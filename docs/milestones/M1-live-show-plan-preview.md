@@ -212,6 +212,17 @@ strings — "make impossible states unrepresentable" reaches the schema.
 `main` is protected — every slice is a branch + PR. Keep slices small enough to
 review in one sitting; each ends green (build + tests).
 
+**Slice status (ledger).** Per
+`/Users/jon/code/jon-platform/docs/agent-collaboration.md`, the executor ticks the
+box in the slice PR that completes it. GitHub PR state is canonical; this is the
+at-a-glance summary.
+
+- [ ] Slice 0 — Skeleton
+- [ ] Slice 1 — Folder scan
+- [ ] Slice 2 — Setlist parser
+- [ ] Slice 3 — Source vocabulary + album title
+- [ ] Slice 4 — `ShowPlan` + Preview screen
+
 ### Slice 0 — Skeleton
 
 Stand up the Xcode project + `VinylFeverCore` package + dependencies + SQLiteData
