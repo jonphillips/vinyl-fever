@@ -2,6 +2,12 @@
 
 This plan starts after Jon reviews and adjusts the product docs.
 
+Concrete, Codex-ready build orders live in [milestones/](milestones/). The phases
+below are the strategic arc; the milestone docs are the slices to implement.
+Milestone 1 realizes the start of Phase 1.5 (the vertical slice) as a read-only,
+no-writes plan preview — see
+[milestones/M1-live-show-plan-preview.md](milestones/M1-live-show-plan-preview.md).
+
 ## Phase 0: Requirements Review
 
 Goal: converge on the app areas and vocabulary before building.
