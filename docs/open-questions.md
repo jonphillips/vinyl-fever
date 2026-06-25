@@ -1,0 +1,92 @@
+# Open Questions
+
+These are intentionally unresolved. They are prompts for Jon's review.
+
+## V1 Scope
+
+- Which existing script is most important after `music_pipeline.sh`?
+- Which remaining steps truly need shell/Python rather than Swift?
+
+## Live Show Prep
+
+- Are the default live-show album title rules in `setlist-formatting-rules.md`
+  complete?
+- Are the source labels in `setlist-formatting-rules.md` complete, or should
+  additional defaults such as `WEB`, `MTX`, or others be added?
+- Resolved: see "Verified" in [App Areas](app-areas.md) and Source Of Truth And
+  Storage Ownership in [Metadata Policy Model](metadata-policy-model.md). A show
+  is verified when its album appears in the Apple Music scan with a matching
+  album title and a track count equal to the setlist, with an optional duration
+  spot check.
+- What Apple Music fields/data should identify an imported album as a live show
+  for the chronological artist view?
+- What should the local-model live-show label audit flag as "probably mislabeled"?
+- Which of the rules in `setlist-formatting-rules.md` are reliable enough for
+  deterministic parsing, and which should be LLM-assisted from the start?
+- Schedule an interactive review session for `setlist-formatting-rules.md`; the
+  current file is today's best guess, not the final law.
+
+## Collection Policies
+
+- What are the first Collection Policies to model?
+- Should a policy target an Apple Music playlist, a Smart Playlist rule, or both?
+- Is ` | ` the final delimiter for multiple Grouping tokens?
+- What should happen when imported files already have Grouping values?
+- What should the first folder-application workflow do when a folder contains
+  mixed artists or already-tagged songs?
+- Which fields can a policy change automatically?
+- Which fields always require review?
+
+## Metadata Management
+
+- What exactly belongs in Metadata Management versus Collection Management?
+- Is Apple Music remediation part of Metadata Management, or should it become its
+  own app area later?
+- Which first metadata-repair workflow would make this area concrete?
+
+## MusicBrainz and Artwork
+
+- For song-level lookup, what release types should be preferred by default?
+- How strongly should various-artist compilations be penalized?
+- Are there cases where VA compilation artwork is desired?
+- Should cover art be fetched only from MusicBrainz-linked sources, or can the app
+  use other sources later?
+- Should lookup decisions be cached permanently?
+
+## Apple Music Remediation
+
+- Resolved direction: the read/verification surface is decided early, not later.
+  Default to AppleScript/ScriptingBridge as the primary read surface with
+  `Library.xml` as a fallback; see Verification Surface in
+  [Technical Architecture](technical-architecture.md).
+- Should the app ever automate deletion from Music.app, or only prepare manual
+  reimport packages?
+- What fields does Music.app most often fail to refresh?
+- What is the safest manual reimport checklist?
+
+## File Safety
+
+- Should every source file get SHA-256 checksummed before a run?
+- Should checksums be required only for destructive or source-mutating workflows?
+- Should the app maintain an archive folder for replaced files?
+- For failed or unapproved live-show runs, how long should generated `Working/`
+  folders be kept before cleanup?
+
+## iPad Companion
+
+- Which screens would be useful away from the Mac?
+- Should work queues and metadata policies sync through CloudKit eventually?
+
+## Shared Components
+
+- Extraction trigger: when Vinyl Fever starts consuming model access (Phase 5),
+  lift Galavant's `GalavantAI` into a neutrally-named shared package both apps
+  depend on, per `jon-platform/docs/adr/0001-extract-model-layer.md`. Confirm the
+  path: depend on the extracted shared package (intended), copy/vendor for now, or
+  defer AI until after extraction. Recommendation: rename-and-move at Phase 5; do
+  not pre-extract and do not copy.
+- Does setlist normalization need a frontier tier to be useful, or is the
+  on-device/Apple-cloud tier good enough? This decides whether the feature is
+  meaningfully usable without a BYO key.
+- Does AcoustID fingerprint lookup ever enter scope? If so, it is the only
+  non-model credential; decide whether it reuses the shared Keychain key store.
