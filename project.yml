@@ -1,0 +1,61 @@
+name: VinylFever
+options:
+  bundleIdPrefix: com.jonphillips
+  createIntermediateGroups: true
+  deploymentTarget:
+    macOS: "27.0"
+  xcodeVersion: "27.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    MARKETING_VERSION: 0.1.0
+    CURRENT_PROJECT_VERSION: 1
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+packages:
+  VinylFeverCore:
+    path: VinylFeverCore
+  swift-dependencies:
+    url: https://github.com/pointfreeco/swift-dependencies
+    from: 1.0.0
+  swift-navigation:
+    url: https://github.com/pointfreeco/swift-navigation
+    from: 2.0.0
+targets:
+  VinylFever:
+    type: application
+    platform: macOS
+    deploymentTarget: "27.0"
+    sources:
+      - VinylFever
+    dependencies:
+      - package: VinylFeverCore
+        product: VinylFeverCore
+      - package: swift-dependencies
+        product: Dependencies
+      - package: swift-navigation
+        product: SwiftUINavigation
+    info:
+      path: VinylFever/Info.plist
+      properties:
+        CFBundleDisplayName: Vinyl Fever
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.music
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jonphillips.VinylFever
+        PRODUCT_NAME: VinylFever
+        GENERATE_INFOPLIST_FILE: NO
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+schemes:
+  VinylFever:
+    build:
+      targets:
+        VinylFever: all
+    run:
+      config: Debug
