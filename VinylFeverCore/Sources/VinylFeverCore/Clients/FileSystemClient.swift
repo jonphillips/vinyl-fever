@@ -1,17 +1,16 @@
 import Dependencies
+import DependenciesMacros
 import Foundation
 
-public protocol FileSystemClientProtocol: Sendable {
-  func scanShowFolder(at root: URL) throws -> ScannedShowFolder
+@DependencyClient
+public struct FileSystemClient: Sendable {
+  public var scanShowFolder: @Sendable (_ root: URL) throws -> ScannedShowFolder
 }
 
-public struct LiveFileSystemClient: FileSystemClientProtocol {
+private struct LiveShowFolderScanner {
   @Dependency(\.uuid) private var uuid
 
-  public init() {
-  }
-
-  public func scanShowFolder(at root: URL) throws -> ScannedShowFolder {
+  func scanShowFolder(at root: URL) throws -> ScannedShowFolder {
     let root = root.standardizedFileURL
     let contents = try directoryContents(at: root)
       .filter(isRegularFile)
@@ -121,51 +120,21 @@ public struct LiveFileSystemClient: FileSystemClientProtocol {
     guard filePath.hasPrefix(rootPath) else {
       return url.lastPathComponent
     }
-    let start = filePath.index(rootPath.endIndex, offsetBy: filePath[rootPath.endIndex...] .hasPrefix("/") ? 1 : 0)
-    return String(filePath[start...])
+    let relativePath = filePath.dropFirst(rootPath.count)
+    return String(relativePath.hasPrefix("/") ? relativePath.dropFirst() : relativePath)
   }
 }
 
-public struct UnimplementedFileSystemClient: FileSystemClientProtocol {
-  public init() {
-  }
-
-  public func scanShowFolder(at root: URL) throws -> ScannedShowFolder {
-    throw FileSystemClientError.unimplemented
-  }
-}
-
-public struct TestFileSystemClient: FileSystemClientProtocol {
-  public var scanShowFolderResult: @Sendable (URL) throws -> ScannedShowFolder
-
-  public init(scanShowFolderResult: @escaping @Sendable (URL) throws -> ScannedShowFolder) {
-    self.scanShowFolderResult = scanShowFolderResult
-  }
-
-  public func scanShowFolder(at root: URL) throws -> ScannedShowFolder {
-    try scanShowFolderResult(root)
-  }
-}
-
-public enum FileSystemClientError: Error, Equatable, Sendable {
-  case unimplemented
-}
-
-private enum FileSystemClientKey: TestDependencyKey {
-  static var testValue: any FileSystemClientProtocol {
-    UnimplementedFileSystemClient()
-  }
-}
-
-extension FileSystemClientKey: DependencyKey {
-  static var liveValue: any FileSystemClientProtocol {
-    LiveFileSystemClient()
+extension FileSystemClient: DependencyKey {
+  public static let testValue = Self()
+  public static let liveValue = Self { root in
+    try LiveShowFolderScanner().scanShowFolder(at: root)
   }
 }
 
 extension DependencyValues {
-  public var fileSystemClient: any FileSystemClientProtocol {
-    get { self[FileSystemClientKey.self] }
-    set { self[FileSystemClientKey.self] = newValue }
+  public var fileSystemClient: FileSystemClient {
+    get { self[FileSystemClient.self] }
+    set { self[FileSystemClient.self] = newValue }
   }
 }

@@ -21,6 +21,7 @@ let package = Package(
       name: "VinylFeverCore",
       dependencies: [
         .product(name: "Dependencies", package: "swift-dependencies"),
+        .product(name: "DependenciesMacros", package: "swift-dependencies"),
         .product(name: "SQLiteData", package: "sqlite-data"),
         .product(name: "SwiftNavigation", package: "swift-navigation"),
       ]

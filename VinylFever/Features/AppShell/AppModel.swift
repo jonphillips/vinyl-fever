@@ -19,7 +19,7 @@ final class AppModel {
 
   func scanShowFolder(at url: URL) {
     do {
-      scannedShowFolder = try fileSystemClient.scanShowFolder(at: url)
+      scannedShowFolder = try fileSystemClient.scanShowFolder(root: url)
       scanErrorMessage = nil
     } catch {
       scannedShowFolder = nil

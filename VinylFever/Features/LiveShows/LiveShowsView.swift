@@ -240,11 +240,8 @@ private extension URL {
     guard filePath.hasPrefix(rootPath) else {
       return lastPathComponent
     }
-    let relativeStart = filePath.index(
-      rootPath.endIndex,
-      offsetBy: filePath[rootPath.endIndex...].hasPrefix("/") ? 1 : 0
-    )
-    return String(filePath[relativeStart...])
+    let relativePath = filePath.dropFirst(rootPath.count)
+    return String(relativePath.hasPrefix("/") ? relativePath.dropFirst() : relativePath)
   }
 }
 

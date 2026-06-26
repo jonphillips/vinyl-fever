@@ -25,7 +25,7 @@ struct FileSystemClientTests {
       }
     }
 
-    let result = try LiveFileSystemClient().scanShowFolder(at: root.url)
+    let result = try FileSystemClient.liveValue.scanShowFolder(root: root.url)
 
     expectNoDifference(
       result.audioFiles.map { file in
@@ -83,7 +83,7 @@ struct FileSystemClientTests {
       }
     }
 
-    let result = try LiveFileSystemClient().scanShowFolder(at: root.url)
+    let result = try FileSystemClient.liveValue.scanShowFolder(root: root.url)
 
     expectNoDifference(
       result.setlistCandidates.map { $0.relativePath(from: root.url) },
@@ -163,10 +163,7 @@ private extension URL {
     guard filePath.hasPrefix(rootPath) else {
       return lastPathComponent
     }
-    let relativeStart = filePath.index(
-      rootPath.endIndex,
-      offsetBy: filePath[rootPath.endIndex...].hasPrefix("/") ? 1 : 0
-    )
-    return String(filePath[relativeStart...])
+    let relativePath = filePath.dropFirst(rootPath.count)
+    return String(relativePath.hasPrefix("/") ? relativePath.dropFirst() : relativePath)
   }
 }
