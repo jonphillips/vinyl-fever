@@ -13,6 +13,9 @@ final class AppModel {
   var destination: Destination?
   var scannedShowFolder: ScannedShowFolder?
   var scanErrorMessage: String?
+  var setlistInput = ""
+  var setlistDraft: SetlistDraft?
+  var setlistErrorMessage: String?
 
   enum Destination: Hashable {
   }
@@ -25,6 +28,21 @@ final class AppModel {
       scannedShowFolder = nil
       scanErrorMessage = error.localizedDescription
     }
+  }
+
+  func loadSetlistText(from url: URL) {
+    do {
+      setlistInput = try String(contentsOf: url, encoding: .utf8)
+      parseSetlistInput()
+      setlistErrorMessage = nil
+    } catch {
+      setlistErrorMessage = error.localizedDescription
+    }
+  }
+
+  func parseSetlistInput() {
+    setlistDraft = SetlistParser().parse(setlistInput)
+    setlistErrorMessage = nil
   }
 }
 

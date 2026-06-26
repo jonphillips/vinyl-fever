@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 import VinylFeverCore
 
 struct LiveShowsView: View {
@@ -10,8 +11,9 @@ struct LiveShowsView: View {
       if let scannedShowFolder = model.scannedShowFolder {
         ScannedShowFolderView(
           folder: scannedShowFolder,
-          errorMessage: model.scanErrorMessage,
-          openFolder: openFolder
+          model: model,
+          openFolder: openFolder,
+          openSetlistFile: openSetlistFile
         )
       } else {
         ContentUnavailableView {
@@ -51,18 +53,34 @@ struct LiveShowsView: View {
     }
     model.scanShowFolder(at: url)
   }
+
+  private func openSetlistFile() {
+    let panel = NSOpenPanel()
+    panel.allowsMultipleSelection = false
+    panel.canChooseDirectories = false
+    panel.canChooseFiles = true
+    panel.canCreateDirectories = false
+    panel.allowedContentTypes = [.plainText, .text]
+    panel.prompt = "Load"
+
+    guard panel.runModal() == .OK, let url = panel.url else {
+      return
+    }
+    model.loadSetlistText(from: url)
+  }
 }
 
 private struct ScannedShowFolderView: View {
   let folder: ScannedShowFolder
-  let errorMessage: String?
+  @Bindable var model: AppModel
   let openFolder: () -> Void
+  let openSetlistFile: () -> Void
 
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 24) {
         ScanHeader(root: folder.root, openFolder: openFolder)
-        if let errorMessage {
+        if let errorMessage = model.scanErrorMessage {
           ScanErrorBanner(message: errorMessage)
         }
         ScanSection(
@@ -87,6 +105,16 @@ private struct ScannedShowFolderView: View {
         ) {
           CandidateList(urls: folder.setlistCandidates, root: folder.root)
         }
+        SetlistInputSection(
+          setlistInput: $model.setlistInput,
+          draft: $model.setlistDraft,
+          errorMessage: model.setlistErrorMessage,
+          setlistCandidates: folder.setlistCandidates,
+          root: folder.root,
+          parse: model.parseSetlistInput,
+          loadCandidate: model.loadSetlistText(from:),
+          openSetlistFile: openSetlistFile
+        )
         ScanSection(
           title: "Cover Art",
           systemImage: "photo",
@@ -98,6 +126,165 @@ private struct ScannedShowFolderView: View {
       .frame(maxWidth: 980, alignment: .leading)
       .padding(24)
     }
+  }
+}
+
+private struct SetlistInputSection: View {
+  @Binding var setlistInput: String
+  @Binding var draft: SetlistDraft?
+  let errorMessage: String?
+  let setlistCandidates: [URL]
+  let root: URL
+  let parse: () -> Void
+  let loadCandidate: (URL) -> Void
+  let openSetlistFile: () -> Void
+
+  var body: some View {
+    ScanSection(
+      title: "Parsed Setlist",
+      systemImage: "text.badge.checkmark",
+      count: draft?.tracks.count ?? 0
+    ) {
+      VStack(alignment: .leading, spacing: 14) {
+        SetlistTextInput(
+          text: $setlistInput,
+          parse: parse,
+          openSetlistFile: openSetlistFile
+        )
+        if !setlistCandidates.isEmpty {
+          DetectedSetlistButtons(
+            urls: setlistCandidates,
+            root: root,
+            load: loadCandidate
+          )
+        }
+        if let errorMessage {
+          ScanErrorBanner(message: errorMessage)
+        }
+        if let draft = Binding($draft) {
+          SetlistDraftEditor(draft: draft)
+        } else {
+          EmptyScanSectionRow(title: "No parsed setlist yet")
+        }
+      }
+      .padding(.vertical, 8)
+    }
+  }
+}
+
+private struct SetlistTextInput: View {
+  @Binding var text: String
+  let parse: () -> Void
+  let openSetlistFile: () -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      TextEditor(text: $text)
+        .font(.body.monospaced())
+        .frame(minHeight: 150)
+        .overlay {
+          RoundedRectangle(cornerRadius: 6)
+            .stroke(Color(nsColor: .separatorColor))
+        }
+      HStack {
+        Button(action: openSetlistFile) {
+          Label("Load .txt", systemImage: "doc.badge.plus")
+        }
+        Button(action: parse) {
+          Label("Parse Setlist", systemImage: "text.magnifyingglass")
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+      }
+    }
+  }
+}
+
+private struct DetectedSetlistButtons: View {
+  let urls: [URL]
+  let root: URL
+  let load: (URL) -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("Detected text files")
+        .font(.subheadline.weight(.semibold))
+      ScrollView(.horizontal) {
+        HStack(spacing: 8) {
+          ForEach(urls, id: \.self) { url in
+            Button {
+              load(url)
+            } label: {
+              Label(url.relativePath(from: root), systemImage: "text.page")
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+private struct SetlistDraftEditor: View {
+  @Binding var draft: SetlistDraft
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      SetlistTagsEditor(tags: $draft.tags)
+      VStack(alignment: .leading, spacing: 8) {
+        Text("Tracks")
+          .font(.subheadline.weight(.semibold))
+        if draft.tracks.isEmpty {
+          EmptyScanSectionRow(title: "No tracks parsed")
+        } else {
+          LazyVStack(alignment: .leading, spacing: 8) {
+            ForEach($draft.tracks) { $track in
+              SetlistTrackEditRow(track: $track)
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+private struct SetlistTagsEditor: View {
+  @Binding var tags: ShowTags
+
+  var body: some View {
+    Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 10) {
+      EditableTagRow(title: "Artist", text: $tags.artist.text)
+      EditableTagRow(title: "Album", text: $tags.album.text)
+      EditableTagRow(title: "Album Artist", text: $tags.albumArtist.text)
+      EditableTagRow(title: "Date", text: $tags.date.text)
+      EditableTagRow(title: "Venue", text: $tags.venue.text)
+      EditableTagRow(title: "Location", text: $tags.location.text)
+    }
+  }
+}
+
+private struct EditableTagRow: View {
+  let title: LocalizedStringResource
+  @Binding var text: String
+
+  var body: some View {
+    GridRow {
+      Text(title)
+        .foregroundStyle(.secondary)
+      TextField(text: $text, prompt: Text("Unknown")) {
+        Text(title)
+      }
+      .textFieldStyle(.roundedBorder)
+      .frame(maxWidth: 520)
+    }
+  }
+}
+
+private struct SetlistTrackEditRow: View {
+  @Binding var track: SetlistTrack
+
+  var body: some View {
+    TextField("Track title", text: $track.title)
+      .textFieldStyle(.roundedBorder)
   }
 }
 
