@@ -32,7 +32,7 @@ final class AppModel {
 
   func loadSetlistText(from url: URL) {
     do {
-      setlistInput = try String(contentsOf: url, encoding: .utf8)
+      setlistInput = try loadTextFile(at: url)
       parseSetlistInput()
       setlistErrorMessage = nil
     } catch {
@@ -43,6 +43,31 @@ final class AppModel {
   func parseSetlistInput() {
     setlistDraft = SetlistParser().parse(setlistInput)
     setlistErrorMessage = nil
+  }
+
+  private func loadTextFile(at url: URL) throws -> String {
+    var detectedEncoding = String.Encoding.utf8
+    if let text = try? String(contentsOf: url, usedEncoding: &detectedEncoding) {
+      return text
+    }
+
+    let data = try Data(contentsOf: url)
+    for encoding in fallbackTextEncodings {
+      if let text = String(data: data, encoding: encoding) {
+        return text
+      }
+    }
+
+    throw CocoaError(.fileReadInapplicableStringEncoding)
+  }
+
+  private var fallbackTextEncodings: [String.Encoding] {
+    [
+      .utf8,
+      .windowsCP1252,
+      .macOSRoman,
+      .isoLatin1,
+    ]
   }
 }
 

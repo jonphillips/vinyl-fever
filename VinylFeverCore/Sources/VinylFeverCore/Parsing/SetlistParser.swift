@@ -110,12 +110,12 @@ public struct SetlistParser: Sendable {
     }
 
     let separator = line[index]
-    if separator == "." || separator == ")" || separator == "-" || separator == ":" {
+    if separator == "." || separator == ")" {
       let titleStart = line.index(after: index)
       return String(line[titleStart...])
     }
 
-    if separator.isWhitespace {
+    if separator.isWhitespace, digitCount > 1, line[numberStart] == "0" {
       return String(line[index...])
     }
 

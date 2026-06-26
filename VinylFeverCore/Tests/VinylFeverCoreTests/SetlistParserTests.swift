@@ -83,6 +83,30 @@ struct SetlistParserTests {
   }
 
   @Test
+  func numberTitledPlainSongsKeepTheirLeadingNumbers() {
+    let draft = SetlistParser().parse(
+      """
+      500 Miles
+      8 Days a Week
+      16 Tons
+      99 Luftballons
+      2-4-6-8 Motorway
+      """
+    )
+
+    expectNoDifference(
+      draft.tracks.map(\.title),
+      [
+        "500 Miles",
+        "8 Days a Week",
+        "16 Tons",
+        "99 Luftballons",
+        "2-4-6-8 Motorway",
+      ]
+    )
+  }
+
+  @Test
   func stripsUnnumberedStructuralHeadersButKeepsNumberedNonSongTracks() {
     let draft = SetlistParser().parse(
       """
