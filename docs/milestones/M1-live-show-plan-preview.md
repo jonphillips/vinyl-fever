@@ -218,7 +218,7 @@ box in the slice PR that completes it. GitHub PR state is canonical; this is the
 at-a-glance summary.
 
 - [x] Slice 0 — Skeleton
-- [ ] Slice 1 — Folder scan
+- [x] Slice 1 — Folder scan
 - [ ] Slice 2 — Setlist parser
 - [ ] Slice 3 — Source vocabulary + album title
 - [ ] Slice 4 — `ShowPlan` + Preview screen
