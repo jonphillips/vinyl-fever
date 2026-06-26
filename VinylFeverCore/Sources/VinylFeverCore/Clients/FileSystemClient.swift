@@ -126,9 +126,14 @@ private struct LiveShowFolderScanner {
 }
 
 extension FileSystemClient: DependencyKey {
-  public static let testValue = Self()
-  public static let liveValue = Self { root in
-    try LiveShowFolderScanner().scanShowFolder(at: root)
+  public static var testValue: Self {
+    Self()
+  }
+
+  public static var liveValue: Self {
+    Self { root in
+      try LiveShowFolderScanner().scanShowFolder(at: root)
+    }
   }
 }
 
