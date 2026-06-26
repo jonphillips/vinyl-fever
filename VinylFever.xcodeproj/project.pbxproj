@@ -9,8 +9,9 @@
 /* Begin PBXBuildFile section */
 		497E2DE4FB2B485815B4066A /* VinylFeverCore in Frameworks */ = {isa = PBXBuildFile; productRef = 7C6E06FBA965ABDAC7489C80 /* VinylFeverCore */; };
 		62EBE6D7B9DC65E79B5F1542 /* Dependencies in Frameworks */ = {isa = PBXBuildFile; productRef = 99211BDD035C702EFB2123E3 /* Dependencies */; };
-		67F35C8B29D2FB10EAECF9DC /* SwiftUINavigation in Frameworks */ = {isa = PBXBuildFile; productRef = A25F349E47368726A30A4DF2 /* SwiftUINavigation */; };
+		67F35C8B29D2FB10EAECF9DC /* SQLiteData in Frameworks */ = {isa = PBXBuildFile; productRef = B0CEEDF3C9060FC734814A66 /* SQLiteData */; };
 		6AAC484EE4FCEE3EF361E526 /* AppShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59513EA8B3113F9F15330147 /* AppShellView.swift */; };
+		922A693A808062926F4158D9 /* SwiftUINavigation in Frameworks */ = {isa = PBXBuildFile; productRef = A25F349E47368726A30A4DF2 /* SwiftUINavigation */; };
 		B7760BDB855168DC4B52C4C9 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B9501DC755058CF461B454F /* AppModel.swift */; };
 		CCA54B8CA7EF47661C400FFD /* LiveShowsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6AB6D74511FA4977973A9A7 /* LiveShowsView.swift */; };
 		D9300F0E5225EB93AE024E5B /* VinylFeverApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AD3A453FDC0D3B42EB1247C /* VinylFeverApp.swift */; };
@@ -33,7 +34,8 @@
 			files = (
 				497E2DE4FB2B485815B4066A /* VinylFeverCore in Frameworks */,
 				62EBE6D7B9DC65E79B5F1542 /* Dependencies in Frameworks */,
-				67F35C8B29D2FB10EAECF9DC /* SwiftUINavigation in Frameworks */,
+				67F35C8B29D2FB10EAECF9DC /* SQLiteData in Frameworks */,
+				922A693A808062926F4158D9 /* SwiftUINavigation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -119,6 +121,7 @@
 			packageProductDependencies = (
 				7C6E06FBA965ABDAC7489C80 /* VinylFeverCore */,
 				99211BDD035C702EFB2123E3 /* Dependencies */,
+				B0CEEDF3C9060FC734814A66 /* SQLiteData */,
 				A25F349E47368726A30A4DF2 /* SwiftUINavigation */,
 			);
 			productName = VinylFever;
@@ -150,6 +153,7 @@
 			mainGroup = 9B2046D6D81987826B7AAC57;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				AE338F867AA01E7224320B06 /* XCRemoteSwiftPackageReference "sqlite-data" */,
 				5B2EEA32054487CB52052332 /* XCRemoteSwiftPackageReference "swift-dependencies" */,
 				91086051D9EC56BBA794DAD1 /* XCRemoteSwiftPackageReference "swift-navigation" */,
 				91CC58644ABC044D48488747 /* XCLocalSwiftPackageReference "VinylFeverCore" */,
@@ -403,6 +407,14 @@
 				minimumVersion = 2.0.0;
 			};
 		};
+		AE338F867AA01E7224320B06 /* XCRemoteSwiftPackageReference "sqlite-data" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/sqlite-data";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -419,6 +431,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 91086051D9EC56BBA794DAD1 /* XCRemoteSwiftPackageReference "swift-navigation" */;
 			productName = SwiftUINavigation;
+		};
+		B0CEEDF3C9060FC734814A66 /* SQLiteData */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AE338F867AA01E7224320B06 /* XCRemoteSwiftPackageReference "sqlite-data" */;
+			productName = SQLiteData;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

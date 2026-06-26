@@ -20,6 +20,9 @@ packages:
   swift-dependencies:
     url: https://github.com/pointfreeco/swift-dependencies
     from: 1.0.0
+  sqlite-data:
+    url: https://github.com/pointfreeco/sqlite-data
+    from: 1.0.0
   swift-navigation:
     url: https://github.com/pointfreeco/swift-navigation
     from: 2.0.0
@@ -35,6 +38,8 @@ targets:
         product: VinylFeverCore
       - package: swift-dependencies
         product: Dependencies
+      - package: sqlite-data
+        product: SQLiteData
       - package: swift-navigation
         product: SwiftUINavigation
     info:

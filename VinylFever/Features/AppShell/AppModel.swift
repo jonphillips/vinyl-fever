@@ -1,6 +1,7 @@
 import Dependencies
 import Foundation
 import Observation
+import SQLiteData
 import VinylFeverCore
 
 @MainActor
@@ -8,6 +9,10 @@ import VinylFeverCore
 final class AppModel {
   @ObservationIgnored
   @Dependency(\.fileSystemClient) private var fileSystemClient
+  @ObservationIgnored
+  @Dependency(\.defaultDatabase) private var database
+  @ObservationIgnored
+  @Dependency(\.uuid) private var uuid
 
   var selectedSection: AppSection = .liveShows
   var destination: Destination?
@@ -16,6 +21,9 @@ final class AppModel {
   var setlistInput = ""
   var setlistDraft: SetlistDraft?
   var setlistErrorMessage: String?
+  var selectedSourceLabelID: SourceLabel.ID?
+  var newSourceLabelToken = ""
+  var sourceLabelErrorMessage: String?
 
   enum Destination: Hashable {
   }
@@ -43,6 +51,54 @@ final class AppModel {
   func parseSetlistInput() {
     setlistDraft = SetlistParser().parse(setlistInput)
     setlistErrorMessage = nil
+  }
+
+  func addSourceLabel() {
+    let token = SourceLabel.normalizedToken(newSourceLabelToken)
+    guard !token.isEmpty else {
+      sourceLabelErrorMessage = "Enter a source label."
+      return
+    }
+
+    do {
+      let existingSourceLabels = try database.read { db in
+        try SourceLabel.order(by: \.token).fetchAll(db)
+      }
+      guard !existingSourceLabels.contains(where: { $0.normalizedTokenKey == token.lowercased() })
+      else {
+        sourceLabelErrorMessage = "That source label already exists."
+        return
+      }
+
+      let sourceLabel = SourceLabel(id: uuid(), token: token, isBuiltIn: false)
+      try database.write { db in
+        try SourceLabel.upsert { sourceLabel }.execute(db)
+      }
+      selectedSourceLabelID = sourceLabel.id
+      newSourceLabelToken = ""
+      sourceLabelErrorMessage = nil
+    } catch {
+      sourceLabelErrorMessage = error.localizedDescription
+    }
+  }
+
+  func deleteSourceLabel(_ sourceLabel: SourceLabel) {
+    guard !sourceLabel.isBuiltIn else {
+      sourceLabelErrorMessage = "Built-in source labels cannot be removed."
+      return
+    }
+
+    do {
+      try database.write { db in
+        try SourceLabel.find(sourceLabel.id).delete().execute(db)
+      }
+      if selectedSourceLabelID == sourceLabel.id {
+        selectedSourceLabelID = nil
+      }
+      sourceLabelErrorMessage = nil
+    } catch {
+      sourceLabelErrorMessage = error.localizedDescription
+    }
   }
 
   private func loadTextFile(at url: URL) throws -> String {

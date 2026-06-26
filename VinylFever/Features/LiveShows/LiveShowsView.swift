@@ -1,4 +1,6 @@
 import AppKit
+import Dependencies
+import SQLiteData
 import SwiftUI
 import UniformTypeIdentifiers
 import VinylFeverCore
@@ -76,7 +78,13 @@ private struct ScannedShowFolderView: View {
   let openFolder: () -> Void
   let openSetlistFile: () -> Void
 
+  @FetchAll(SourceLabel.order(by: \.token))
+  private var persistedSourceLabels: [SourceLabel]
+
   var body: some View {
+    let sourceLabels = SourceLabel.deduplicated(persistedSourceLabels)
+    let selectedSourceLabel = sourceLabels.first { $0.id == model.selectedSourceLabelID }
+
     ScrollView {
       VStack(alignment: .leading, spacing: 24) {
         ScanHeader(root: folder.root, openFolder: openFolder)
@@ -115,6 +123,17 @@ private struct ScannedShowFolderView: View {
           loadCandidate: model.loadSetlistText(from:),
           openSetlistFile: openSetlistFile
         )
+        SourceMetadataSection(
+          sourceLabels: sourceLabels,
+          selectedSourceLabelID: $model.selectedSourceLabelID,
+          newSourceLabelToken: $model.newSourceLabelToken,
+          errorMessage: model.sourceLabelErrorMessage,
+          metadata: model.setlistDraft.map {
+            ShowMetadata(tags: $0.tags, source: selectedSourceLabel)
+          },
+          addSourceLabel: model.addSourceLabel,
+          deleteSourceLabel: model.deleteSourceLabel
+        )
         ScanSection(
           title: "Cover Art",
           systemImage: "photo",
@@ -126,6 +145,113 @@ private struct ScannedShowFolderView: View {
       .frame(maxWidth: 980, alignment: .leading)
       .padding(24)
     }
+  }
+}
+
+private struct SourceMetadataSection: View {
+  let sourceLabels: [SourceLabel]
+  @Binding var selectedSourceLabelID: SourceLabel.ID?
+  @Binding var newSourceLabelToken: String
+  let errorMessage: String?
+  let metadata: ShowMetadata?
+  let addSourceLabel: () -> Void
+  let deleteSourceLabel: (SourceLabel) -> Void
+
+  var body: some View {
+    ScanSection(
+      title: "Source & Album Title",
+      systemImage: "record.circle",
+      count: sourceLabels.count
+    ) {
+      VStack(alignment: .leading, spacing: 14) {
+        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 10) {
+          GridRow {
+            Text("Source")
+              .foregroundStyle(.secondary)
+            Picker("Source", selection: $selectedSourceLabelID) {
+              Text("unknown").tag(SourceLabel.ID?.none)
+              ForEach(sourceLabels) { sourceLabel in
+                Text(sourceLabel.token).tag(SourceLabel.ID?.some(sourceLabel.id))
+              }
+            }
+            .labelsHidden()
+            .frame(maxWidth: 260)
+          }
+
+          GridRow {
+            Text("Album")
+              .foregroundStyle(.secondary)
+            Text(metadata?.albumTitle ?? "Parse a setlist to compute the album title.")
+              .textSelection(.enabled)
+          }
+
+          GridRow {
+            Text("Sort Album")
+              .foregroundStyle(.secondary)
+            Text(metadata?.sortAlbum ?? "Parse a setlist to compute the sort album.")
+              .foregroundStyle(metadata == nil ? .secondary : .primary)
+              .textSelection(.enabled)
+          }
+        }
+
+        Divider()
+
+        VStack(alignment: .leading, spacing: 10) {
+          Text("Vocabulary")
+            .font(.subheadline.weight(.semibold))
+          HStack(spacing: 8) {
+            TextField("Add source label", text: $newSourceLabelToken)
+              .textFieldStyle(.roundedBorder)
+              .frame(width: 220)
+              .onSubmit(addSourceLabel)
+            Button(action: addSourceLabel) {
+              Label("Add", systemImage: "plus")
+            }
+            .disabled(newSourceLabelToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+          }
+          if let errorMessage {
+            ScanErrorBanner(message: errorMessage)
+          }
+          LazyVStack(alignment: .leading, spacing: 6) {
+            ForEach(sourceLabels) { sourceLabel in
+              SourceLabelRow(
+                sourceLabel: sourceLabel,
+                delete: { deleteSourceLabel(sourceLabel) }
+              )
+            }
+          }
+        }
+      }
+      .padding(.vertical, 8)
+    }
+  }
+}
+
+private struct SourceLabelRow: View {
+  let sourceLabel: SourceLabel
+  let delete: () -> Void
+
+  var body: some View {
+    HStack(spacing: 8) {
+      Text(sourceLabel.token)
+        .font(.callout.monospaced())
+      if sourceLabel.isBuiltIn {
+        Label("Built-in", systemImage: "lock")
+          .labelStyle(.iconOnly)
+          .foregroundStyle(.secondary)
+      }
+      Spacer()
+      Button(action: delete) {
+        Label("Remove", systemImage: "trash")
+      }
+      .disabled(sourceLabel.isBuiltIn)
+      .help(
+        sourceLabel.isBuiltIn
+          ? "Built-in source labels cannot be removed."
+          : "Remove source label"
+      )
+    }
+    .frame(maxWidth: 420)
   }
 }
 
@@ -433,5 +559,8 @@ private extension URL {
 }
 
 #Preview {
+  let _ = prepareDependencies {
+    try! $0.bootstrapDatabase()
+  }
   LiveShowsView(model: AppModel())
 }
