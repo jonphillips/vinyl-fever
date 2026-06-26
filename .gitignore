@@ -7,10 +7,11 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
-# Xcode / Swift (future app)
+# Xcode / Swift
 .build/
 DerivedData/
 *.xcuserstate
 xcuserdata/
 .swiftpm/
 *.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcuserdata/
