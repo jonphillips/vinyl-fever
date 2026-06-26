@@ -99,7 +99,7 @@ VinylFever/                      # Xcode project
         │                       #   ShowMetadata, ShowPlan, PlanIssue, SourceLabel
         ├── Parsing/             # SetlistParser (pure)
         ├── Planning/            # ShowMetadata + ShowPlan builders (pure)
-        ├── Clients/             # FileSystemClient (protocol + live + test)
+        ├── Clients/             # FileSystemClient (struct-of-closures + live)
         └── Database/            # SQLiteData schema + migration for SourceLabel
     └── Tests/VinylFeverCoreTests/
 ```
@@ -232,8 +232,10 @@ trivial core test runs; `KNOWN-ISSUES.md` created if any beta breakage shows up.
 
 ### Slice 1 — Folder scan (read-only)
 
-`FileSystemClient` (protocol + live FileManager impl + test impl) and the
-`ScannedShowFolder` builder. App: an "Open Show Folder" command (NSOpenPanel in the
+`FileSystemClient` — a house-style **struct of `@Sendable` closures behind a
+`DependencyKey`** (`@DependencyClient`), with a live FileManager `liveValue` and the
+generated unimplemented `testValue`; **not** a protocol witness (swift-style.md §4)
+— and the `ScannedShowFolder` builder. App: an "Open Show Folder" command (NSOpenPanel in the
 app target) → renders the scan. **Tests:** fixture folders → expected files in
 expected order; non-audio ignored; cover and setlist detection. **Done when:** pick
 a folder, see its classified contents.
