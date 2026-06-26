@@ -1,0 +1,414 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		497E2DE4FB2B485815B4066A /* VinylFeverCore in Frameworks */ = {isa = PBXBuildFile; productRef = 7C6E06FBA965ABDAC7489C80 /* VinylFeverCore */; };
+		62EBE6D7B9DC65E79B5F1542 /* Dependencies in Frameworks */ = {isa = PBXBuildFile; productRef = 99211BDD035C702EFB2123E3 /* Dependencies */; };
+		67F35C8B29D2FB10EAECF9DC /* SwiftUINavigation in Frameworks */ = {isa = PBXBuildFile; productRef = A25F349E47368726A30A4DF2 /* SwiftUINavigation */; };
+		6AAC484EE4FCEE3EF361E526 /* AppShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59513EA8B3113F9F15330147 /* AppShellView.swift */; };
+		B7760BDB855168DC4B52C4C9 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B9501DC755058CF461B454F /* AppModel.swift */; };
+		D9300F0E5225EB93AE024E5B /* VinylFeverApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AD3A453FDC0D3B42EB1247C /* VinylFeverApp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		4B9501DC755058CF461B454F /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		5749E1A3637D488CA2EE906D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		59513EA8B3113F9F15330147 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
+		8AD3A453FDC0D3B42EB1247C /* VinylFeverApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VinylFeverApp.swift; sourceTree = "<group>"; };
+		C5BA3EE762A82EB875DF3A8E /* VinylFever.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VinylFever.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CC336537557BE54F0DB166E6 /* VinylFeverCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VinylFeverCore; path = VinylFeverCore; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		ECC8EE6E68EA4A6E16A09DA9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				497E2DE4FB2B485815B4066A /* VinylFeverCore in Frameworks */,
+				62EBE6D7B9DC65E79B5F1542 /* Dependencies in Frameworks */,
+				67F35C8B29D2FB10EAECF9DC /* SwiftUINavigation in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		049A125EB1F82AAA03079683 /* VinylFever */ = {
+			isa = PBXGroup;
+			children = (
+				5749E1A3637D488CA2EE906D /* Info.plist */,
+				8AD3A453FDC0D3B42EB1247C /* VinylFeverApp.swift */,
+				36D9C1BD8B5665BEE891A5D8 /* Features */,
+			);
+			path = VinylFever;
+			sourceTree = "<group>";
+		};
+		36D9C1BD8B5665BEE891A5D8 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				A0013BA49C12AB9134E726E5 /* AppShell */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		7591ADA858208560FCBEF6CA /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				CC336537557BE54F0DB166E6 /* VinylFeverCore */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		82F110051A55E3158FF9916B /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				C5BA3EE762A82EB875DF3A8E /* VinylFever.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		9B2046D6D81987826B7AAC57 = {
+			isa = PBXGroup;
+			children = (
+				7591ADA858208560FCBEF6CA /* Packages */,
+				049A125EB1F82AAA03079683 /* VinylFever */,
+				82F110051A55E3158FF9916B /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A0013BA49C12AB9134E726E5 /* AppShell */ = {
+			isa = PBXGroup;
+			children = (
+				4B9501DC755058CF461B454F /* AppModel.swift */,
+				59513EA8B3113F9F15330147 /* AppShellView.swift */,
+			);
+			path = AppShell;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		FDD826AD9DE28A7B0EDD2334 /* VinylFever */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C9896727FE93A65DD89A62DD /* Build configuration list for PBXNativeTarget "VinylFever" */;
+			buildPhases = (
+				6DE4FAB9D5E85608F8F04645 /* Sources */,
+				ECC8EE6E68EA4A6E16A09DA9 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VinylFever;
+			packageProductDependencies = (
+				7C6E06FBA965ABDAC7489C80 /* VinylFeverCore */,
+				99211BDD035C702EFB2123E3 /* Dependencies */,
+				A25F349E47368726A30A4DF2 /* SwiftUINavigation */,
+			);
+			productName = VinylFever;
+			productReference = C5BA3EE762A82EB875DF3A8E /* VinylFever.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A8ADFF8CCB4100A002B23A95 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					FDD826AD9DE28A7B0EDD2334 = {
+						DevelopmentTeam = 7MQEE539G9;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = E65DB1298AA7BB9FD7662348 /* Build configuration list for PBXProject "VinylFever" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 9B2046D6D81987826B7AAC57;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				5B2EEA32054487CB52052332 /* XCRemoteSwiftPackageReference "swift-dependencies" */,
+				91086051D9EC56BBA794DAD1 /* XCRemoteSwiftPackageReference "swift-navigation" */,
+				91CC58644ABC044D48488747 /* XCLocalSwiftPackageReference "VinylFeverCore" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 82F110051A55E3158FF9916B /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				FDD826AD9DE28A7B0EDD2334 /* VinylFever */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		6DE4FAB9D5E85608F8F04645 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B7760BDB855168DC4B52C4C9 /* AppModel.swift in Sources */,
+				6AAC484EE4FCEE3EF361E526 /* AppShellView.swift in Sources */,
+				D9300F0E5225EB93AE024E5B /* VinylFeverApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		18FFBDB9650E607126311A25 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 7MQEE539G9;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		3C0763EFFC9FF56290E56B46 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 7MQEE539G9;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		A1B552F9F91F48E18D5845BB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = 7MQEE539G9;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = VinylFever/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jonphillips.VinylFever;
+				PRODUCT_NAME = VinylFever;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		D40D891F1E75E2F1EA28834C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = 7MQEE539G9;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = VinylFever/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jonphillips.VinylFever;
+				PRODUCT_NAME = VinylFever;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		C9896727FE93A65DD89A62DD /* Build configuration list for PBXNativeTarget "VinylFever" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1B552F9F91F48E18D5845BB /* Debug */,
+				D40D891F1E75E2F1EA28834C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		E65DB1298AA7BB9FD7662348 /* Build configuration list for PBXProject "VinylFever" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				18FFBDB9650E607126311A25 /* Debug */,
+				3C0763EFFC9FF56290E56B46 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		91CC58644ABC044D48488747 /* XCLocalSwiftPackageReference "VinylFeverCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = VinylFeverCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		5B2EEA32054487CB52052332 /* XCRemoteSwiftPackageReference "swift-dependencies" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-dependencies";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
+		91086051D9EC56BBA794DAD1 /* XCRemoteSwiftPackageReference "swift-navigation" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-navigation";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		7C6E06FBA965ABDAC7489C80 /* VinylFeverCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VinylFeverCore;
+		};
+		99211BDD035C702EFB2123E3 /* Dependencies */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5B2EEA32054487CB52052332 /* XCRemoteSwiftPackageReference "swift-dependencies" */;
+			productName = Dependencies;
+		};
+		A25F349E47368726A30A4DF2 /* SwiftUINavigation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 91086051D9EC56BBA794DAD1 /* XCRemoteSwiftPackageReference "swift-navigation" */;
+			productName = SwiftUINavigation;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = A8ADFF8CCB4100A002B23A95 /* Project object */;
+}
