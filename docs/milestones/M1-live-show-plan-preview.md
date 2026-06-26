@@ -261,6 +261,29 @@ date/venue/location fallbacks and the partial-set/compilation variants from the
 rules doc; vocab persists across launches. **Done when:** changing source/tags
 updates the album title live; vocabulary survives relaunch.
 
+Persistence-law guardrails (design to them now even though M1 sync is off — the
+house rule is "obey the sharing laws from day one," jon-platform
+`docs/ios/persistence-and-sync.md`):
+
+- **No unique index on `token`.** CloudKit law 3 forbids unique indexes except the
+  PK, and SQLiteData's sync won't enforce one anyway. Don't reach for `.unique()`.
+  Dedup by `token` **on read** (deterministic winner, e.g. lowest UUID) so a future
+  duplicate can't crash a `@FetchOne`.
+- **Seed built-ins idempotently, with stable UUIDs.** Derive each built-in's `id`
+  deterministically from its token (a fixed UUID per token), not `UUID()`. Re-running
+  the seed — or a second device seeding later — then collides on the PK instead of
+  inserting a duplicate `SBD`. A random-UUID seed is a latent duplicate generator.
+
+Album-title token mapping (pin these exact strings; from
+[../setlist-formatting-rules.md](../setlist-formatting-rules.md) — note the album
+string's unknown-location token differs from the `LOCATION` tag's):
+
+- `Field.unknown` → `Unknown Date` / `Unknown City` / `Unknown Venue` (the album uses
+  **`Unknown City`**, not the tag's `Unknown Location`); no source → **lowercase
+  `(unknown)`**. All-unknown: `Unknown Date: Unknown City - Unknown Venue (unknown)`.
+- Partial-set / early-show qualifier sits **before** the source: `… - Venue (1st Set)
+  (SBD)`. Compilation form is `Title (Compilation)` with no date/venue/location segment.
+
 ### Slice 4 — `ShowPlan` + the Preview screen
 
 `ShowPlan` builder: zip sorted files with setlist tracks; compute
@@ -272,6 +295,15 @@ title/album/artist/albumArtist/filename, the issue list, readiness. **Apply is a
 disabled control labeled "M2."** **Tests:** plan over fixtures; count-mismatch
 issue; filename formatting (incl. ≥100 tracks); readiness logic. **Done when:** the
 full end-to-end flow works in-app with zero writes.
+
+**Filename sanitization (don't skip).** `proposedFilename` must replace
+filesystem-illegal characters while the **`title` tag keeps the original text**.
+Segues and medleys are explicitly preserved in titles per the rules doc, so real
+titles contain `/` (the `Mandolin Rain / Brokedown Palace` medley form) and `>`
+(`On the Western Skyline >`). A raw `NN - A / B.flac` is a broken path, not a
+filename. Pick a deterministic replacement (at minimum `/` → `-`; also handle `:`,
+which is macOS-hostile) and cover it with a test. The illegal-character set and its
+replacement are a constant — justify it in the register below, don't guess inline.
 
 ## Constants register (pre-justified — jon-platform "constants need a rationale")
 
