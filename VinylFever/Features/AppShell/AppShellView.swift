@@ -15,7 +15,7 @@ struct AppShellView: View {
     } detail: {
       switch model.selectedSection {
       case .liveShows:
-        ContentUnavailableView("Live Shows", systemImage: "music.note.list")
+        LiveShowsView(model: model)
       case .collections:
         ContentUnavailableView("Collections", systemImage: "rectangle.stack")
       }
