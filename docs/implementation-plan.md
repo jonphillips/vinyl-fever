@@ -7,6 +7,10 @@ below are the strategic arc; the milestone docs are the slices to implement.
 Milestone 1 realizes the start of Phase 1.5 (the vertical slice) as a read-only,
 no-writes plan preview — see
 [milestones/M1-live-show-plan-preview.md](milestones/M1-live-show-plan-preview.md).
+Milestone 2 executes that plan (Phase 4–5): the first mutation — tool discovery,
+copy to `Working/`, tag, FLAC→ALAC into `Output/`, and file-level verification,
+still stopping short of Music.app — see
+[milestones/M2-live-show-apply-convert.md](milestones/M2-live-show-apply-convert.md).
 
 ## Phase 0: Requirements Review
 
