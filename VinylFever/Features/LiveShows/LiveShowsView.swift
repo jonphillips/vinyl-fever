@@ -84,6 +84,15 @@ private struct ScannedShowFolderView: View {
   var body: some View {
     let sourceLabels = SourceLabel.deduplicated(persistedSourceLabels)
     let selectedSourceLabel = sourceLabels.first { $0.id == model.selectedSourceLabelID }
+    let metadata = model.setlistDraft.map {
+      ShowMetadata(tags: $0.tags, source: selectedSourceLabel)
+    }
+    let showPlan: ShowPlan? =
+      if let setlistDraft = model.setlistDraft, let metadata {
+        ShowPlan(folder: folder, setlist: setlistDraft, metadata: metadata)
+      } else {
+        nil
+      }
 
     ScrollView {
       VStack(alignment: .leading, spacing: 24) {
@@ -128,12 +137,11 @@ private struct ScannedShowFolderView: View {
           selectedSourceLabelID: $model.selectedSourceLabelID,
           newSourceLabelToken: $model.newSourceLabelToken,
           errorMessage: model.sourceLabelErrorMessage,
-          metadata: model.setlistDraft.map {
-            ShowMetadata(tags: $0.tags, source: selectedSourceLabel)
-          },
+          metadata: metadata,
           addSourceLabel: model.addSourceLabel,
           deleteSourceLabel: model.deleteSourceLabel
         )
+        PlanPreviewSection(plan: showPlan, root: folder.root)
         ScanSection(
           title: "Cover Art",
           systemImage: "photo",
@@ -144,6 +152,145 @@ private struct ScannedShowFolderView: View {
       }
       .frame(maxWidth: 980, alignment: .leading)
       .padding(24)
+    }
+  }
+}
+
+private struct PlanPreviewSection: View {
+  let plan: ShowPlan?
+  let root: URL
+
+  var body: some View {
+    ScanSection(
+      title: "Import Plan",
+      systemImage: "list.bullet.rectangle",
+      count: plan?.tracks.count ?? 0
+    ) {
+      if let plan {
+        VStack(alignment: .leading, spacing: 16) {
+          PlanReadinessSummary(plan: plan)
+          ProposedMetadataSummary(plan: plan)
+          if plan.tracks.isEmpty {
+            EmptyScanSectionRow(title: "No file-to-track mappings")
+          } else {
+            LazyVStack(alignment: .leading, spacing: 10) {
+              ForEach(plan.tracks) { trackPlan in
+                TrackPlanRow(trackPlan: trackPlan, root: root)
+              }
+            }
+          }
+        }
+        .padding(.vertical, 8)
+      } else {
+        EmptyScanSectionRow(title: "Parse a setlist to preview the import plan")
+      }
+    }
+  }
+}
+
+private struct PlanReadinessSummary: View {
+  let plan: ShowPlan
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      HStack(alignment: .firstTextBaseline, spacing: 12) {
+        Label(
+          plan.isReadyToImport ? "Ready to import" : "Not ready to import",
+          systemImage: plan.isReadyToImport ? "checkmark.circle" : "exclamationmark.triangle"
+        )
+        .foregroundStyle(plan.isReadyToImport ? .green : .orange)
+        Spacer()
+        Button {
+        } label: {
+          Label("Apply (M2)", systemImage: "hammer")
+        }
+        .disabled(true)
+        .help("Applying the plan is deferred to M2.")
+      }
+
+      if !plan.issues.isEmpty {
+        VStack(alignment: .leading, spacing: 6) {
+          ForEach(plan.issues, id: \.self) { issue in
+            Label(issue.message, systemImage: "exclamationmark.circle")
+              .font(.callout)
+              .foregroundStyle(.secondary)
+          }
+        }
+      }
+    }
+  }
+}
+
+private struct ProposedMetadataSummary: View {
+  let plan: ShowPlan
+
+  var body: some View {
+    Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 8) {
+      ProposedMetadataRow(title: "Album", value: plan.metadata.albumTitle)
+      ProposedMetadataRow(title: "Sort Album", value: plan.metadata.sortAlbum)
+      ProposedMetadataRow(title: "Artist", value: plan.metadata.tags.artist.displayText)
+      ProposedMetadataRow(title: "Album Artist", value: plan.metadata.tags.albumArtist.displayText)
+    }
+  }
+}
+
+private struct ProposedMetadataRow: View {
+  let title: LocalizedStringResource
+  let value: String
+
+  var body: some View {
+    GridRow {
+      Text(title)
+        .foregroundStyle(.secondary)
+      Text(value)
+        .textSelection(.enabled)
+    }
+  }
+}
+
+private struct TrackPlanRow: View {
+  let trackPlan: TrackPlan
+  let root: URL
+
+  var body: some View {
+    HStack(alignment: .top, spacing: 12) {
+      Text(trackPlan.proposedTags.trackNumber, format: .number)
+        .font(.callout.monospacedDigit())
+        .foregroundStyle(.secondary)
+        .frame(width: 28, alignment: .trailing)
+      VStack(alignment: .leading, spacing: 6) {
+        Text(trackPlan.proposedFilename)
+          .font(.callout.monospaced())
+          .textSelection(.enabled)
+        Text(trackPlan.sourceFile.url.relativePath(from: root))
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .textSelection(.enabled)
+        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 4) {
+          TrackTagRow(title: "Title", value: trackPlan.proposedTags.title)
+          TrackTagRow(title: "Artist", value: trackPlan.proposedTags.artist)
+          TrackTagRow(title: "Album Artist", value: trackPlan.proposedTags.albumArtist)
+        }
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.vertical, 8)
+  }
+}
+
+private struct TrackTagRow: View {
+  let title: LocalizedStringResource
+  let value: String
+
+  var body: some View {
+    GridRow {
+      Text(title)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      Text(value.isEmpty ? "Missing title" : value)
+        .font(.caption)
+        .foregroundStyle(value.isEmpty ? .orange : .secondary)
+        .textSelection(.enabled)
     }
   }
 }

@@ -221,7 +221,7 @@ at-a-glance summary.
 - [x] Slice 1 — Folder scan
 - [x] Slice 2 — Setlist parser
 - [x] Slice 3 — Source vocabulary + album title
-- [ ] Slice 4 — `ShowPlan` + Preview screen
+- [x] Slice 4 — `ShowPlan` + Preview screen
 
 ### Slice 0 — Skeleton
 
@@ -317,6 +317,14 @@ treatment.
 - **Filename zero-pad width = max(2, digits(trackCount)).** The pipeline defaults
   to 2-digit `TrackNN`; widen only past 99 tracks so lexical order stays correct.
   Derived from the data, not fixed.
+- **M1 proposed disc number = 1.** M1 zips one ordered audio-file list to one
+  ordered setlist; explicit disc/set modeling belongs with later apply/conversion
+  work once multi-disc source handling returns.
+- **Filename illegal characters = `/`, `:`, NUL; replacement = ` - `.** `/` is the
+  POSIX path separator, `:` is macOS-hostile because HFS-style path APIs treat it
+  specially, and NUL cannot appear in a path component. The spaced hyphen keeps
+  segue/medley titles readable without creating nested paths; the title tag
+  remains unchanged.
 - **Cover candidates = `front.*`, `image.*` (case-insensitive).** Exactly
   `copy_cover_candidates` in the pipeline.
 - **Setlist detection = `setlist.txt`, then any `*.txt`.** The pipeline writes
