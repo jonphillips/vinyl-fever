@@ -10,6 +10,8 @@ final class AppModel {
   @ObservationIgnored
   @Dependency(\.fileSystemClient) private var fileSystemClient
   @ObservationIgnored
+  @Dependency(\.toolPathClient) private var toolPathClient
+  @ObservationIgnored
   @Dependency(\.defaultDatabase) private var database
   @ObservationIgnored
   @Dependency(\.uuid) private var uuid
@@ -24,6 +26,8 @@ final class AppModel {
   var selectedSourceLabelID: SourceLabel.ID?
   var newSourceLabelToken = ""
   var sourceLabelErrorMessage: String?
+  var toolStatuses = AudioTool.allCases.map { ToolStatus.missing(tool: $0) }
+  var toolStatusErrorMessage: String?
 
   enum Destination: Hashable {
   }
@@ -98,6 +102,32 @@ final class AppModel {
       sourceLabelErrorMessage = nil
     } catch {
       sourceLabelErrorMessage = error.localizedDescription
+    }
+  }
+
+  func toolStatus(for tool: AudioTool) -> ToolStatus {
+    toolStatuses.first { $0.tool == tool } ?? .missing(tool: tool)
+  }
+
+  func refreshToolStatuses(settings: AppSetting) async {
+    do {
+      toolStatuses = try await toolPathClient.resolveTools(settings.toolPathOverrides)
+      toolStatusErrorMessage = nil
+    } catch is CancellationError {
+    } catch {
+      toolStatusErrorMessage = error.localizedDescription
+    }
+  }
+
+  func saveToolOverride(_ path: String?, for tool: AudioTool, settings: AppSetting) {
+    let updatedSettings = settings.withOverridePath(path, for: tool)
+    do {
+      try database.write { db in
+        try AppSetting.upsert { updatedSettings }.execute(db)
+      }
+      toolStatusErrorMessage = nil
+    } catch {
+      toolStatusErrorMessage = error.localizedDescription
     }
   }
 
