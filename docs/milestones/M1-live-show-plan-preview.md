@@ -220,7 +220,7 @@ at-a-glance summary.
 - [x] Slice 0 — Skeleton
 - [x] Slice 1 — Folder scan
 - [x] Slice 2 — Setlist parser
-- [ ] Slice 3 — Source vocabulary + album title
+- [x] Slice 3 — Source vocabulary + album title
 - [ ] Slice 4 — `ShowPlan` + Preview screen
 
 ### Slice 0 — Skeleton
