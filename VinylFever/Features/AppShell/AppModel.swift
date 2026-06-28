@@ -10,6 +10,8 @@ final class AppModel {
   @ObservationIgnored
   @Dependency(\.fileSystemClient) private var fileSystemClient
   @ObservationIgnored
+  @Dependency(\.fileOperationClient) private var fileOperationClient
+  @ObservationIgnored
   @Dependency(\.toolPathClient) private var toolPathClient
   @ObservationIgnored
   @Dependency(\.audioMetadataClient) private var audioMetadataClient
@@ -35,6 +37,7 @@ final class AppModel {
   var toolStatusErrorMessage: String?
   var runLogErrorMessage: String?
   var currentMetadataByFileID: [ScannedAudioFile.ID: AudioMetadataLoadState] = [:]
+  var applyState: ApplyRunState = .idle
 
   enum Destination: Hashable {
   }
@@ -43,10 +46,12 @@ final class AppModel {
     do {
       scannedShowFolder = try fileSystemClient.scanShowFolder(root: url)
       currentMetadataByFileID = [:]
+      applyState = .idle
       scanErrorMessage = nil
     } catch {
       scannedShowFolder = nil
       currentMetadataByFileID = [:]
+      applyState = .idle
       scanErrorMessage = error.localizedDescription
     }
   }
@@ -130,6 +135,58 @@ final class AppModel {
     }
   }
 
+  func hasRequiredApplyTools(for plan: ShowPlan?) -> Bool {
+    guard let plan else {
+      return false
+    }
+    let applyPlan = ApplyPlan(showPlan: plan, showRoot: scannedShowFolder?.root ?? URL(fileURLWithPath: "/"))
+    return applyPlan.requiredTools.allSatisfy { tool in
+      toolStatus(for: tool).resolvedPath != nil
+    }
+  }
+
+  func applyShowPlan(_ showPlan: ShowPlan, coverURL: URL?) async {
+    guard let scannedShowFolder else {
+      applyState = .failed("Open a show folder before applying.")
+      return
+    }
+
+    let applyPlan = ApplyPlan(
+      showPlan: showPlan,
+      showRoot: scannedShowFolder.root,
+      coverURL: coverURL
+    )
+    applyState = .running(applyPlan)
+
+    do {
+      let result = try await ApplyExecutor().apply(
+        applyPlan,
+        toolPaths: AudioToolPaths(statuses: toolStatuses)
+      )
+      applyState = .completed(result)
+      runLogErrorMessage = nil
+    } catch is CancellationError {
+      applyState = .idle
+    } catch {
+      applyState = .failed(error.localizedDescription)
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
+  func revealWorkingDirectory() async {
+    guard let scannedShowFolder else {
+      return
+    }
+    do {
+      try await fileOperationClient.reveal(
+        scannedShowFolder.root.appendingPathComponent(ApplyPlan.workingDirectoryName, isDirectory: true)
+      )
+      runLogErrorMessage = nil
+    } catch {
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
   func refreshCurrentMetadata() async {
     guard let scannedShowFolder else {
       currentMetadataByFileID = [:]
@@ -149,13 +206,8 @@ final class AppModel {
     )
 
     let toolPaths = AudioToolPaths(statuses: toolStatuses)
-    let run = await openMetadataReadRun(
-      folder: scannedShowFolder,
-      files: files,
-      toolPaths: toolPaths
-    )
     let audioMetadataClient = self.audioMetadataClient
-    var failedCount = 0
+    var outcomes: [MetadataReadOutcome] = []
     await withTaskGroup(of: (ScannedAudioFile.ID, AudioMetadataLoadState).self) { group in
       for file in files {
         group.addTask {
@@ -179,13 +231,29 @@ final class AppModel {
           continue
         }
         let outcome = metadataReadOutcome(file: file, state: state)
-        if outcome.status == .failed {
-          failedCount += 1
-        }
-        await appendMetadataReadOutcome(outcome, to: run)
+        outcomes.append(outcome)
       }
     }
 
+    guard !Task.isCancelled else {
+      return
+    }
+    guard shouldRecordMetadataReadRun(folder: scannedShowFolder, outcomes: outcomes) else {
+      return
+    }
+
+    let run = await openMetadataReadRun(
+      folder: scannedShowFolder,
+      files: files,
+      toolPaths: toolPaths
+    )
+    let sortedOutcomes = outcomes.sorted {
+      $0.file.url.path(percentEncoded: false) < $1.file.url.path(percentEncoded: false)
+    }
+    for outcome in sortedOutcomes {
+      await appendMetadataReadOutcome(outcome, to: run)
+    }
+    let failedCount = sortedOutcomes.count { $0.status == .failed }
     await closeMetadataReadRun(run, fileCount: files.count, failedCount: failedCount)
   }
 
@@ -289,6 +357,42 @@ final class AppModel {
     }
   }
 
+  private func shouldRecordMetadataReadRun(
+    folder: ScannedShowFolder,
+    outcomes: [MetadataReadOutcome]
+  ) -> Bool {
+    do {
+      let rootPath = folder.root.path(percentEncoded: false)
+      let current = metadataReadSnapshots(from: outcomes)
+      return try database.read { db in
+        guard let previous = try RunHistory.mostRecentMetadataReadOutcomes(
+          showRootPath: rootPath,
+          in: db
+        ) else {
+          return true
+        }
+        return previous != current
+      }
+    } catch {
+      runLogErrorMessage = error.localizedDescription
+      return true
+    }
+  }
+
+  private func metadataReadSnapshots(
+    from outcomes: [MetadataReadOutcome]
+  ) -> [RunFileOutcomeSummary] {
+    outcomes
+      .map { outcome in
+        RunFileOutcomeSummary(
+          sourcePath: outcome.file.url.path(percentEncoded: false),
+          status: outcome.status,
+          note: outcome.note
+        )
+      }
+      .sorted { $0.sourcePath < $1.sourcePath }
+  }
+
   private func metadataReadOutcome(
     file: ScannedAudioFile,
     state: AudioMetadataLoadState
@@ -352,6 +456,20 @@ private struct MetadataReadOutcome: Sendable {
   var file: ScannedAudioFile
   var status: RunFileOutcome.Status
   var note: String
+}
+
+enum ApplyRunState: Equatable {
+  case idle
+  case running(ApplyPlan)
+  case completed(ApplyResult)
+  case failed(String)
+
+  var isRunning: Bool {
+    if case .running = self {
+      return true
+    }
+    return false
+  }
 }
 
 enum AppSection: String, CaseIterable, Identifiable, Hashable {

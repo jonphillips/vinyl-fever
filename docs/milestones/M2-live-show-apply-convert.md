@@ -238,7 +238,7 @@ box in the slice PR that completes it. GitHub PR state is canonical.
 - [x] Slice 0 — Tool discovery + Settings
 - [x] Slice 1 — `ScriptClient` + `AudioMetadataClient` (read) + current-vs-proposed
 - [x] Slice 2 — Run log (SQLiteData) + run history
-- [ ] Slice 3 — Apply to `Working/` (copy + rename + tag + cover) — first mutation
+- [x] Slice 3 — Apply to `Working/` (copy + rename + tag + cover) — first mutation
 - [ ] Slice 4 — FLAC→ALAC → `Output/` + file-level verification
 
 ### Slice 0 — Tool discovery + Settings
@@ -337,6 +337,27 @@ integration test guarded on real tool availability copies+tags a generated FLAC
 fixture and reads the tags back. **Done when:** Apply produces a correctly named,
 tagged, cover-embedded `Working/` from a real show, originals untouched, run
 recorded.
+
+**Carry-over from the Slice 3 review (fold into Slice 4):**
+
+- **Add real-tool MP3/M4A tagging coverage.** The guarded integration test only
+  generates and round-trips a FLAC; the ffmpeg MP3/M4A recipes (`-c:a copy` +
+  mjpeg cover mapping, `-disposition attached_pic`, `-f ipod`, `+faststart`, the
+  `0:v:0?` optional-cover branch) have only argv-string assertions. These are the
+  most tool-version-sensitive commands in the apply path and nothing proves they
+  produce correctly-tagged files — mirror the FLAC integration test for MP3 and
+  M4A (guarded on real tool availability).
+- **Don't let a partial failure wedge re-apply.** A tagging failure on track K
+  leaves its half-tagged working copy in place while later tracks proceed; the
+  next apply then sees those files as conflicts and skips everything, forcing a
+  manual `Working/` cleanup. Add a "clear Working" affordance (or clean up just
+  this run's partial outputs on failure) so a transient tool hiccup is
+  recoverable in-app — staying within the no-auto-delete-of-a-*good*-`Working/`
+  invariant.
+- **Handle stale `.tagtmp.<ext>`.** The temp output path is outside the conflict
+  preflight and ffmpeg runs with `-nostdin` but no `-y`/`-n`, so a leftover temp
+  from a crashed run makes ffmpeg fail confusingly. Pass `-y` on our own temp
+  output (safe — it's our scratch file) or remove it before writing.
 
 ### Slice 4 — FLAC→ALAC → `Output/` + file-level verification
 
