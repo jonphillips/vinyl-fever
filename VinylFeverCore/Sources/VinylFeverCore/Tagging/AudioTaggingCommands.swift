@@ -157,6 +157,7 @@ public enum AudioTaggingCommands {
   private static func ffmpegPrefix(for track: ApplyTrackPlan) -> [String] {
     var arguments = [
       "-nostdin",
+      "-y",
       "-hide_banner",
       "-loglevel",
       "error",

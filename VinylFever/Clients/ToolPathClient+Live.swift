@@ -30,6 +30,17 @@ extension FileOperationClient {
           withIntermediateDirectories: true
         )
       },
+      directoryFiles: { url in
+        let contents = try FileManager.default.contentsOfDirectory(
+          at: url,
+          includingPropertiesForKeys: [.isDirectoryKey],
+          options: [.skipsHiddenFiles]
+        )
+        return try contents.filter { file in
+          let resourceValues = try file.resourceValues(forKeys: [.isDirectoryKey])
+          return resourceValues.isDirectory != true
+        }
+      },
       copyFile: { source, destination in
         guard !FileManager.default.fileExists(atPath: destination.path(percentEncoded: false)) else {
           throw FileOperationError.destinationExists(destination)

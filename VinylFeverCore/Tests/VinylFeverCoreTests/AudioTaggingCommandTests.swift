@@ -71,7 +71,7 @@ struct AudioTaggingCommandTests {
     expectNoDifference(
       mp3Plan.commands.first?.arguments,
       [
-        "-nostdin", "-hide_banner", "-loglevel", "error",
+        "-nostdin", "-y", "-hide_banner", "-loglevel", "error",
         "-i", "/Shows/BruceHornsby/Working/01 - The Way It Is.mp3",
         "-i", "/Shows/BruceHornsby/front.jpg",
         "-map", "0:a:0", "-map", "1:v:0",
