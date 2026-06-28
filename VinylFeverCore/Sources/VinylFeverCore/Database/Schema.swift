@@ -23,6 +23,7 @@ public enum VinylFeverDatabase {
     registerMigrations(in: &migrator)
     try migrator.migrate(database)
     try seedBuiltInSourceLabels(in: database)
+    try seedDefaultAppSettings(in: database)
     return database
   }
 
@@ -37,12 +38,33 @@ public enum VinylFeverDatabase {
         """)
         .execute(db)
     }
+
+    migrator.registerMigration("Create 'appSettings' table") { db in
+      try #sql("""
+        CREATE TABLE "appSettings" (
+          "id" TEXT PRIMARY KEY NOT NULL ON CONFLICT REPLACE DEFAULT (uuid()),
+          "metaflacPath" TEXT,
+          "ffmpegPath" TEXT,
+          "ffprobePath" TEXT
+        ) STRICT
+        """)
+        .execute(db)
+    }
   }
 
   public static func seedBuiltInSourceLabels(in database: any DatabaseWriter) throws {
     try database.write { db in
       for sourceLabel in SourceLabel.builtIns {
         try SourceLabel.upsert { sourceLabel }.execute(db)
+      }
+    }
+  }
+
+  public static func seedDefaultAppSettings(in database: any DatabaseWriter) throws {
+    try database.write { db in
+      let existingSettings = try AppSetting.find(AppSetting.singletonID).fetchOne(db)
+      if existingSettings == nil {
+        try AppSetting.upsert { .default }.execute(db)
       }
     }
   }
