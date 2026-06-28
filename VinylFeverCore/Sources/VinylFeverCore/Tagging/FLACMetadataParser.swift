@@ -12,7 +12,7 @@ public enum FLACMetadataParser {
       TagValueParser.leadingInteger(tags.firstValue(for: ["TRACKTOTAL", "TOTALTRACKS"]))
       ?? TagValueParser.trailingTotal(tags.firstValue(for: ["TRACKNUMBER", "TRACK"]))
     let discNumber = TagValueParser.leadingInteger(tags.firstValue(for: ["DISCNUMBER", "DISC"]))
-    let durationSeconds = parseDuration(streamInfoOutput)
+    let streamInfo = parseStreamInfo(streamInfoOutput)
 
     return AudioTags(
       title: tags.joinedValues(for: ["TITLE"]),
@@ -22,20 +22,33 @@ public enum FLACMetadataParser {
       trackNumber: trackNumber,
       trackTotal: trackTotal,
       discNumber: discNumber,
-      durationSeconds: durationSeconds,
-      hasAudioStream: durationSeconds != nil,
+      durationSeconds: streamInfo.durationSeconds,
+      hasAudioStream: streamInfo.hasAudioStream,
       hasEmbeddedArtwork: hasPicture(pictureListOutput)
     )
   }
 
-  private static func parseDuration(_ output: String) -> Double? {
+  private static func parseStreamInfo(_ output: String) -> FLACStreamInfo {
+    // Kept in lockstep with AudioMetadataCommands.flacStreamInfo: line 0 is
+    // total samples, line 1 is sample rate.
     let values = output
       .split(whereSeparator: \.isNewline)
       .compactMap { Double($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
-    guard values.count >= 2, values[1] > 0 else {
-      return nil
-    }
-    return values[0] / values[1]
+    let durationSeconds =
+      if values.count >= 2, values[1] > 0 {
+        values[0] / values[1]
+      } else {
+        Double?.none
+      }
+    return FLACStreamInfo(
+      durationSeconds: durationSeconds,
+      hasAudioStream: !values.isEmpty
+    )
+  }
+
+  private struct FLACStreamInfo {
+    var durationSeconds: Double?
+    var hasAudioStream: Bool
   }
 
   private static func hasPicture(_ output: String) -> Bool {

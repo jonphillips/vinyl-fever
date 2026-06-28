@@ -96,6 +96,43 @@ import Testing
   }
 
   @Test
+  func parsesZeroSampleFLACAsAudioStreamWithZeroDuration() {
+    let tags = FLACMetadataParser.parse(
+      tagsOutput: "",
+      streamInfoOutput: """
+        0
+        44100
+        """,
+      pictureListOutput: ""
+    )
+
+    expectNoDifference(
+      tags,
+      AudioTags(
+        durationSeconds: 0,
+        hasAudioStream: true
+      )
+    )
+  }
+
+  @Test
+  func combinedOutputTextSeparatesStdoutAndStderr() {
+    let command = ScriptCommand(
+      tool: .ffprobe,
+      executableURL: URL(fileURLWithPath: "/tools/ffprobe"),
+      arguments: ["--version"]
+    )
+    let result = ScriptResult(
+      command: command,
+      exitCode: 1,
+      standardOutput: Data("stdout".utf8),
+      standardError: Data("stderr".utf8)
+    )
+
+    expectNoDifference(result.combinedOutputText, "stdout\nstderr")
+  }
+
+  @Test
   func parsesFFProbeJSON() throws {
     let json = Data(
       """

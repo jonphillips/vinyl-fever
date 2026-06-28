@@ -237,7 +237,7 @@ box in the slice PR that completes it. GitHub PR state is canonical.
 
 - [x] Slice 0 — Tool discovery + Settings
 - [x] Slice 1 — `ScriptClient` + `AudioMetadataClient` (read) + current-vs-proposed
-- [ ] Slice 2 — Run log (SQLiteData) + run history
+- [x] Slice 2 — Run log (SQLiteData) + run history
 - [ ] Slice 3 — Apply to `Working/` (copy + rename + tag + cover) — first mutation
 - [ ] Slice 4 — FLAC→ALAC → `Output/` + file-level verification
 
@@ -296,6 +296,26 @@ Log the **Slice 1 read invocations** so the table has real content before any
 mutation exists. **Tests:** open→append→close round-trips; observed read returns
 runs newest-first; child outcomes join correctly. **Done when:** read operations
 appear in a run history that survives relaunch. *(No file mutation.)*
+
+**Carry-over from the Slice 2 review (fold into Slice 3):**
+
+- **De-dupe `metadataRead` runs.** Every folder open currently writes a fresh
+  `metadataRead` run (open → per-file outcome → close) with no collapsing, so
+  reopening a show N times yields N identical runs that will bury the real
+  apply/convert runs. **Decided fix:** skip logging a read run when the prior
+  read for the same `showRootPath` produced identical outcomes (same files, same
+  statuses/notes). Compare against the most recent `metadataRead` run for that
+  root before opening a new one.
+- **Bail before recording a cancelled read run.** A refresh cancelled mid-flight
+  still opens/closes a run of all-`skipped` outcomes. Skip
+  `closeMetadataReadRun` (and ideally the open) when `Task.isCancelled` — a
+  second source of the noise above.
+- **Cap the run-history read.** `RunHistoryRequest` fetches both tables in full
+  and groups in memory with no `LIMIT`; add a limit on runs (and fetch only the
+  outcomes for those runs) when the history view gets pagination.
+- **Cosmetics.** Drop the redundant explicit raw value on
+  `RunRecord.Kind.metadataRead`; revisit `RunFileOutcome` history ordering
+  (currently by `sourcePath`) once `producedPath` ordering matters in apply.
 
 ### Slice 3 — Apply to `Working/` (copy + rename + tag + cover) — first mutation
 

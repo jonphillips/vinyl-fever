@@ -24,6 +24,23 @@ public struct ScriptCommand: Equatable, Sendable {
   public var argv: [String] {
     [executableURL.path(percentEncoded: false)] + arguments
   }
+
+  public var commandLine: String {
+    argv.map(Self.shellEscaped).joined(separator: " ")
+  }
+
+  private static func shellEscaped(_ value: String) -> String {
+    guard !value.isEmpty else {
+      return "''"
+    }
+
+    let safeCharacters = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/_:=-+.,")
+    if value.unicodeScalars.allSatisfy({ safeCharacters.contains($0) }) {
+      return value
+    }
+
+    return "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+  }
 }
 
 public struct ScriptResult: Equatable, Sendable {
@@ -57,7 +74,13 @@ public struct ScriptResult: Equatable, Sendable {
   }
 
   public var combinedOutputText: String {
-    standardOutputText + standardErrorText
+    if standardOutputText.isEmpty {
+      return standardErrorText
+    }
+    if standardErrorText.isEmpty {
+      return standardOutputText
+    }
+    return standardOutputText + "\n" + standardErrorText
   }
 }
 
