@@ -4,6 +4,7 @@ public struct AudioTags: Equatable, Sendable {
   public var title: String?
   public var artist: String?
   public var album: String?
+  public var sortAlbum: String?
   public var albumArtist: String?
   public var trackNumber: Int?
   public var trackTotal: Int?
@@ -16,6 +17,7 @@ public struct AudioTags: Equatable, Sendable {
     title: String? = nil,
     artist: String? = nil,
     album: String? = nil,
+    sortAlbum: String? = nil,
     albumArtist: String? = nil,
     trackNumber: Int? = nil,
     trackTotal: Int? = nil,
@@ -27,6 +29,7 @@ public struct AudioTags: Equatable, Sendable {
     self.title = title
     self.artist = artist
     self.album = album
+    self.sortAlbum = sortAlbum
     self.albumArtist = albumArtist
     self.trackNumber = trackNumber
     self.trackTotal = trackTotal

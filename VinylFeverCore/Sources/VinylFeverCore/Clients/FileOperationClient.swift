@@ -6,6 +6,7 @@ import Foundation
 public struct FileOperationClient: Sendable {
   public var fileExists: @Sendable (_ url: URL) async throws -> Bool
   public var createDirectory: @Sendable (_ url: URL) async throws -> Void
+  public var directoryFiles: @Sendable (_ url: URL) async throws -> [URL]
   public var copyFile: @Sendable (_ source: URL, _ destination: URL) async throws -> Void
   public var replaceFile: @Sendable (_ source: URL, _ destination: URL) async throws -> Void
   public var reveal: @Sendable (_ url: URL) async throws -> Void

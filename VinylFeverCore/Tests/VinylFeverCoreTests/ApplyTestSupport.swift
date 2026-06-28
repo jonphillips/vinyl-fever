@@ -72,6 +72,23 @@ func makeApplyTrack(format: AudioFormat, coverURL: URL?) -> ApplyTrackPlan {
   )
 }
 
+func makeConversionPlan(format: AudioFormat) -> ConversionPlan {
+  let showPlan = makeShowPlan(
+    files: [
+      makeAudioFile(
+        id: UUID(1),
+        name: "01.\(format.rawValue)",
+        format: format,
+        sortKey: "01.\(format.rawValue)"
+      ),
+    ],
+    trackTitles: ["The Way It Is"]
+  )
+  return ConversionPlan(
+    applyPlan: ApplyPlan(showPlan: showPlan, showRoot: applyShowRoot, coverURL: nil)
+  )
+}
+
 enum ApplyOperationSnapshot: Equatable {
   case copy(source: String, destination: String)
   case writeTags(
@@ -107,15 +124,18 @@ actor FileOperationRecorder {
   struct Snapshot: Equatable {
     var existenceChecks: [String] = []
     var createdDirectories: [String] = []
+    var directoryFileReads: [String] = []
     var copies: [String] = []
     var replacements: [String] = []
   }
 
   private var existingPaths: Set<String>
+  private var filesByDirectoryPath: [String: [URL]]
   private var state = Snapshot()
 
-  init(existingPaths: Set<String> = []) {
+  init(existingPaths: Set<String> = [], filesByDirectoryPath: [String: [URL]] = [:]) {
     self.existingPaths = existingPaths
+    self.filesByDirectoryPath = filesByDirectoryPath
   }
 
   func fileExists(_ url: URL) -> Bool {
@@ -126,6 +146,12 @@ actor FileOperationRecorder {
 
   func createDirectory(_ url: URL) {
     state.createdDirectories.append(url.path(percentEncoded: false))
+  }
+
+  func directoryFiles(_ url: URL) -> [URL] {
+    let path = url.path(percentEncoded: false)
+    state.directoryFileReads.append(path)
+    return filesByDirectoryPath[path] ?? []
   }
 
   func copyFile(_ source: URL, _ destination: URL) {
@@ -176,19 +202,20 @@ actor ApplyCommandRecorder {
 }
 
 actor RunLogRecorder {
-  private let run = RunRecord(
+  private let baseRun = RunRecord(
     id: UUID(999),
     showRootPath: "/Shows/BruceHornsby",
     kind: .apply,
     startedAt: Date(timeIntervalSince1970: 1_000),
     command: ""
   )
+  private var openedRun: RunRecord?
   private var outcomes: [RunLogFileOutcomeRequest] = []
 
   nonisolated var client: RunLogClient {
     RunLogClient(
-      open: { _ in
-        await self.open()
+      open: { request in
+        await self.open(request)
       },
       appendFileOutcome: { request in
         await self.appendFileOutcome(request)
@@ -203,8 +230,13 @@ actor RunLogRecorder {
     outcomes
   }
 
-  private func open() -> RunRecord {
-    run
+  private func open(_ request: RunLogOpenRequest) -> RunRecord {
+    var run = baseRun
+    run.showRootPath = request.showRootPath
+    run.kind = request.kind
+    run.command = request.command
+    openedRun = run
+    return run
   }
 
   private func appendFileOutcome(_ request: RunLogFileOutcomeRequest) -> RunFileOutcome {
@@ -220,7 +252,7 @@ actor RunLogRecorder {
   }
 
   private func close(_ request: RunLogCloseRequest) -> RunRecord {
-    var closedRun = run
+    var closedRun = openedRun ?? baseRun
     closedRun.finishedAt = Date(timeIntervalSince1970: 1_001)
     closedRun.exitSummary = request.exitSummary
     return closedRun

@@ -170,15 +170,33 @@ private struct ScannedShowFolderView: View {
           coverURL: folder.coverCandidates.first,
           currentMetadataByFileID: model.currentMetadataByFileID,
           applyState: model.applyState,
+          conversionState: model.conversionState,
+          verificationState: model.verificationState,
           hasRequiredApplyTools: model.hasRequiredApplyTools(for: showPlan),
+          hasRequiredConversionTools: { applyPlan in
+            model.hasRequiredConversionTools(for: applyPlan)
+          },
+          hasSuccessfulApply: { applyPlan in
+            model.hasSuccessfulApply(for: applyPlan)
+          },
           apply: { plan in
             Task {
               await model.applyShowPlan(plan, coverURL: folder.coverCandidates.first)
             }
           },
+          convertAndVerify: { applyPlan in
+            Task {
+              await model.convertAndVerify(applyPlan)
+            }
+          },
           revealWorkingDirectory: {
             Task {
               await model.revealWorkingDirectory()
+            }
+          },
+          revealOutputDirectory: {
+            Task {
+              await model.revealOutputDirectory()
             }
           }
         )
@@ -216,9 +234,15 @@ private struct PlanPreviewSection: View {
   let coverURL: URL?
   let currentMetadataByFileID: [ScannedAudioFile.ID: AudioMetadataLoadState]
   let applyState: ApplyRunState
+  let conversionState: ConversionRunState
+  let verificationState: VerificationRunState
   let hasRequiredApplyTools: Bool
+  let hasRequiredConversionTools: (ApplyPlan) -> Bool
+  let hasSuccessfulApply: (ApplyPlan) -> Bool
   let apply: (ShowPlan) -> Void
+  let convertAndVerify: (ApplyPlan) -> Void
   let revealWorkingDirectory: () -> Void
+  let revealOutputDirectory: () -> Void
 
   var body: some View {
     ScanSection(
@@ -231,10 +255,18 @@ private struct PlanPreviewSection: View {
         VStack(alignment: .leading, spacing: 16) {
           PlanReadinessSummary(
             plan: plan,
+            applyPlan: applyPlan,
+            root: root,
             applyState: applyState,
+            conversionState: conversionState,
+            verificationState: verificationState,
             hasRequiredApplyTools: hasRequiredApplyTools,
+            hasRequiredConversionTools: hasRequiredConversionTools(applyPlan),
+            hasSuccessfulApply: hasSuccessfulApply(applyPlan),
             apply: { apply(plan) },
-            revealWorkingDirectory: revealWorkingDirectory
+            convertAndVerify: { convertAndVerify(applyPlan) },
+            revealWorkingDirectory: revealWorkingDirectory,
+            revealOutputDirectory: revealOutputDirectory
           )
           ProposedMetadataSummary(plan: plan)
           ApplyOperationsPreview(applyPlan: applyPlan, root: root)
@@ -262,14 +294,23 @@ private struct PlanPreviewSection: View {
 
 private struct PlanReadinessSummary: View {
   let plan: ShowPlan
+  let applyPlan: ApplyPlan
+  let root: URL
   let applyState: ApplyRunState
+  let conversionState: ConversionRunState
+  let verificationState: VerificationRunState
   let hasRequiredApplyTools: Bool
+  let hasRequiredConversionTools: Bool
+  let hasSuccessfulApply: Bool
   let apply: () -> Void
+  let convertAndVerify: () -> Void
   let revealWorkingDirectory: () -> Void
+  let revealOutputDirectory: () -> Void
 
   @State private var isConfirmingApply = false
 
   var body: some View {
+    let conversionPlan = ConversionPlan(applyPlan: applyPlan)
     VStack(alignment: .leading, spacing: 10) {
       HStack(alignment: .firstTextBaseline, spacing: 12) {
         Label(
@@ -294,6 +335,11 @@ private struct PlanReadinessSummary: View {
         } message: {
           Text("Copies and tags \(plan.tracks.count) files. Existing Working destinations are reported as conflicts.")
         }
+        Button(action: convertAndVerify) {
+          Label(convertButtonTitle(conversionPlan), systemImage: conversionSystemImage(conversionPlan))
+        }
+        .disabled(!canConvert)
+        .help(convertDisabledReason ?? convertHelp(conversionPlan))
       }
 
       if !plan.issues.isEmpty {
@@ -307,6 +353,12 @@ private struct PlanReadinessSummary: View {
       }
 
       ApplyRunStatus(state: applyState, revealWorkingDirectory: revealWorkingDirectory)
+      ConversionRunStatus(
+        state: conversionState,
+        plan: conversionPlan,
+        revealOutputDirectory: revealOutputDirectory
+      )
+      VerificationRunStatus(state: verificationState, root: root)
     }
   }
 
@@ -325,6 +377,48 @@ private struct PlanReadinessSummary: View {
       return "Required audio tools are missing."
     }
     return nil
+  }
+
+  private var canConvert: Bool {
+    hasSuccessfulApply &&
+      hasRequiredConversionTools &&
+      !applyState.isRunning &&
+      !conversionState.isRunning &&
+      !verificationState.isRunning
+  }
+
+  private var convertDisabledReason: String? {
+    if applyState.isRunning {
+      return "Apply is already running."
+    }
+    if conversionState.isRunning {
+      return "Conversion is already running."
+    }
+    if verificationState.isRunning {
+      return "Verification is already running."
+    }
+    if !hasSuccessfulApply {
+      return "Apply must finish successfully first."
+    }
+    if !hasRequiredConversionTools {
+      return "Required conversion and verification tools are missing."
+    }
+    return nil
+  }
+
+  private func convertButtonTitle(_ plan: ConversionPlan) -> LocalizedStringResource {
+    plan.requiresConversion ? "Convert" : "Verify"
+  }
+
+  private func conversionSystemImage(_ plan: ConversionPlan) -> String {
+    plan.requiresConversion ? "arrow.triangle.2.circlepath" : "checkmark.shield"
+  }
+
+  private func convertHelp(_ plan: ConversionPlan) -> String {
+    if plan.requiresConversion {
+      return "Convert FLAC Working files to ALAC and verify Output."
+    }
+    return "Verify tagged Working files."
   }
 }
 
@@ -356,6 +450,105 @@ private struct ApplyRunStatus: View {
       Label(message, systemImage: "exclamationmark.triangle")
         .font(.callout)
         .foregroundStyle(.red)
+    }
+  }
+}
+
+private struct ConversionRunStatus: View {
+  let state: ConversionRunState
+  let plan: ConversionPlan
+  let revealOutputDirectory: () -> Void
+
+  var body: some View {
+    switch state {
+    case .idle:
+      EmptyView()
+    case let .running(plan):
+      Label("Converting \(plan.convertibleTracks.count) files", systemImage: "hourglass")
+        .font(.callout)
+        .foregroundStyle(.secondary)
+    case let .skipped(message):
+      Label(message, systemImage: "forward")
+        .font(.callout)
+        .foregroundStyle(.secondary)
+    case let .completed(result):
+      HStack(spacing: 10) {
+        Label(
+          result.exitSummary,
+          systemImage: result.didSucceed ? "checkmark.circle" : "exclamationmark.triangle"
+        )
+        .foregroundStyle(result.didSucceed ? .green : .orange)
+        if result.didSucceed && plan.requiresConversion {
+          Button(action: revealOutputDirectory) {
+            Label("Reveal Output", systemImage: "folder")
+          }
+        }
+      }
+      .font(.callout)
+    case let .failed(message):
+      Label(message, systemImage: "exclamationmark.triangle")
+        .font(.callout)
+        .foregroundStyle(.red)
+    }
+  }
+}
+
+private struct VerificationRunStatus: View {
+  let state: VerificationRunState
+  let root: URL
+
+  var body: some View {
+    switch state {
+    case .idle:
+      EmptyView()
+    case let .running(plan):
+      Label("Verifying \(plan.tracks.count) files", systemImage: "hourglass")
+        .font(.callout)
+        .foregroundStyle(.secondary)
+    case let .completed(result):
+      VStack(alignment: .leading, spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+          Label(
+            result.didVerify ? "Verified" : "Not verified",
+            systemImage: result.didVerify ? "checkmark.seal" : "xmark.seal"
+          )
+          .foregroundStyle(result.didVerify ? .green : .red)
+          Text("\(result.actualFileCount)/\(result.expectedFileCount) files")
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+        }
+        LazyVStack(alignment: .leading, spacing: 6) {
+          ForEach(result.files) { file in
+            VerificationFileResultRow(result: file, root: root)
+          }
+        }
+      }
+      .font(.callout)
+    case let .failed(message):
+      Label(message, systemImage: "exclamationmark.triangle")
+        .font(.callout)
+        .foregroundStyle(.red)
+    }
+  }
+}
+
+private struct VerificationFileResultRow: View {
+  let result: VerificationFileResult
+  let root: URL
+
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 8) {
+      Image(systemName: result.didVerify ? "checkmark.circle" : "exclamationmark.triangle")
+        .foregroundStyle(result.didVerify ? .green : .red)
+        .frame(width: 18)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(result.url.relativePath(from: root))
+          .font(.caption.monospaced())
+          .textSelection(.enabled)
+        Text(result.note)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
     }
   }
 }

@@ -38,6 +38,9 @@ final class AppModel {
   var runLogErrorMessage: String?
   var currentMetadataByFileID: [ScannedAudioFile.ID: AudioMetadataLoadState] = [:]
   var applyState: ApplyRunState = .idle
+  var conversionState: ConversionRunState = .idle
+  var verificationState: VerificationRunState = .idle
+  var lastSuccessfulApplyPlan: ApplyPlan?
 
   enum Destination: Hashable {
   }
@@ -47,11 +50,17 @@ final class AppModel {
       scannedShowFolder = try fileSystemClient.scanShowFolder(root: url)
       currentMetadataByFileID = [:]
       applyState = .idle
+      conversionState = .idle
+      verificationState = .idle
+      lastSuccessfulApplyPlan = nil
       scanErrorMessage = nil
     } catch {
       scannedShowFolder = nil
       currentMetadataByFileID = [:]
       applyState = .idle
+      conversionState = .idle
+      verificationState = .idle
+      lastSuccessfulApplyPlan = nil
       scanErrorMessage = error.localizedDescription
     }
   }
@@ -145,6 +154,22 @@ final class AppModel {
     }
   }
 
+  func hasRequiredConversionTools(for applyPlan: ApplyPlan?) -> Bool {
+    guard let applyPlan else {
+      return false
+    }
+    return ConversionPlan(applyPlan: applyPlan).requiredTools.allSatisfy { tool in
+      toolStatus(for: tool).resolvedPath != nil
+    }
+  }
+
+  func hasSuccessfulApply(for applyPlan: ApplyPlan) -> Bool {
+    guard case let .completed(result) = applyState, result.didSucceed else {
+      return false
+    }
+    return lastSuccessfulApplyPlan == applyPlan
+  }
+
   func applyShowPlan(_ showPlan: ShowPlan, coverURL: URL?) async {
     guard let scannedShowFolder else {
       applyState = .failed("Open a show folder before applying.")
@@ -157,6 +182,9 @@ final class AppModel {
       coverURL: coverURL
     )
     applyState = .running(applyPlan)
+    conversionState = .idle
+    verificationState = .idle
+    lastSuccessfulApplyPlan = nil
 
     do {
       let result = try await ApplyExecutor().apply(
@@ -164,11 +192,64 @@ final class AppModel {
         toolPaths: AudioToolPaths(statuses: toolStatuses)
       )
       applyState = .completed(result)
+      lastSuccessfulApplyPlan = result.didSucceed ? applyPlan : nil
       runLogErrorMessage = nil
     } catch is CancellationError {
       applyState = .idle
     } catch {
       applyState = .failed(error.localizedDescription)
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
+  func convertAndVerify(_ applyPlan: ApplyPlan) async {
+    guard hasSuccessfulApply(for: applyPlan) else {
+      conversionState = .failed("Apply must finish successfully before conversion.")
+      verificationState = .idle
+      return
+    }
+
+    let conversionPlan = ConversionPlan(applyPlan: applyPlan)
+    let toolPaths = AudioToolPaths(statuses: toolStatuses)
+    guard conversionPlan.requiredTools.allSatisfy({ toolStatus(for: $0).resolvedPath != nil }) else {
+      conversionState = .failed("Required conversion and verification tools are missing.")
+      verificationState = .idle
+      return
+    }
+
+    verificationState = .idle
+    if conversionPlan.requiresConversion {
+      conversionState = .running(conversionPlan)
+      do {
+        let result = try await ConversionExecutor().convert(conversionPlan, toolPaths: toolPaths)
+        conversionState = .completed(result)
+        runLogErrorMessage = nil
+        guard result.didSucceed else {
+          verificationState = .failed("Conversion did not finish cleanly.")
+          return
+        }
+      } catch is CancellationError {
+        conversionState = .idle
+        return
+      } catch {
+        conversionState = .failed(error.localizedDescription)
+        verificationState = .idle
+        runLogErrorMessage = error.localizedDescription
+        return
+      }
+    } else {
+      conversionState = .skipped("No FLAC tracks; verifying Working files.")
+    }
+
+    verificationState = .running(conversionPlan)
+    do {
+      let result = try await VerificationExecutor().verify(conversionPlan, toolPaths: toolPaths)
+      verificationState = .completed(result)
+      runLogErrorMessage = nil
+    } catch is CancellationError {
+      verificationState = .idle
+    } catch {
+      verificationState = .failed(error.localizedDescription)
       runLogErrorMessage = error.localizedDescription
     }
   }
@@ -180,6 +261,20 @@ final class AppModel {
     do {
       try await fileOperationClient.reveal(
         scannedShowFolder.root.appendingPathComponent(ApplyPlan.workingDirectoryName, isDirectory: true)
+      )
+      runLogErrorMessage = nil
+    } catch {
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
+  func revealOutputDirectory() async {
+    guard let scannedShowFolder else {
+      return
+    }
+    do {
+      try await fileOperationClient.reveal(
+        scannedShowFolder.root.appendingPathComponent(ConversionPlan.outputDirectoryName, isDirectory: true)
       )
       runLogErrorMessage = nil
     } catch {
@@ -462,6 +557,35 @@ enum ApplyRunState: Equatable {
   case idle
   case running(ApplyPlan)
   case completed(ApplyResult)
+  case failed(String)
+
+  var isRunning: Bool {
+    if case .running = self {
+      return true
+    }
+    return false
+  }
+}
+
+enum ConversionRunState: Equatable {
+  case idle
+  case running(ConversionPlan)
+  case skipped(String)
+  case completed(ConversionResult)
+  case failed(String)
+
+  var isRunning: Bool {
+    if case .running = self {
+      return true
+    }
+    return false
+  }
+}
+
+enum VerificationRunState: Equatable {
+  case idle
+  case running(ConversionPlan)
+  case completed(VerificationResult)
   case failed(String)
 
   var isRunning: Bool {

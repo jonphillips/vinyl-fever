@@ -1,6 +1,6 @@
 import Foundation
 
-public enum AudioFormat: String, CaseIterable, Equatable, Sendable {
+public enum AudioFormat: String, CaseIterable, Equatable, Hashable, Sendable {
   case flac
   case mp3
   case m4a
