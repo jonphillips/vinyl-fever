@@ -50,6 +50,38 @@ public enum VinylFeverDatabase {
         """)
         .execute(db)
     }
+
+    migrator.registerMigration("Create run log tables") { db in
+      try #sql("""
+        CREATE TABLE "runRecords" (
+          "id" TEXT PRIMARY KEY NOT NULL ON CONFLICT REPLACE DEFAULT (uuid()),
+          "showRootPath" TEXT NOT NULL DEFAULT '',
+          "kind" TEXT NOT NULL DEFAULT 'metadataRead',
+          "startedAt" TEXT NOT NULL,
+          "finishedAt" TEXT,
+          "command" TEXT NOT NULL DEFAULT '',
+          "exitSummary" TEXT NOT NULL DEFAULT ''
+        ) STRICT
+        """)
+        .execute(db)
+
+      try #sql("""
+        CREATE TABLE "runFileOutcomes" (
+          "id" TEXT PRIMARY KEY NOT NULL ON CONFLICT REPLACE DEFAULT (uuid()),
+          "runID" TEXT NOT NULL REFERENCES "runRecords"("id") ON DELETE CASCADE,
+          "sourcePath" TEXT NOT NULL DEFAULT '',
+          "producedPath" TEXT,
+          "status" TEXT NOT NULL DEFAULT 'read',
+          "note" TEXT NOT NULL DEFAULT ''
+        ) STRICT
+        """)
+        .execute(db)
+
+      try #sql("""
+        CREATE INDEX "index_runFileOutcomes_on_runID" ON "runFileOutcomes"("runID")
+        """)
+        .execute(db)
+    }
   }
 
   public static func seedBuiltInSourceLabels(in database: any DatabaseWriter) throws {

@@ -237,7 +237,7 @@ box in the slice PR that completes it. GitHub PR state is canonical.
 
 - [x] Slice 0 — Tool discovery + Settings
 - [x] Slice 1 — `ScriptClient` + `AudioMetadataClient` (read) + current-vs-proposed
-- [ ] Slice 2 — Run log (SQLiteData) + run history
+- [x] Slice 2 — Run log (SQLiteData) + run history
 - [ ] Slice 3 — Apply to `Working/` (copy + rename + tag + cover) — first mutation
 - [ ] Slice 4 — FLAC→ALAC → `Output/` + file-level verification
 

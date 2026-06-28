@@ -18,18 +18,10 @@ struct LiveShowsView: View {
           openSetlistFile: openSetlistFile
         )
       } else {
-        ContentUnavailableView {
-          Label("Live Shows", systemImage: "music.note.list")
-        } description: {
-          if let scanErrorMessage = model.scanErrorMessage {
-            Text(scanErrorMessage)
-          }
-        } actions: {
-          Button(action: openFolder) {
-            Label("Open Show Folder", systemImage: "folder")
-          }
-          .buttonStyle(.borderedProminent)
-        }
+        EmptyLiveShowsView(
+          scanErrorMessage: model.scanErrorMessage,
+          openFolder: openFolder
+        )
       }
     }
     .navigationTitle("Live Shows")
@@ -69,6 +61,34 @@ struct LiveShowsView: View {
       return
     }
     model.loadSetlistText(from: url)
+  }
+}
+
+private struct EmptyLiveShowsView: View {
+  let scanErrorMessage: String?
+  let openFolder: () -> Void
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 24) {
+        ContentUnavailableView {
+          Label("Live Shows", systemImage: "music.note.list")
+        } description: {
+          if let scanErrorMessage {
+            Text(scanErrorMessage)
+          }
+        } actions: {
+          Button(action: openFolder) {
+            Label("Open Show Folder", systemImage: "folder")
+          }
+          .buttonStyle(.borderedProminent)
+        }
+
+        RunHistorySection()
+      }
+      .frame(maxWidth: 980, alignment: .leading)
+      .padding(24)
+    }
   }
 }
 
@@ -156,12 +176,23 @@ private struct ScannedShowFolderView: View {
         ) {
           CandidateList(urls: folder.coverCandidates, root: folder.root)
         }
+        if let errorMessage = model.runLogErrorMessage {
+          ScanErrorBanner(message: errorMessage)
+        }
+        RunHistorySection()
       }
       .frame(maxWidth: 980, alignment: .leading)
       .padding(24)
     }
-    .task(id: MetadataRefreshID(folder: folder, settings: settings)) {
-      await model.refreshCurrentMetadata(settings: settings)
+    .task(id: settings) {
+      await model.refreshToolStatuses(settings: settings)
+    }
+    .task(id: MetadataRefreshID(
+      folder: folder,
+      toolStatuses: model.toolStatuses,
+      hasResolvedToolStatuses: model.hasResolvedToolStatuses
+    )) {
+      await model.refreshCurrentMetadata()
     }
   }
 }
@@ -412,12 +443,151 @@ private struct CurrentMetadataStatus: View {
 private struct MetadataRefreshID: Equatable {
   var root: URL
   var fileIDs: [ScannedAudioFile.ID]
-  var settings: AppSetting
+  var toolStatuses: [ToolStatus]
+  var hasResolvedToolStatuses: Bool
 
-  init(folder: ScannedShowFolder, settings: AppSetting) {
+  init(
+    folder: ScannedShowFolder,
+    toolStatuses: [ToolStatus],
+    hasResolvedToolStatuses: Bool
+  ) {
     root = folder.root
     fileIDs = folder.audioFiles.map(\.id)
-    self.settings = settings
+    self.toolStatuses = toolStatuses
+    self.hasResolvedToolStatuses = hasResolvedToolStatuses
+  }
+}
+
+private struct RunHistorySection: View {
+  @Fetch(RunHistoryRequest())
+  private var runHistory = RunHistoryRequest.Value()
+
+  var body: some View {
+    ScanSection(
+      title: "Run History",
+      systemImage: "clock.arrow.circlepath",
+      count: runHistory.entries.count
+    ) {
+      if runHistory.entries.isEmpty {
+        EmptyScanSectionRow(title: "No runs recorded yet")
+      } else {
+        LazyVStack(alignment: .leading, spacing: 0) {
+          ForEach(runHistory.entries) { entry in
+            RunHistoryEntryRow(entry: entry)
+          }
+        }
+      }
+    }
+  }
+}
+
+private struct RunHistoryEntryRow: View {
+  let entry: RunHistoryEntry
+
+  @State private var isExpanded = false
+
+  var body: some View {
+    DisclosureGroup(isExpanded: $isExpanded) {
+      VStack(alignment: .leading, spacing: 10) {
+        RunHistoryCommand(command: entry.run.command)
+        if entry.fileOutcomes.isEmpty {
+          EmptyScanSectionRow(title: "No file outcomes")
+        } else {
+          LazyVStack(alignment: .leading, spacing: 8) {
+            ForEach(entry.fileOutcomes) { outcome in
+              RunFileOutcomeRow(outcome: outcome)
+            }
+          }
+        }
+      }
+      .padding(.top, 8)
+    } label: {
+      RunHistoryEntryLabel(entry: entry)
+    }
+    .padding(.vertical, 8)
+  }
+}
+
+private struct RunHistoryEntryLabel: View {
+  let entry: RunHistoryEntry
+
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 12) {
+      Label(entry.run.kind.displayName, systemImage: "terminal")
+        .font(.callout.weight(.semibold))
+      Text(entry.run.startedAt, format: .dateTime.month().day().hour().minute())
+        .foregroundStyle(.secondary)
+      Text(entry.run.exitSummary.isEmpty ? "open" : entry.run.exitSummary)
+        .foregroundStyle(entry.run.exitSummary == "ok" ? .green : .secondary)
+      Spacer()
+      Text(entry.fileOutcomes.count, format: .number)
+        .font(.caption.monospacedDigit())
+        .foregroundStyle(.secondary)
+    }
+  }
+}
+
+private struct RunHistoryCommand: View {
+  let command: String
+
+  var body: some View {
+    Text(command)
+      .font(.caption.monospaced())
+      .foregroundStyle(.secondary)
+      .textSelection(.enabled)
+      .lineLimit(8)
+  }
+}
+
+private struct RunFileOutcomeRow: View {
+  let outcome: RunFileOutcome
+
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 10) {
+      Label(outcome.status.displayName, systemImage: systemImage)
+        .foregroundStyle(statusColor)
+        .frame(width: 88, alignment: .leading)
+      VStack(alignment: .leading, spacing: 3) {
+        Text(outcome.sourcePath)
+          .font(.caption.monospaced())
+          .textSelection(.enabled)
+        if let producedPath = outcome.producedPath {
+          Text(producedPath)
+            .font(.caption.monospaced())
+            .foregroundStyle(.secondary)
+            .textSelection(.enabled)
+        }
+        if !outcome.note.isEmpty {
+          Text(outcome.note)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+      }
+    }
+  }
+
+  private var systemImage: String {
+    switch outcome.status {
+    case .read:
+      "checkmark.circle"
+    case .created:
+      "plus.circle"
+    case .skipped:
+      "minus.circle"
+    case .failed:
+      "exclamationmark.triangle"
+    }
+  }
+
+  private var statusColor: Color {
+    switch outcome.status {
+    case .read, .created:
+      .green
+    case .skipped:
+      .secondary
+    case .failed:
+      .red
+    }
   }
 }
 
