@@ -376,6 +376,26 @@ tag-match comparison normalizes the same way the writer does. **Done when:** a F
 show goes plan → `Working/` → `Output/` → green verification end to end with zero
 writes outside `Working/`+`Output/`.
 
+**Carry-over from the Slice 4 review (fold into M3 — Slice 4 is M2's last slice):**
+
+- **The partial-failure wedge is now *reintroduced* in the convert path** (the
+  Slice-3 #2 carry-over was dropped, not addressed). A crashed/failed ffmpeg
+  leaves a partial `.m4a` in `Output/`; the next Convert's conflict preflight
+  finds it and `recordConflictResult` marks **every** track `.skipped`
+  (`ConversionExecutor.convert`), so one stale file wedges the whole re-convert
+  with no in-app recovery — the same shape as the still-unaddressed Apply wedge.
+  **Decided fix (Jon, Slice 4 review):** on a failed/cancelled convert (and
+  apply), clean up *only the files that run produced* so a retry starts clean.
+  Stays within the "never auto-delete a *good* `Working/`/`Output/`" invariant
+  (we only remove this run's own partial outputs, never a prior good result).
+- **Artless-FLAC ALAC command may error.** A FLAC with neither a folder cover nor
+  embedded art still gets `-c:a alac -c:v mjpeg -disposition:v:0 attached_pic`
+  against an optional/absent `0:v:0?` stream (`AudioConversionCommands.alacCommand`).
+  Low risk in practice (Apply embeds a cover when one is detected), but guard the
+  cover/disposition args on cover presence, or note the assumption.
+- **No test exercises the `.missingAudioStream` branch** of `AudioTagVerifier`
+  (only `durationNotPositive` is covered). Cheap to add alongside the duration case.
+
 ## Constants register (pre-justified — jon-platform "constants need a rationale")
 
 Derived from the existing pipeline and toolchain doc, not guessed. Codex must not
