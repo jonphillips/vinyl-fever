@@ -236,7 +236,7 @@ Slice 3; Slices 0–2 are read-only/plumbing.
 box in the slice PR that completes it. GitHub PR state is canonical.
 
 - [x] Slice 0 — Tool discovery + Settings
-- [ ] Slice 1 — `ScriptClient` + `AudioMetadataClient` (read) + current-vs-proposed
+- [x] Slice 1 — `ScriptClient` + `AudioMetadataClient` (read) + current-vs-proposed
 - [ ] Slice 2 — Run log (SQLiteData) + run history
 - [ ] Slice 3 — Apply to `Working/` (copy + rename + tag + cover) — first mutation
 - [ ] Slice 4 — FLAC→ALAC → `Output/` + file-level verification
