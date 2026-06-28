@@ -13,6 +13,7 @@ struct VinylFeverApp: App {
       $0.audioMetadataClient = .liveValue
       $0.toolPathClient = .liveValue
       $0.runLogClient = .liveValue
+      $0.fileOperationClient = .liveValue
     }
     _model = State(initialValue: AppModel())
   }

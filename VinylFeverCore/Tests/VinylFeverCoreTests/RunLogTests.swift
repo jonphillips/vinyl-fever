@@ -114,6 +114,151 @@ struct RunLogTests {
       )
     )
   }
+
+  @Test
+  func historyRequestLimitsRunsAndFetchesOnlyTheirOutcomes() throws {
+    let database = try VinylFeverDatabase.open(path: temporaryDatabasePath())
+    let olderRun = RunRecord(
+      id: UUID(1),
+      showRootPath: "/Shows/Older",
+      kind: .metadataRead,
+      startedAt: Date(timeIntervalSince1970: 100),
+      command: "older"
+    )
+    let newerRun = RunRecord(
+      id: UUID(2),
+      showRootPath: "/Shows/Newer",
+      kind: .apply,
+      startedAt: Date(timeIntervalSince1970: 200),
+      command: "newer"
+    )
+    let olderOutcome = RunFileOutcome(
+      id: UUID(3),
+      runID: olderRun.id,
+      sourcePath: "/Shows/Older/01.flac",
+      status: .read,
+      note: "Read current tags."
+    )
+    let newerOutcome = RunFileOutcome(
+      id: UUID(4),
+      runID: newerRun.id,
+      sourcePath: "/Shows/Newer/01.flac",
+      status: .created,
+      note: "Copied and tagged."
+    )
+
+    try database.write { db in
+      try RunRecord.upsert { olderRun }.execute(db)
+      try RunRecord.upsert { newerRun }.execute(db)
+      try RunFileOutcome.upsert { olderOutcome }.execute(db)
+      try RunFileOutcome.upsert { newerOutcome }.execute(db)
+    }
+
+    let history = try database.read { db in
+      try RunHistoryRequest(limit: 1).fetch(db)
+    }
+
+    expectNoDifference(
+      history,
+      RunHistoryRequest.Value(
+        entries: [
+          RunHistoryEntry(run: newerRun, fileOutcomes: [newerOutcome]),
+        ]
+      )
+    )
+  }
+
+  @Test
+  func mostRecentMetadataReadOutcomesForRootIgnoreOtherRuns() throws {
+    let database = try VinylFeverDatabase.open(path: temporaryDatabasePath())
+    let olderMetadataRun = RunRecord(
+      id: UUID(1),
+      showRootPath: "/Shows/Root",
+      kind: .metadataRead,
+      startedAt: Date(timeIntervalSince1970: 100),
+      command: "older metadata"
+    )
+    let newerApplyRun = RunRecord(
+      id: UUID(2),
+      showRootPath: "/Shows/Root",
+      kind: .apply,
+      startedAt: Date(timeIntervalSince1970: 300),
+      command: "newer apply"
+    )
+    let newerMetadataRun = RunRecord(
+      id: UUID(3),
+      showRootPath: "/Shows/Root",
+      kind: .metadataRead,
+      startedAt: Date(timeIntervalSince1970: 200),
+      command: "newer metadata"
+    )
+    let otherRootMetadataRun = RunRecord(
+      id: UUID(4),
+      showRootPath: "/Shows/Other",
+      kind: .metadataRead,
+      startedAt: Date(timeIntervalSince1970: 400),
+      command: "other metadata"
+    )
+    let selectedOutcome = RunFileOutcome(
+      id: UUID(5),
+      runID: newerMetadataRun.id,
+      sourcePath: "/Shows/Root/01.flac",
+      status: .read,
+      note: "Read current tags."
+    )
+
+    try database.write { db in
+      for run in [olderMetadataRun, newerApplyRun, newerMetadataRun, otherRootMetadataRun] {
+        try RunRecord.upsert { run }.execute(db)
+      }
+      try RunFileOutcome.upsert {
+        RunFileOutcome(
+          id: UUID(6),
+          runID: olderMetadataRun.id,
+          sourcePath: "/Shows/Root/old.flac",
+          status: .failed,
+          note: "old"
+        )
+      }
+      .execute(db)
+      try RunFileOutcome.upsert {
+        RunFileOutcome(
+          id: UUID(7),
+          runID: newerApplyRun.id,
+          sourcePath: "/Shows/Root/apply.flac",
+          status: .created,
+          note: "apply"
+        )
+      }
+      .execute(db)
+      try RunFileOutcome.upsert { selectedOutcome }.execute(db)
+      try RunFileOutcome.upsert {
+        RunFileOutcome(
+          id: UUID(8),
+          runID: otherRootMetadataRun.id,
+          sourcePath: "/Shows/Other/01.flac",
+          status: .read,
+          note: "other"
+        )
+      }
+      .execute(db)
+    }
+
+    let summaries = try database.read { db in
+      try RunHistory.mostRecentMetadataReadOutcomes(showRootPath: "/Shows/Root", in: db)
+    }
+
+    expectNoDifference(
+      summaries,
+      [
+        RunFileOutcomeSummary(
+          sourcePath: "/Shows/Root/01.flac",
+          status: .read,
+          note: "Read current tags."
+        ),
+      ]
+    )
+  }
 }
 
 private func temporaryDatabasePath() throws -> String {

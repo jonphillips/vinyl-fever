@@ -30,7 +30,7 @@ public struct RunRecord: Equatable, Identifiable, Sendable {
   }
 
   public enum Kind: String, CaseIterable, Equatable, Hashable, QueryBindable, Sendable {
-    case metadataRead = "metadataRead"
+    case metadataRead
     case apply
     case convert
     case verify
@@ -110,7 +110,25 @@ public struct RunHistoryEntry: Equatable, Identifiable, Sendable {
   }
 }
 
+public struct RunFileOutcomeSummary: Equatable, Sendable {
+  public var sourcePath: String
+  public var status: RunFileOutcome.Status
+  public var note: String
+
+  public init(sourcePath: String, status: RunFileOutcome.Status, note: String) {
+    self.sourcePath = sourcePath
+    self.status = status
+    self.note = note
+  }
+
+  public init(outcome: RunFileOutcome) {
+    self.init(sourcePath: outcome.sourcePath, status: outcome.status, note: outcome.note)
+  }
+}
+
 public struct RunHistoryRequest: FetchKeyRequest {
+  public var limit: Int
+
   public struct Value: Equatable, Sendable {
     public var entries: [RunHistoryEntry] = []
 
@@ -119,26 +137,49 @@ public struct RunHistoryRequest: FetchKeyRequest {
     }
   }
 
-  public init() {
+  public init(limit: Int = RunHistory.defaultLimit) {
+    self.limit = limit
   }
 
   public func fetch(_ db: Database) throws -> Value {
-    try Value(entries: RunHistory.entries(in: db))
+    try Value(entries: RunHistory.entries(in: db, limit: limit))
   }
 }
 
 public enum RunHistory {
-  public static func entries(in db: Database) throws -> [RunHistoryEntry] {
+  public static let defaultLimit = 50
+
+  public static func entries(in db: Database, limit: Int = defaultLimit) throws -> [RunHistoryEntry] {
     let runs = try RunRecord
       .order { $0.startedAt.desc() }
+      .limit(limit)
       .fetchAll(db)
-    let outcomes = try RunFileOutcome
+
+    return try runs.map { run in
+      let outcomes = try RunFileOutcome
+        .where { $0.runID.eq(run.id) }
+        .order(by: \.sourcePath)
+        .fetchAll(db)
+      return RunHistoryEntry(run: run, fileOutcomes: outcomes)
+    }
+  }
+
+  public static func mostRecentMetadataReadOutcomes(
+    showRootPath: String,
+    in db: Database
+  ) throws -> [RunFileOutcomeSummary]? {
+    let latestMetadataRead = RunRecord
+      .where { $0.showRootPath.eq(showRootPath) && $0.kind.eq(RunRecord.Kind.metadataRead) }
+      .order { $0.startedAt.desc() }
+      .limit(1)
+    guard let run = try latestMetadataRead.fetchOne(db) else {
+      return nil
+    }
+
+    return try RunFileOutcome
+      .where { $0.runID.eq(run.id) }
       .order(by: \.sourcePath)
       .fetchAll(db)
-    let outcomesByRunID = Dictionary(grouping: outcomes, by: \.runID)
-
-    return runs.map { run in
-      RunHistoryEntry(run: run, fileOutcomes: outcomesByRunID[run.id] ?? [])
-    }
+      .map(RunFileOutcomeSummary.init(outcome:))
   }
 }

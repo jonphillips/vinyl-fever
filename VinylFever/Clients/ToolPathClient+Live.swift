@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import VinylFeverCore
 
@@ -14,6 +15,39 @@ extension ToolPathClient {
     Self { overrides in
       try await LiveToolPathResolver().resolveTools(overrides: overrides)
     }
+  }
+}
+
+extension FileOperationClient {
+  static var liveValue: Self {
+    Self(
+      fileExists: { url in
+        FileManager.default.fileExists(atPath: url.path(percentEncoded: false))
+      },
+      createDirectory: { url in
+        try FileManager.default.createDirectory(
+          at: url,
+          withIntermediateDirectories: true
+        )
+      },
+      copyFile: { source, destination in
+        guard !FileManager.default.fileExists(atPath: destination.path(percentEncoded: false)) else {
+          throw FileOperationError.destinationExists(destination)
+        }
+        try FileManager.default.copyItem(at: source, to: destination)
+      },
+      replaceFile: { source, destination in
+        guard FileManager.default.fileExists(atPath: source.path(percentEncoded: false)) else {
+          throw FileOperationError.replacementSourceMissing(source)
+        }
+        _ = try FileManager.default.replaceItemAt(destination, withItemAt: source)
+      },
+      reveal: { url in
+        await MainActor.run {
+          NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
+      }
+    )
   }
 }
 

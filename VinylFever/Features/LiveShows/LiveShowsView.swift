@@ -167,7 +167,20 @@ private struct ScannedShowFolderView: View {
         PlanPreviewSection(
           plan: showPlan,
           root: folder.root,
-          currentMetadataByFileID: model.currentMetadataByFileID
+          coverURL: folder.coverCandidates.first,
+          currentMetadataByFileID: model.currentMetadataByFileID,
+          applyState: model.applyState,
+          hasRequiredApplyTools: model.hasRequiredApplyTools(for: showPlan),
+          apply: { plan in
+            Task {
+              await model.applyShowPlan(plan, coverURL: folder.coverCandidates.first)
+            }
+          },
+          revealWorkingDirectory: {
+            Task {
+              await model.revealWorkingDirectory()
+            }
+          }
         )
         ScanSection(
           title: "Cover Art",
@@ -200,7 +213,12 @@ private struct ScannedShowFolderView: View {
 private struct PlanPreviewSection: View {
   let plan: ShowPlan?
   let root: URL
+  let coverURL: URL?
   let currentMetadataByFileID: [ScannedAudioFile.ID: AudioMetadataLoadState]
+  let applyState: ApplyRunState
+  let hasRequiredApplyTools: Bool
+  let apply: (ShowPlan) -> Void
+  let revealWorkingDirectory: () -> Void
 
   var body: some View {
     ScanSection(
@@ -209,9 +227,17 @@ private struct PlanPreviewSection: View {
       count: plan?.tracks.count ?? 0
     ) {
       if let plan {
+        let applyPlan = ApplyPlan(showPlan: plan, showRoot: root, coverURL: coverURL)
         VStack(alignment: .leading, spacing: 16) {
-          PlanReadinessSummary(plan: plan)
+          PlanReadinessSummary(
+            plan: plan,
+            applyState: applyState,
+            hasRequiredApplyTools: hasRequiredApplyTools,
+            apply: { apply(plan) },
+            revealWorkingDirectory: revealWorkingDirectory
+          )
           ProposedMetadataSummary(plan: plan)
+          ApplyOperationsPreview(applyPlan: applyPlan, root: root)
           if plan.tracks.isEmpty {
             EmptyScanSectionRow(title: "No file-to-track mappings")
           } else {
@@ -236,6 +262,12 @@ private struct PlanPreviewSection: View {
 
 private struct PlanReadinessSummary: View {
   let plan: ShowPlan
+  let applyState: ApplyRunState
+  let hasRequiredApplyTools: Bool
+  let apply: () -> Void
+  let revealWorkingDirectory: () -> Void
+
+  @State private var isConfirmingApply = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
@@ -247,11 +279,21 @@ private struct PlanReadinessSummary: View {
         .foregroundStyle(plan.isReadyToImport ? .green : .orange)
         Spacer()
         Button {
+          isConfirmingApply = true
         } label: {
-          Label("Apply (M2)", systemImage: "hammer")
+          Label("Apply", systemImage: "hammer")
         }
-        .disabled(true)
-        .help("Applying the plan is deferred to M2.")
+        .disabled(!canApply)
+        .help(disabledReason ?? "Apply the plan into Working.")
+        .confirmationDialog("Apply into Working?", isPresented: $isConfirmingApply) {
+          Button("Apply") {
+            apply()
+          }
+          Button("Cancel", role: .cancel) {
+          }
+        } message: {
+          Text("Copies and tags \(plan.tracks.count) files. Existing Working destinations are reported as conflicts.")
+        }
       }
 
       if !plan.issues.isEmpty {
@@ -263,6 +305,57 @@ private struct PlanReadinessSummary: View {
           }
         }
       }
+
+      ApplyRunStatus(state: applyState, revealWorkingDirectory: revealWorkingDirectory)
+    }
+  }
+
+  private var canApply: Bool {
+    plan.isReadyToImport && hasRequiredApplyTools && !applyState.isRunning
+  }
+
+  private var disabledReason: String? {
+    if applyState.isRunning {
+      return "Apply is already running."
+    }
+    if !plan.isReadyToImport {
+      return "Resolve blocking plan issues first."
+    }
+    if !hasRequiredApplyTools {
+      return "Required audio tools are missing."
+    }
+    return nil
+  }
+}
+
+private struct ApplyRunStatus: View {
+  let state: ApplyRunState
+  let revealWorkingDirectory: () -> Void
+
+  var body: some View {
+    switch state {
+    case .idle:
+      EmptyView()
+    case let .running(plan):
+      Label("Applying \(plan.tracks.count) files", systemImage: "hourglass")
+        .font(.callout)
+        .foregroundStyle(.secondary)
+    case let .completed(result):
+      HStack(spacing: 10) {
+        Label(
+          result.exitSummary,
+          systemImage: result.didSucceed ? "checkmark.circle" : "exclamationmark.triangle"
+        )
+        .foregroundStyle(result.didSucceed ? .green : .orange)
+        Button(action: revealWorkingDirectory) {
+          Label("Reveal Working", systemImage: "folder")
+        }
+      }
+      .font(.callout)
+    case let .failed(message):
+      Label(message, systemImage: "exclamationmark.triangle")
+        .font(.callout)
+        .foregroundStyle(.red)
     }
   }
 }
@@ -290,6 +383,65 @@ private struct ProposedMetadataRow: View {
         .foregroundStyle(.secondary)
       Text(value)
         .textSelection(.enabled)
+    }
+  }
+}
+
+private struct ApplyOperationsPreview: View {
+  let applyPlan: ApplyPlan
+  let root: URL
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 8) {
+        Label("Working", systemImage: "folder")
+          .font(.subheadline.weight(.semibold))
+        Text(applyPlan.workingDirectory.relativePath(from: root))
+          .font(.caption.monospaced())
+          .foregroundStyle(.secondary)
+          .textSelection(.enabled)
+      }
+
+      LazyVStack(alignment: .leading, spacing: 4) {
+        ForEach(Array(applyPlan.operations.enumerated()), id: \.offset) { _, operation in
+          ApplyOperationRow(operation: operation, root: root)
+        }
+      }
+    }
+  }
+}
+
+private struct ApplyOperationRow: View {
+  let operation: FileOperation
+  let root: URL
+
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 8) {
+      Image(systemName: systemImage)
+        .foregroundStyle(.secondary)
+        .frame(width: 18)
+      Text(text)
+        .font(.caption.monospaced())
+        .foregroundStyle(.secondary)
+        .textSelection(.enabled)
+    }
+  }
+
+  private var systemImage: String {
+    switch operation {
+    case .copy:
+      "doc.on.doc"
+    case .writeTags:
+      "tag"
+    }
+  }
+
+  private var text: String {
+    switch operation {
+    case let .copy(source, destination):
+      "\(source.relativePath(from: root)) -> \(destination.relativePath(from: root))"
+    case let .writeTags(track):
+      "tag \(track.workingFile.relativePath(from: root))"
     }
   }
 }
