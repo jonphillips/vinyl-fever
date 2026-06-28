@@ -12,6 +12,8 @@ final class AppModel {
   @ObservationIgnored
   @Dependency(\.toolPathClient) private var toolPathClient
   @ObservationIgnored
+  @Dependency(\.audioMetadataClient) private var audioMetadataClient
+  @ObservationIgnored
   @Dependency(\.defaultDatabase) private var database
   @ObservationIgnored
   @Dependency(\.uuid) private var uuid
@@ -28,6 +30,7 @@ final class AppModel {
   var sourceLabelErrorMessage: String?
   var toolStatuses = AudioTool.allCases.map { ToolStatus.missing(tool: $0) }
   var toolStatusErrorMessage: String?
+  var currentMetadataByFileID: [ScannedAudioFile.ID: AudioMetadataLoadState] = [:]
 
   enum Destination: Hashable {
   }
@@ -35,9 +38,11 @@ final class AppModel {
   func scanShowFolder(at url: URL) {
     do {
       scannedShowFolder = try fileSystemClient.scanShowFolder(root: url)
+      currentMetadataByFileID = [:]
       scanErrorMessage = nil
     } catch {
       scannedShowFolder = nil
+      currentMetadataByFileID = [:]
       scanErrorMessage = error.localizedDescription
     }
   }
@@ -116,6 +121,57 @@ final class AppModel {
     } catch is CancellationError {
     } catch {
       toolStatusErrorMessage = error.localizedDescription
+    }
+  }
+
+  func refreshCurrentMetadata(settings: AppSetting) async {
+    guard let scannedShowFolder else {
+      currentMetadataByFileID = [:]
+      return
+    }
+
+    let files = scannedShowFolder.audioFiles
+    currentMetadataByFileID = Dictionary(
+      uniqueKeysWithValues: files.map { ($0.id, .loading) }
+    )
+
+    let statuses: [ToolStatus]
+    do {
+      statuses = try await toolPathClient.resolveTools(settings.toolPathOverrides)
+      toolStatuses = statuses
+      toolStatusErrorMessage = nil
+    } catch is CancellationError {
+      return
+    } catch {
+      toolStatusErrorMessage = error.localizedDescription
+      currentMetadataByFileID = Dictionary(
+        uniqueKeysWithValues: files.map { ($0.id, .failed(error.localizedDescription)) }
+      )
+      return
+    }
+
+    let toolPaths = AudioToolPaths(statuses: statuses)
+    let audioMetadataClient = self.audioMetadataClient
+    await withTaskGroup(of: (ScannedAudioFile.ID, AudioMetadataLoadState).self) { group in
+      for file in files {
+        group.addTask {
+          do {
+            try Task.checkCancellation()
+            let tags = try await audioMetadataClient.read(
+              AudioMetadataRequest(file: file, toolPaths: toolPaths)
+            )
+            return (file.id, .loaded(tags))
+          } catch is CancellationError {
+            return (file.id, .notLoaded)
+          } catch {
+            return (file.id, .failed(error.localizedDescription))
+          }
+        }
+      }
+
+      for await (id, state) in group {
+        currentMetadataByFileID[id] = state
+      }
     }
   }
 

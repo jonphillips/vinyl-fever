@@ -236,7 +236,7 @@ Slice 3; Slices 0–2 are read-only/plumbing.
 box in the slice PR that completes it. GitHub PR state is canonical.
 
 - [x] Slice 0 — Tool discovery + Settings
-- [ ] Slice 1 — `ScriptClient` + `AudioMetadataClient` (read) + current-vs-proposed
+- [x] Slice 1 — `ScriptClient` + `AudioMetadataClient` (read) + current-vs-proposed
 - [ ] Slice 2 — Run log (SQLiteData) + run history
 - [ ] Slice 3 — Apply to `Working/` (copy + rename + tag + cover) — first mutation
 - [ ] Slice 4 — FLAC→ALAC → `Output/` + file-level verification
@@ -266,6 +266,25 @@ columns. **Tests:** parse fixture `metaflac` and `ffprobe` outputs into `AudioTa
 exact argv; `ScriptClient` interaction via a mock. **Done when:** the preview shows
 real current tags/durations for a scanned show. *(No file mutation — read-only
 tools.)*
+
+**Carry-over from the Slice 1 review (fold into Slice 2):**
+
+- **Don't re-resolve tools inside the read path.** `refreshCurrentMetadata`
+  re-runs `toolPathClient.resolveTools` and overwrites `toolStatuses` on every
+  folder/settings change, re-spawning `--version` for all three tools and racing
+  the Settings screen's own resolution. Read the already-resolved `toolStatuses`
+  (or cache the `AudioToolPaths`) instead.
+- **Stop deriving FLAC `hasAudioStream` from duration.** It's currently
+  `durationSeconds != nil`, so a parse hiccup reads as "no audio stream" and
+  there's no real stream check. The verification work (DoD #5) should assert
+  duration explicitly rather than trust this flag.
+- **FLAC duration parsing is line-order-dependent and silent on edge cases.**
+  `parseDuration` assumes line 0 = total-samples, line 1 = sample-rate from the
+  arg order; add a comment tying them together, and note that a FLAC reporting 0
+  total samples yields `durationSeconds: 0.0` + `hasAudioStream: true`.
+- **`combinedOutputText` joins stdout+stderr with no separator**, so the last
+  stdout line can merge into the first stderr line. Join with `\n` if it's ever
+  surfaced verbatim.
 
 ### Slice 2 — Run log (SQLiteData) + run history
 

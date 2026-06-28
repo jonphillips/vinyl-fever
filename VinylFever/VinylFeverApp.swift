@@ -9,6 +9,8 @@ struct VinylFeverApp: App {
   init() {
     prepareDependencies {
       try! $0.bootstrapDatabase()
+      $0.scriptClient = .liveValue
+      $0.audioMetadataClient = .liveValue
       $0.toolPathClient = .liveValue
     }
     _model = State(initialValue: AppModel())

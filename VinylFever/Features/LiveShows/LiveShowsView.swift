@@ -80,9 +80,12 @@ private struct ScannedShowFolderView: View {
 
   @FetchAll(SourceLabel.order(by: \.token))
   private var persistedSourceLabels: [SourceLabel]
+  @FetchAll(AppSetting.all)
+  private var persistedSettings: [AppSetting]
 
   var body: some View {
     let sourceLabels = SourceLabel.deduplicated(persistedSourceLabels)
+    let settings = AppSetting.current(from: persistedSettings)
     let selectedSourceLabel = sourceLabels.first { $0.id == model.selectedSourceLabelID }
     let metadata = model.setlistDraft.map {
       ShowMetadata(tags: $0.tags, source: selectedSourceLabel)
@@ -141,7 +144,11 @@ private struct ScannedShowFolderView: View {
           addSourceLabel: model.addSourceLabel,
           deleteSourceLabel: model.deleteSourceLabel
         )
-        PlanPreviewSection(plan: showPlan, root: folder.root)
+        PlanPreviewSection(
+          plan: showPlan,
+          root: folder.root,
+          currentMetadataByFileID: model.currentMetadataByFileID
+        )
         ScanSection(
           title: "Cover Art",
           systemImage: "photo",
@@ -153,12 +160,16 @@ private struct ScannedShowFolderView: View {
       .frame(maxWidth: 980, alignment: .leading)
       .padding(24)
     }
+    .task(id: MetadataRefreshID(folder: folder, settings: settings)) {
+      await model.refreshCurrentMetadata(settings: settings)
+    }
   }
 }
 
 private struct PlanPreviewSection: View {
   let plan: ShowPlan?
   let root: URL
+  let currentMetadataByFileID: [ScannedAudioFile.ID: AudioMetadataLoadState]
 
   var body: some View {
     ScanSection(
@@ -175,7 +186,11 @@ private struct PlanPreviewSection: View {
           } else {
             LazyVStack(alignment: .leading, spacing: 10) {
               ForEach(plan.tracks) { trackPlan in
-                TrackPlanRow(trackPlan: trackPlan, root: root)
+                TrackPlanRow(
+                  trackPlan: trackPlan,
+                  root: root,
+                  currentMetadata: currentMetadataByFileID[trackPlan.sourceFile.id] ?? .notLoaded
+                )
               }
             }
           }
@@ -251,6 +266,7 @@ private struct ProposedMetadataRow: View {
 private struct TrackPlanRow: View {
   let trackPlan: TrackPlan
   let root: URL
+  let currentMetadata: AudioMetadataLoadState
 
   var body: some View {
     HStack(alignment: .top, spacing: 12) {
@@ -267,31 +283,141 @@ private struct TrackPlanRow: View {
           .foregroundStyle(.secondary)
           .textSelection(.enabled)
         Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 4) {
-          TrackTagRow(title: "Title", value: trackPlan.proposedTags.title)
-          TrackTagRow(title: "Artist", value: trackPlan.proposedTags.artist)
-          TrackTagRow(title: "Album Artist", value: trackPlan.proposedTags.albumArtist)
+          GridRow {
+            Text("")
+            Text("Current")
+              .font(.caption.weight(.semibold))
+              .foregroundStyle(.secondary)
+            Text("Proposed")
+              .font(.caption.weight(.semibold))
+              .foregroundStyle(.secondary)
+          }
+          TrackMetadataComparisonRow(
+            title: "Title",
+            current: currentMetadata.tags?.title,
+            proposed: trackPlan.proposedTags.title
+          )
+          TrackMetadataComparisonRow(
+            title: "Artist",
+            current: currentMetadata.tags?.artist,
+            proposed: trackPlan.proposedTags.artist
+          )
+          TrackMetadataComparisonRow(
+            title: "Album",
+            current: currentMetadata.tags?.album,
+            proposed: trackPlan.proposedTags.album
+          )
+          TrackMetadataComparisonRow(
+            title: "Album Artist",
+            current: currentMetadata.tags?.albumArtist,
+            proposed: trackPlan.proposedTags.albumArtist
+          )
+          TrackMetadataComparisonRow(
+            title: "Track",
+            current: currentMetadata.tags?.trackNumber.map(String.init),
+            proposed: String(trackPlan.proposedTags.trackNumber)
+          )
+          TrackMetadataComparisonRow(
+            title: "Disc",
+            current: currentMetadata.tags?.discNumber.map(String.init),
+            proposed: String(trackPlan.proposedTags.discNumber)
+          )
+          TrackMetadataComparisonRow(
+            title: "Duration",
+            current: currentMetadata.tags?.durationSeconds.map(Self.durationText),
+            proposed: nil
+          )
         }
+        CurrentMetadataStatus(state: currentMetadata)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.vertical, 8)
   }
+
+  private static func durationText(_ seconds: Double) -> String {
+    let roundedSeconds = Int(seconds.rounded())
+    let minutes = roundedSeconds / 60
+    let remainder = roundedSeconds % 60
+    return "\(minutes):\(String(format: "%02d", remainder))"
+  }
 }
 
-private struct TrackTagRow: View {
+private struct TrackMetadataComparisonRow: View {
   let title: LocalizedStringResource
-  let value: String
+  let current: String?
+  let proposed: String?
 
   var body: some View {
     GridRow {
       Text(title)
         .font(.caption)
         .foregroundStyle(.secondary)
-      Text(value.isEmpty ? "Missing title" : value)
-        .font(.caption)
-        .foregroundStyle(value.isEmpty ? .orange : .secondary)
-        .textSelection(.enabled)
+      TagValueText(value: current)
+      TagValueText(value: proposed)
     }
+  }
+}
+
+private struct TagValueText: View {
+  let value: String?
+
+  var body: some View {
+    let trimmedValue = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let displayValue =
+      if let trimmedValue, !trimmedValue.isEmpty {
+        trimmedValue
+      } else {
+        "None"
+      }
+    Text(displayValue)
+      .font(.caption)
+      .foregroundStyle(displayValue == "None" ? .tertiary : .secondary)
+      .textSelection(.enabled)
+  }
+}
+
+private struct CurrentMetadataStatus: View {
+  let state: AudioMetadataLoadState
+
+  var body: some View {
+    switch state {
+    case .notLoaded:
+      EmptyView()
+    case .loading:
+      Label("Reading current tags", systemImage: "hourglass")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    case let .failed(message):
+      Label(message, systemImage: "exclamationmark.triangle")
+        .font(.caption)
+        .foregroundStyle(.orange)
+    case let .loaded(tags):
+      HStack(spacing: 10) {
+        Label(
+          tags.hasAudioStream ? "Audio stream" : "No audio stream",
+          systemImage: tags.hasAudioStream ? "waveform" : "waveform.slash"
+        )
+        Label(
+          tags.hasEmbeddedArtwork ? "Artwork" : "No artwork",
+          systemImage: tags.hasEmbeddedArtwork ? "photo" : "photo.badge.exclamationmark"
+        )
+      }
+      .font(.caption)
+      .foregroundStyle(.secondary)
+    }
+  }
+}
+
+private struct MetadataRefreshID: Equatable {
+  var root: URL
+  var fileIDs: [ScannedAudioFile.ID]
+  var settings: AppSetting
+
+  init(folder: ScannedShowFolder, settings: AppSetting) {
+    root = folder.root
+    fileIDs = folder.audioFiles.map(\.id)
+    self.settings = settings
   }
 }
 

@@ -1,6 +1,14 @@
 import Foundation
 import VinylFeverCore
 
+extension ScriptClient {
+  static var liveValue: Self {
+    Self { command in
+      try await LiveProcessRunner().run(command)
+    }
+  }
+}
+
 extension ToolPathClient {
   static var liveValue: Self {
     Self { overrides in
@@ -29,7 +37,7 @@ private struct LiveToolPathResolver: Sendable {
           }
 
           do {
-            let output = try Self.runVersionCommand(tool: tool, resolvedPath: resolvedPath)
+            let output = try await Self.runVersionCommand(tool: tool, resolvedPath: resolvedPath)
             return resolution.status(version: tool.parseVersion(from: output))
           } catch {
             return resolution.status(
@@ -49,32 +57,22 @@ private struct LiveToolPathResolver: Sendable {
     }
   }
 
-  private static func runVersionCommand(tool: AudioTool, resolvedPath: String) throws -> String {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: resolvedPath)
-    process.arguments = tool.versionArguments
-
-    let standardOutput = Pipe()
-    let standardError = Pipe()
-    process.standardOutput = standardOutput
-    process.standardError = standardError
-
-    try process.run()
-    process.waitUntilExit()
-
-    let output = Self.string(from: standardOutput) + Self.string(from: standardError)
-    guard process.terminationStatus == 0 else {
+  private static func runVersionCommand(tool: AudioTool, resolvedPath: String) async throws -> String {
+    let command = ScriptCommand(
+      tool: tool,
+      executableURL: URL(fileURLWithPath: resolvedPath),
+      arguments: tool.versionArguments
+    )
+    let result = try await LiveProcessRunner().run(command)
+    let output = result.combinedOutputText
+    guard result.isSuccessful else {
       throw ToolVersionError(
         executableName: tool.executableName,
-        exitCode: process.terminationStatus,
+        exitCode: result.exitCode,
         output: output
       )
     }
     return output
-  }
-
-  private static func string(from pipe: Pipe) -> String {
-    String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
   }
 }
 
@@ -93,4 +91,91 @@ private struct ToolVersionError: LocalizedError {
     }
     return "\(executableName) exited \(exitCode)"
   }
+}
+
+private struct LiveProcessRunner: Sendable {
+  func run(_ command: ScriptCommand) async throws -> ScriptResult {
+    let process = Process()
+    process.executableURL = command.executableURL
+    process.arguments = command.arguments
+    if let workingDirectory = command.workingDirectory {
+      process.currentDirectoryURL = workingDirectory
+    }
+    if !command.environment.isEmpty {
+      process.environment = ProcessInfo.processInfo.environment.merging(command.environment) { _, new in
+        new
+      }
+    }
+
+    let standardOutput = Pipe()
+    let standardError = Pipe()
+    process.standardOutput = standardOutput
+    process.standardError = standardError
+
+    try process.run()
+    do {
+      return try await withTaskCancellationHandler {
+        try await collectResult(
+          for: process,
+          command: command,
+          standardOutput: standardOutput,
+          standardError: standardError
+        )
+      } onCancel: {
+        process.terminate()
+      }
+    } catch {
+      if process.isRunning {
+        process.terminate()
+      }
+      throw error
+    }
+  }
+
+  private func collectResult(
+    for process: Process,
+    command: ScriptCommand,
+    standardOutput: Pipe,
+    standardError: Pipe
+  ) async throws -> ScriptResult {
+    try await withThrowingTaskGroup(of: ProcessEvent.self) { group in
+      group.addTask {
+        .standardOutput(try standardOutput.fileHandleForReading.readToEnd() ?? Data())
+      }
+      group.addTask {
+        .standardError(try standardError.fileHandleForReading.readToEnd() ?? Data())
+      }
+      group.addTask {
+        process.waitUntilExit()
+        return .exit(process.terminationStatus)
+      }
+
+      var output = Data()
+      var error = Data()
+      var exitCode: Int32?
+      for try await event in group {
+        switch event {
+        case let .standardOutput(data):
+          output = data
+        case let .standardError(data):
+          error = data
+        case let .exit(status):
+          exitCode = status
+        }
+      }
+
+      return ScriptResult(
+        command: command,
+        exitCode: exitCode ?? process.terminationStatus,
+        standardOutput: output,
+        standardError: error
+      )
+    }
+  }
+}
+
+private enum ProcessEvent: Sendable {
+  case standardOutput(Data)
+  case standardError(Data)
+  case exit(Int32)
 }
