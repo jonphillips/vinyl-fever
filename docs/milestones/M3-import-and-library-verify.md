@@ -267,11 +267,12 @@ apply/convert self-heals its own partial outputs.
 
 Codex must not introduce new bare constants without the same treatment.
 
-- **Library read surface = ScriptingBridge (primary), `Library.xml` (fallback).**
-  The architecture's resolved default for a household Mac app: ScriptingBridge
-  exposes persistent IDs, album, track count, and file location and can write;
-  XML export is manual and goes stale. Do not design around MusicKit where
-  file-path mapping is required.
+- **Library read surface = ScriptingBridge.** The architecture's resolved default
+  for a household Mac app: ScriptingBridge exposes persistent IDs, album, track
+  count, and file location and can write. **M3 builds the ScriptingBridge path
+  only** (decision 4); the `Library.xml` fallback is deferred and revisited only if
+  the Slice 0 spike proves ScriptingBridge unreliable. Do not design around
+  MusicKit where file-path mapping is required.
 - **Apple Events entitlement = `com.apple.security.automation.apple-events`** +
   **`NSAppleEventsUsageDescription`** usage string. Required under the hardened
   runtime to send Apple Events to Music.app; without it the import/read calls are
@@ -301,14 +302,15 @@ dirs `Working/`/`Output/`, `discNumber = 1`.
 3. **Imported-shows library browse view = deferred to M-later.** **Decided (Jon):**
    yes — M3 is the import→verify→cleanup loop only.
 4. **Read surface = ScriptingBridge primary, `Library.xml` fallback** (arch
-   default). I recommend confirming we *don't* build the XML fallback in M3 unless
-   ScriptingBridge mapping proves unreliable in the Slice 0 spike.
-5. **Duration spot-check in library verify:** include or skip in M3? I lean
-   **title + track count is the resolved definition; treat duration as an optional,
-   tolerant spot-check** (off by default if it proves flaky). Confirm.
-6. **Already-present handling on import:** surface as `.alreadyPresent` and let the
-   verify decide, vs block re-import. I lean **surface + continue to verify**
-   (idempotent re-runs). Confirm.
+   default). **Decided (Jon):** skip the XML fallback in M3 — ScriptingBridge only.
+   Revisit only if the Slice 0 mapping spike proves it unreliable (flag it then).
+5. **Duration spot-check in library verify.** **Decided (Jon):** title + track
+   count is the resolved verification definition; duration is an **optional,
+   tolerant spot-check, off by default** (a lossless re-encode should be near-exact;
+   pin a small ± window with a rationale when it's switched on).
+6. **Already-present handling on import.** **Decided (Jon):** surface as
+   `.alreadyPresent` and continue to verify (idempotent re-runs) — do not block
+   re-import.
 
 ## Working agreement
 
