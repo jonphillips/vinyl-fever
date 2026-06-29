@@ -172,12 +172,16 @@ private struct ScannedShowFolderView: View {
           applyState: model.applyState,
           conversionState: model.conversionState,
           verificationState: model.verificationState,
+          libraryReadState: model.libraryReadState,
           hasRequiredApplyTools: model.hasRequiredApplyTools(for: showPlan),
           hasRequiredConversionTools: { applyPlan in
             model.hasRequiredConversionTools(for: applyPlan)
           },
           hasSuccessfulApply: { applyPlan in
             model.hasSuccessfulApply(for: applyPlan)
+          },
+          hasSuccessfulFileVerify: { conversionPlan in
+            model.hasSuccessfulFileVerify(for: conversionPlan)
           },
           apply: { plan in
             Task {
@@ -187,6 +191,11 @@ private struct ScannedShowFolderView: View {
           convertAndVerify: { applyPlan in
             Task {
               await model.convertAndVerify(applyPlan)
+            }
+          },
+          readMusicLibrary: { conversionPlan in
+            Task {
+              await model.readMusicLibrary(for: conversionPlan)
             }
           },
           revealWorkingDirectory: {
@@ -236,11 +245,14 @@ private struct PlanPreviewSection: View {
   let applyState: ApplyRunState
   let conversionState: ConversionRunState
   let verificationState: VerificationRunState
+  let libraryReadState: LibraryReadState
   let hasRequiredApplyTools: Bool
   let hasRequiredConversionTools: (ApplyPlan) -> Bool
   let hasSuccessfulApply: (ApplyPlan) -> Bool
+  let hasSuccessfulFileVerify: (ConversionPlan) -> Bool
   let apply: (ShowPlan) -> Void
   let convertAndVerify: (ApplyPlan) -> Void
+  let readMusicLibrary: (ConversionPlan) -> Void
   let revealWorkingDirectory: () -> Void
   let revealOutputDirectory: () -> Void
 
@@ -252,6 +264,7 @@ private struct PlanPreviewSection: View {
     ) {
       if let plan {
         let applyPlan = ApplyPlan(showPlan: plan, showRoot: root, coverURL: coverURL)
+        let conversionPlan = ConversionPlan(applyPlan: applyPlan)
         VStack(alignment: .leading, spacing: 16) {
           PlanReadinessSummary(
             plan: plan,
@@ -260,11 +273,14 @@ private struct PlanPreviewSection: View {
             applyState: applyState,
             conversionState: conversionState,
             verificationState: verificationState,
+            libraryReadState: libraryReadState,
             hasRequiredApplyTools: hasRequiredApplyTools,
             hasRequiredConversionTools: hasRequiredConversionTools(applyPlan),
             hasSuccessfulApply: hasSuccessfulApply(applyPlan),
+            hasSuccessfulFileVerify: hasSuccessfulFileVerify(conversionPlan),
             apply: { apply(plan) },
             convertAndVerify: { convertAndVerify(applyPlan) },
+            readMusicLibrary: { readMusicLibrary(conversionPlan) },
             revealWorkingDirectory: revealWorkingDirectory,
             revealOutputDirectory: revealOutputDirectory
           )
@@ -299,11 +315,14 @@ private struct PlanReadinessSummary: View {
   let applyState: ApplyRunState
   let conversionState: ConversionRunState
   let verificationState: VerificationRunState
+  let libraryReadState: LibraryReadState
   let hasRequiredApplyTools: Bool
   let hasRequiredConversionTools: Bool
   let hasSuccessfulApply: Bool
+  let hasSuccessfulFileVerify: Bool
   let apply: () -> Void
   let convertAndVerify: () -> Void
+  let readMusicLibrary: () -> Void
   let revealWorkingDirectory: () -> Void
   let revealOutputDirectory: () -> Void
 
@@ -340,6 +359,11 @@ private struct PlanReadinessSummary: View {
         }
         .disabled(!canConvert)
         .help(convertDisabledReason ?? convertHelp(conversionPlan))
+        Button(action: readMusicLibrary) {
+          Label("Read Music", systemImage: "music.note")
+        }
+        .disabled(!canReadMusic)
+        .help(readMusicDisabledReason ?? "Read Music for this album and resolve produced files.")
       }
 
       if !plan.issues.isEmpty {
@@ -359,6 +383,7 @@ private struct PlanReadinessSummary: View {
         revealOutputDirectory: revealOutputDirectory
       )
       VerificationRunStatus(state: verificationState, root: root)
+      LibraryReadStatus(state: libraryReadState, root: root)
     }
   }
 
@@ -384,7 +409,8 @@ private struct PlanReadinessSummary: View {
       hasRequiredConversionTools &&
       !applyState.isRunning &&
       !conversionState.isRunning &&
-      !verificationState.isRunning
+      !verificationState.isRunning &&
+      !libraryReadState.isRunning
   }
 
   private var convertDisabledReason: String? {
@@ -397,11 +423,41 @@ private struct PlanReadinessSummary: View {
     if verificationState.isRunning {
       return "Verification is already running."
     }
+    if libraryReadState.isRunning {
+      return "Music read is already running."
+    }
     if !hasSuccessfulApply {
       return "Apply must finish successfully first."
     }
     if !hasRequiredConversionTools {
       return "Required conversion and verification tools are missing."
+    }
+    return nil
+  }
+
+  private var canReadMusic: Bool {
+    hasSuccessfulFileVerify &&
+      !applyState.isRunning &&
+      !conversionState.isRunning &&
+      !verificationState.isRunning &&
+      !libraryReadState.isRunning
+  }
+
+  private var readMusicDisabledReason: String? {
+    if applyState.isRunning {
+      return "Apply is already running."
+    }
+    if conversionState.isRunning {
+      return "Conversion is already running."
+    }
+    if verificationState.isRunning {
+      return "Verification is already running."
+    }
+    if libraryReadState.isRunning {
+      return "Music read is already running."
+    }
+    if !hasSuccessfulFileVerify {
+      return "File verification must finish successfully first."
     }
     return nil
   }
@@ -550,6 +606,86 @@ private struct VerificationFileResultRow: View {
           .foregroundStyle(.secondary)
       }
     }
+  }
+}
+
+private struct LibraryReadStatus: View {
+  let state: LibraryReadState
+  let root: URL
+
+  var body: some View {
+    switch state {
+    case .idle:
+      EmptyView()
+    case .requestingPermission:
+      Label("Requesting Music automation access", systemImage: "hourglass")
+        .font(.callout)
+        .foregroundStyle(.secondary)
+    case let .running(plan):
+      Label("Reading Music for \(plan.albumTitle)", systemImage: "hourglass")
+        .font(.callout)
+        .foregroundStyle(.secondary)
+    case let .permission(permission):
+      Label(permission.displayMessage, systemImage: "exclamationmark.triangle")
+        .font(.callout)
+        .foregroundStyle(permission == .authorized ? .green : .orange)
+    case let .completed(result):
+      VStack(alignment: .leading, spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+          Label(
+            result.didResolveAll ? "Music resolved" : "Music unresolved",
+            systemImage: result.didResolveAll ? "checkmark.seal" : "xmark.seal"
+          )
+          .foregroundStyle(result.didResolveAll ? .green : .orange)
+          Text("\(result.resolvedCount)/\(result.trackResolutions.count) files")
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+          Text("\(result.libraryTracks.count) Music tracks")
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+        }
+        LazyVStack(alignment: .leading, spacing: 6) {
+          ForEach(result.trackResolutions) { resolution in
+            LibraryTrackResolutionRow(resolution: resolution, root: root)
+          }
+        }
+      }
+      .font(.callout)
+    case let .failed(message):
+      Label(message, systemImage: "exclamationmark.triangle")
+        .font(.callout)
+        .foregroundStyle(.red)
+    }
+  }
+}
+
+private struct LibraryTrackResolutionRow: View {
+  let resolution: LibraryTrackResolution
+  let root: URL
+
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 8) {
+      Image(systemName: resolution.isResolved ? "checkmark.circle" : "exclamationmark.triangle")
+        .foregroundStyle(resolution.isResolved ? .green : .orange)
+        .frame(width: 18)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(resolution.producedFile.relativePath(from: root))
+          .font(.caption.monospaced())
+          .textSelection(.enabled)
+        Text(detail)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .textSelection(.enabled)
+      }
+    }
+  }
+
+  private var detail: String {
+    if let libraryRef = resolution.libraryRef {
+      let strategy = resolution.strategy?.displayName ?? "unknown"
+      return "Matched \(libraryRef.id) by \(strategy)."
+    }
+    return resolution.failure?.displayMessage ?? "Unresolved."
   }
 }
 

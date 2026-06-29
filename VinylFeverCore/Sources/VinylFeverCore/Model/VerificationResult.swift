@@ -144,8 +144,8 @@ public enum AudioTagVerifier {
     _ mismatch: (String, String?) -> VerificationMismatch,
     into mismatches: inout [VerificationMismatch]
   ) {
-    let expected = normalized(expected)
-    let actual = normalized(actual)
+    let expected = normalizedMetadataString(expected)
+    let actual = normalizedMetadataString(actual)
     if actual != expected {
       mismatches.append(mismatch(expected, actual))
     }
@@ -162,11 +162,11 @@ public enum AudioTagVerifier {
     }
   }
 
-  private static func normalized(_ value: String) -> String {
+  public static func normalizedMetadataString(_ value: String) -> String {
     value.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
-  private static func normalized(_ value: String?) -> String? {
+  public static func normalizedMetadataString(_ value: String?) -> String? {
     guard let value else {
       return nil
     }

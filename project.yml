@@ -49,6 +49,7 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.music
+        NSAppleEventsUsageDescription: Vinyl Fever reads Music library tracks to verify live-show imports.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jonphillips.VinylFever
@@ -56,6 +57,7 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         ENABLE_APP_SANDBOX: NO
         ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_ENTITLEMENTS: VinylFever/VinylFever.entitlements
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "Apple Development"
         DEVELOPMENT_TEAM: 7MQEE539G9

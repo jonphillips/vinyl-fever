@@ -202,7 +202,7 @@ sitting, each ending green (build + tests).
 `/Users/jon/code/jon-platform/docs/agent-collaboration.md`, the executor ticks the
 box in the slice PR that completes it. GitHub PR state is canonical.
 
-- [ ] Slice 0 — Music.app read-surface spike + Apple Events permission
+- [x] Slice 0 — Music.app read-surface spike + Apple Events permission
 - [ ] Slice 1 — Import `Output/` into Apple Music (explicit)
 - [ ] Slice 2 — Library-level verification
 - [ ] Slice 3 — `Working/` cleanup (confirmed) + partial-output recovery
