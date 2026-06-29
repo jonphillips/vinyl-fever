@@ -202,7 +202,7 @@ sitting, each ending green (build + tests).
 `/Users/jon/code/jon-platform/docs/agent-collaboration.md`, the executor ticks the
 box in the slice PR that completes it. GitHub PR state is canonical.
 
-- [ ] Slice 0 — Music.app read-surface spike + Apple Events permission
+- [x] Slice 0 — Music.app read-surface spike + Apple Events permission
 - [ ] Slice 1 — Import `Output/` into Apple Music (explicit)
 - [ ] Slice 2 — Library-level verification
 - [ ] Slice 3 — `Working/` cleanup (confirmed) + partial-output recovery
@@ -221,6 +221,36 @@ over a mock library snapshot (exact-location match, fallback match, ambiguous �
 unresolved); read-model parsing. **Done when:** the app can read a known album's
 tracks + locations and resolve each `Output/` file to its library item. *(No file
 mutation; reads Music.app only.)*
+
+**Carry-over from the Slice 0 review (fold into Slice 1):**
+
+- **Prove the live ScriptingBridge read before relying on location-primary
+  matching.** Slice 0 merged with the offline matcher fully tested, but the *live*
+  read (`MusicAppClient+Live`) was never exercised against a real, already-imported
+  album — which is the spike's gating purpose (confirm Music.app reliably exposes
+  file `location`). **Decided fix:** before Slice 1 leans on location-primary
+  resolution, run the live "Read Music" path against a known album in the running
+  app and confirm each `Output/` file resolves by `location` (not just the
+  album+track+title fallback). If `location` is *not* reliably exposed, stop and
+  flag it per Decision 4 (revisit the `Library.xml` fallback) rather than silently
+  shipping fallback-only matching.
+- **Live read pulls the whole library and filters in memory.**
+  `readAlbumTracks` reads every `fileTrack` on the library playlist and fetches six
+  properties per track via individual `value(forKey:)` Apple Events round-trips,
+  then filters by album in Swift — O(n) Apple Events that will be slow on a large
+  library. **Fold:** before Slice 2 runs this for real, narrow the read (a `whose`
+  predicate / batched fetch) so verify isn't quadratic on a multi-thousand-track
+  library.
+- **Module-layout deviation.** The contract puts the pure matching/verify logic in
+  a `Library/` directory; Slice 0 placed `MusicLibraryMatcher` + read models in
+  `Model/LibraryImport.swift`. The core-purity boundary is honored, so this is
+  cosmetic — **fold:** land Slice 2's verify-comparison consistently (move both into
+  `Library/`, or ratify `Model/` as the home and update the layout sketch).
+- **Reconcile the read-model vocabulary in Slice 2.** Slice 0 introduced
+  `LibraryResolutionResult` / `LibraryTrackResolution` rather than the sketched
+  `LibraryVerificationResult` / `LibraryTrackCheck`. **Fold:** Slice 2 should build
+  `LibraryVerificationResult` *on top of* the Slice 0 resolution types, not
+  introduce a third parallel set of names.
 
 ### Slice 1 — Import `Output/` into Apple Music (explicit)
 

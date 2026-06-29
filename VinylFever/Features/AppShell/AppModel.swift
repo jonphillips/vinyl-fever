@@ -18,6 +18,8 @@ final class AppModel {
   @ObservationIgnored
   @Dependency(\.runLogClient) private var runLogClient
   @ObservationIgnored
+  @Dependency(\.musicAppClient) private var musicAppClient
+  @ObservationIgnored
   @Dependency(\.defaultDatabase) private var database
   @ObservationIgnored
   @Dependency(\.uuid) private var uuid
@@ -40,6 +42,7 @@ final class AppModel {
   var applyState: ApplyRunState = .idle
   var conversionState: ConversionRunState = .idle
   var verificationState: VerificationRunState = .idle
+  var libraryReadState: LibraryReadState = .idle
   var lastSuccessfulApplyPlan: ApplyPlan?
 
   enum Destination: Hashable {
@@ -52,6 +55,7 @@ final class AppModel {
       applyState = .idle
       conversionState = .idle
       verificationState = .idle
+      libraryReadState = .idle
       lastSuccessfulApplyPlan = nil
       scanErrorMessage = nil
     } catch {
@@ -60,6 +64,7 @@ final class AppModel {
       applyState = .idle
       conversionState = .idle
       verificationState = .idle
+      libraryReadState = .idle
       lastSuccessfulApplyPlan = nil
       scanErrorMessage = error.localizedDescription
     }
@@ -184,6 +189,7 @@ final class AppModel {
     applyState = .running(applyPlan)
     conversionState = .idle
     verificationState = .idle
+    libraryReadState = .idle
     lastSuccessfulApplyPlan = nil
 
     do {
@@ -206,6 +212,7 @@ final class AppModel {
     guard hasSuccessfulApply(for: applyPlan) else {
       conversionState = .failed("Apply must finish successfully before conversion.")
       verificationState = .idle
+      libraryReadState = .idle
       return
     }
 
@@ -214,10 +221,12 @@ final class AppModel {
     guard conversionPlan.requiredTools.allSatisfy({ toolStatus(for: $0).resolvedPath != nil }) else {
       conversionState = .failed("Required conversion and verification tools are missing.")
       verificationState = .idle
+      libraryReadState = .idle
       return
     }
 
     verificationState = .idle
+    libraryReadState = .idle
     if conversionPlan.requiresConversion {
       conversionState = .running(conversionPlan)
       do {
@@ -226,14 +235,17 @@ final class AppModel {
         runLogErrorMessage = nil
         guard result.didSucceed else {
           verificationState = .failed("Conversion did not finish cleanly.")
+          libraryReadState = .idle
           return
         }
       } catch is CancellationError {
         conversionState = .idle
+        libraryReadState = .idle
         return
       } catch {
         conversionState = .failed(error.localizedDescription)
         verificationState = .idle
+        libraryReadState = .idle
         runLogErrorMessage = error.localizedDescription
         return
       }
@@ -250,6 +262,44 @@ final class AppModel {
       verificationState = .idle
     } catch {
       verificationState = .failed(error.localizedDescription)
+      libraryReadState = .idle
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
+  func hasSuccessfulFileVerify(for plan: ConversionPlan) -> Bool {
+    guard case let .completed(result) = verificationState, result.didVerify else {
+      return false
+    }
+    return result.files.map(\.id) == plan.tracks.map(\.id)
+  }
+
+  func readMusicLibrary(for plan: ConversionPlan) async {
+    guard hasSuccessfulFileVerify(for: plan) else {
+      libraryReadState = .failed("File verification must finish successfully before reading Music.")
+      return
+    }
+
+    libraryReadState = .requestingPermission
+    let permission = await musicAppClient.requestAutomationPermission()
+    guard permission == .authorized else {
+      libraryReadState = .permission(permission)
+      return
+    }
+
+    libraryReadState = .running(plan)
+    do {
+      let libraryTracks = try await musicAppClient.readAlbumTracks(
+        MusicAlbumReadRequest(albumTitle: plan.albumTitle)
+      )
+      libraryReadState = .completed(
+        MusicLibraryMatcher.resolve(plan: plan, libraryTracks: libraryTracks)
+      )
+      runLogErrorMessage = nil
+    } catch is CancellationError {
+      libraryReadState = .idle
+    } catch {
+      libraryReadState = .failed(error.localizedDescription)
       runLogErrorMessage = error.localizedDescription
     }
   }
@@ -593,6 +643,24 @@ enum VerificationRunState: Equatable {
       return true
     }
     return false
+  }
+}
+
+enum LibraryReadState: Equatable {
+  case idle
+  case requestingPermission
+  case running(ConversionPlan)
+  case permission(MusicAutomationPermission)
+  case completed(LibraryResolutionResult)
+  case failed(String)
+
+  var isRunning: Bool {
+    switch self {
+    case .requestingPermission, .running:
+      true
+    case .idle, .permission, .completed, .failed:
+      false
+    }
   }
 }
 

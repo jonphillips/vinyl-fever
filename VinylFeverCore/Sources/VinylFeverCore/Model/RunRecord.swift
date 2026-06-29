@@ -34,6 +34,8 @@ public struct RunRecord: Equatable, Identifiable, Sendable {
     case apply
     case convert
     case verify
+    case importLibrary
+    case verifyLibrary
 
     public var displayName: String {
       switch self {
@@ -45,6 +47,10 @@ public struct RunRecord: Equatable, Identifiable, Sendable {
         "Convert"
       case .verify:
         "Verify"
+      case .importLibrary:
+        "Import library"
+      case .verifyLibrary:
+        "Verify library"
       }
     }
   }
