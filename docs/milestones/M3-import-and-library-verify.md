@@ -265,6 +265,40 @@ track `.failed` and is recorded without touching originals. **Tests:** a mock
 already-present and failed paths. **Done when:** pressing Import adds the show to
 Apple Music and writes the run.
 
+**Carry-over from the Slice 1 review (fold into Slice 2):**
+
+- **The Slice 0 "prove the live read/location" carry-over is still open — Slice 1
+  shipped without discharging it.** The PR statically confirmed the `add:to:`
+  selector (sdef/sdp) but explicitly "did not perform a real import into Jon's Music
+  library from automation," so the *live* ScriptingBridge read + location-primary
+  resolution remain unproven — exactly the gating spike Slice 0 deferred. Slice 1's
+  `.alreadyPresent` preflight (`readAlbumTracks` → `MusicLibraryMatcher.resolve`) and
+  post-import resolution both depend on it. Compounding risk: with Music's default
+  *"Copy files to Media folder,"* the library item's `location` becomes the **copied**
+  path inside the Music Media folder, not the `Output/` path — so location-primary
+  matching silently falls through to the `album`+`trackNumber`+`title` fallback on
+  every re-run, and `.alreadyPresent` idempotency (Decision 6) actually rides on the
+  fallback, not the primary key. **Decided fix:** _(awaiting Jon)_ — run one real
+  Import + re-Import against a known album in the running app and confirm (a) tracks
+  resolve, (b) whether `location` matches `Output/` or the copied media path. If
+  `location` doesn't reliably point at our produced file, ratify album/track/title as
+  the de-facto primary for already-present detection (and revisit Decision 4 /
+  `Library.xml`) rather than leaving location-primary as dead code. Do this before
+  Slice 2's verify leans on the same resolution.
+- **`add` is called per-track in a loop (N Apple Events).** The executor adds one URL
+  at a time so a single failed add marks only that track `.failed` and the run
+  continues (satisfies the Slice 1 safety requirement) — but it's N separate
+  `add:to:` round-trips, the same O(n) Apple Events shape flagged for reads in the
+  Slice 0 carry-over. **Fold:** in Slice 2's perf pass, either batch the add (and find
+  another way to attribute per-track failure) or consciously ratify per-track as the
+  cost of failure attribution.
+- **Post-import resolution trusts `add`'s return value, untested live.**
+  `addedLibraryRefs` come straight off the `add:to:` result, handled defensively for
+  `SBObject` / `[SBObject]` / `SBElementArray` / `NSArray`. If `add` returns nothing
+  usable, tracks fall back to the post-import album re-read + album/track/title match
+  (fine *if* tags are exposed). Confirm the actual return shape in the same live run
+  above; keep the fallback either way.
+
 ### Slice 2 — Library-level verification
 
 `LibraryVerificationResult` over the imported album: album presence, actual vs
