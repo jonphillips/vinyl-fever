@@ -172,6 +172,7 @@ private struct ScannedShowFolderView: View {
           applyState: model.applyState,
           conversionState: model.conversionState,
           verificationState: model.verificationState,
+          libraryImportState: model.libraryImportState,
           libraryReadState: model.libraryReadState,
           hasRequiredApplyTools: model.hasRequiredApplyTools(for: showPlan),
           hasRequiredConversionTools: { applyPlan in
@@ -191,6 +192,11 @@ private struct ScannedShowFolderView: View {
           convertAndVerify: { applyPlan in
             Task {
               await model.convertAndVerify(applyPlan)
+            }
+          },
+          importIntoMusicLibrary: { conversionPlan in
+            Task {
+              await model.importIntoMusicLibrary(for: conversionPlan)
             }
           },
           readMusicLibrary: { conversionPlan in
@@ -245,6 +251,7 @@ private struct PlanPreviewSection: View {
   let applyState: ApplyRunState
   let conversionState: ConversionRunState
   let verificationState: VerificationRunState
+  let libraryImportState: LibraryImportState
   let libraryReadState: LibraryReadState
   let hasRequiredApplyTools: Bool
   let hasRequiredConversionTools: (ApplyPlan) -> Bool
@@ -252,6 +259,7 @@ private struct PlanPreviewSection: View {
   let hasSuccessfulFileVerify: (ConversionPlan) -> Bool
   let apply: (ShowPlan) -> Void
   let convertAndVerify: (ApplyPlan) -> Void
+  let importIntoMusicLibrary: (ConversionPlan) -> Void
   let readMusicLibrary: (ConversionPlan) -> Void
   let revealWorkingDirectory: () -> Void
   let revealOutputDirectory: () -> Void
@@ -273,6 +281,7 @@ private struct PlanPreviewSection: View {
             applyState: applyState,
             conversionState: conversionState,
             verificationState: verificationState,
+            libraryImportState: libraryImportState,
             libraryReadState: libraryReadState,
             hasRequiredApplyTools: hasRequiredApplyTools,
             hasRequiredConversionTools: hasRequiredConversionTools(applyPlan),
@@ -280,6 +289,7 @@ private struct PlanPreviewSection: View {
             hasSuccessfulFileVerify: hasSuccessfulFileVerify(conversionPlan),
             apply: { apply(plan) },
             convertAndVerify: { convertAndVerify(applyPlan) },
+            importIntoMusicLibrary: { importIntoMusicLibrary(conversionPlan) },
             readMusicLibrary: { readMusicLibrary(conversionPlan) },
             revealWorkingDirectory: revealWorkingDirectory,
             revealOutputDirectory: revealOutputDirectory
@@ -315,6 +325,7 @@ private struct PlanReadinessSummary: View {
   let applyState: ApplyRunState
   let conversionState: ConversionRunState
   let verificationState: VerificationRunState
+  let libraryImportState: LibraryImportState
   let libraryReadState: LibraryReadState
   let hasRequiredApplyTools: Bool
   let hasRequiredConversionTools: Bool
@@ -322,6 +333,7 @@ private struct PlanReadinessSummary: View {
   let hasSuccessfulFileVerify: Bool
   let apply: () -> Void
   let convertAndVerify: () -> Void
+  let importIntoMusicLibrary: () -> Void
   let readMusicLibrary: () -> Void
   let revealWorkingDirectory: () -> Void
   let revealOutputDirectory: () -> Void
@@ -359,6 +371,11 @@ private struct PlanReadinessSummary: View {
         }
         .disabled(!canConvert)
         .help(convertDisabledReason ?? convertHelp(conversionPlan))
+        Button(action: importIntoMusicLibrary) {
+          Label("Import", systemImage: "square.and.arrow.down")
+        }
+        .disabled(!canImport)
+        .help(importDisabledReason ?? "Add the verified files to Music.")
         Button(action: readMusicLibrary) {
           Label("Read Music", systemImage: "music.note")
         }
@@ -383,6 +400,7 @@ private struct PlanReadinessSummary: View {
         revealOutputDirectory: revealOutputDirectory
       )
       VerificationRunStatus(state: verificationState, root: root)
+      LibraryImportStatus(state: libraryImportState, root: root)
       LibraryReadStatus(state: libraryReadState, root: root)
     }
   }
@@ -410,6 +428,7 @@ private struct PlanReadinessSummary: View {
       !applyState.isRunning &&
       !conversionState.isRunning &&
       !verificationState.isRunning &&
+      !libraryImportState.isRunning &&
       !libraryReadState.isRunning
   }
 
@@ -422,6 +441,9 @@ private struct PlanReadinessSummary: View {
     }
     if verificationState.isRunning {
       return "Verification is already running."
+    }
+    if libraryImportState.isRunning {
+      return "Import is already running."
     }
     if libraryReadState.isRunning {
       return "Music read is already running."
@@ -440,7 +462,39 @@ private struct PlanReadinessSummary: View {
       !applyState.isRunning &&
       !conversionState.isRunning &&
       !verificationState.isRunning &&
+      !libraryImportState.isRunning &&
       !libraryReadState.isRunning
+  }
+
+  private var canImport: Bool {
+    hasSuccessfulFileVerify &&
+      !applyState.isRunning &&
+      !conversionState.isRunning &&
+      !verificationState.isRunning &&
+      !libraryImportState.isRunning &&
+      !libraryReadState.isRunning
+  }
+
+  private var importDisabledReason: String? {
+    if applyState.isRunning {
+      return "Apply is already running."
+    }
+    if conversionState.isRunning {
+      return "Conversion is already running."
+    }
+    if verificationState.isRunning {
+      return "Verification is already running."
+    }
+    if libraryImportState.isRunning {
+      return "Import is already running."
+    }
+    if libraryReadState.isRunning {
+      return "Music read is already running."
+    }
+    if !hasSuccessfulFileVerify {
+      return "File verification must finish successfully first."
+    }
+    return nil
   }
 
   private var readMusicDisabledReason: String? {
@@ -452,6 +506,9 @@ private struct PlanReadinessSummary: View {
     }
     if verificationState.isRunning {
       return "Verification is already running."
+    }
+    if libraryImportState.isRunning {
+      return "Import is already running."
     }
     if libraryReadState.isRunning {
       return "Music read is already running."
@@ -605,6 +662,97 @@ private struct VerificationFileResultRow: View {
           .font(.caption)
           .foregroundStyle(.secondary)
       }
+    }
+  }
+}
+
+private struct LibraryImportStatus: View {
+  let state: LibraryImportState
+  let root: URL
+
+  var body: some View {
+    switch state {
+    case .idle:
+      EmptyView()
+    case .requestingPermission:
+      Label("Requesting Music automation access", systemImage: "hourglass")
+        .font(.callout)
+        .foregroundStyle(.secondary)
+    case let .running(plan):
+      Label("Importing \(plan.tracks.count) files into Music", systemImage: "hourglass")
+        .font(.callout)
+        .foregroundStyle(.secondary)
+    case let .permission(permission):
+      Label(permission.displayMessage, systemImage: "exclamationmark.triangle")
+        .font(.callout)
+        .foregroundStyle(permission == .authorized ? .green : .orange)
+    case let .completed(result):
+      VStack(alignment: .leading, spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+          Label(
+            result.didSucceed ? "Imported to Music" : "Import incomplete",
+            systemImage: result.didSucceed ? "checkmark.seal" : "xmark.seal"
+          )
+          .foregroundStyle(result.didSucceed ? .green : .red)
+          Text(result.exitSummary)
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+        }
+        LazyVStack(alignment: .leading, spacing: 6) {
+          ForEach(result.tracks) { track in
+            ImportedTrackRow(track: track, root: root)
+          }
+        }
+      }
+      .font(.callout)
+    case let .failed(message):
+      Label(message, systemImage: "exclamationmark.triangle")
+        .font(.callout)
+        .foregroundStyle(.red)
+    }
+  }
+}
+
+private struct ImportedTrackRow: View {
+  let track: ImportedTrack
+  let root: URL
+
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 8) {
+      Image(systemName: systemImage)
+        .foregroundStyle(statusColor)
+        .frame(width: 18)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(track.sourceURL.relativePath(from: root))
+          .font(.caption.monospaced())
+          .textSelection(.enabled)
+        Text(track.note)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .textSelection(.enabled)
+      }
+    }
+  }
+
+  private var systemImage: String {
+    switch track.status {
+    case .imported:
+      "checkmark.circle"
+    case .alreadyPresent:
+      "checkmark.circle"
+    case .failed:
+      "exclamationmark.triangle"
+    }
+  }
+
+  private var statusColor: Color {
+    switch track.status {
+    case .imported:
+      .green
+    case .alreadyPresent:
+      .secondary
+    case .failed:
+      .red
     }
   }
 }

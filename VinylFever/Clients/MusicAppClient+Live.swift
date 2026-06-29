@@ -14,6 +14,9 @@ extension MusicAppClient {
       requestAutomationPermission: {
         await bridge.automationPermission(askUserIfNeeded: true)
       },
+      add: { urls in
+        try await bridge.add(urls)
+      },
       readAlbumTracks: { request in
         try await bridge.readAlbumTracks(request)
       }
@@ -65,6 +68,24 @@ private struct LiveMusicAppBridge: Sendable {
             (lhs.title ?? "") < (rhs.title ?? "")
           }
         }
+    }
+    .value
+  }
+
+  func add(_ urls: [URL]) async throws -> [ImportedTrackRef] {
+    try await ensureMusicIsRunning()
+    let permission = await Self.determineAutomationPermission(askUserIfNeeded: false)
+    guard permission == .authorized else {
+      throw MusicAppLiveError.automationPermission(permission)
+    }
+
+    return try await Task.detached(priority: .userInitiated) {
+      let application = try Self.musicApplication()
+      let playlist = try Self.libraryPlaylist(in: application)
+      let standardizedURLs = urls.map(\.standardizedFileURL)
+      let result = (application as MusicScriptingApplication)
+        .add?(standardizedURLs as NSArray, to: playlist)
+      return Self.importedTrackRefs(from: result)
     }
     .value
   }
@@ -172,6 +193,21 @@ private struct LiveMusicAppBridge: Sendable {
     return elementArray.get() as? [SBObject] ?? []
   }
 
+  private static func importedTrackRefs(from result: Any?) -> [ImportedTrackRef] {
+    switch result {
+    case let track as SBObject:
+      return [importedTrackRef(from: track)]
+    case let tracks as [SBObject]:
+      return tracks.map(importedTrackRef(from:))
+    case let elementArray as SBElementArray:
+      return (elementArray.get() as? [SBObject] ?? []).map(importedTrackRef(from:))
+    case let array as NSArray:
+      return array.compactMap { $0 as? SBObject }.map(importedTrackRef(from:))
+    default:
+      return []
+    }
+  }
+
   private static func importedTrackRef(from track: SBObject) -> ImportedTrackRef {
     ImportedTrackRef(
       id: stringValue(named: "persistentID", on: track) ?? "",
@@ -208,6 +244,14 @@ private struct LiveMusicAppBridge: Sendable {
       nil
     }
   }
+}
+
+@objc
+private protocol MusicScriptingApplication {
+  @objc optional func add(_ urls: NSArray, to playlist: SBObject?) -> Any?
+}
+
+extension SBApplication: MusicScriptingApplication {
 }
 
 private enum MusicAppLiveError: LocalizedError {

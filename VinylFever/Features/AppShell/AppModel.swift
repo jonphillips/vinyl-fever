@@ -42,6 +42,7 @@ final class AppModel {
   var applyState: ApplyRunState = .idle
   var conversionState: ConversionRunState = .idle
   var verificationState: VerificationRunState = .idle
+  var libraryImportState: LibraryImportState = .idle
   var libraryReadState: LibraryReadState = .idle
   var lastSuccessfulApplyPlan: ApplyPlan?
 
@@ -55,6 +56,7 @@ final class AppModel {
       applyState = .idle
       conversionState = .idle
       verificationState = .idle
+      libraryImportState = .idle
       libraryReadState = .idle
       lastSuccessfulApplyPlan = nil
       scanErrorMessage = nil
@@ -64,6 +66,7 @@ final class AppModel {
       applyState = .idle
       conversionState = .idle
       verificationState = .idle
+      libraryImportState = .idle
       libraryReadState = .idle
       lastSuccessfulApplyPlan = nil
       scanErrorMessage = error.localizedDescription
@@ -189,6 +192,7 @@ final class AppModel {
     applyState = .running(applyPlan)
     conversionState = .idle
     verificationState = .idle
+    libraryImportState = .idle
     libraryReadState = .idle
     lastSuccessfulApplyPlan = nil
 
@@ -212,6 +216,7 @@ final class AppModel {
     guard hasSuccessfulApply(for: applyPlan) else {
       conversionState = .failed("Apply must finish successfully before conversion.")
       verificationState = .idle
+      libraryImportState = .idle
       libraryReadState = .idle
       return
     }
@@ -221,11 +226,13 @@ final class AppModel {
     guard conversionPlan.requiredTools.allSatisfy({ toolStatus(for: $0).resolvedPath != nil }) else {
       conversionState = .failed("Required conversion and verification tools are missing.")
       verificationState = .idle
+      libraryImportState = .idle
       libraryReadState = .idle
       return
     }
 
     verificationState = .idle
+    libraryImportState = .idle
     libraryReadState = .idle
     if conversionPlan.requiresConversion {
       conversionState = .running(conversionPlan)
@@ -235,16 +242,19 @@ final class AppModel {
         runLogErrorMessage = nil
         guard result.didSucceed else {
           verificationState = .failed("Conversion did not finish cleanly.")
+          libraryImportState = .idle
           libraryReadState = .idle
           return
         }
       } catch is CancellationError {
         conversionState = .idle
+        libraryImportState = .idle
         libraryReadState = .idle
         return
       } catch {
         conversionState = .failed(error.localizedDescription)
         verificationState = .idle
+        libraryImportState = .idle
         libraryReadState = .idle
         runLogErrorMessage = error.localizedDescription
         return
@@ -262,6 +272,7 @@ final class AppModel {
       verificationState = .idle
     } catch {
       verificationState = .failed(error.localizedDescription)
+      libraryImportState = .idle
       libraryReadState = .idle
       runLogErrorMessage = error.localizedDescription
     }
@@ -272,6 +283,34 @@ final class AppModel {
       return false
     }
     return result.files.map(\.id) == plan.tracks.map(\.id)
+  }
+
+  func importIntoMusicLibrary(for plan: ConversionPlan) async {
+    guard hasSuccessfulFileVerify(for: plan) else {
+      libraryImportState = .failed("File verification must finish successfully before import.")
+      libraryReadState = .idle
+      return
+    }
+
+    libraryImportState = .requestingPermission
+    let permission = await musicAppClient.requestAutomationPermission()
+    guard permission == .authorized else {
+      libraryImportState = .permission(permission)
+      return
+    }
+
+    libraryImportState = .running(plan)
+    libraryReadState = .idle
+    do {
+      let result = try await LibraryImportExecutor().importToLibrary(plan)
+      libraryImportState = .completed(result)
+      runLogErrorMessage = nil
+    } catch is CancellationError {
+      libraryImportState = .idle
+    } catch {
+      libraryImportState = .failed(error.localizedDescription)
+      runLogErrorMessage = error.localizedDescription
+    }
   }
 
   func readMusicLibrary(for plan: ConversionPlan) async {
@@ -643,6 +682,24 @@ enum VerificationRunState: Equatable {
       return true
     }
     return false
+  }
+}
+
+enum LibraryImportState: Equatable {
+  case idle
+  case requestingPermission
+  case running(ConversionPlan)
+  case permission(MusicAutomationPermission)
+  case completed(ImportResult)
+  case failed(String)
+
+  var isRunning: Bool {
+    switch self {
+    case .requestingPermission, .running:
+      true
+    case .idle, .permission, .completed, .failed:
+      false
+    }
   }
 }
 

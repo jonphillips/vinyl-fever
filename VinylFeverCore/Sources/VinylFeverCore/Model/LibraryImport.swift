@@ -37,6 +37,115 @@ public struct ImportedTrackRef: Equatable, Identifiable, Sendable {
   }
 }
 
+public struct ImportedTrack: Equatable, Identifiable, Sendable {
+  public let id: ConversionTrackPlan.ID
+  public var sourceURL: URL
+  public var libraryRef: ImportedTrackRef?
+  public var status: MusicImportStatus
+
+  public init(
+    id: ConversionTrackPlan.ID,
+    sourceURL: URL,
+    libraryRef: ImportedTrackRef?,
+    status: MusicImportStatus
+  ) {
+    self.id = id
+    self.sourceURL = sourceURL
+    self.libraryRef = libraryRef
+    self.status = status
+  }
+
+  public var didSucceed: Bool {
+    status.didSucceed
+  }
+
+  public var runOutcomeStatus: RunFileOutcome.Status {
+    status.runOutcomeStatus
+  }
+
+  public var note: String {
+    switch status {
+    case .imported:
+      if let libraryRef {
+        return "Imported as Music item \(libraryRef.id)."
+      }
+      return "Imported."
+    case .alreadyPresent:
+      if let libraryRef {
+        return "Already present as Music item \(libraryRef.id)."
+      }
+      return "Already present."
+    case let .failed(message):
+      return message
+    }
+  }
+}
+
+public enum MusicImportStatus: Equatable, Sendable {
+  case imported
+  case alreadyPresent
+  case failed(String)
+
+  public var didSucceed: Bool {
+    switch self {
+    case .imported, .alreadyPresent:
+      true
+    case .failed:
+      false
+    }
+  }
+
+  public var runOutcomeStatus: RunFileOutcome.Status {
+    switch self {
+    case .imported:
+      .created
+    case .alreadyPresent:
+      .skipped
+    case .failed:
+      .failed
+    }
+  }
+
+  public var displayName: String {
+    switch self {
+    case .imported:
+      "Imported"
+    case .alreadyPresent:
+      "Already present"
+    case .failed:
+      "Failed"
+    }
+  }
+}
+
+public struct ImportResult: Equatable, Sendable {
+  public var run: RunRecord
+  public var tracks: [ImportedTrack]
+  public var exitSummary: String
+
+  public init(run: RunRecord, tracks: [ImportedTrack], exitSummary: String) {
+    self.run = run
+    self.tracks = tracks
+    self.exitSummary = exitSummary
+  }
+
+  public var didSucceed: Bool {
+    !tracks.isEmpty && tracks.allSatisfy(\.didSucceed)
+  }
+
+  public var importedCount: Int {
+    tracks.count { $0.status == .imported }
+  }
+
+  public var alreadyPresentCount: Int {
+    tracks.count { $0.status == .alreadyPresent }
+  }
+
+  public var failedCount: Int {
+    tracks.count { !$0.didSucceed }
+  }
+}
+
 public struct LibraryResolutionResult: Equatable, Sendable {
   public var albumTitle: String
   public var libraryTracks: [ImportedTrackRef]
