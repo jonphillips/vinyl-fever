@@ -78,6 +78,109 @@ Simple v1 policy matching:
 - A policy can be applied to a selected Finder folder or set of folders by adding
   the policy token to the contained songs' `Grouping` field.
 
+## Compilation-Album (Append) Policy
+
+A **Compilation Album** is a curated album Jon manufactures in Apple Music to
+hold a set of otherwise-unrelated songs — "Great Covers", "Rare Hits from the
+80s" — so that a crowd of one-hit-wonder artists does not pollute the Artists
+list. It is the "intentionally quarantined small custom crate" case named in the
+field defaults below, and it is a concrete *flavor* of Collection Policy where
+the **album identity** (Album, Album Artist, artwork) is the payload, not just a
+Grouping token.
+
+This policy is deliberately narrow: **these albums already exist in Apple Music.**
+Jon builds and maintains each album by hand, including the cover-art hack (a
+single 2-second silent "carrier" track that is the album's *only numbered track*
+and carries the collection cover so Apple Music renders it). Vinyl Fever does not
+create albums, generate the carrier track, or manage artwork on the album as a
+whole. Its one job is to make **adding new tracks** to an existing curated album
+painless.
+
+### Album Artist as owner identity
+
+This policy intentionally overrides the "avoid using `Album Artist` as
+collection-policy plumbing" rule under *Grouping As Collection Carrier*. The
+distinction that keeps the two consistent:
+
+- Using Album Artist as **membership** plumbing (which songs belong to a theme)
+  is still forbidden — that stays in `Grouping`.
+- Using Album Artist as the **album's owner identity** (`Album Artist =
+  Jon Phillips`) is exactly what the field is for, and it is the lever that keeps
+  a various-artists album grouped as one album and off the Artists list.
+
+So a Compilation Album sets `Album Artist` deliberately, and `Grouping` may still
+carry the collection token independently.
+
+### The Registry
+
+Vinyl Fever keeps a **small registry of only the curated albums this feature
+manages** — on the order of 10–20 entries — in SQLiteData. This is not a mirror
+of the (out-of-control) Apple Music library; browsing the whole library is the
+pain this feature exists to avoid, so this policy barely touches the Music.app
+read surface.
+
+Seed the registry from **folders, not from the library**:
+
+- Drop **one album's folder** → VF reads the contained files' existing tags →
+  proposes an entry (Album, Album Artist, a thumbnail lifted from the folder's
+  embedded art) → Jon confirms.
+- Drop a **parent folder of album subfolders** → VF discovers each subfolder and
+  presents the list to check off. That checkable discovered-folder list *is* the
+  "skim a short list" gesture — short and relevant, not thousands of albums.
+
+A registry entry holds:
+
+- **Display**: name + image, used only to find the album in the workspace. The
+  image is a workspace locator; it is **not** embedded into files by VF and is
+  **not** the carrier-track art (Jon owns that).
+- **Identity** (the merge key): the exact `Album` and `Album Artist` strings,
+  read from the seeding folder's file tags.
+- **Ruleset**:
+  - Strip all track/disc numbers — **default ON**. These are unrelated one-off
+    songs; inherited track/disc numbers make album display and playback chaotic.
+    Per-album toggle.
+  - `Compilation` flag — **default OFF**, per-album override. Album Artist is the
+    grouping lever; the Compilation flag (which routes into Apple Music's
+    Compilations bucket) is opt-in only.
+  - Grouping token(s) to add, if any.
+  - Artwork: **keep each song's original embedded art; apply the collection cover
+    only as a fallback for songs that have none.** The keep-vs-fallback branch
+    reads `AudioTags.hasEmbeddedArtwork` per file.
+
+### Append Flow
+
+1. Pick a target entry from the short registry.
+2. Point VF at the folder of new songs to add.
+3. VF stamps each new song with the entry's identity (`Album`, `Album Artist`)
+   and applies the ruleset (strip track/disc, compilation flag, grouping,
+   artwork keep-else-fallback).
+4. Show the preview diff required by *Preview Requirements* below; Jon confirms.
+5. Write tags → import into Apple Music → certify.
+
+VF only ever touches the new-songs folder, so the existing carrier track and its
+number are never at risk.
+
+### Identity drift and certification
+
+The merge key comes from **file tags**, but Apple Music is a lossy display layer
+that may have mutated the album's title or artist on its way in. If the registry
+says `Great Covers` and Apple Music actually stored `Great Covers ` (trailing
+space) or `The Beatles` vs `Beatles`, an append does not merge — it silently
+spawns a duplicate album (`Great Covers 2`).
+
+Certification is therefore the whole ballgame for this policy, and it reuses the
+existing verification step:
+
+- On **first append** to an entry (and on demand), run a lightweight check: does
+  an album with this exact `Album` / `Album Artist` already exist in Apple Music,
+  and after import did that album's track count increase (rather than a second
+  album appearing)?
+- Certify-not-enumerate also governs the Album Artist cleanup: VF writes the one
+  canonical Apple Music album-artist field and certifies it reads back correctly.
+  It does **not** attempt to enumerate and delete every album-artist-shaped tag
+  variant across formats; it strips a variant only if certification shows Apple
+  Music is confused by it.
+
 ## Apple Music Field Defaults
 
 Follow [reference/apple_music_library_strategy.md](reference/apple_music_library_strategy.md).
