@@ -37,6 +37,28 @@ These are intentionally unresolved. They are prompts for Jon's review.
 - Which fields can a policy change automatically?
 - Which fields always require review?
 
+### Compilation-Album (Append) Policy
+
+- Resolved direction: see *Compilation-Album (Append) Policy* in
+  [Metadata Policy Model](metadata-policy-model.md). VF appends tracks to
+  curated albums that already exist in Apple Music; it never creates albums or
+  the silent cover-carrier track. A small SQLiteData registry (~10–20 entries),
+  seeded by folder-drop / parent-folder discovery, is the workspace — not a
+  library mirror. Album Artist is the owner identity; track/disc strip defaults
+  on (per-album toggle); Compilation flag defaults off (per-album override);
+  artwork keeps original embedded art and falls back to the collection cover
+  only when a song has none.
+- Identity drift is the main open risk: the merge key (`Album` / `Album Artist`)
+  is read from file tags, but Apple Music may have mutated it on import, which
+  silently spawns a duplicate album instead of merging. First-append
+  certification checks the exact album exists and its track count went up. Open:
+  how forgiving should the match be — exact string only, or trim/normalize
+  whitespace and leading articles before comparing? And what should VF offer when
+  the check finds no matching album (block, warn-and-proceed, or open a
+  reconcile step to re-point the entry at the real album)?
+- Open: when seeding an entry from a folder whose files disagree on `Album` or
+  `Album Artist`, which value wins — most common, first, or prompt?
+
 ## Metadata Management
 
 - What exactly belongs in Metadata Management versus Collection Management?
