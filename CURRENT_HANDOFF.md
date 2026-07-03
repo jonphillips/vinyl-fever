@@ -12,20 +12,24 @@ _Last touched: 2026-07-02._
 ## Active fronts
 
 - **M3 — live-show import + library verify**
-  ([ledger](docs/milestones/M3-import-and-library-verify.md)). S0 merged (#19).
-  **S1 is ready and awaiting architect review — [PR #20](https://github.com/jonphillips/vinyl-fever/pull/20).**
-  S2 (library verify) and S3 (`Working/` cleanup) not started.
+  ([ledger](docs/milestones/M3-import-and-library-verify.md)). S0 + S1 merged
+  (#19, #20). **S2 (library verify) is next**, folding the S1 review carry-over
+  (live-read/`location` device check, per-track `add` batching, `add` return
+  shape). S3 (`Working/` cleanup) after.
 - **M4 — compilation-album append (first Phase 6)**
   ([ledger](docs/milestones/M4-compilation-album-append.md)). Build order + policy
-  **merged** (#21); **scope confirmed append-only.** Not yet dispatched to Codex;
-  no slices started.
+  **merged** (#21); **scope append-only.** **Dispatched: Slice 0 + Slice 1 as one
+  batch** — both land before anything touches Music.app. Codex's turn.
 
 ## Next up
 
-1. **Architect:** review [PR #20](https://github.com/jonphillips/vinyl-fever/pull/20)
-   (M3 S1) against the M3 done-criteria — it's ready, so it's your turn.
-2. Dispatch **M4 Slice 0 + Slice 1** to Codex as one batch (cohesive; both land
-   before anything touches Music.app).
+1. **Codex (executor):** open **one** draft PR batching **M4 Slice 0 + Slice 1** —
+   registry model + folder seeding, then the policy-stamping engine + preview
+   (writes to `Working/` copies only, no import). Build + tests green, then mark
+   ready. Blocked → write it in the PR, label `question-for-architect`.
+2. After that batch, the architect picks the next front: **M4 S2**
+   (append + import + certify — unlocks Jon's dogfooding) vs **M3 S2** (library
+   verify). They don't collide.
 
 ## Pending Jon decisions
 
