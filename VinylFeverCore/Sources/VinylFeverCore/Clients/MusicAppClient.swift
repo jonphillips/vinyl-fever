@@ -10,6 +10,7 @@ public struct MusicAppClient: Sendable {
   public var requestAutomationPermission: @Sendable () async -> MusicAutomationPermission = {
     .unavailable("Music automation is not configured.")
   }
+  public var add: @Sendable (_ urls: [URL]) async throws -> [ImportedTrackRef]
   public var readAlbumTracks: @Sendable (_ request: MusicAlbumReadRequest) async throws -> [ImportedTrackRef]
 }
 
