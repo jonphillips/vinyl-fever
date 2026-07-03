@@ -7,7 +7,7 @@ the active fronts, whose turn it is, and pending decisions — it points at the
 canonical state and never restates PR/slice history. If it disagrees with GitHub,
 GitHub wins; fix this file.
 
-_Last touched: 2026-07-02._
+_Last touched: 2026-07-03._
 
 ## Active fronts
 
@@ -20,6 +20,14 @@ _Last touched: 2026-07-02._
   ([ledger](docs/milestones/M4-compilation-album-append.md)). Build order + policy
   **merged** (#21); **scope append-only.** **Dispatched: Slice 0 + Slice 1 as one
   batch** — both land before anything touches Music.app. Codex's turn.
+- **Setlist Normalizer — live-show path engine (NEW).** Spec **resolved**
+  2026-07-03 against an 18-file raw corpus; see *Automation Implications* in
+  [setlist-formatting-rules.md](docs/setlist-formatting-rules.md). Architecture
+  settled (sandwich: deterministic pre-segment → frontier LLM JSON via
+  `LLMClientKit` → deterministic validate → mandatory preview; source of truth =
+  what's on the media). No milestone ledger yet; no slices started. **Key point:
+  buildable now — pure text-in/JSON-out in `VinylFeverCore`, independent of macOS 27
+  and the M3 beta-3 pause.**
 
 ## Next up
 
@@ -30,6 +38,10 @@ _Last touched: 2026-07-02._
 2. After that batch, the architect picks the next front: **M4 S2**
    (append + import + certify — unlocks Jon's dogfooding) vs **M3 S2** (library
    verify). They don't collide.
+3. **Setlist Normalizer:** draft a milestone ledger and decide the implementer
+   (Codex slices vs. Jon hand-coding). First slice is the model-free bookends —
+   deterministic pre-segment + validator with a golden-file test per corpus file —
+   so it needs no `LLMClientKit` wiring to start.
 
 ## Pending Jon decisions
 
