@@ -644,36 +644,160 @@ This document answers part of the live-show reassessment: the app needs a
 Setlist Parser/Normalizer that can turn noisy input into a previewable
 `setlist.txt`.
 
-In practice this normalizer is LLM-first, not deterministic-first. Most of the
-rules above are semantic judgment: inferring source from prose, attaching
-footnotes to the right tracks, distinguishing musical detail from trading noise,
-fixing spelling when the intended song is clear. The LLM does the interpretation;
-the deterministic layer's real job is validation and guardrails on the LLM
-output: tag presence, the one-blank-line-after-tags shape, track count, no `|`
-inside a Grouping token, source labels drawn only from the user's controlled
-vocabulary, and no invented sources. The LLM call goes through the house
-`ModelClient` boundary (see `jon-platform/docs/ios/ai-model-access.md`), not a
-one-off model API.
+### Two artifacts, not one
 
-Deterministic parsing should handle:
+There are two distinct text shapes, and they must not be conflated:
 
-- Header detection.
-- Numbered track extraction.
-- Blank line cleanup.
-- Disc/set/encore header removal.
-- Source label normalization.
-- Basic venue/location/date extraction.
-- Known month abbreviation formatting.
-- Known source-token mapping.
-- Footnote expansion when the source uses simple symbols.
+1. **Raw trading notes** — pasted text, `.txt` files, torrent/bootleg metadata.
+   Free-form and wildly inconsistent. This is the *input*.
+2. **The normalized `setlist.txt`** — the tagged shape at the top of this
+   document. This is the *output*.
 
-LLM assistance is appropriate when:
+The existing `SetlistParser` in `VinylFeverCore` parses shape 2 (it looks for
+`ARTIST:`/`ALBUM:` tags and `NN. Title` lines). Run against raw notes it does not
+merely under-perform — it emits garbage, treating headers, `Source:` lines, time
+totals, and note paragraphs as tracks. The hard, mostly-unbuilt problem is the
+transform **raw notes → normalized setlist.txt**. That transform is the
+Normalizer this section specifies.
 
-- The notes are prose-heavy or inconsistently structured.
-- Source, venue, or location must be inferred from surrounding text.
-- Footnotes require semantic interpretation.
-- Guest/singer notes need to be attached to the right tracks.
-- Encoding errors or spelling corrections require musical context.
-- The app needs to distinguish useful musical detail from trading noise.
+### Resolved design: the normalizer sandwich
 
-Any LLM-assisted output must still be previewed before file/tag changes.
+Reviewed against a corpus of 18 real raw setlists (2026-07-03). The corpus made
+plain that even "find the actual track list" is a semantic judgment (e.g. a
+setlist with no track numbers at all; a file carrying both a media track list and
+a prose "complete set" that includes songs not on the recording; a single segue
+jam spanning three lines; the same `(*)` glyph meaning "processed in Cool Edit"
+in one file and "guest performer" in another). Deterministic parsing therefore
+cannot *lead*. But it earns its place as two bookends around the model:
+
+```text
+raw .txt
+   -> [1] Deterministic pre-segment  => cleaned text + region hints
+   -> [2] LLM normalize (frontier)   => structured JSON (see contract)
+   -> [3] Deterministic validate     => pass | fail(reasons)
+   -> [4] Human preview (ALWAYS)      => approve => write setlist.txt
+```
+
+**[1] Pre-segment — hints, never decisions.** Normalize CRLF/BOM/stray
+whitespace; excise FFP/MD5/shntool hash blocks (mechanical and token-heavy);
+label candidate regions (`header` | `tracklist` | `lineage` | `prose`) to hand
+the model structure. It annotates; it never decides what is or isn't a track.
+
+**[2] LLM normalize.** The model reads the cleaned text, the region hints, this
+rules document, and the controlled source vocabulary, and does all interpretation:
+inferring source from prose, attaching footnotes to the right tracks,
+distinguishing musical detail from trading noise, fixing spelling when the
+intended song is clear. It emits **structured JSON, not finished text**, so the
+validator can inspect fields and only step [3]/[4] renders `setlist.txt`.
+
+The call goes through **`LLMClientKit`** — the shared, app-agnostic model boundary
+in the `jon-platform` monorepo (`packages/LLMClientKit`), first proven as
+Galavant's `GalavantAI` and now also used by Yes Chef. `VinylFeverCore` consumes
+it as a path dependency, `.package(path: "../../jon-platform/packages/LLMClientKit")`,
+and reads `@Dependency(\.modelClient)`. Vinyl Fever requests the
+`.frontier(.anthropic)` tier (per the BYO-key decision below); the boundary
+degrades to on-device automatically when no key is configured, so the Normalizer
+never branches on key presence.
+
+**Template — mirror `HoursExtractor`.** Galavant's `HoursExtractor`
+(`GalavantLibrary/Sources/GalavantPlaces/HoursExtractor.swift`) is the same shape
+as this task — pull structured data out of messy free text, *"always extraction,
+never invention"* — and is the house pattern to copy: a `Sendable` struct with a
+`DependencyKey`; `liveValue` builds a `ModelRequest(system: instructions, prompt:
+…)`, calls `modelClient.complete`, and **defensively parses the JSON out of
+`response.text`** (slice the outer `{…}`; malformed output degrades to a
+low-confidence draft, never a crash); `testValue` returns nothing so the
+deterministic path stays the tested default and unit tests use
+`StubModelClient`.
+
+Two structured-output strategies, in order of preference:
+
+- **Prompt-and-parse (start here).** Ask for JSON in the system prompt and parse
+  `response.text`, exactly as `HoursExtractor` does. Proven, matches the house
+  style, trivially testable with `StubModelClient`.
+- **Forced tool-use (promote if needed).** `LLMClientKit` already supports
+  `ModelTool`/`ModelToolCall`, but no consumer yet uses tools for *structured
+  output* (the existing extractors run on-device, where tools are ignored). Our
+  contract is nested (`tracks[]`, `dropped[]`) and frontier-only — exactly where a
+  forced tool whose `inputSchema` *is* the contract earns its keep. If
+  prompt-and-parse proves unreliable on the nested arrays, promote to a tool. That
+  promotion is also the right moment to lift a shared structured-output/JSON helper
+  into `LLMClientKit` — by then `HoursExtractor`, `EvaluationExtractor`, and this
+  Normalizer are three hand-rolled parsers (rule of three), and none of that
+  library work blocks shipping the Normalizer first.
+
+**[3] Validate — the guardrails.** Required tags present; `ALBUM` shape; `DATE`
+is a real ISO date; `source` drawn only from the controlled vocabulary and never
+invented (checked by confirming `sourceEvidence` actually appears in the input);
+no `|` inside a Grouping token; track count sane versus the source. A failure
+does not auto-fix — it marks the draft low-confidence and forces review.
+
+**[4] Preview.** Every file is previewed before any file/tag change. No
+auto-write, even on high confidence. This is a dogfooding tool; trust comes from
+seeing what was dropped.
+
+### LLM output contract
+
+The model returns structured JSON so guardrails are checkable and the dropped
+material is auditable:
+
+```json
+{
+  "tags": { "artist": "...", "albumArtist": "...", "date": "1997-07-19",
+            "venue": "...", "location": "...", "source": "SBD" },
+  "tracks": [ { "title": "Slow Turning", "note": null, "confidence": "high" } ],
+  "sourceEvidence": "quoted lineage line the source label was inferred from",
+  "confidence": "high | low",
+  "dropped": [ "lines the model discarded, for audit" ]
+}
+```
+
+`sourceEvidence` makes "no invented source" verifiable — the quoted string must
+appear in the input. `dropped` makes the preview auditable. Implementing this
+contract implies two small model changes in `VinylFeverCore`: `ShowTags` needs an
+explicit `source` field (today it is only implied inside `ALBUM`), and
+`SetlistTrack` needs an optional `note`.
+
+### Source of truth: the media, not the show
+
+A setlist reflects **what is physically on the recording**, not a reconstructed
+complete performance. This resolves the corpus's ugliest ambiguities into a rule
+the model can follow and the validator can trust: use the structured
+numbered/disc list; treat prose re-lists and "complete set" paragraphs as noise;
+drop separately listed "not recorded" songs. When a release physically contains
+two sub-sets (e.g. an early and a late show, or a main set plus a later radio
+session), both are on the media and both are kept.
+
+### Resolved decisions (2026-07-03 review)
+
+- **Architecture:** the sandwich above (deterministic pre-segment -> LLM ->
+  deterministic validate -> preview).
+- **Model tier:** frontier / BYO key, via `LLMClientKit`'s
+  `.frontier(.anthropic)`. The prose-inference, dirty-OCR, and multi-line-jam
+  cases lean on reasoning quality the on-device tier cannot yet be assumed to
+  reach. Resolves the tier question in `open-questions.md` toward BYO-required for
+  this feature.
+- **Key storage:** reuse `LLMClientKit`'s `APIKeyStore` (`@Dependency(\.apiKeyStore)`)
+  — one iCloud-Keychain-synced slot per provider under a shared service
+  (`com.jonphillips.llmclientkit.apikeys`). A Claude key entered in Galavant or Yes
+  Chef is therefore *already* available to Vinyl Fever (enter once, all apps use
+  it). The library ships the store and a `masked()` preview but not the entry
+  screen; a small per-app settings screen bound to `apiKeyStore` is the only
+  net-new UI, and only needed if the user wants to enter the key inside Vinyl Fever
+  rather than rely on the synced one.
+- **Review gate:** always preview before write.
+- **Source of truth:** what's on the media (above).
+- **Independence:** this Normalizer is pure text-in / JSON-out in
+  `VinylFeverCore` via `ModelClient`. It does **not** depend on macOS 27 or the
+  Music.app import/verify surface, so it is buildable and dogfoodable now,
+  independent of the M3 beta-3 pause, with a golden-file test per corpus file.
+
+### Deferred (not blockers)
+
+- **Embedded per-file instructions.** One corpus file contained an instruction
+  addressed to the formatter ("format these like ..."). For a personal tool
+  operating on the user's own notes, the lean is to *honor* such instructions,
+  gated behind the same mandatory preview. It is also the prompt-injection
+  surface; decide deliberately when first encountered.
+- **Impossible/typo dates** (e.g. a month of `22`): the validator flags them to
+  low-confidence review rather than guessing a correction.

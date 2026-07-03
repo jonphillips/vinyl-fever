@@ -21,10 +21,17 @@ These are intentionally unresolved. They are prompts for Jon's review.
 - What Apple Music fields/data should identify an imported album as a live show
   for the chronological artist view?
 - What should the local-model live-show label audit flag as "probably mislabeled"?
-- Which of the rules in `setlist-formatting-rules.md` are reliable enough for
-  deterministic parsing, and which should be LLM-assisted from the start?
-- Schedule an interactive review session for `setlist-formatting-rules.md`; the
-  current file is today's best guess, not the final law.
+- Resolved (2026-07-03 review): see *Automation Implications* in
+  [Setlist Formatting Rules](setlist-formatting-rules.md). The Normalizer is a
+  sandwich — deterministic pre-segment (clean + region hints, no decisions) ->
+  frontier LLM via `ModelClient` (all semantic judgment, emits structured JSON)
+  -> deterministic validate (tags, ALBUM/DATE shape, controlled source vocab, no
+  invented source, track-count sanity) -> mandatory human preview. Source of
+  truth is what's on the media, not a reconstructed show. Buildable now,
+  independent of the M3 beta-3 pause.
+- Resolved: the interactive review session ran 2026-07-03 against a 18-file raw
+  corpus; outcomes folded into *Automation Implications*. The rules body remains
+  open to revision, but the automation boundary is settled.
 
 ## Collection Policies
 
@@ -107,8 +114,11 @@ These are intentionally unresolved. They are prompts for Jon's review.
   path: depend on the extracted shared package (intended), copy/vendor for now, or
   defer AI until after extraction. Recommendation: rename-and-move at Phase 5; do
   not pre-extract and do not copy.
-- Does setlist normalization need a frontier tier to be useful, or is the
-  on-device/Apple-cloud tier good enough? This decides whether the feature is
-  meaningfully usable without a BYO key.
+- Resolved (2026-07-03 review): setlist normalization targets the frontier /
+  BYO-key tier. The prose-inference, dirty-OCR, and multi-line-jam cases in the
+  raw corpus lean on reasoning quality the on-device/Apple-cloud tier cannot yet
+  be assumed to reach, so the feature is BYO-required. See *Automation
+  Implications* in [Setlist Formatting Rules](setlist-formatting-rules.md). A
+  tiered on-device-then-escalate approach remains a possible later optimization.
 - Does AcoustID fingerprint lookup ever enter scope? If so, it is the only
   non-model credential; decide whether it reuses the shared Keychain key store.

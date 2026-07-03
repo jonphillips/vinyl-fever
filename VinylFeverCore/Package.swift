@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
   name: "VinylFeverCore",
   platforms: [
-    .macOS(.v27),
+    .macOS(.v26),
   ],
   products: [
     .library(name: "VinylFeverCore", targets: ["VinylFeverCore"]),
