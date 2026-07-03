@@ -772,11 +772,11 @@ session), both are on the media and both are kept.
 
 - **Architecture:** the sandwich above (deterministic pre-segment -> LLM ->
   deterministic validate -> preview).
-- **Model tier:** frontier / BYO key, via `LLMClientKit`'s
-  `.frontier(.anthropic)`. The prose-inference, dirty-OCR, and multi-line-jam
-  cases lean on reasoning quality the on-device tier cannot yet be assumed to
-  reach. Resolves the tier question in `open-questions.md` toward BYO-required for
-  this feature.
+- **Model tier:** any configured frontier provider, resolved via 
+  FrontierResolver (.frontierPreferred); degrades to on-device only with no key at all. 
+  The prose-inference, dirty-OCR, and multi-line-jam cases lean on reasoning quality 
+  the on-device tier cannot yet be assumed to reach. Resolves the tier question in 
+  `open-questions.md` toward BYO-required for this feature.
 - **Key storage:** reuse `LLMClientKit`'s `APIKeyStore` (`@Dependency(\.apiKeyStore)`)
   — one iCloud-Keychain-synced slot per provider under a shared service
   (`com.jonphillips.llmclientkit.apikeys`). A Claude key entered in Galavant or Yes
