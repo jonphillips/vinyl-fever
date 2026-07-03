@@ -106,7 +106,7 @@ Invariants that must hold at merge:
 | Import into Music.app + **library** verify (ScriptingBridge) | **M3** | The keystone read surface; file→library mapping is its own spike |
 | Deleting `Working/` after a successful import | **M3** | Per Phase 5, delete only *after* import+verify — which is M3 |
 | Multi-disc / multi-set consolidation across subfolders | **M-later** | M1 fixes `discNumber = 1`; multi-disc scan + plan is its own change |
-| LLM setlist normalization | **M-later** | Needs the `ModelKit` extraction (jon-platform ADR-0001) |
+| LLM setlist normalization | **M-later** | Uses `LLMClientKit` (jon-platform); **first headless consumer** of the query-profile catalog — see `ai-model-access.md` → Query profiles |
 | Source-tag mutation / in-place metadata repair | **Phase 6+** | M2 only writes derived copies; source mutation is opt-in, later |
 | MusicBrainz lookup, artwork policy, Collection Policy | **Phase 6** | Separate product area; not on the live-show import path |
 | MP3/M4A *conversion* (e.g. OPUS→AAC) | **M-later** | M2 converts FLAC→ALAC only; MP3/M4A are tagged-in-place, not converted (matches the pipeline) |

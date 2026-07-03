@@ -73,7 +73,7 @@ Invariants that must hold at merge:
 | Applying the plan (write to `Working/` → `Output/`) | **M2** | First mutation; needs the run-log + safety machinery |
 | FLAC→ALAC / format conversion | **M2** | ffmpeg orchestration |
 | Import into Music.app + **verify** (ScriptingBridge) | **M3** | The keystone read surface; spike it there |
-| LLM setlist normalization | **M-later** | Needs the `ModelKit` extraction (jon-platform ADR-0001) |
+| LLM setlist normalization | **M-later** | Uses `LLMClientKit` (jon-platform); **first headless consumer** of the query-profile catalog — see `ai-model-access.md` → Query profiles |
 | Imported-shows library view (by artist, chronological) | **M-later** | Depends on the M3 Music.app read |
 | Collection Management, Metadata Management | later areas | Separate product areas |
 | CloudKit sync | when useful | Local SQLite is the source of truth; M1 stays local |

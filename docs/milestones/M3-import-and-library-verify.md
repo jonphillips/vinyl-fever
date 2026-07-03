@@ -111,7 +111,7 @@ Invariants that must hold at merge:
 | Collection Policy / Grouping metadata, MusicBrainz, artwork policy | **Phase 6** | Separate product area, not on the live-show import path |
 | **Deleting items from Apple Music** (vs from disk) | **later / explicit** | M3 import is additive; library deletion is a separate, explicit feature |
 | `Library.xml` as the **primary** read surface | **fallback only** | ScriptingBridge is primary (arch default); XML export is manual + goes stale |
-| LLM setlist normalization | **M-later** | Needs the `ModelKit` extraction (jon-platform ADR-0001) |
+| LLM setlist normalization | **M-later** | Uses `LLMClientKit` (jon-platform); **first headless consumer** of the query-profile catalog — see `ai-model-access.md` → Query profiles |
 | Source-tag mutation / in-place metadata repair | **Phase 6+** | M3 still only writes derived copies + imports them |
 | Multi-disc / multi-set consolidation | **M-later** | M1 fixes `discNumber = 1`; unchanged here |
 

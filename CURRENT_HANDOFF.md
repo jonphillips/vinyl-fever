@@ -7,7 +7,7 @@ the active fronts, whose turn it is, and pending decisions — it points at the
 canonical state and never restates PR/slice history. If it disagrees with GitHub,
 GitHub wins; fix this file.
 
-_Last touched: 2026-07-02._
+_Last touched: 2026-07-03._
 
 ## Active fronts
 
@@ -20,6 +20,13 @@ _Last touched: 2026-07-02._
   ([ledger](docs/milestones/M4-compilation-album-append.md)). Build order + policy
   **merged** (#21); **scope append-only.** **Dispatched: Slice 0 + Slice 1 as one
   batch** — both land before anything touches Music.app. Codex's turn.
+- **M5 — LLM setlist normalization** (**next front**, Jon's pick 2026-07-03)
+  ([ledger](docs/milestones/M5-llm-setlist-normalization.md)). Build order drafted;
+  **awaiting Jon's go to dispatch.** First headless consumer of the query-profile
+  catalog (jon-platform `ai-model-access.md` → Query profiles). Cross-repo, two PRs:
+  **Slice 0** builds the catalog into `LLMClientKit` (jon-platform, lands first,
+  **parallel-safe with the M4 batch**); **Slice 1** consumes it in `VinylFeverCore` +
+  app (on-device-only v1, no key UI). Distinct area from M1–M4; blocks nothing.
 
 ## Next up
 
@@ -27,9 +34,12 @@ _Last touched: 2026-07-02._
    registry model + folder seeding, then the policy-stamping engine + preview
    (writes to `Working/` copies only, no import). Build + tests green, then mark
    ready. Blocked → write it in the PR, label `question-for-architect`.
-2. After that batch, the architect picks the next front: **M4 S2**
-   (append + import + certify — unlocks Jon's dogfooding) vs **M3 S2** (library
-   verify). They don't collide.
+2. **Next front is M5** (LLM setlist normalization) — Jon's pick 2026-07-03,
+   **awaiting his go to dispatch** (execution is a game-time call). M5 **Slice 0**
+   (build the query-profile catalog into jon-platform `LLMClientKit`) touches no
+   Vinyl Fever code and is **parallel-safe with the M4 batch** — it can start on
+   Jon's word without waiting for M4. **M4 S2** (append + import + certify) and
+   **M3 S2** (library verify) follow; none of the four collide.
 
 ## Pending Jon decisions
 
