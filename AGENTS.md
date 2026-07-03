@@ -11,6 +11,11 @@ This repo is built by **two agents** under the architect/executor protocol.
 summary below is so you can act on `go` without a second hop. Jon is **never the
 courier** — orient from the repo (`gh`), not from a link or status he pastes.
 
+**Start here:** [`CURRENT_HANDOFF.md`](CURRENT_HANDOFF.md) names the active
+milestone, whose turn it is, and any pending decisions. It's a pointer at
+canonical state (open PRs + each milestone's slice ledger), never a substitute for
+it — if it disagrees with GitHub, GitHub wins.
+
 - **Claude Code = architect / editor-in-chief.** Owns product/architecture docs,
   ADRs, and the milestone build orders; reviews the executor's slice PRs against
   their done-criteria. Does **not** write feature code or commit to a slice branch
