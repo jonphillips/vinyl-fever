@@ -1,0 +1,68 @@
+removedHashLines: 0
+cleanedLines: 54
+regionCount: 8
+
+[1] prose (6 lines)
+    John Hiatt
+    The Bottom Line
+    New York, NY
+    July 27, 1990
+    (Broadcast on WNEW-FM 102.7, New York City)
+    ** 16 BIT **
+
+[2] lineage (5 lines)
+    Source:  FM > Unknown received & tape deck > Master Cassette > 1st Gen Cassette (Maxell XLII-S)
+    Transfer:  1st Gen Cassette > Nakamichi LX-5 (azimuth adjusted) > Focusrite Scarlett 4I4 3rd Generation USB Audio Interface > Sound Forge Pro 11.0
+    (Build 299) (Dell PRECISION M6800 laptop) > .WAV @ 24 bit/48 kHz
+    Mastering:  .WAV's > Sound Forge Pro 14.0 (Build 65) (splicing, minor edits, normalize, & fades) > iZotope RX7 Advanced v7.01.315 (De-click,
+    Spectral De-noise) > CDWav (tracking) > iZotop MBIT+ (dithered and downsampled to 16 bit/44.1 kHz) > Trader's Little Helper (level 5) > FLAC >
+
+[3] prose (1 lines)
+    TagScanner 6.0.35 (tagging)
+
+[4] lineage (1 lines)
+    Recorded by:  Unknown
+
+[5] prose (2 lines)
+    Transferred & mastered by:  Dennis Orr
+    Setlist: (1:31:27)
+
+[6] tracklist (32 lines)
+    01 Intro
+    02 It'll Come To You
+    03 Georgia Rae
+    04 Chat & Tuning
+    05 Drive South
+    06 Chat & Tuning
+    07 Ride Along
+    08 Real Fine Love
+    09 Thing Called Love
+    10 Chat & Tuning
+    11 Thirty Years Of Tears
+    12 Riding With The King
+    13 Chat
+    14 Slow Turning
+    15 Chat & Riffing
+    16 Bring Back Your Love To Me
+    17 Lipstick Sunset
+    18 The Rest Of The Dream
+    19 Chat & Tuning
+    20 Paper Thin
+    21 Child Of The Wild Blue Yonder
+    - Encore -
+    22 Have A Little Faith In Me
+    23 Band Intros & Chat
+    24 Memphis In The Meantime (fades out)
+    John Hiatt - lead vocals & guitar
+    Steven Paul Perry - lead guitar & backing vocals
+    David Tronzo - slide guitar
+    Barry Lederer - keyboards & backing vocals
+    Pat Donaldson - bass
+    Lyn Williams - drums
+    Mastering Notes:
+
+[7] prose (1 lines)
+    Tape flip during the track 13 "Chat" - seamlessly spliced, no music lost
+
+[8] tracklist (1 lines)
+    Tape ran out and "Memphis In The Meantime" is faded out

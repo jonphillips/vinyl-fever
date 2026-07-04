@@ -1,0 +1,30 @@
+setlist:
+
+John Hiatt & The Goners
+Club Train, Aarhus, Denmark
+January 17th, 2002
+
+01 Before I Go
+02 Drive South
+03 The Tiki Bar Is Open
+04 All The Lilacs In Ohio
+05 I Know A Place
+06 Slow Turning
+07 Feels Like Rain
+08 Everybody Went Low
+09 Is Anybody There?
+10 Lincoln Town (*)
+
+11 My Old Friend
+12 Cry Love
+13 Memphis In The Meantime
+14 Tennessee Plates
+15 Riding With The King
+16 Have A Little Faith In Me
+17 Band Intros
+18 Thing Called Love
+19 Farther Stars (fades out)
+20 New York Had Her Heart Broke 
+21 Interview
+
+FM > ? > CD-R > EAC (secure w/ read offset) > WAV > (*) Cool Edit Pro 2.0 (splice, copy &  paste) > (*) WAV > FLAC frontend (level 8, align on SB) > FLAC

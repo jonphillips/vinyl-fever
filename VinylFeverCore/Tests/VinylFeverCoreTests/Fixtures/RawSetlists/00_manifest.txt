@@ -1,0 +1,20 @@
+Raw setlists included in this zip:
+
+01. 01_BoDeans_1991-05-20_Empire_Concert_Club_Cleveland_raw.txt
+02. 02_John_Hiatt_1997-07-19_Central_Park_NYC_raw.txt
+03. 03_John_Hiatt_2000-10-10_McCarter_Princeton_raw.txt
+04. 04_John_Hiatt_Fugitive_Popes_1990-12-14_Toads_Place_raw.txt
+05. 05_John_Hiatt_1990-07-27_Bottom_Line_NYC_raw.txt
+06. 06_John_Hiatt_1993-10-24_El_Mocambo_Toronto_raw.txt
+07. 07_Bruce_Hornsby_1995-12-02_Musikhalle_Hamburg_raw.txt
+08. 08_Bruce_Hornsby_1998-10-31_Yoshis_Oakland_raw.txt
+09. 09_Bruce_Hornsby_1995-12-05_Melkweg_Amsterdam_raw.txt
+10. 10_Jackson_Browne_Collected_Classics_2003_Disc_One_Acoustic_raw.txt
+11. 11_Prince_1985-01-04_The_Omni_Atlanta_raw.txt
+12. 12_Depeche_Mode_1998-12-18_The_Forum_Los_Angeles_raw.txt
+13. 13_Lyle_Lovett_2011-04-30_MerleFest_North_Wilkesboro_raw.txt
+14. 14_John_Hiatt_Goners_2002-01-17_Club_Train_Aarhus_raw.txt
+15. 15_Foreigner_1995-02-24_House_of_Blues_Los_Angeles_raw.txt
+16. 16_Jackson_Browne_Collected_Classics_Vol_3_raw.txt
+17. 17_Lou_Gramm_2014-04-25_BPO_Buffalo_raw.txt
+18. 18_Lyle_Lovett_Small_Band_1997-10-23_West_End_Winnipeg_raw.txt

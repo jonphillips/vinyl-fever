@@ -1,0 +1,47 @@
+removedHashLines: 0
+cleanedLines: 40
+regionCount: 4
+
+[1] prose (2 lines)
+    Bruce Hornsby solo show
+    12/05/95 The Melkweg, Amsterdam, Holland
+
+[2] lineage (1 lines)
+    No source or lineage details, but this is a superb soundboard copy from Bruce's solo tour of Europe in 1995.
+
+[3] prose (3 lines)
+    Still working on a list of shows... please direct any requests via my websiote at www.bruuuce.com
+    - Si Twining.
+    www.bruuuce.com
+
+[4] tracklist (30 lines)
+    01: We Wish You A Merry Christmas
+    02: Spider Fingers
+    03: Defenders of the Flag
+    04: The Road Not Taken >
+    05: Workin' in a Coalmine
+    06: Scarlet Begonias
+    07: Look Out Any Window
+    08: The Entertainer
+    09: End of the Innocence
+    10: Stander on the Mountain >
+    11: Mandolin Rain >
+    12: Brokedown Palace
+    13: Talk of the Town
+    14: Rainbow's Cadillac
+    15: China Doll
+    16: The Way It Is
+    17: (Piano Man)
+    18: Madman Across the Water
+    19: (Little Wing)
+    20: Lot to Laugh Train to Cry
+    21: White-Wheeled Limousine >
+    22: (99 Bottles of Beer)
+    23: Harbor Lights
+    24: Walk in the Sun
+    25: (Greensleeves)
+    26: Country Doctor
+    27: Valley Road >
+    28: Special Night >
+    29: Valley Road reprise
+    30: Night on the Town

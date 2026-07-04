@@ -73,9 +73,17 @@ struct SetlistPreSegmenterTests {
     ("003 Song", true),
     ("d1t04 Song", true),
     ("d2t11. Song", true),
+    ("1: Jim Ellis radio introduction", true),
+    ("15: hot blooded", true),
+    // Zero-padded numbers set off by tabs (column-aligned corpus notes).
+    ("01\t\t\tIntro / Slow Turning", true),
+    ("02\tReal Fine Love", true),
     ("Song Title", false),
     ("1997-05-21", false),
     ("3 blind mice at the show", false),
+    // A bare inline time — no space after the colon — must not read as a track number.
+    ("9:23", false),
+    ("runtime: 89:00", false),
   ])
   func numberedTrackDetection(line: String, expected: Bool) {
     #expect(SetlistPreSegmenter.looksLikeNumberedTrack(line) == expected)

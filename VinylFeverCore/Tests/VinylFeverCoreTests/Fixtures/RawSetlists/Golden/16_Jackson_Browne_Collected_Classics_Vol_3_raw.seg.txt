@@ -1,0 +1,58 @@
+removedHashLines: 0
+cleanedLines: 52
+regionCount: 2
+
+[1] prose (1 lines)
+    This is a track listing for a Jackson Browne collection: "Collected Classics, Vol. 3". You'll see there are 3 discs (we do not need to keep the notion of discs) and that each song has notes after it noting a collaborator and a location and a date. Let's format these like: %song title% w/ %artist% (%friendly date% - %location but do not include USA or Canada country designators%)
+
+[2] tracklist (50 lines)
+    Disc One:
+    01. The Barricades of Heaven w Val McCallum and Greg  Leisz - Tokyo, Japan    2017.10.17
+    02. The Only Child - Baltimore, MD, USA 1976.10.15
+    03. Your Bright Baby Blues  w  Greg Leisz -San Francisco, CA, USA   2016.10 .01
+    04. Til I Go Down w Chavonne Stewart & Alethia Mills - Los Angeles, CA, USA  2017.01 .30
+    05. Fountain of Sorrow w J D Souther &  Ry Cooder - Nashville, TN, USA  2014.09.07
+    06. Downtown (unique early live version) - Oklahoma City, OK, USA  1983.03.23
+    07. These Days  w Dawes - Los Angeles, CA, USA   2012.06.24
+    08. Late for the Sky w My Morning Jacket - Irvine, CA, USA   2013.08.13
+    09. Willin' w Sara & Sean Watkins - Winnipeg, Canada   2017.04.22
+    10. Sweet Little 16 w Bruce Springsteen - Los Angeles, CA, USA   1980.11.08
+    11. Under the Falling Sky w Leftover Salmon - Telluride, CO, USA   2013.06.22
+    12. Redneck Friend w Jackshit - New York City, NY, USA   2014.08.08
+    13. The Pretender w Greg Leisz - San Francisco, CA, USA   2016.10.01
+    14. Take It Easy w Linda Ronstadt & her band -  San Jose, CA, USA   1975.22.09
+    Disc Two:
+    01. Before the Deluge w Greg  Leisz - San Francisco, CA, USA   2016.10.01
+    02. Daddy's Tune w Midnight Ramble Band - Melia, Braco Village, Jamaica    2018.01.11
+    03. Dear Jackson w Midnight Ramble Band - Melia Braco  Village, Jamaica    2018.01.11
+    04. Culver Moon w Ozomatli -  Los Angeles, CA, USA   2013.08.02
+    05. For a Rocker w James Taylor -  Boston, MA, USA  2016.08.0306.
+    06. City of Immigrants w Lucius - New York City, NY, USA   2019.06.24
+    07. A Thousand Kisses Deep - Murcia, Spain   2006.07.06
+    08. Far from the Arms of Hunger w Chavonne Stewart & Alethia Mills - Los Angeles, CA, USA
+    2017.01.30
+    09. Standing in the Breech--Philadelphia, PA, USA   2012.07.25
+    10. Which Side w Chavonne Stewart & Alethia Mills -  Los Angeles, CA, USA   2017.01.30
+    11. Our Lady of the Well w Jackshit - New York City, NY, USA   2014.08.08
+    12. The Dreamer - Melbourne, Australia  2016.04.01
+    13. For a Dancer w Sara Watkins - Seneca, NY, USA  2013.06.29
+    14. Running On Empty w  Sara & Sean Watkins - Winnipeg, Canada   2017 04.22
+    15. Take It Easy w Sara and Sean Watkins & the Audience - Winnipeg, Canada   2017.04.22
+    Disc 3:
+    01. The Waiting - Tokyo, Japan   2017.01.19
+    02. Let It Be Me w Jenny Lewis - Hollywood, CA, USA   2012.06.24
+    03. Melissa - Tokyo, Japan   2017.01.18
+    04.. A Human Touch w Leslie Mendelson - New York City, NY, USA   2019.06.24
+    05. Mohammed's Radio w Lucius - New York City, NY, USA   2019.06.24
+    06. Shaky Town w Jackshit - New York City, NY, USA    2014.08.08
+    07. California Stars w Wilco - Irvine, CA, USA  2013.08.13
+    08. In My Life - KPFK, Los Angeles, CA, USA  2010.10.09
+    09. The King Is Gone (So Are You)   w Jackshit -  New York City, NY, USA   2014.08.08
+    10. American Skin (41 Shots) w Shawn Colvin & Greg  Leisz -  San Francisco, CA, USA  2016.10.01
+    11. You Know the Night w Rob Osserman - Newport, RI, USA  2012.07.29
+    12. Walls And Doors w Sara & Sean Watkins - Winnipeg, Canada    2017.04.22
+    13. Willin' w Lucius and Greg Leisz - New York City, NY, USA    2019.06.24
+    14. A Piece of the Pie - Edinburgh, UK  2013.06.18
+    15. Sierra Blanca Massacre - Collingswood, NJ, USA   2018.10.26
+    16. Will the Circle Be Unbroken w Claudia Linnear - Los  Angeles, CA, USA   2017.01.30
+    17. I Am a Patriot w Bonnie Raitt & Kris Kristofferson -  San Francisco, CA, USA   1990.03.29
