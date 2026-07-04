@@ -17,7 +17,7 @@ struct AppShellView: View {
       case .liveShows:
         LiveShowsView(model: model)
       case .collections:
-        ContentUnavailableView("Collections", systemImage: "rectangle.stack")
+        CollectionsView(model: model)
       }
     }
   }

@@ -64,17 +64,55 @@ public enum AudioTaggingCommands {
   }
 
   private static func flacTagArguments(tags: ProposedTags, trackTotal: Int) -> [String] {
-    [
-      ("TITLE", tags.title),
-      ("ALBUM", tags.album),
-      ("ALBUMSORT", tags.sortAlbum),
-      ("ARTIST", tags.artist),
-      ("ALBUMARTIST", tags.albumArtist),
-      ("TRACKNUMBER", String(tags.trackNumber)),
-      ("TRACKTOTAL", String(trackTotal)),
-      ("DISCNUMBER", String(tags.discNumber)),
-    ].flatMap { key, value in
-      ["--remove-tag=\(key)", "--set-tag=\(key)=\(value)"]
+    var arguments: [String] = []
+    appendFLACTag("TITLE", value: tags.title, field: .title, tags: tags, to: &arguments)
+    appendFLACTag("ALBUM", value: tags.album, field: .album, tags: tags, to: &arguments)
+    appendFLACTag("ALBUMSORT", value: tags.sortAlbum, field: .sortAlbum, tags: tags, to: &arguments)
+    appendFLACTag("ARTIST", value: tags.artist, field: .artist, tags: tags, to: &arguments)
+    appendFLACTag("ALBUMARTIST", value: tags.albumArtist, field: .albumArtist, tags: tags, to: &arguments)
+    appendFLACTag("GROUPING", value: tags.grouping, field: .grouping, tags: tags, to: &arguments)
+    appendFLACTag(
+      "COMPILATION",
+      value: tags.isCompilation == true ? "1" : nil,
+      field: .isCompilation,
+      tags: tags,
+      to: &arguments
+    )
+    appendFLACTag(
+      "TRACKNUMBER",
+      value: tags.trackNumber.map(String.init),
+      field: .trackNumber,
+      tags: tags,
+      to: &arguments
+    )
+    appendFLACTag(
+      "TRACKTOTAL",
+      value: (tags.trackTotal ?? (tags.trackNumber == nil ? nil : trackTotal)).map(String.init),
+      field: .trackTotal,
+      tags: tags,
+      to: &arguments
+    )
+    appendFLACTag(
+      "DISCNUMBER",
+      value: tags.discNumber.map(String.init),
+      field: .discNumber,
+      tags: tags,
+      to: &arguments
+    )
+    return arguments
+  }
+
+  private static func appendFLACTag(
+    _ key: String,
+    value: String?,
+    field: ProposedTags.Field,
+    tags: ProposedTags,
+    to arguments: inout [String]
+  ) {
+    if let value {
+      arguments += ["--remove-tag=\(key)", "--set-tag=\(key)=\(value)"]
+    } else if tags.clearedFields.contains(field) {
+      arguments.append("--remove-tag=\(key)")
     }
   }
 
@@ -171,16 +209,43 @@ public enum AudioTaggingCommands {
   }
 
   private static func metadataArguments(for track: ApplyTrackPlan) -> [String] {
-    [
-      ("title", track.tags.title),
-      ("album", track.tags.album),
-      ("sort_album", track.tags.sortAlbum),
-      ("artist", track.tags.artist),
-      ("album_artist", track.tags.albumArtist),
-      ("track", "\(track.tags.trackNumber)/\(track.trackTotal)"),
-      ("disc", String(track.tags.discNumber)),
-    ].flatMap { key, value in
-      ["-metadata", "\(key)=\(value)"]
+    var arguments: [String] = []
+    appendFFmpegMetadata("title", value: track.tags.title, field: .title, tags: track.tags, to: &arguments)
+    appendFFmpegMetadata("album", value: track.tags.album, field: .album, tags: track.tags, to: &arguments)
+    appendFFmpegMetadata("sort_album", value: track.tags.sortAlbum, field: .sortAlbum, tags: track.tags, to: &arguments)
+    appendFFmpegMetadata("artist", value: track.tags.artist, field: .artist, tags: track.tags, to: &arguments)
+    appendFFmpegMetadata("album_artist", value: track.tags.albumArtist, field: .albumArtist, tags: track.tags, to: &arguments)
+    appendFFmpegMetadata("grouping", value: track.tags.grouping, field: .grouping, tags: track.tags, to: &arguments)
+    appendFFmpegMetadata(
+      "compilation",
+      value: track.tags.isCompilation.map { $0 ? "1" : "" },
+      field: .isCompilation,
+      tags: track.tags,
+      to: &arguments
+    )
+    let trackValue = track.tags.trackNumber.map { "\($0)/\(track.tags.trackTotal ?? track.trackTotal)" }
+    appendFFmpegMetadata("track", value: trackValue, field: .trackNumber, tags: track.tags, to: &arguments)
+    appendFFmpegMetadata(
+      "disc",
+      value: track.tags.discNumber.map(String.init),
+      field: .discNumber,
+      tags: track.tags,
+      to: &arguments
+    )
+    return arguments
+  }
+
+  private static func appendFFmpegMetadata(
+    _ key: String,
+    value: String?,
+    field: ProposedTags.Field,
+    tags: ProposedTags,
+    to arguments: inout [String]
+  ) {
+    if let value {
+      arguments += ["-metadata", "\(key)=\(value)"]
+    } else if tags.clearedFields.contains(field) {
+      arguments += ["-metadata", "\(key)="]
     }
   }
 

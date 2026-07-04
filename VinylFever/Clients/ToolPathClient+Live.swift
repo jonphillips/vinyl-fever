@@ -53,6 +53,9 @@ extension FileOperationClient {
         }
         _ = try FileManager.default.replaceItemAt(destination, withItemAt: source)
       },
+      writeData: { data, destination in
+        try data.write(to: destination, options: [.atomic])
+      },
       reveal: { url in
         await MainActor.run {
           NSWorkspace.shared.activateFileViewerSelecting([url])

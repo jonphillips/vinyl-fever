@@ -5,6 +5,8 @@ import Foundation
 @DependencyClient
 public struct FileSystemClient: Sendable {
   public var scanShowFolder: @Sendable (_ root: URL) throws -> ScannedShowFolder
+  public var scanAudioFolder: @Sendable (_ root: URL) throws -> [ScannedAudioFile]
+  public var discoverCompilationAlbumSeedFolders: @Sendable (_ root: URL) throws -> [URL]
 }
 
 private struct LiveShowFolderScanner {
@@ -39,6 +41,45 @@ private struct LiveShowFolderScanner {
       setlistCandidates: setlistCandidates(in: contents),
       coverCandidates: coverCandidates(in: contents)
     )
+  }
+
+  func scanAudioFolder(at root: URL) throws -> [ScannedAudioFile] {
+    let root = root.standardizedFileURL
+    return try audioFiles(in: root)
+  }
+
+  func discoverCompilationAlbumSeedFolders(at root: URL) throws -> [URL] {
+    let root = root.standardizedFileURL
+    if try !audioFiles(in: root).isEmpty {
+      return [root]
+    }
+
+    return try directoryContents(at: root)
+      .filter { try $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true }
+      .filter { try !audioFiles(in: $0).isEmpty }
+      .sorted {
+        $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+      }
+      .map(\.standardizedFileURL)
+  }
+
+  private func audioFiles(in root: URL) throws -> [ScannedAudioFile] {
+    try recursiveFiles(at: root)
+      .compactMap { url -> ScannedAudioFile? in
+        guard let format = AudioFormat(pathExtension: url.pathExtension) else {
+          return nil
+        }
+        let sortKey = relativePath(for: url, root: root)
+        return ScannedAudioFile(
+          id: uuid(),
+          url: url,
+          format: format,
+          sortKey: sortKey
+        )
+      }
+      .sorted { lhs, rhs in
+        lhs.sortKey.localizedStandardCompare(rhs.sortKey) == .orderedAscending
+      }
   }
 
   private func directoryContents(at url: URL) throws -> [URL] {
@@ -133,6 +174,10 @@ extension FileSystemClient: DependencyKey {
   public static var liveValue: Self {
     Self { root in
       try LiveShowFolderScanner().scanShowFolder(at: root)
+    } scanAudioFolder: { root in
+      try LiveShowFolderScanner().scanAudioFolder(at: root)
+    } discoverCompilationAlbumSeedFolders: { root in
+      try LiveShowFolderScanner().discoverCompilationAlbumSeedFolders(at: root)
     }
   }
 }

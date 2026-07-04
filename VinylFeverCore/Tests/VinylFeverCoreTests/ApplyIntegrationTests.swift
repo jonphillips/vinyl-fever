@@ -280,6 +280,9 @@ private var realFileOperationClient: FileOperationClient {
     replaceFile: { source, destination in
       _ = try FileManager.default.replaceItemAt(destination, withItemAt: source)
     },
+    writeData: { data, destination in
+      try data.write(to: destination, options: [.atomic])
+    },
     reveal: { _ in }
   )
 }

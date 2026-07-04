@@ -94,8 +94,8 @@ enum ApplyOperationSnapshot: Equatable {
   case writeTags(
     file: String,
     format: AudioFormat,
-    title: String,
-    trackNumber: Int,
+    title: String?,
+    trackNumber: Int?,
     trackTotal: Int,
     cover: String?
   )

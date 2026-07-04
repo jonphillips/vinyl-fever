@@ -207,11 +207,11 @@ private func audioFile(id: UUID, name: String, sortKey: String) -> ScannedAudioF
 private struct TrackPlanSnapshot: Equatable {
   var fileName: String
   var proposedFilename: String
-  var title: String
-  var album: String
-  var sortAlbum: String
-  var artist: String
-  var albumArtist: String
-  var trackNumber: Int
-  var discNumber: Int
+  var title: String?
+  var album: String?
+  var sortAlbum: String?
+  var artist: String?
+  var albumArtist: String?
+  var trackNumber: Int?
+  var discNumber: Int?
 }

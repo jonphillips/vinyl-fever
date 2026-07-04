@@ -25,6 +25,8 @@ public enum FFProbeMetadataParser {
       album: tags.joinedValues(for: ["album"]),
       sortAlbum: tags.joinedValues(for: ["sort_album", "album_sort", "albumsort"]),
       albumArtist: tags.joinedValues(for: ["album_artist", "album artist", "albumartist"]),
+      grouping: tags.joinedValues(for: ["grouping"]),
+      isCompilation: TagValueParser.boolean(tags.firstValue(for: ["compilation"])),
       trackNumber: TagValueParser.leadingInteger(trackValue),
       trackTotal: tags.firstValue(for: ["tracktotal", "totaltracks"]).flatMap(TagValueParser.leadingInteger)
         ?? TagValueParser.trailingTotal(trackValue),

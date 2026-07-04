@@ -288,9 +288,9 @@ public enum MusicLibraryMatcher {
       return LibraryTrackResolution(
         id: track.id,
         producedFile: track.verificationFile,
-        expectedAlbum: track.tags.album,
-        expectedTitle: track.tags.title,
-        expectedTrackNumber: track.tags.trackNumber,
+        expectedAlbum: track.tags.album ?? "",
+        expectedTitle: track.tags.title ?? "",
+        expectedTrackNumber: track.tags.trackNumber ?? 0,
         libraryRef: matches[0],
         strategy: strategy
       )
@@ -309,9 +309,9 @@ public enum MusicLibraryMatcher {
     LibraryTrackResolution(
       id: track.id,
       producedFile: track.verificationFile,
-      expectedAlbum: track.tags.album,
-      expectedTitle: track.tags.title,
-      expectedTrackNumber: track.tags.trackNumber,
+      expectedAlbum: track.tags.album ?? "",
+      expectedTitle: track.tags.title ?? "",
+      expectedTrackNumber: track.tags.trackNumber ?? 0,
       failure: failure
     )
   }

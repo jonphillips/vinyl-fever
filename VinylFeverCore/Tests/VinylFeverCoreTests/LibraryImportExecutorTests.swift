@@ -202,7 +202,7 @@ private enum MusicAppRecorderError: LocalizedError {
 
 private func libraryRef(for track: ConversionTrackPlan) -> ImportedTrackRef {
   ImportedTrackRef(
-    id: "music-\(track.tags.trackNumber)",
+    id: "music-\(track.tags.trackNumber ?? 0)",
     title: track.tags.title,
     album: track.tags.album,
     trackNumber: track.tags.trackNumber,

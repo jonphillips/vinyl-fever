@@ -100,4 +100,69 @@ struct AudioTaggingCommandTests {
       Optional(["-movflags", "+faststart", "-f", "ipod", "/Shows/BruceHornsby/Working/01 - The Way It Is.m4a.tagtmp.m4a"])
     )
   }
+
+  @Test
+  func constructsCompilationTaggingCommandsThatStripAndPreserve() throws {
+    let toolPaths = AudioToolPaths(paths: [
+      .metaflac: "/tools/metaflac",
+      .ffmpeg: "/tools/ffmpeg",
+    ])
+    let tags = ProposedTags(
+      album: "Great Covers",
+      albumArtist: "Jon Phillips",
+      grouping: "Existing | Great Covers",
+      isCompilation: false,
+      clearedFields: [.trackNumber, .trackTotal, .discNumber, .isCompilation]
+    )
+    let flacTrack = ApplyTrackPlan(
+      id: UUID(1),
+      sourceFile: makeAudioFile(id: UUID(1), name: "cover.flac", format: .flac, sortKey: "cover.flac"),
+      workingFile: URL(fileURLWithPath: "/Incoming/Working/cover.flac"),
+      tags: tags,
+      trackTotal: 0,
+      coverURL: URL(fileURLWithPath: "/Incoming/front.jpg")
+    )
+    let mp3Track = ApplyTrackPlan(
+      id: UUID(2),
+      sourceFile: makeAudioFile(id: UUID(2), name: "cover.mp3", format: .mp3, sortKey: "cover.mp3"),
+      workingFile: URL(fileURLWithPath: "/Incoming/Working/cover.mp3"),
+      tags: tags,
+      trackTotal: 0,
+      coverURL: nil
+    )
+
+    expectNoDifference(
+      try AudioTaggingCommands.plan(for: flacTrack, toolPaths: toolPaths).steps[0].command.arguments,
+      [
+        "--remove-tag=ALBUM", "--set-tag=ALBUM=Great Covers",
+        "--remove-tag=ALBUMARTIST", "--set-tag=ALBUMARTIST=Jon Phillips",
+        "--remove-tag=GROUPING", "--set-tag=GROUPING=Existing | Great Covers",
+        "--remove-tag=COMPILATION",
+        "--remove-tag=TRACKNUMBER",
+        "--remove-tag=TRACKTOTAL",
+        "--remove-tag=DISCNUMBER",
+        "/Incoming/Working/cover.flac",
+      ]
+    )
+
+    expectNoDifference(
+      try AudioTaggingCommands.plan(for: mp3Track, toolPaths: toolPaths).commands[0].arguments,
+      [
+        "-nostdin", "-y", "-hide_banner", "-loglevel", "error",
+        "-i", "/Incoming/Working/cover.mp3",
+        "-map", "0:a:0", "-map", "0:v:0?",
+        "-c:a", "copy", "-c:v", "mjpeg",
+        "-id3v2_version", "3",
+        "-metadata", "album=Great Covers",
+        "-metadata", "album_artist=Jon Phillips",
+        "-metadata", "grouping=Existing | Great Covers",
+        "-metadata", "compilation=",
+        "-metadata", "track=",
+        "-metadata", "disc=",
+        "-metadata:s:v", "title=Album cover",
+        "-metadata:s:v", "comment=Cover (front)",
+        "/Incoming/Working/cover.mp3.tagtmp.mp3",
+      ]
+    )
+  }
 }
