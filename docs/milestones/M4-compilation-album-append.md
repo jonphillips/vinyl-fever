@@ -289,6 +289,71 @@ append reduction (per-track outcomes, run summary). **Done when:** Jon picks an
 album, drops new songs, previews, "tags away," and sees them land in the existing
 album with a green certified verdict — or a loud not-certified with the reason.
 
+#### Slice 2 build order (executor)
+
+*Drafted 2026-07-03 after S0+S1 landed (#26). The prose above is the intent; this
+is the task list. Where the two disagree, the prose wins — flag it.*
+
+**Pinned decisions (do not re-litigate — these ride the documented defaults so the
+slice can run; the two genuinely-open ones are deferred *by design* until a real
+append shows how Apple Music mangles the strings):**
+
+- **#1 Identity match = exact `Album` + `Album Artist`** for this slice. Do **not**
+  invent normalization yet. If a real run mis-certifies on a trailing space / article,
+  that's the *evidence* that resolves decision #2 — surface it, don't pre-fold it in.
+- **#3 No-match behavior = import proceeds, run is `not certified`**, verdict
+  surfaced. No blocking, no auto-reconcile (that's the deferred fast-follow).
+- **#6 `RunRecord.Kind`:** reuse `.importLibrary` for the add; add **one** new case
+  `.compilationCertify` for the verdict. Surface the new case in the PR body.
+- #4 (tie-break) and #5 (fallback = workspace image) already shipped in S0/S1 on
+  their leans; nothing new here.
+
+**Tasks:**
+
+1. **Certification core (pure, `Collection/`).** Add `AppendVerdict` +
+   `AppendCertification` (shapes already in *Domain model* above). Write the pure
+   comparator: input = pre-import album snapshot + post-import library read +
+   added-song count; output = `.merged` / `.albumNotFound` /
+   `.duplicateSpawned` / `.countMismatch`. No ScriptingBridge, no tool spawn.
+2. **Extend the read surface.** `MusicAlbumReadRequest` today carries only
+   `albumTitle` — certification needs the full `AlbumIdentity` (album **+ album
+   artist**) to assert exact identity, and needs to see **sibling albums with a
+   near-identical title** to catch a `Great Covers 2` duplicate-spawn. Extend the
+   request/response (and the live `readAlbumTracks` impl) to return enough to make
+   both calls; keep the live read behind `MusicAppClient` so the comparator stays
+   offline-testable. Reuse `MusicLibraryMatcher` for the per-track resolution.
+3. **Append flow wiring (app).** Extend `AppModel.applyCompilationPlan`'s successor
+   path: after the `Working/` apply + M2 FLAC→ALAC convert, capture the target
+   album's **pre-import** track count via the read surface, `MusicAppClient.add`
+   the produced files, re-read, run the comparator, record a `.compilationCertify`
+   `RunRecord`, and drive a certification panel in `CollectionsView`.
+4. **Fold the #26 carry-over nits:**
+   - Preview shows track/disc as *cleared* even when `stripTrackAndDisc == false`
+     (engine actually **preserves** them on that path). Fix
+     `CompilationApplyPlan.diffs` so the off-strip preview reflects "kept," not
+     "→ —". ([CompilationApplyPlan.swift](../../VinylFeverCore/Sources/VinylFeverCore/Collection/CompilationApplyPlan.swift))
+   - Add a **real-tool** integration assertion that ffmpeg's `compilation=` /
+     `track=` empty-value clearing on **m4a** (via `-map_metadata 0`) actually drops
+     `cpil`/`trkn`, not writes an empty/zero atom.
+   - Fallback-artwork temp file is hardcoded `.jpg` regardless of the stored image's
+     real format — cosmetic, fix opportunistically (name off the sniffed bytes).
+
+**Live-Music guard (blocker to check first).** This is the first M4 slice to touch
+Music.app. The M3 Slice 0→1 review flagged that the **live ScriptingBridge read +
+`location`-primary matching were never exercised against a real imported album**
+(Music's "copy to Media folder" may point `location` at the copied path, not
+`Output/`). M4 certification leans on that same live read. **Before the live leg is
+trusted, run the read-back device check** (shared with M3 S2). The pure comparator +
+its tests are buildable now regardless; if the live read is still blocked pending the
+macOS-27 beta-3 spike, land the pure half + mock-snapshot tests and mark the live leg
+`question-for-architect` rather than shipping an unverified certify.
+
+**Tests:** comparator over mock library snapshots — clean merge; album-not-found;
+duplicate-spawn (near-identical sibling); count mismatch (short and over). Append
+reduction (per-track outcomes → run summary). The m4a real-tool clearing assertion
+above. Every pure path offline via `@Dependency`; the live read guarded on
+availability and never the only coverage.
+
 ## Constants register (pre-justified — jon-platform "constants need a rationale")
 
 - **Track/disc when stripped = absent, not zero.** For a crate of unrelated

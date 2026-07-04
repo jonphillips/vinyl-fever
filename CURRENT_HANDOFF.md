@@ -7,7 +7,7 @@ the active fronts, whose turn it is, and pending decisions — it points at the
 canonical state and never restates PR/slice history. If it disagrees with GitHub,
 GitHub wins; fix this file.
 
-_Last touched: 2026-07-03._
+_Last touched: 2026-07-03 (M4 S0+S1 merged #26; S2 dispatched)._
 
 ## Active fronts
 
@@ -18,8 +18,12 @@ _Last touched: 2026-07-03._
   shape). S3 (`Working/` cleanup) after.
 - **M4 — compilation-album append (first Phase 6)**
   ([ledger](docs/milestones/M4-compilation-album-append.md)). Build order + policy
-  **merged** (#21); **scope append-only.** **Dispatched: Slice 0 + Slice 1 as one
-  batch** — both land before anything touches Music.app. Codex's turn.
+  **merged** (#21); **scope append-only.** **S0 + S1 merged (#26)** — registry +
+  folder seeding + policy-stamping engine + preview, all `Working/`-only, no import.
+  **S2 (append + import + drift certification) dispatched** — build order written in
+  the ledger, folds the #26 review carry-over (off-strip preview, m4a real-tool
+  clearing assertion, `.jpg` fallback name). **First M4 slice to touch Music.app** —
+  gated on the shared live-read/`location` device check. Codex's turn.
 - **Setlist Normalizer — live-show path engine (NEW).** Spec **resolved**
   2026-07-03 against an 18-file raw corpus; see *Automation Implications* in
   [setlist-formatting-rules.md](docs/setlist-formatting-rules.md). Architecture
@@ -31,13 +35,15 @@ _Last touched: 2026-07-03._
 
 ## Next up
 
-1. **Codex (executor):** open **one** draft PR batching **M4 Slice 0 + Slice 1** —
-   registry model + folder seeding, then the policy-stamping engine + preview
-   (writes to `Working/` copies only, no import). Build + tests green, then mark
-   ready. Blocked → write it in the PR, label `question-for-architect`.
-2. After that batch, the architect picks the next front: **M4 S2**
-   (append + import + certify — unlocks Jon's dogfooding) vs **M3 S2** (library
-   verify). They don't collide.
+1. **Codex (executor):** open a draft PR for **M4 Slice 2** — append + import +
+   drift certification, per the *Slice 2 build order* in the ledger. Land the **pure
+   comparator + mock-snapshot tests first** (buildable now); the **live Music.app
+   leg is gated on the shared live-read/`location` device check** — if still blocked
+   on the macOS-27 beta-3 spike, ship the pure half and mark the live leg
+   `question-for-architect`. New `.compilationCertify` `RunRecord.Kind` — surface it
+   in the PR body. Build + tests green, then mark ready.
+2. **M3 S2** (library verify) is the alternate front and shares that same live-read
+   device check — doing the check once unblocks both. They don't collide.
 3. **Setlist Normalizer:** draft a milestone ledger and decide the implementer
    (Codex slices vs. Jon hand-coding). First slice is the model-free bookends —
    deterministic pre-segment + validator with a golden-file test per corpus file —
