@@ -117,30 +117,61 @@ public struct TrackPlan: Equatable, Identifiable, Sendable {
 }
 
 public struct ProposedTags: Equatable, Sendable {
-  public var title: String
-  public var album: String
-  public var sortAlbum: String
-  public var artist: String
-  public var albumArtist: String
-  public var trackNumber: Int
-  public var discNumber: Int
+  public var title: String?
+  public var album: String?
+  public var sortAlbum: String?
+  public var artist: String?
+  public var albumArtist: String?
+  public var grouping: String?
+  public var isCompilation: Bool?
+  public var trackNumber: Int?
+  public var trackTotal: Int?
+  public var discNumber: Int?
+  public var clearedFields: Set<Field>
 
   public init(
-    title: String,
-    album: String,
-    sortAlbum: String,
-    artist: String,
-    albumArtist: String,
-    trackNumber: Int,
-    discNumber: Int
+    title: String? = nil,
+    album: String? = nil,
+    sortAlbum: String? = nil,
+    artist: String? = nil,
+    albumArtist: String? = nil,
+    grouping: String? = nil,
+    isCompilation: Bool? = nil,
+    trackNumber: Int? = nil,
+    trackTotal: Int? = nil,
+    discNumber: Int? = nil,
+    clearedFields: Set<Field> = []
   ) {
     self.title = title
     self.album = album
     self.sortAlbum = sortAlbum
     self.artist = artist
     self.albumArtist = albumArtist
+    self.grouping = grouping
+    self.isCompilation = isCompilation
     self.trackNumber = trackNumber
+    self.trackTotal = trackTotal
     self.discNumber = discNumber
+    self.clearedFields = clearedFields
+  }
+
+  public enum Field: String, CaseIterable, Equatable, Hashable, Sendable {
+    case title
+    case album
+    case sortAlbum
+    case artist
+    case albumArtist
+    case grouping
+    case isCompilation
+    case trackNumber
+    case trackTotal
+    case discNumber
+  }
+
+  public func clearing(_ fields: Field...) -> Self {
+    var copy = self
+    copy.clearedFields.formUnion(fields)
+    return copy
   }
 }
 

@@ -31,7 +31,7 @@ struct MusicLibraryMatcherTests {
     let track = plan.tracks[0]
     let libraryTrack = ImportedTrackRef(
       id: "MUSIC-2",
-      title: "  \(track.tags.title)  ",
+      title: "  \(track.tags.title ?? "")  ",
       album: track.tags.album,
       trackNumber: track.tags.trackNumber
     )

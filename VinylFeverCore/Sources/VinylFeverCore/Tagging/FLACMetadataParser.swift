@@ -20,6 +20,8 @@ public enum FLACMetadataParser {
       album: tags.joinedValues(for: ["ALBUM"]),
       sortAlbum: tags.joinedValues(for: ["ALBUMSORT", "ALBUM SORT"]),
       albumArtist: tags.joinedValues(for: ["ALBUMARTIST", "ALBUM ARTIST"]),
+      grouping: tags.joinedValues(for: ["GROUPING"]),
+      isCompilation: TagValueParser.boolean(tags.firstValue(for: ["COMPILATION"])),
       trackNumber: trackNumber,
       trackTotal: trackTotal,
       discNumber: discNumber,
@@ -116,5 +118,19 @@ enum TagValueParser {
     let totalText = value[value.index(after: slash)...]
       .trimmingCharacters(in: .whitespacesAndNewlines)
     return Int(totalText.prefix(while: \.isNumber))
+  }
+
+  static func boolean(_ value: String?) -> Bool? {
+    guard let value else {
+      return nil
+    }
+    switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+    case "1", "true", "yes":
+      return true
+    case "0", "false", "no":
+      return false
+    default:
+      return nil
+    }
   }
 }

@@ -126,7 +126,7 @@ public enum AudioTagVerifier {
     compareString(tags.artist, actual.artist, { .artist(expected: $0, actual: $1) }, into: &mismatches)
     compareString(tags.albumArtist, actual.albumArtist, { .albumArtist(expected: $0, actual: $1) }, into: &mismatches)
     compareInt(tags.trackNumber, actual.trackNumber, { .trackNumber(expected: $0, actual: $1) }, into: &mismatches)
-    compareInt(trackTotal, actual.trackTotal, { .trackTotal(expected: $0, actual: $1) }, into: &mismatches)
+    compareInt(tags.trackTotal ?? (tags.trackNumber == nil ? nil : trackTotal), actual.trackTotal, { .trackTotal(expected: $0, actual: $1) }, into: &mismatches)
     compareInt(tags.discNumber, actual.discNumber, { .discNumber(expected: $0, actual: $1) }, into: &mismatches)
 
     if !actual.hasAudioStream {
@@ -139,12 +139,15 @@ public enum AudioTagVerifier {
   }
 
   private static func compareString(
-    _ expected: String,
+    _ expected: String?,
     _ actual: String?,
     _ mismatch: (String, String?) -> VerificationMismatch,
     into mismatches: inout [VerificationMismatch]
   ) {
-    let expected = normalizedMetadataString(expected)
+    guard let expectedValue = expected else {
+      return
+    }
+    let expected = normalizedMetadataString(expectedValue)
     let actual = normalizedMetadataString(actual)
     if actual != expected {
       mismatches.append(mismatch(expected, actual))
@@ -152,11 +155,14 @@ public enum AudioTagVerifier {
   }
 
   private static func compareInt(
-    _ expected: Int,
+    _ expected: Int?,
     _ actual: Int?,
     _ mismatch: (Int, Int?) -> VerificationMismatch,
     into mismatches: inout [VerificationMismatch]
   ) {
+    guard let expected else {
+      return
+    }
     if actual != expected {
       mismatches.append(mismatch(expected, actual))
     }

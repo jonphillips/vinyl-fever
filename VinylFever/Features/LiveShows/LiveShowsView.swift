@@ -930,7 +930,7 @@ private struct TrackPlanRow: View {
 
   var body: some View {
     HStack(alignment: .top, spacing: 12) {
-      Text(trackPlan.proposedTags.trackNumber, format: .number)
+      Text(trackPlan.proposedTags.trackNumber.map(String.init) ?? "-")
         .font(.callout.monospacedDigit())
         .foregroundStyle(.secondary)
         .frame(width: 28, alignment: .trailing)
@@ -975,12 +975,12 @@ private struct TrackPlanRow: View {
           TrackMetadataComparisonRow(
             title: "Track",
             current: currentMetadata.tags?.trackNumber.map(String.init),
-            proposed: String(trackPlan.proposedTags.trackNumber)
+            proposed: trackPlan.proposedTags.trackNumber.map(String.init)
           )
           TrackMetadataComparisonRow(
             title: "Disc",
             current: currentMetadata.tags?.discNumber.map(String.init),
-            proposed: String(trackPlan.proposedTags.discNumber)
+            proposed: trackPlan.proposedTags.discNumber.map(String.init)
           )
           TrackMetadataComparisonRow(
             title: "Duration",

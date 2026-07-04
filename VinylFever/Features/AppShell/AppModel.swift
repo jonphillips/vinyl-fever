@@ -45,6 +45,14 @@ final class AppModel {
   var libraryImportState: LibraryImportState = .idle
   var libraryReadState: LibraryReadState = .idle
   var lastSuccessfulApplyPlan: ApplyPlan?
+  var compilationSeedCandidates: [CompilationAlbumSeedCandidate] = []
+  var selectedCompilationSeedCandidateIDs: Set<CompilationAlbumSeedCandidate.ID> = []
+  var compilationSeedState: CollectionSeedState = .idle
+  var compilationAppendFolder: URL?
+  var compilationAppendFiles: [ScannedAudioFile] = []
+  var compilationAppendMetadataByFileID: [ScannedAudioFile.ID: AudioMetadataLoadState] = [:]
+  var compilationApplyPlan: CompilationApplyPlan?
+  var compilationApplyState: ApplyRunState = .idle
 
   enum Destination: Hashable {
   }
@@ -441,6 +449,124 @@ final class AppModel {
     await closeMetadataReadRun(run, fileCount: files.count, failedCount: failedCount)
   }
 
+  func seedCompilationAlbums(from url: URL) async {
+    compilationSeedState = .running(url)
+    do {
+      let candidates = try await CompilationAlbumSeeder().candidates(
+        from: url,
+        toolPaths: AudioToolPaths(statuses: toolStatuses)
+      )
+      compilationSeedCandidates = candidates
+      selectedCompilationSeedCandidateIDs = Set(candidates.map(\.id))
+      compilationSeedState = .completed(candidates)
+      runLogErrorMessage = nil
+    } catch is CancellationError {
+      compilationSeedState = .idle
+    } catch {
+      compilationSeedCandidates = []
+      selectedCompilationSeedCandidateIDs = []
+      compilationSeedState = .failed(error.localizedDescription)
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
+  func persistSelectedCompilationSeedCandidates() {
+    let albums = compilationSeedCandidates
+      .filter { selectedCompilationSeedCandidateIDs.contains($0.id) }
+      .map(\.album)
+    guard !albums.isEmpty else {
+      compilationSeedState = .failed("Select at least one album to save.")
+      return
+    }
+
+    do {
+      try database.write { db in
+        try CompilationAlbumRegistry.upsert(albums, in: db)
+      }
+      compilationSeedState = .saved(albums.count)
+      runLogErrorMessage = nil
+    } catch {
+      compilationSeedState = .failed(error.localizedDescription)
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
+  func buildCompilationAppendPlan(entry: CompilationAlbum, sourceFolder: URL) async {
+    compilationAppendFolder = sourceFolder
+    compilationApplyPlan = nil
+    compilationApplyState = .idle
+    do {
+      let files = try fileSystemClient.scanAudioFolder(sourceFolder)
+      compilationAppendFiles = files
+      compilationAppendMetadataByFileID = Dictionary(
+        uniqueKeysWithValues: files.map { ($0.id, .loading) }
+      )
+      let toolPaths = AudioToolPaths(statuses: toolStatuses)
+      var currentTagsByFileID: [ScannedAudioFile.ID: AudioTags] = [:]
+      for file in files {
+        do {
+          let tags = try await audioMetadataClient.read(
+            AudioMetadataRequest(file: file, toolPaths: toolPaths)
+          )
+          currentTagsByFileID[file.id] = tags
+          compilationAppendMetadataByFileID[file.id] = .loaded(tags)
+        } catch is CancellationError {
+          throw CancellationError()
+        } catch {
+          compilationAppendMetadataByFileID[file.id] = .failed(error.localizedDescription)
+        }
+      }
+      let fallbackArtworkURL =
+        if entry.fallbackArtwork == nil {
+          URL?.none
+        } else {
+          sourceFolder
+            .appendingPathComponent(ApplyPlan.workingDirectoryName, isDirectory: true)
+            .appendingPathComponent("compilation-fallback-artwork.jpg")
+        }
+      compilationApplyPlan = CompilationApplyPlan(
+        entry: entry,
+        sourceRoot: sourceFolder,
+        files: files,
+        currentTagsByFileID: currentTagsByFileID,
+        fallbackArtworkURL: fallbackArtworkURL
+      )
+      runLogErrorMessage = nil
+    } catch is CancellationError {
+      compilationApplyPlan = nil
+    } catch {
+      compilationApplyPlan = nil
+      compilationApplyState = .failed(error.localizedDescription)
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
+  func applyCompilationPlan(_ plan: CompilationApplyPlan) async {
+    let applyPlan = ApplyPlan(compilationPlan: plan)
+    compilationApplyState = .running(applyPlan)
+
+    do {
+      if let artwork = plan.entry.fallbackArtwork,
+        plan.tracks.contains(where: { $0.artwork == .applyFallback }),
+        let fallbackArtworkURL = plan.tracks.first(where: { $0.fallbackArtworkURL != nil })?.fallbackArtworkURL
+      {
+        try await fileOperationClient.createDirectory(plan.workingDirectory)
+        try await fileOperationClient.writeData(artwork, fallbackArtworkURL)
+      }
+      let result = try await ApplyExecutor().apply(
+        applyPlan,
+        toolPaths: AudioToolPaths(statuses: toolStatuses)
+      )
+      compilationApplyState = .completed(result)
+      runLogErrorMessage = nil
+    } catch is CancellationError {
+      compilationApplyState = .idle
+    } catch {
+      compilationApplyState = .failed(error.localizedDescription)
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
   func saveToolOverride(_ path: String?, for tool: AudioTool, settings: AppSetting) {
     let updatedSettings = settings.withOverridePath(path, for: tool)
     do {
@@ -719,6 +845,14 @@ enum LibraryReadState: Equatable {
       false
     }
   }
+}
+
+enum CollectionSeedState: Equatable {
+  case idle
+  case running(URL)
+  case completed([CompilationAlbumSeedCandidate])
+  case saved(Int)
+  case failed(String)
 }
 
 enum AppSection: String, CaseIterable, Identifiable, Hashable {

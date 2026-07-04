@@ -82,6 +82,25 @@ public enum VinylFeverDatabase {
         """)
         .execute(db)
     }
+
+    migrator.registerMigration("Create 'compilationAlbums' table") { db in
+      try #sql("""
+        CREATE TABLE "compilationAlbums" (
+          "id" TEXT PRIMARY KEY NOT NULL ON CONFLICT REPLACE DEFAULT (uuid()),
+          "name" TEXT NOT NULL DEFAULT '',
+          "album" TEXT NOT NULL DEFAULT '',
+          "albumArtist" TEXT NOT NULL DEFAULT '',
+          "displayImage" BLOB,
+          "fallbackArtwork" BLOB,
+          "stripTrackAndDisc" INTEGER NOT NULL DEFAULT 1,
+          "setCompilationFlag" INTEGER NOT NULL DEFAULT 0,
+          "groupingTokensText" TEXT NOT NULL DEFAULT '',
+          "seedFolderPath" TEXT,
+          "seedWarningsText" TEXT NOT NULL DEFAULT ''
+        ) STRICT
+        """)
+        .execute(db)
+    }
   }
 
   public static func seedBuiltInSourceLabels(in database: any DatabaseWriter) throws {

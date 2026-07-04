@@ -231,8 +231,8 @@ sitting, each ending green (build + tests).
 **Slice status (ledger).** The executor ticks the box in the slice PR that
 completes it; GitHub PR state is canonical.
 
-- [ ] Slice 0 — Registry model + folder seeding (read-only)
-- [ ] Slice 1 — Policy stamping engine + preview (writes to `Working/`, no import)
+- [x] Slice 0 — Registry model + folder seeding (read-only)
+- [x] Slice 1 — Policy stamping engine + preview (writes to `Working/`, no import)
 - [ ] Slice 2 — Append + import + drift certification
 
 ### Slice 0 — Registry model + folder seeding (read-only)
