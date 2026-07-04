@@ -87,8 +87,9 @@ public enum AppendCertificationComparator {
     identity: AlbumIdentity,
     in tracks: [ImportedTrackRef]
   ) -> [ImportedTrackRef] {
-    tracks.filter { ref in
-      ref.album == identity.album && ref.albumArtist == identity.albumArtist
+    let normalizedIdentity = normalized(identity)
+    return tracks.filter { ref in
+      isExactIdentity(ref, identity: normalizedIdentity)
     }
   }
 
@@ -98,12 +99,13 @@ public enum AppendCertificationComparator {
     postImportTracks: [ImportedTrackRef]
   ) -> String? {
     let preKeys = Set(preImportTracks.map(albumKey))
+    let normalizedIdentity = normalized(identity)
     return postImportTracks
       .filter { ref in
         !preKeys.contains(albumKey(ref)) &&
           ref.album != nil &&
-          !isExactIdentity(ref, identity: identity) &&
-          looksLikeDuplicateTitle(ref.album, of: identity.album)
+          !isExactIdentity(ref, identity: normalizedIdentity) &&
+          looksLikeDuplicateTitle(ref.album, of: normalizedIdentity.album)
       }
       .compactMap(\.album)
       .sorted()
@@ -112,6 +114,13 @@ public enum AppendCertificationComparator {
 
   private static func isExactIdentity(_ ref: ImportedTrackRef, identity: AlbumIdentity) -> Bool {
     ref.album == identity.album && ref.albumArtist == identity.albumArtist
+  }
+
+  private static func normalized(_ identity: AlbumIdentity) -> AlbumIdentity {
+    AlbumIdentity(
+      album: AudioTagVerifier.normalizedMetadataString(identity.album),
+      albumArtist: AudioTagVerifier.normalizedMetadataString(identity.albumArtist)
+    )
   }
 
   private static func albumKey(_ ref: ImportedTrackRef) -> AlbumKey {
@@ -141,4 +150,43 @@ public enum AppendCertificationComparator {
 private struct AlbumKey: Hashable {
   var album: String
   var albumArtist: String
+}
+
+public enum CompilationImportReducer {
+  public static func importedTracks(
+    plan: ConversionPlan,
+    addedRefs: [ImportedTrackRef]
+  ) -> [ImportedTrack] {
+    var remainingRefs = addedRefs
+    return plan.tracks.map { track in
+      if let locationMatchIndex = remainingRefs.firstIndex(where: { ref in
+        ref.locationPath == ImportedTrackRef.normalizedFilePath(track.verificationFile)
+      }) {
+        let ref = remainingRefs.remove(at: locationMatchIndex)
+        return ImportedTrack(
+          id: track.id,
+          sourceURL: track.verificationFile,
+          libraryRef: ref,
+          status: .imported
+        )
+      }
+
+      if !remainingRefs.isEmpty {
+        let ref = remainingRefs.removeFirst()
+        return ImportedTrack(
+          id: track.id,
+          sourceURL: track.verificationFile,
+          libraryRef: ref,
+          status: .imported
+        )
+      }
+
+      return ImportedTrack(
+        id: track.id,
+        sourceURL: track.verificationFile,
+        libraryRef: nil,
+        status: .alreadyPresent
+      )
+    }
+  }
 }

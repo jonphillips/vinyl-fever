@@ -673,14 +673,10 @@ final class AppModel {
     do {
       let producedFiles = plan.tracks.map(\.verificationFile)
       let refs = try await musicAppClient.add(producedFiles)
-      let importedTracks = plan.tracks.enumerated().map { index, track in
-        ImportedTrack(
-          id: track.id,
-          sourceURL: track.verificationFile,
-          libraryRef: refs.indices.contains(index) ? refs[index] : nil,
-          status: .imported
-        )
-      }
+      let importedTracks = CompilationImportReducer.importedTracks(
+        plan: plan,
+        addedRefs: refs
+      )
       for track in importedTracks {
         _ = try await runLogClient.appendFileOutcome(
           RunLogFileOutcomeRequest(
@@ -692,7 +688,7 @@ final class AppModel {
           )
         )
       }
-      let exitSummary = importedTracks.isEmpty ? "no files" : "imported"
+      let exitSummary = compilationImportExitSummary(for: importedTracks)
       let closedRun = try await runLogClient.close(
         RunLogCloseRequest(runID: run.id, exitSummary: exitSummary)
       )
@@ -702,6 +698,22 @@ final class AppModel {
         RunLogCloseRequest(runID: run.id, exitSummary: error.localizedDescription)
       )
       throw error
+    }
+  }
+
+  private func compilationImportExitSummary(for tracks: [ImportedTrack]) -> String {
+    if tracks.isEmpty {
+      return "no files"
+    }
+    let importedCount = tracks.count { $0.status == .imported }
+    let alreadyPresentCount = tracks.count { $0.status == .alreadyPresent }
+    switch (importedCount, alreadyPresentCount) {
+    case (0, _):
+      return "already present"
+    case (_, 0):
+      return "imported"
+    default:
+      return "\(importedCount) imported, \(alreadyPresentCount) already present"
     }
   }
 
