@@ -26,6 +26,8 @@ packages:
   swift-navigation:
     url: https://github.com/pointfreeco/swift-navigation
     from: 2.0.0
+  LLMClientKit:
+    path: ../jon-platform/packages/LLMClientKit
 targets:
   VinylFever:
     type: application
@@ -42,6 +44,8 @@ targets:
         product: SQLiteData
       - package: swift-navigation
         product: SwiftUINavigation
+      - package: LLMClientKit
+        product: LLMClientKit
     info:
       path: VinylFever/Info.plist
       properties:

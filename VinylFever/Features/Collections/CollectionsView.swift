@@ -357,6 +357,14 @@ private struct CompilationTrackPlanRow: View {
         }
       }
       .font(.caption)
+      if track.proposed.isCompilation == false {
+        Label(
+          "Clearing the per-track Compilation flag is intentional: the album is unified by Album Artist + Grouping, not the iTunes compilation checkbox (which fragments tracks in Music).",
+          systemImage: "info.circle"
+        )
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+      }
     }
     .padding(12)
     .background(Color.secondary.opacity(0.08))
@@ -371,9 +379,21 @@ private struct CollectionSeedStatus: View {
     switch state {
     case .idle:
       EmptyCollectionRow(title: "Seed from one album folder or a parent folder of album folders")
-    case let .running(url):
-      Label("Reading \(url.lastPathComponent)", systemImage: "hourglass")
-        .foregroundStyle(.secondary)
+    case let .running(progress):
+      VStack(alignment: .leading, spacing: 4) {
+        if progress.total > 0 {
+          Label(
+            "Reading \(progress.url.lastPathComponent) — \(progress.completed) of \(progress.total) albums",
+            systemImage: "hourglass"
+          )
+          .foregroundStyle(.secondary)
+          ProgressView(value: Double(progress.completed), total: Double(progress.total))
+        } else {
+          Label("Reading \(progress.url.lastPathComponent)", systemImage: "hourglass")
+            .foregroundStyle(.secondary)
+          ProgressView()
+        }
+      }
     case let .completed(candidates):
       Label("\(candidates.count) candidates found", systemImage: "checkmark.circle")
         .foregroundStyle(.green)

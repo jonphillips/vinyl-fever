@@ -75,6 +75,51 @@ struct CompilationAlbumTests {
   }
 
   @Test
+  func candidatesSkipUnreadableFilesReportProgressAndStayOrdered() async throws {
+    let root = URL(fileURLWithPath: "/Music/Parent")
+    let albumA = root.appendingPathComponent("AlbumA")
+    let albumB = root.appendingPathComponent("AlbumB")
+    let a1 = seedFile(id: UUID(1), name: "a1.flac")
+    let a2 = seedFile(id: UUID(2), name: "a2.flac")
+    let b1 = seedFile(id: UUID(3), name: "b1.flac")
+    let recorder = SeedProgressRecorder()
+
+    let candidates = try await withDependencies {
+      $0.uuid = .incrementing
+      $0.fileSystemClient.discoverCompilationAlbumSeedFolders = { _ in [albumA, albumB] }
+      $0.fileSystemClient.scanAudioFolder = { folder in
+        folder.lastPathComponent == "AlbumA" ? [a1, a2] : [b1]
+      }
+      $0.audioMetadataClient.read = { request in
+        if request.url == a2.url {
+          throw UnreadableFileError()
+        }
+        return AudioTags(albumArtist: "Various Artists")
+      }
+    } operation: {
+      try await CompilationAlbumSeeder().candidates(
+        from: root,
+        toolPaths: AudioToolPaths(statuses: [])
+      ) { completed, total in
+        await recorder.record(completed: completed, total: total)
+      }
+    }
+
+    // Deterministic order preserved despite concurrent reads.
+    expectNoDifference(candidates.map(\.folderURL.lastPathComponent), ["AlbumA", "AlbumB"])
+    // AlbumA's unreadable file is dropped, not fatal; its skip is surfaced as a warning.
+    expectNoDifference(candidates[0].trackCount, 1)
+    expectNoDifference(candidates[0].warnings, ["1 file(s) could not be read and were skipped."])
+    expectNoDifference(candidates[1].trackCount, 1)
+    expectNoDifference(candidates[1].warnings, [])
+
+    let updates = await recorder.updates
+    expectNoDifference(updates.first?.total, 2)
+    expectNoDifference(updates.last.map { [$0.completed, $0.total] }, [2, 2])
+    expectNoDifference(updates.map(\.completed).max(), 2)
+  }
+
+  @Test
   func applyPlanSetsIdentityMergesGroupingStripsNumbersAndBranchesArtwork() {
     let entry = CompilationAlbum(
       id: UUID(10),
@@ -182,6 +227,16 @@ struct CompilationAlbumTests {
         CompilationTagDiff(field: "Disc Number", current: "2", proposed: "2"),
       ]
     )
+  }
+}
+
+private struct UnreadableFileError: Error {}
+
+private actor SeedProgressRecorder {
+  private(set) var updates: [(completed: Int, total: Int)] = []
+
+  func record(completed: Int, total: Int) {
+    updates.append((completed, total))
   }
 }
 

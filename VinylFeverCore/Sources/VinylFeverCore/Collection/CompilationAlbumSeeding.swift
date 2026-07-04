@@ -7,37 +7,116 @@ public struct CompilationAlbumSeeder: Sendable {
   @Dependency(\.fileSystemClient) private var fileSystemClient
   @Dependency(\.uuid) private var uuid
 
+  /// Cap on simultaneous tag-reading subprocesses across all album folders. Seeding a
+  /// parent folder can span many albums, so an unbounded `TaskGroup` would fork one
+  /// `ffprobe`/`metaflac` per file all at once; this keeps the fan-out bounded.
+  static let maxConcurrentReads = max(4, ProcessInfo.processInfo.activeProcessorCount)
+
   public init() {
   }
 
-  public func candidates(from root: URL, toolPaths: AudioToolPaths) async throws -> [CompilationAlbumSeedCandidate] {
+  /// Reads every candidate album under `root` concurrently.
+  ///
+  /// Mirrors the show-folder metadata path (`AppModel.refreshCurrentMetadata`): each
+  /// file's tags are read on a `TaskGroup`, capped by a shared limiter so a parent
+  /// folder of many albums doesn't spawn thousands of `ffprobe`/`metaflac`
+  /// subprocesses at once. A file that can't be read is skipped rather than aborting
+  /// the whole seed. `progress` reports completed/total album folders as they finish.
+  public func candidates(
+    from root: URL,
+    toolPaths: AudioToolPaths,
+    progress: (@Sendable (_ completed: Int, _ total: Int) async -> Void)? = nil
+  ) async throws -> [CompilationAlbumSeedCandidate] {
     let folders = try fileSystemClient.discoverCompilationAlbumSeedFolders(root)
-    var candidates: [CompilationAlbumSeedCandidate] = []
-    for folder in folders {
-      try Task.checkCancellation()
-      let files = try fileSystemClient.scanAudioFolder(folder)
-      let metadata = try await metadata(for: files, toolPaths: toolPaths)
-      candidates.append(deriveCandidate(folder: folder, metadata: metadata))
+    let total = folders.count
+    await progress?(0, total)
+    guard total > 0 else {
+      return []
     }
-    return candidates
+
+    let limiter = SeedConcurrencyLimiter(limit: Self.maxConcurrentReads)
+    return try await withThrowingTaskGroup(
+      of: (offset: Int, candidate: CompilationAlbumSeedCandidate).self
+    ) { group in
+      for (offset, folder) in folders.enumerated() {
+        group.addTask {
+          try Task.checkCancellation()
+          let files = try self.fileSystemClient.scanAudioFolder(folder)
+          let read = try await self.metadata(for: files, toolPaths: toolPaths, limiter: limiter)
+          return (
+            offset,
+            self.deriveCandidate(
+              folder: folder,
+              metadata: read.values,
+              unreadableCount: read.unreadableCount
+            )
+          )
+        }
+      }
+
+      var ordered = [CompilationAlbumSeedCandidate?](repeating: nil, count: total)
+      var completed = 0
+      for try await result in group {
+        ordered[result.offset] = result.candidate
+        completed += 1
+        await progress?(completed, total)
+      }
+      return ordered.compactMap { $0 }
+    }
   }
 
+  /// Reads tags for one album's files concurrently, tolerating per-file failures.
+  ///
+  /// A file whose tags can't be read is counted in `unreadableCount` and dropped from
+  /// `values` instead of aborting the batch. Cancellation still propagates so the
+  /// caller can stop the whole seed.
   private func metadata(
     for files: [ScannedAudioFile],
-    toolPaths: AudioToolPaths
-  ) async throws -> [(ScannedAudioFile, AudioTags)] {
-    var values: [(ScannedAudioFile, AudioTags)] = []
-    for file in files {
-      try Task.checkCancellation()
-      let tags = try await audioMetadataClient.read(AudioMetadataRequest(file: file, toolPaths: toolPaths))
-      values.append((file, tags))
+    toolPaths: AudioToolPaths,
+    limiter: SeedConcurrencyLimiter
+  ) async throws -> (values: [(ScannedAudioFile, AudioTags)], unreadableCount: Int) {
+    let audioMetadataClient = self.audioMetadataClient
+    return try await withThrowingTaskGroup(of: (offset: Int, tags: AudioTags?).self) { group in
+      for (offset, file) in files.enumerated() {
+        group.addTask {
+          try Task.checkCancellation()
+          await limiter.acquire()
+          do {
+            let tags = try await audioMetadataClient.read(
+              AudioMetadataRequest(file: file, toolPaths: toolPaths)
+            )
+            await limiter.release()
+            return (offset, tags)
+          } catch is CancellationError {
+            await limiter.release()
+            throw CancellationError()
+          } catch {
+            await limiter.release()
+            return (offset, nil)
+          }
+        }
+      }
+
+      var tagsByOffset = [AudioTags?](repeating: nil, count: files.count)
+      var unreadableCount = 0
+      for try await result in group {
+        if let tags = result.tags {
+          tagsByOffset[result.offset] = tags
+        } else {
+          unreadableCount += 1
+        }
+      }
+      let values = files.enumerated().compactMap { offset, file in
+        tagsByOffset[offset].map { (file, $0) }
+      }
+      return (values, unreadableCount)
     }
-    return values
   }
 
   public func deriveCandidate(
     folder: URL,
-    metadata: [(ScannedAudioFile, AudioTags)]
+    metadata: [(ScannedAudioFile, AudioTags)],
+    unreadableCount: Int = 0
   ) -> CompilationAlbumSeedCandidate {
     let albumChoice = Self.mostCommon(
       metadata.compactMap { $0.1.album?.nilIfBlank },
@@ -58,6 +137,9 @@ public struct CompilationAlbumSeeder: Sendable {
       chosen: albumArtistChoice.value,
       counts: albumArtistChoice.counts
     )
+    if unreadableCount > 0 {
+      warnings.append("\(unreadableCount) file(s) could not be read and were skipped.")
+    }
 
     let artwork = metadata.lazy.compactMap(\.1.embeddedArtwork).first
     let album = CompilationAlbum(
@@ -116,6 +198,33 @@ public struct CompilationAlbumSeeder: Sendable {
       .map { "\($0.key) (\($0.value))" }
       .joined(separator: ", ")
     return ["\(field) disagrees; using \(chosen). Values: \(alternatives)."]
+  }
+}
+
+/// A minimal async counting semaphore used to bound how many tag-reading
+/// subprocesses run concurrently while seeding.
+actor SeedConcurrencyLimiter {
+  private var available: Int
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+
+  init(limit: Int) {
+    self.available = max(1, limit)
+  }
+
+  func acquire() async {
+    if available > 0 {
+      available -= 1
+      return
+    }
+    await withCheckedContinuation { waiters.append($0) }
+  }
+
+  func release() {
+    if waiters.isEmpty {
+      available += 1
+    } else {
+      waiters.removeFirst().resume()
+    }
   }
 }
 
