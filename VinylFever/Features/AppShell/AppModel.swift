@@ -53,6 +53,9 @@ final class AppModel {
   var compilationAppendMetadataByFileID: [ScannedAudioFile.ID: AudioMetadataLoadState] = [:]
   var compilationApplyPlan: CompilationApplyPlan?
   var compilationApplyState: ApplyRunState = .idle
+  var compilationConversionState: ConversionRunState = .idle
+  var compilationImportState: LibraryImportState = .idle
+  var compilationCertificationState: CompilationCertificationState = .idle
 
   enum Destination: Hashable {
   }
@@ -495,6 +498,9 @@ final class AppModel {
     compilationAppendFolder = sourceFolder
     compilationApplyPlan = nil
     compilationApplyState = .idle
+    compilationConversionState = .idle
+    compilationImportState = .idle
+    compilationCertificationState = .idle
     do {
       let files = try fileSystemClient.scanAudioFolder(sourceFolder)
       compilationAppendFiles = files
@@ -517,12 +523,12 @@ final class AppModel {
         }
       }
       let fallbackArtworkURL =
-        if entry.fallbackArtwork == nil {
-          URL?.none
-        } else {
+        if let fallbackArtwork = entry.fallbackArtwork {
           sourceFolder
             .appendingPathComponent(ApplyPlan.workingDirectoryName, isDirectory: true)
-            .appendingPathComponent("compilation-fallback-artwork.jpg")
+            .appendingPathComponent("compilation-fallback-artwork.\(imageFileExtension(for: fallbackArtwork))")
+        } else {
+          URL?.none
         }
       compilationApplyPlan = CompilationApplyPlan(
         entry: entry,
@@ -544,6 +550,9 @@ final class AppModel {
   func applyCompilationPlan(_ plan: CompilationApplyPlan) async {
     let applyPlan = ApplyPlan(compilationPlan: plan)
     compilationApplyState = .running(applyPlan)
+    compilationConversionState = .idle
+    compilationImportState = .idle
+    compilationCertificationState = .idle
 
     do {
       if let artwork = plan.entry.fallbackArtwork,
@@ -559,12 +568,208 @@ final class AppModel {
       )
       compilationApplyState = .completed(result)
       runLogErrorMessage = nil
+      guard result.didSucceed else {
+        return
+      }
+      await appendCompilationToMusic(plan, applyPlan: applyPlan)
     } catch is CancellationError {
       compilationApplyState = .idle
+      compilationConversionState = .idle
+      compilationImportState = .idle
+      compilationCertificationState = .idle
     } catch {
       compilationApplyState = .failed(error.localizedDescription)
+      compilationConversionState = .idle
+      compilationImportState = .idle
+      compilationCertificationState = .failed(error.localizedDescription)
       runLogErrorMessage = error.localizedDescription
     }
+  }
+
+  private func appendCompilationToMusic(_ plan: CompilationApplyPlan, applyPlan: ApplyPlan) async {
+    let conversionPlan = ConversionPlan(applyPlan: applyPlan)
+    let toolPaths = AudioToolPaths(statuses: toolStatuses)
+    guard conversionPlan.requiredTools.allSatisfy({ toolStatus(for: $0).resolvedPath != nil }) else {
+      compilationConversionState = .failed("Required conversion and verification tools are missing.")
+      compilationCertificationState = .failed("Required conversion and verification tools are missing.")
+      return
+    }
+
+    if conversionPlan.requiresConversion {
+      compilationConversionState = .running(conversionPlan)
+      do {
+        let result = try await ConversionExecutor().convert(conversionPlan, toolPaths: toolPaths)
+        compilationConversionState = .completed(result)
+        guard result.didSucceed else {
+          compilationCertificationState = .failed("Conversion did not finish cleanly.")
+          return
+        }
+      } catch is CancellationError {
+        compilationConversionState = .idle
+        compilationImportState = .idle
+        compilationCertificationState = .idle
+        return
+      } catch {
+        compilationConversionState = .failed(error.localizedDescription)
+        compilationCertificationState = .failed(error.localizedDescription)
+        runLogErrorMessage = error.localizedDescription
+        return
+      }
+    } else {
+      compilationConversionState = .skipped("No FLAC tracks; importing Working files.")
+    }
+
+    compilationImportState = .requestingPermission
+    let permission = await musicAppClient.requestAutomationPermission()
+    guard permission == .authorized else {
+      compilationImportState = .permission(permission)
+      compilationCertificationState = .failed(permission.displayMessage)
+      return
+    }
+
+    compilationImportState = .running(conversionPlan)
+    compilationCertificationState = .running(plan.entry.identity)
+
+    do {
+      let request = MusicAlbumReadRequest(identity: plan.entry.identity, includesTitleSiblings: true)
+      let preImportTracks = try await musicAppClient.readAlbumTracks(request)
+      let importResult = try await importCompilationFiles(conversionPlan)
+      compilationImportState = .completed(importResult)
+      let postImportTracks = try await musicAppClient.readAlbumTracks(request)
+      let verdict = AppendCertificationComparator.verdict(
+        identity: plan.entry.identity,
+        preImportTracks: preImportTracks,
+        postImportTracks: postImportTracks,
+        addedTrackCount: importResult.importedCount
+      )
+      let certification = try await recordCompilationCertification(
+        plan: plan,
+        preImportTracks: preImportTracks,
+        postImportTracks: postImportTracks,
+        addedTrackCount: importResult.importedCount,
+        verdict: verdict
+      )
+      compilationCertificationState = .completed(certification)
+      runLogErrorMessage = nil
+    } catch is CancellationError {
+      compilationImportState = .idle
+      compilationCertificationState = .idle
+    } catch {
+      compilationImportState = .failed(error.localizedDescription)
+      compilationCertificationState = .failed(error.localizedDescription)
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
+  private func importCompilationFiles(_ plan: ConversionPlan) async throws -> ImportResult {
+    let run = try await runLogClient.open(
+      RunLogOpenRequest(
+        showRootPath: plan.showRoot.path(percentEncoded: false),
+        kind: .importLibrary,
+        command: compilationImportCommandText(for: plan)
+      )
+    )
+
+    do {
+      let producedFiles = plan.tracks.map(\.verificationFile)
+      let refs = try await musicAppClient.add(producedFiles)
+      let importedTracks = plan.tracks.enumerated().map { index, track in
+        ImportedTrack(
+          id: track.id,
+          sourceURL: track.verificationFile,
+          libraryRef: refs.indices.contains(index) ? refs[index] : nil,
+          status: .imported
+        )
+      }
+      for track in importedTracks {
+        _ = try await runLogClient.appendFileOutcome(
+          RunLogFileOutcomeRequest(
+            runID: run.id,
+            sourcePath: track.sourceURL.path(percentEncoded: false),
+            producedPath: track.libraryRef?.locationPath,
+            status: track.runOutcomeStatus,
+            note: track.note
+          )
+        )
+      }
+      let exitSummary = importedTracks.isEmpty ? "no files" : "imported"
+      let closedRun = try await runLogClient.close(
+        RunLogCloseRequest(runID: run.id, exitSummary: exitSummary)
+      )
+      return ImportResult(run: closedRun, tracks: importedTracks, exitSummary: exitSummary)
+    } catch {
+      _ = try? await runLogClient.close(
+        RunLogCloseRequest(runID: run.id, exitSummary: error.localizedDescription)
+      )
+      throw error
+    }
+  }
+
+  private func recordCompilationCertification(
+    plan: CompilationApplyPlan,
+    preImportTracks: [ImportedTrackRef],
+    postImportTracks: [ImportedTrackRef],
+    addedTrackCount: Int,
+    verdict: AppendVerdict
+  ) async throws -> AppendCertification {
+    let identity = plan.entry.identity
+    let run = try await runLogClient.open(
+      RunLogOpenRequest(
+        showRootPath: plan.sourceRoot.path(percentEncoded: false),
+        kind: .compilationCertify,
+        command: compilationCertificationCommandText(identity: identity, addedTrackCount: addedTrackCount)
+      )
+    )
+    let preCount = AppendCertificationComparator.exactMatches(identity: identity, in: preImportTracks).count
+    let postCount = AppendCertificationComparator.exactMatches(identity: identity, in: postImportTracks).count
+    _ = try await runLogClient.appendFileOutcome(
+      RunLogFileOutcomeRequest(
+        runID: run.id,
+        sourcePath: plan.sourceRoot.path(percentEncoded: false),
+        status: verdict.isCertified ? .created : .failed,
+        note: verdict.displayMessage
+      )
+    )
+    let closedRun = try await runLogClient.close(
+      RunLogCloseRequest(runID: run.id, exitSummary: verdict.displayMessage)
+    )
+    return AppendCertification(
+      run: closedRun,
+      identity: identity,
+      addedTrackCount: addedTrackCount,
+      preImportTrackCount: preCount,
+      postImportTrackCount: postCount,
+      verdict: verdict
+    )
+  }
+
+  private func compilationImportCommandText(for plan: ConversionPlan) -> String {
+    plan.tracks
+      .map { "add \($0.verificationFile.path(percentEncoded: false))" }
+      .joined(separator: "\n")
+  }
+
+  private func compilationCertificationCommandText(
+    identity: AlbumIdentity,
+    addedTrackCount: Int
+  ) -> String {
+    """
+    read Music album "\(identity.album)" / "\(identity.albumArtist)"
+    certify added track count \(addedTrackCount)
+    """
+  }
+
+  private func imageFileExtension(for data: Data) -> String {
+    if data.starts(with: [0x89, 0x50, 0x4E, 0x47]) {
+      return "png"
+    }
+    if data.starts(with: [0xFF, 0xD8, 0xFF]) {
+      return "jpg"
+    }
+    if data.starts(with: [0x47, 0x49, 0x46]) {
+      return "gif"
+    }
+    return "img"
   }
 
   func saveToolOverride(_ path: String?, for tool: AudioTool, settings: AppSetting) {
@@ -853,6 +1058,20 @@ enum CollectionSeedState: Equatable {
   case completed([CompilationAlbumSeedCandidate])
   case saved(Int)
   case failed(String)
+}
+
+enum CompilationCertificationState: Equatable {
+  case idle
+  case running(AlbumIdentity)
+  case completed(AppendCertification)
+  case failed(String)
+
+  var isRunning: Bool {
+    if case .running = self {
+      return true
+    }
+    return false
+  }
 }
 
 enum AppSection: String, CaseIterable, Identifiable, Hashable {

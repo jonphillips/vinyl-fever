@@ -233,7 +233,7 @@ completes it; GitHub PR state is canonical.
 
 - [x] Slice 0 — Registry model + folder seeding (read-only)
 - [x] Slice 1 — Policy stamping engine + preview (writes to `Working/`, no import)
-- [ ] Slice 2 — Append + import + drift certification
+- [x] Slice 2 — Append + import + drift certification
 
 ### Slice 0 — Registry model + folder seeding (read-only)
 
