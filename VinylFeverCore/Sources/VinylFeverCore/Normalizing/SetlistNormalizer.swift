@@ -43,8 +43,12 @@ struct LiveSetlistNormalizer: Sendable {
 
   func normalize(_ rawInput: String) async throws -> SetlistNormalizationResult {
     let pre = SetlistPreSegmenter().segment(rawInput)
+    // `.frontierPreferred`, not a hardcoded provider: LLMClientKit's `FrontierResolver`
+    // routes to whichever frontier key is configured (Anthropic first) and degrades to
+    // on-device only when none is set — the "any frontier" intent of commit 7fe58fc and
+    // the M5 ledger, so the Normalizer never branches on which key the user pasted.
     let request = ModelRequest(
-      tier: .frontier(.anthropic),
+      tier: .frontierPreferred,
       system: SetlistNormalizer.systemPrompt,
       prompt: SetlistNormalizer.userPrompt(for: pre),
       maxTokens: 4096

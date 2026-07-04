@@ -15,6 +15,12 @@ struct VinylFeverApp: App {
       $0.runLogClient = .liveValue
       $0.fileOperationClient = .liveValue
       $0.musicAppClient = .liveValue
+      // The Setlist Normalizer's live sandwich. `modelClient` and `apiKeyStore` need no
+      // wiring — LLMClientKit ships live defaults (TieredModelClient.live reads the
+      // Keychain per request), and we don't share keys across apps here, so the default
+      // (app-own) access group is correct. Only this seam has an unimplemented testValue,
+      // so without it the Normalize path throws the moment the sheet runs.
+      $0.setlistNormalizer = .liveValue
     }
     _model = State(initialValue: AppModel())
   }

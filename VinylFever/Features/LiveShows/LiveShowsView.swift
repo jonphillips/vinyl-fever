@@ -16,7 +16,8 @@ struct LiveShowsView: View {
           folder: scannedShowFolder,
           model: model,
           openFolder: openFolder,
-          openSetlistFile: openSetlistFile
+          openSetlistFile: openSetlistFile,
+          openNormalizer: { isShowingNormalizer = true }
         )
       } else {
         EmptyLiveShowsView(
@@ -33,6 +34,7 @@ struct LiveShowsView: View {
         } label: {
           Label("Normalize Notes", systemImage: "wand.and.stars")
         }
+        .help("AI: turn raw trading notes into a structured setlist. Distinct from Parse Setlist (deterministic).")
       }
       ToolbarItem {
         Button(action: openFolder) {
@@ -108,6 +110,7 @@ private struct ScannedShowFolderView: View {
   @Bindable var model: AppModel
   let openFolder: () -> Void
   let openSetlistFile: () -> Void
+  let openNormalizer: () -> Void
 
   @FetchAll(SourceLabel.order(by: \.token))
   private var persistedSourceLabels: [SourceLabel]
@@ -164,7 +167,8 @@ private struct ScannedShowFolderView: View {
           root: folder.root,
           parse: model.parseSetlistInput,
           loadCandidate: model.loadSetlistText(from:),
-          openSetlistFile: openSetlistFile
+          openSetlistFile: openSetlistFile,
+          openNormalizer: openNormalizer
         )
         SourceMetadataSection(
           sourceLabels: sourceLabels,
@@ -1347,6 +1351,7 @@ private struct SetlistInputSection: View {
   let parse: () -> Void
   let loadCandidate: (URL) -> Void
   let openSetlistFile: () -> Void
+  let openNormalizer: () -> Void
 
   var body: some View {
     ScanSection(
@@ -1358,7 +1363,8 @@ private struct SetlistInputSection: View {
         SetlistTextInput(
           text: $setlistInput,
           parse: parse,
-          openSetlistFile: openSetlistFile
+          openSetlistFile: openSetlistFile,
+          openNormalizer: openNormalizer
         )
         if !setlistCandidates.isEmpty {
           DetectedSetlistButtons(
@@ -1385,9 +1391,10 @@ private struct SetlistTextInput: View {
   @Binding var text: String
   let parse: () -> Void
   let openSetlistFile: () -> Void
+  let openNormalizer: () -> Void
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
+    VStack(alignment: .leading, spacing: 10) {
       TextEditor(text: $text)
         .font(.body.monospaced())
         .frame(minHeight: 150)
@@ -1395,16 +1402,34 @@ private struct SetlistTextInput: View {
           RoundedRectangle(cornerRadius: 6)
             .stroke(Color(nsColor: .separatorColor))
         }
-      HStack {
+      HStack(spacing: 8) {
         Button(action: openSetlistFile) {
           Label("Load .txt", systemImage: "doc.badge.plus")
         }
         Button(action: parse) {
           Label("Parse Setlist", systemImage: "text.magnifyingglass")
         }
-        .buttonStyle(.borderedProminent)
         .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .help(
+          "Deterministic — reads an already-formatted setlist (ARTIST:/ALBUM: tags, “NN. Title” lines). No AI; raw notes come out as garbage."
+        )
+
+        Spacer(minLength: 12)
+
+        Button(action: openNormalizer) {
+          Label("Normalize Raw Notes…", systemImage: "wand.and.stars")
+        }
+        .buttonStyle(.borderedProminent)
+        .help(
+          "AI — turns messy raw trading notes into a structured setlist, with a preview before anything is saved."
+        )
       }
+      // The cue the two buttons lacked: which one is the model, and when to use it.
+      Text(
+        "Pasting **raw trading notes**? Use **Normalize Raw Notes** — it runs them through AI. **Parse Setlist** only reads a setlist that’s already formatted."
+      )
+      .font(.caption)
+      .foregroundStyle(.secondary)
     }
   }
 }

@@ -14,6 +14,16 @@ struct SetlistNormalizerSheet: View {
     NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: 16) {
+          Label {
+            Text(
+              "AI turns messy raw trading notes into a structured setlist.txt. Nothing is saved until you review the preview and choose Save."
+            )
+          } icon: {
+            Image(systemName: "wand.and.stars")
+          }
+          .font(.callout)
+          .foregroundStyle(.secondary)
+
           if !model.isFrontierConfigured {
             frontierBanner
           }
