@@ -1,0 +1,50 @@
+removedHashLines: 0
+cleanedLines: 40
+regionCount: 7
+
+[1] prose (5 lines)
+    Another excellent set from John Hiatt and band.  Show theme, by Ry Cooder, is officially released and has been removed. This is a fresh transfer from my master and therefore will differ from previous uploads of this broadcast, if any.
+    faults: none
+    JOHN HIATT
+    Toronto, ON  --  El Mocambo
+    1993-10-24  --  49:50
+
+[2] tracklist (20 lines)
+    01.  -radio host intro-
+    02.  -talk-
+    03.  Straight Out of Time
+    04.  -talk-
+    05.  Buffalo River Home  /// 16:55
+    06.  Loving a Hurricane
+    07.  When You Hold Me Tight
+    08.  -talk, drum solo-
+    09.  Child of the Wild Blue Yonder  ///  34:00
+    10.  -talk-
+    11.  Perfectly Good Guitar
+    12.  Real Fine Love
+    13.  -talk-
+    14.  Tennessee Plates
+    15.  -radio host outro-
+    note: CBC 'Hot Ticket'; above is broadcast date
+    Karen Gordon - radio host
+    John Hiatt - songwriter
+    t01: contains talk by Hiatt
+    No artwork.
+
+[3] lineage (2 lines)
+    source: recorded by stevemtl on 1993-10-24 - analogue cable FM > master cassette (Maxell XL90)
+    transferred by stevemtl: master cass > Nakamichi Dragon > R500 (SBM) > R44 (16/48) > SD chip > HD
+
+[4] tracklist (1 lines)
+    Mastered and posted to DIME by stevemtl on 2018-09-16:
+
+[5] lineage (1 lines)
+    HD > Soundforge (trim, edit, fades) > R8brain (downsample to 16/44.1) > CDwave (track cut) > TLH (flac level 8, ffp, md5) > TLH (torrent) > DIME
+
+[6] prose (3 lines)
+    Support John Hiatt by purchasing official releases and merchandise.
+    Please pass on in a lossless format; reserve mp3 and other degrades for your own use only.
+    Do not profit in any material way from this recording.
+
+[7] tracklist (1 lines)
+    Category	Rock

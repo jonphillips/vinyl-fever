@@ -192,8 +192,18 @@ public struct SetlistPreSegmenter: Sendable {
       // `NN. Title` / `NN) Title` — require something after the separator.
       return rest.dropFirst().contains(where: { !$0.isWhitespace })
     }
-    // `01 Title` zero-padded with a space is also a common track shape.
-    if separator == " ", digits.count > 1, digits.first == "0" {
+    // `NN: Title` colon-delimited setlists (seen in the corpus, e.g. Foreigner). Require
+    // whitespace immediately after the colon so an inline time like `9:23` — no space
+    // after the colon — is never mistaken for a track number. A leading 1–3 digit run
+    // can't collide with a `KEY: value` header tag, whose key is alphabetic.
+    if separator == ":" {
+      let afterColon = rest.dropFirst()
+      guard let next = afterColon.first, next.isWhitespace else { return false }
+      return afterColon.contains(where: { !$0.isWhitespace })
+    }
+    // `01 Title` / `01\tTitle` — a zero-padded number set off by whitespace (space or
+    // tab, as several corpus notes align columns with tabs) is a common track shape.
+    if separator.isWhitespace, digits.count > 1, digits.first == "0" {
       return rest.dropFirst().contains(where: { !$0.isWhitespace })
     }
     return false

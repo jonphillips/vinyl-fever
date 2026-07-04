@@ -1,0 +1,25 @@
+removedHashLines: 0
+cleanedLines: 35
+regionCount: 2
+
+[1] prose (1 lines)
+    Jackson Browne - Collected Classics 2003
+
+[2] tracklist (17 lines)
+    Disc One  (Acoustic)
+    1. Rock Me on the Water (rare guitar version) - Rome, 11/5/1996
+    2. Lives in the Balance (w/ David Crosby, Graham Nash, Sangre Machehual) - Los Angeles, 11/12/1988
+    3. World in Motion (w/ Scott Thurston & Debra Dobkin) - Poughkeepsie, 6/28/1990
+    4. I'll Be True to You (w/ David Blue) - Boston, 8/27/1972
+    5. Jamaica, Say You Will (rare guitar version) - Stony Brook, 2/24/1972
+    6. My Personal Revenge (w/ Sangre Machehual) - Los Angeles, 11/12/1988
+    7. Bitter Fruit (w/ Sangre Machehual) - Los Angeles, 11/12/1988
+    8. Call It a Loan (w/ David Lindley & Wally Ingram) - Santa Monica, 3/15/1998
+    9. Something Fine (w/ Shawn Colvin) - London, 11/11/1996
+    10. The Facts about Jimmy (w/ Shawn Colvin) - London, 11/11/1996
+    11. Crazy Love (w/ Marc Cohn) - Atlanta, 8/29/1998
+    12. Deportee (w/ Joan Baez) - Santa Cruz, 2/8/1977
+    13. Do You Wanna Dance >> Run Boy Run >> Redneck Friend >> Sweet Little Sixteen (w/ David Lindley) - Bryn Mawr, 9/7/1975
+    14. Tomorrow Will Be Fine (w/ David Blue) - Boston, 8/27/1972
+    15. The Road (w/ Danny O'Keefe) - Seattle, 6/1/2001
+    16. Linda Paloma (rare piano version) - Hilversum, 12/8/1976

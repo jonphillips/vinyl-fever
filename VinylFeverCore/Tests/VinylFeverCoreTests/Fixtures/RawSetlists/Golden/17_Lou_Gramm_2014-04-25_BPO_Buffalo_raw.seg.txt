@@ -1,0 +1,46 @@
+removedHashLines: 0
+cleanedLines: 38
+regionCount: 6
+
+[1] prose (6 lines)
+    setlist:
+    Lou Gramm & The Buffalo Philharmonic Orchestra
+    Kleinhan's Music Hall
+    Buffalo, NY
+    April 25, 2014
+    16 bit version
+
+[2] lineage (1 lines)
+    Taper: Binko
+
+[3] prose (1 lines)
+    Transfer & mastering: }{eywood
+
+[4] lineage (2 lines)
+    Gear: Audio Technica 831s > Tascam Dr-08
+    Lineage: DR-08 (wav @ 24/96) > Adobe Audition 1.5 (EQ, splits & fades, limiting, conversion to 16/44.1) > TLH (SBE fix, flac 8)
+
+[5] prose (1 lines)
+    The last two songs for this show were not recorded.  The batteries died just before the show ended, taking the file with them.
+
+[6] tracklist (20 lines)
+    01 Intro
+    02 Who Wants To Live Forever
+    03 Signs of Life
+    04 Moby Dick
+    05 intro
+    06 Double Vision
+    07 Ready or Not
+    08 Feels Like the First Time
+    09 Just Between You and Me
+    10 Long, Long Way From Home
+    11 Cold as Ice
+    12 I Want to Know What Love Is
+    13 That Was Yesterday
+    14 Dirty White Boy
+    15 Urgent
+    16 Blue Morning, Blue Day
+    17 Midnight Blue
+    not recorded:
+    18 Juke Box Hero
+    19 Hot Blooded

@@ -1,0 +1,58 @@
+removedHashLines: 0
+cleanedLines: 51
+regionCount: 4
+
+[1] prose (18 lines)
+    setlist:
+    Foreigner
+    Lou Gramm: vocals
+    Mick Jones: lead guitar, keyboards
+    Jeff Jacobs: keyboards
+    Scott Gilman: saxophone, guitar and flute
+    Bruce Turgon: bass, backing vocals
+    Ron Wikso: drums
+    House of Blues
+    Los Angeles, Ca. USA
+    February 24, 1995
+    promoting their 8th album "Mr. Moonlight"
+    "Superstars in Concert" Westwood One FM broadcast
+    and 4 songs live and unplugged on "Rockline" October 26, 1992
+    runtime: 89:00 (minutes/ seconds)
+    Los Angeles show: 74:08
+    Rockline set: 14:52
+    setlist:
+
+[2] tracklist (20 lines)
+    1: Jim Ellis radio introduction :35
+    2: a long, long way from home 3:01
+    3: double vision 3:42
+    4: head games 5:01
+    5: cold as ice 5:53
+    6: until the end of time 5:58
+    7: rain 5:25
+    8: blue morning, blue day 3:18
+    9: feels like the first time 5:25 (short gap in announcer intro after song)
+    10: urgent 5:42
+    11: juke box hero 5:03
+    12: dirty white boy 4:17
+    13: under the gun 4:47
+    14: I want to know what love is 6:35
+    15: hot blooded 9:23
+    "Rockline" October 26, 1992
+    16: dirty white boy 4:16
+    17: a long, long way from home 4:24
+    18: feels like the first time 3:52
+    19: urgent (intro only, and talk) 2:20
+
+[3] lineage (7 lines)
+    lineage:
+    FM radio >
+    Yamaha RX-500U reciever with wire antenna >
+    Nak. BX-125 cassette deck (dolby off) >
+    Maxell XLII 90 minute cassettes >
+    played on tascam 112 into soundforge (wav) >
+    flac (sb's aligned) > torrentially yours.
+
+[4] tracklist (2 lines)
+    do not sell this recording.
+    share freely, losslessly and gaplessly.
