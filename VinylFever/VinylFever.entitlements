@@ -4,5 +4,13 @@
 <dict>
 	<key>com.apple.security.automation.apple-events</key>
 	<true/>
+	<!-- The shared LLMClientKit APIKeyStore writes a synchronizable (iCloud) Keychain
+	     item; on a non-sandboxed macOS app that forces the data-protection keychain,
+	     which requires the app's own keychain-access group. Without this, SecItemAdd
+	     fails silently and the Claude key never persists. -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.jonphillips.VinylFever</string>
+	</array>
 </dict>
 </plist>

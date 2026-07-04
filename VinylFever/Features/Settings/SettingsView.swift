@@ -35,9 +35,24 @@ struct SettingsView: View {
           Label(errorMessage, systemImage: "exclamationmark.triangle")
             .foregroundStyle(.red)
         }
+
+        Section("Frontier Model") {
+          FrontierKeyRow(
+            keyPreview: model.frontierKeyPreview,
+            save: { model.saveFrontierKey($0) },
+            clear: { model.clearFrontierKey() }
+          )
+          if let errorMessage = model.frontierKeyErrorMessage {
+            Label(errorMessage, systemImage: "exclamationmark.triangle")
+              .foregroundStyle(.red)
+          }
+        }
       }
       .formStyle(.grouped)
       .navigationTitle("Settings")
+      .task {
+        model.loadFrontierKeyPreview()
+      }
       .toolbar {
         ToolbarItem {
           Button {
@@ -145,6 +160,57 @@ private struct ToolStatusRow: View {
   private var hasDraftChange: Bool {
     draftOverridePath.trimmingCharacters(in: .whitespacesAndNewlines)
       != overridePath.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+}
+
+/// Enter/clear the Claude API key used by the Setlist Normalizer. The key is stored
+/// in the shared iCloud-Keychain `APIKeyStore`, so a key entered in another
+/// jon-platform app (Galavant, Yes Chef) is already visible here — this row only
+/// needs to exist for entering it inside Vinyl Fever. The secret is never shown back;
+/// only a masked preview confirms a key is set.
+private struct FrontierKeyRow: View {
+  let keyPreview: String?
+  let save: (String) -> Void
+  let clear: () -> Void
+
+  @State private var draftKey = ""
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      if let keyPreview {
+        LabeledContent("Claude key") {
+          Text(keyPreview)
+            .font(.callout.monospaced())
+            .foregroundStyle(.secondary)
+        }
+      } else {
+        Label("No Claude key configured.", systemImage: "key.slash")
+          .foregroundStyle(.secondary)
+      }
+
+      LabeledContent("Set key") {
+        HStack(spacing: 8) {
+          SecureField("sk-ant-…", text: $draftKey)
+            .textFieldStyle(.roundedBorder)
+            .font(.callout.monospaced())
+          Button {
+            save(draftKey)
+            draftKey = ""
+          } label: {
+            Label("Save", systemImage: "checkmark")
+          }
+          .disabled(draftKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+          Button {
+            draftKey = ""
+            clear()
+          } label: {
+            Label("Clear", systemImage: "xmark")
+          }
+          .disabled(keyPreview == nil)
+        }
+      }
+    }
+    .padding(.vertical, 6)
   }
 }
 

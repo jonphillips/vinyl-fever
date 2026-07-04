@@ -15,6 +15,9 @@ let package = Package(
     .package(url: "https://github.com/pointfreeco/swift-custom-dump", from: "1.0.0"),
     .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.0.0"),
     .package(url: "https://github.com/pointfreeco/swift-navigation", from: "2.0.0"),
+    // App-agnostic model boundary shared across jon-platform apps (Galavant, Yes
+    // Chef). Sibling checkout: `jon-platform` lives next to `vinyl-fever`.
+    .package(path: "../../jon-platform/packages/LLMClientKit"),
   ],
   targets: [
     .target(
@@ -24,6 +27,7 @@ let package = Package(
         .product(name: "DependenciesMacros", package: "swift-dependencies"),
         .product(name: "SQLiteData", package: "sqlite-data"),
         .product(name: "SwiftNavigation", package: "swift-navigation"),
+        .product(name: "LLMClientKit", package: "LLMClientKit"),
       ]
     ),
     .testTarget(
@@ -32,6 +36,7 @@ let package = Package(
         "VinylFeverCore",
         .product(name: "CustomDump", package: "swift-custom-dump"),
         .product(name: "DependenciesTestSupport", package: "swift-dependencies"),
+        .product(name: "LLMClientKit", package: "LLMClientKit"),
       ]
     ),
   ]

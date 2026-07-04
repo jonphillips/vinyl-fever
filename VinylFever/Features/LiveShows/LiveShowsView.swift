@@ -7,6 +7,7 @@ import VinylFeverCore
 
 struct LiveShowsView: View {
   @Bindable var model: AppModel
+  @State private var isShowingNormalizer = false
 
   var body: some View {
     Group {
@@ -27,10 +28,20 @@ struct LiveShowsView: View {
     .navigationTitle("Live Shows")
     .toolbar {
       ToolbarItem {
+        Button {
+          isShowingNormalizer = true
+        } label: {
+          Label("Normalize Notes", systemImage: "wand.and.stars")
+        }
+      }
+      ToolbarItem {
         Button(action: openFolder) {
           Label("Open Show Folder", systemImage: "folder")
         }
       }
+    }
+    .sheet(isPresented: $isShowingNormalizer) {
+      SetlistNormalizerSheet(model: model)
     }
   }
 

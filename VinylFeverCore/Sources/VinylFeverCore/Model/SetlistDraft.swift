@@ -13,10 +13,15 @@ public struct SetlistDraft: Equatable, Sendable {
 public struct SetlistTrack: Equatable, Identifiable, Sendable {
   public let id: UUID
   public var title: String
+  /// A trading-note annotation the Normalizer chose to keep with the track (e.g.
+  /// `>` segue, guest performer). Preview/audit only — it is **not** rendered into
+  /// the stacked track list of `setlist.txt` (the format keeps tracks plain).
+  public var note: String?
 
-  public init(id: UUID, title: String) {
+  public init(id: UUID, title: String, note: String? = nil) {
     self.id = id
     self.title = title
+    self.note = note
   }
 }
 
@@ -27,6 +32,11 @@ public struct ShowTags: Equatable, Sendable {
   public var date: DateField
   public var venue: Field
   public var location: Field
+  /// The recording source, drawn from the controlled vocabulary (`SourceLabel`).
+  /// A first-class field rather than a substring of `album`: the Normalizer infers
+  /// it (with evidence) and the composed `ALBUM` line derives its `(Source)` suffix
+  /// from it. `.unknown` renders as `(unknown)`.
+  public var source: Field
 
   public init(
     artist: Field = .unknown,
@@ -34,7 +44,8 @@ public struct ShowTags: Equatable, Sendable {
     albumArtist: Field = .unknown,
     date: DateField = .unknown,
     venue: Field = .unknown,
-    location: Field = .unknown
+    location: Field = .unknown,
+    source: Field = .unknown
   ) {
     self.artist = artist
     self.album = album
@@ -42,6 +53,7 @@ public struct ShowTags: Equatable, Sendable {
     self.date = date
     self.venue = venue
     self.location = location
+    self.source = source
   }
 }
 

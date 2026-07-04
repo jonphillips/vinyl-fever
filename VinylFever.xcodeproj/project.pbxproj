@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		06B1A9F761F94FBEF51B4122 /* ToolPathClient+Live.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FCF80A0CE45B6E77A178A11 /* ToolPathClient+Live.swift */; };
 		22775209C461BD758C5019E2 /* CollectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AED24466777F0409DA88B3E3 /* CollectionsView.swift */; };
+		315F7D9FE8B6468D86AE2735 /* SetlistNormalizerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68E3D973791AA21665A4AEC0 /* SetlistNormalizerSheet.swift */; };
+		39554429845D1E4F3F48622F /* LLMClientKit in Frameworks */ = {isa = PBXBuildFile; productRef = 209AD90212216A34D3061AD1 /* LLMClientKit */; };
 		497E2DE4FB2B485815B4066A /* VinylFeverCore in Frameworks */ = {isa = PBXBuildFile; productRef = 7C6E06FBA965ABDAC7489C80 /* VinylFeverCore */; };
 		4DF6C451B1388905B8A78C4F /* MusicAppClient+Live.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFE8FAAEE05BF9BF9A136EDE /* MusicAppClient+Live.swift */; };
 		62EBE6D7B9DC65E79B5F1542 /* Dependencies in Frameworks */ = {isa = PBXBuildFile; productRef = 99211BDD035C702EFB2123E3 /* Dependencies */; };
@@ -22,16 +24,18 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		37594C5E09F565DC70AF0A3C /* LLMClientKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = LLMClientKit; path = "../jon-platform/packages/LLMClientKit"; sourceTree = SOURCE_ROOT; };
 		4B9501DC755058CF461B454F /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		5749E1A3637D488CA2EE906D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		59513EA8B3113F9F15330147 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
 		5FCF80A0CE45B6E77A178A11 /* ToolPathClient+Live.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ToolPathClient+Live.swift"; sourceTree = "<group>"; };
+		68E3D973791AA21665A4AEC0 /* SetlistNormalizerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetlistNormalizerSheet.swift; sourceTree = "<group>"; };
 		8635979346BE2956055A7DC8 /* VinylFever.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VinylFever.entitlements; sourceTree = "<group>"; };
 		8AD3A453FDC0D3B42EB1247C /* VinylFeverApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VinylFeverApp.swift; sourceTree = "<group>"; };
 		AED24466777F0409DA88B3E3 /* CollectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionsView.swift; sourceTree = "<group>"; };
 		C5BA3EE762A82EB875DF3A8E /* VinylFever.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VinylFever.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C6AB4DB3E04DFCEFC5B041DC /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		CC336537557BE54F0DB166E6 /* VinylFeverCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VinylFeverCore; path = VinylFeverCore; sourceTree = SOURCE_ROOT; };
+		CC336537557BE54F0DB166E6 /* VinylFeverCore */ = {isa = PBXFileReference; lastKnownFileType = folder; path = VinylFeverCore; sourceTree = SOURCE_ROOT; };
 		EFE8FAAEE05BF9BF9A136EDE /* MusicAppClient+Live.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MusicAppClient+Live.swift"; sourceTree = "<group>"; };
 		F6AB6D74511FA4977973A9A7 /* LiveShowsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveShowsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -45,6 +49,7 @@
 				62EBE6D7B9DC65E79B5F1542 /* Dependencies in Frameworks */,
 				67F35C8B29D2FB10EAECF9DC /* SQLiteData in Frameworks */,
 				922A693A808062926F4158D9 /* SwiftUINavigation in Frameworks */,
+				39554429845D1E4F3F48622F /* LLMClientKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -86,6 +91,7 @@
 				A0013BA49C12AB9134E726E5 /* AppShell */,
 				99CF77C8AB4DB5A18E4C2711 /* Collections */,
 				16EB0E43731EBB68198E3CF9 /* LiveShows */,
+				C8B309A345C5DEE35D698D66 /* Normalizer */,
 				C466F85AB93E0F59EBC7B948 /* Settings */,
 			);
 			path = Features;
@@ -94,6 +100,7 @@
 		7591ADA858208560FCBEF6CA /* Packages */ = {
 			isa = PBXGroup;
 			children = (
+				37594C5E09F565DC70AF0A3C /* LLMClientKit */,
 				CC336537557BE54F0DB166E6 /* VinylFeverCore */,
 			);
 			name = Packages;
@@ -141,6 +148,14 @@
 			path = Settings;
 			sourceTree = "<group>";
 		};
+		C8B309A345C5DEE35D698D66 /* Normalizer */ = {
+			isa = PBXGroup;
+			children = (
+				68E3D973791AA21665A4AEC0 /* SetlistNormalizerSheet.swift */,
+			);
+			path = Normalizer;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -161,6 +176,7 @@
 				99211BDD035C702EFB2123E3 /* Dependencies */,
 				B0CEEDF3C9060FC734814A66 /* SQLiteData */,
 				A25F349E47368726A30A4DF2 /* SwiftUINavigation */,
+				209AD90212216A34D3061AD1 /* LLMClientKit */,
 			);
 			productName = VinylFever;
 			productReference = C5BA3EE762A82EB875DF3A8E /* VinylFever.app */;
@@ -194,6 +210,7 @@
 				AE338F867AA01E7224320B06 /* XCRemoteSwiftPackageReference "sqlite-data" */,
 				5B2EEA32054487CB52052332 /* XCRemoteSwiftPackageReference "swift-dependencies" */,
 				91086051D9EC56BBA794DAD1 /* XCRemoteSwiftPackageReference "swift-navigation" */,
+				7950EA78620E8A407134CD86 /* XCLocalSwiftPackageReference "../jon-platform/packages/LLMClientKit" */,
 				91CC58644ABC044D48488747 /* XCLocalSwiftPackageReference "VinylFeverCore" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -216,6 +233,7 @@
 				22775209C461BD758C5019E2 /* CollectionsView.swift in Sources */,
 				CCA54B8CA7EF47661C400FFD /* LiveShowsView.swift in Sources */,
 				4DF6C451B1388905B8A78C4F /* MusicAppClient+Live.swift in Sources */,
+				315F7D9FE8B6468D86AE2735 /* SetlistNormalizerSheet.swift in Sources */,
 				EAFC74430016C0F3EA8F602C /* SettingsView.swift in Sources */,
 				06B1A9F761F94FBEF51B4122 /* ToolPathClient+Live.swift in Sources */,
 				D9300F0E5225EB93AE024E5B /* VinylFeverApp.swift in Sources */,
@@ -373,7 +391,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonphillips.VinylFever;
 				PRODUCT_NAME = VinylFever;
 				SDKROOT = macosx;
@@ -397,7 +415,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonphillips.VinylFever;
 				PRODUCT_NAME = VinylFever;
 				SDKROOT = macosx;
@@ -428,6 +446,10 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
+		7950EA78620E8A407134CD86 /* XCLocalSwiftPackageReference "../jon-platform/packages/LLMClientKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../jon-platform/packages/LLMClientKit";
+		};
 		91CC58644ABC044D48488747 /* XCLocalSwiftPackageReference "VinylFeverCore" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = VinylFeverCore;
@@ -462,6 +484,10 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		209AD90212216A34D3061AD1 /* LLMClientKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = LLMClientKit;
+		};
 		7C6E06FBA965ABDAC7489C80 /* VinylFeverCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = VinylFeverCore;

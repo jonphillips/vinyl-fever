@@ -1,5 +1,6 @@
 import Dependencies
 import Foundation
+import LLMClientKit
 import Observation
 import SQLiteData
 import VinylFeverCore
@@ -23,6 +24,10 @@ final class AppModel {
   @Dependency(\.defaultDatabase) private var database
   @ObservationIgnored
   @Dependency(\.uuid) private var uuid
+  @ObservationIgnored
+  @Dependency(\.setlistNormalizer) private var setlistNormalizer
+  @ObservationIgnored
+  @Dependency(\.apiKeyStore) private var apiKeyStore
 
   var selectedSection: AppSection = .liveShows
   var destination: Destination?
@@ -31,6 +36,9 @@ final class AppModel {
   var setlistInput = ""
   var setlistDraft: SetlistDraft?
   var setlistErrorMessage: String?
+  var setlistNormalizationState: SetlistNormalizationRunState = .idle
+  var frontierKeyPreview: String?
+  var frontierKeyErrorMessage: String?
   var selectedSourceLabelID: SourceLabel.ID?
   var newSourceLabelToken = ""
   var sourceLabelErrorMessage: String?
@@ -97,6 +105,75 @@ final class AppModel {
   func parseSetlistInput() {
     setlistDraft = SetlistParser().parse(setlistInput)
     setlistErrorMessage = nil
+  }
+
+  // MARK: - Setlist Normalizer (raw notes → setlist.txt)
+
+  /// Whether a frontier key is configured. Derived from `frontierKeyPreview`, which is
+  /// observable stored state (not a live Keychain read) so the UI actually re-renders
+  /// when a key is saved or cleared.
+  var isFrontierConfigured: Bool { frontierKeyPreview != nil }
+
+  /// Refresh the masked preview from the store. Call when a settings/normalizer surface
+  /// appears so the observed state reflects what's actually in the Keychain.
+  func loadFrontierKeyPreview() {
+    frontierKeyPreview = apiKeyStore.maskedKey(.anthropic)
+  }
+
+  func saveFrontierKey(_ key: String) {
+    let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+    apiKeyStore.setKey(trimmed, for: .anthropic)
+    // Read back so a silently-failed Keychain write (e.g. a missing entitlement — the
+    // store swallows the OSStatus) surfaces instead of looking like a no-op save.
+    frontierKeyPreview = apiKeyStore.maskedKey(.anthropic)
+    frontierKeyErrorMessage =
+      frontierKeyPreview == nil
+      ? "The key didn’t persist to the Keychain. Check the app’s keychain entitlement."
+      : nil
+  }
+
+  func clearFrontierKey() {
+    apiKeyStore.setKey(nil, for: .anthropic)
+    frontierKeyPreview = apiKeyStore.maskedKey(.anthropic)
+    frontierKeyErrorMessage = nil
+  }
+
+  /// Run the sandwich over the raw notes in `setlistInput`. Never writes — it produces
+  /// a result the preview gate renders; the human approves before anything lands.
+  func normalizeSetlistInput() async {
+    let rawInput = setlistInput
+    guard !rawInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      setlistNormalizationState = .failed("Paste or load raw notes before normalizing.")
+      return
+    }
+
+    setlistNormalizationState = .running
+    do {
+      let result = try await setlistNormalizer.normalize(rawInput)
+      setlistNormalizationState = .completed(result)
+    } catch is CancellationError {
+      setlistNormalizationState = .idle
+    } catch {
+      setlistNormalizationState = .failed(error.localizedDescription)
+    }
+  }
+
+  /// Write the approved, rendered `setlist.txt`. The single write in the flow — only
+  /// reachable from the preview's explicit Save.
+  func writeNormalizedSetlist(_ result: SetlistNormalizationResult, to url: URL) async {
+    do {
+      try await fileOperationClient.writeData(Data(result.renderedText.utf8), url)
+      // Fold the approved result into the parsed-setlist surface so the rest of the
+      // live-show flow can pick it up.
+      setlistInput = result.renderedText
+      setlistDraft = result.draft
+      setlistNormalizationState = .saved(url)
+      runLogErrorMessage = nil
+    } catch {
+      setlistNormalizationState = .failed(error.localizedDescription)
+      runLogErrorMessage = error.localizedDescription
+    }
   }
 
   func addSourceLabel() {
@@ -453,12 +530,21 @@ final class AppModel {
   }
 
   func seedCompilationAlbums(from url: URL) async {
-    compilationSeedState = .running(url)
+    compilationSeedState = .running(CompilationSeedProgress(url: url, completed: 0, total: 0))
     do {
       let candidates = try await CompilationAlbumSeeder().candidates(
         from: url,
         toolPaths: AudioToolPaths(statuses: toolStatuses)
-      )
+      ) { [weak self] completed, total in
+        await MainActor.run {
+          guard let self, case .running = self.compilationSeedState else {
+            return
+          }
+          self.compilationSeedState = .running(
+            CompilationSeedProgress(url: url, completed: completed, total: total)
+          )
+        }
+      }
       compilationSeedCandidates = candidates
       selectedCompilationSeedCandidateIDs = Set(candidates.map(\.id))
       compilationSeedState = .completed(candidates)
@@ -1064,12 +1150,42 @@ enum LibraryReadState: Equatable {
   }
 }
 
+enum SetlistNormalizationRunState: Equatable {
+  case idle
+  case running
+  case completed(SetlistNormalizationResult)
+  case saved(URL)
+  case failed(String)
+
+  var isRunning: Bool {
+    if case .running = self {
+      return true
+    }
+    return false
+  }
+
+  var result: SetlistNormalizationResult? {
+    switch self {
+    case let .completed(result):
+      result
+    default:
+      nil
+    }
+  }
+}
+
 enum CollectionSeedState: Equatable {
   case idle
-  case running(URL)
+  case running(CompilationSeedProgress)
   case completed([CompilationAlbumSeedCandidate])
   case saved(Int)
   case failed(String)
+}
+
+struct CompilationSeedProgress: Equatable {
+  var url: URL
+  var completed: Int
+  var total: Int
 }
 
 enum CompilationCertificationState: Equatable {
