@@ -4,6 +4,7 @@ public struct ImportedTrackRef: Equatable, Identifiable, Sendable {
   public let id: String
   public var title: String?
   public var album: String?
+  public var albumArtist: String?
   public var trackNumber: Int?
   public var durationSeconds: Double?
   public var location: URL?
@@ -12,6 +13,7 @@ public struct ImportedTrackRef: Equatable, Identifiable, Sendable {
     id: String,
     title: String? = nil,
     album: String? = nil,
+    albumArtist: String? = nil,
     trackNumber: Int? = nil,
     durationSeconds: Double? = nil,
     location: URL? = nil
@@ -19,6 +21,7 @@ public struct ImportedTrackRef: Equatable, Identifiable, Sendable {
     self.id = id.trimmingCharacters(in: .whitespacesAndNewlines)
     self.title = Self.normalizedOptionalText(title)
     self.album = Self.normalizedOptionalText(album)
+    self.albumArtist = Self.normalizedOptionalText(albumArtist)
     self.trackNumber = trackNumber.flatMap { $0 > 0 ? $0 : nil }
     self.durationSeconds = durationSeconds.flatMap { $0 > 0 ? $0 : nil }
     self.location = location?.standardizedFileURL

@@ -233,7 +233,7 @@ completes it; GitHub PR state is canonical.
 
 - [x] Slice 0 — Registry model + folder seeding (read-only)
 - [x] Slice 1 — Policy stamping engine + preview (writes to `Working/`, no import)
-- [ ] Slice 2 — Append + import + drift certification
+- [x] Slice 2 — Append + import + drift certification
 
 ### Slice 0 — Registry model + folder seeding (read-only)
 
@@ -353,6 +353,44 @@ duplicate-spawn (near-identical sibling); count mismatch (short and over). Appen
 reduction (per-track outcomes → run summary). The m4a real-tool clearing assertion
 above. Every pure path offline via `@Dependency`; the live read guarded on
 availability and never the only coverage.
+
+**Carry-over from the Slice 2 review (fold into the Reconcile fast-follow — Slice 2
+is M4's last slice; see the out-of-scope table):**
+
+*Reviewed 2026-07-04 against PR #28. Two findings were fixed in-branch (commit
+`028de3e`); one is deferred here by design.*
+
+- **Fixed in S2 (`028de3e`) — no action for the fast-follow, recorded so the fix
+  isn't re-derived:** (a) the comparator compared a *raw* seeded `AlbumIdentity`
+  against *normalized* `ImportedTrackRef` fields, so the live read could return
+  matching tracks while `verdict` reported `.albumNotFound`; now both sides run the
+  same `AudioTagVerifier.normalizedMetadataString` whitespace floor. (b)
+  `importCompilationFiles` hardcoded every submitted file to `.imported`, so
+  `addedTrackCount` couldn't reflect Music-side dedup; the new pure
+  `CompilationImportReducer` derives per-track `.imported`/`.alreadyPresent` from the
+  `add` return refs (location-match first, positional fallback), keeping
+  `importedCount` and the run summary honest.
+- **Duplicate-spawn detection only catches *suffix*-differentiated titles, not a
+  same-title fork (the deferred finding — this is the fast-follow's job).**
+  `AppendCertificationComparator.duplicateSpawn` reports `.duplicateSpawned` only when
+  a new sibling's title is `target + " …"` ("Great Covers 2"); its
+  `looksLikeDuplicateTitle` explicitly returns `false` on an *equal* title. So Apple
+  Music's other common fork — a second album with the **identical** `Album` but a
+  differing `Album Artist` / hidden field — currently surfaces as `.countMismatch`,
+  not `.duplicateSpawned`. It is still **not-certified** (loud, never silent), so no
+  drift is swallowed; only the *verdict precision* is coarse. **Fold into the
+  Reconcile fast-follow:** when the reconcile slice adds re-point-the-entry UI, sharpen
+  the comparator to classify a same-title/different-owner sibling as a duplicate-spawn
+  (or a distinct `.identityForked` verdict) so the reconcile prompt can name the
+  offending album, and resolve this together with decision #2 (identity-match
+  forgiveness) using the *real* mis-certify evidence a live append produces. Do **not**
+  invent normalization for it pre-emptively — the whole point of the deferral is to
+  see how Music actually mangles the string first.
+- **The live-Music certify leg is still gated (unchanged by `028de3e`).** The
+  pre/post reads straddle an async `MusicAppClient.add`, and the fast-follow must not
+  assume the post-import read has settled; the read-back device check (shared with M3
+  S2, pending the macOS-27 beta-3 spike) is still the prerequisite before any live
+  verdict — including a reconcile decision — is trusted.
 
 ## Constants register (pre-justified — jon-platform "constants need a rationale")
 

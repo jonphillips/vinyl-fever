@@ -123,6 +123,9 @@ public struct CompilationApplyPlan: Equatable, Sendable {
       albumArtist: entry.identity.albumArtist,
       grouping: grouping,
       isCompilation: entry.ruleset.setCompilationFlag ? true : false,
+      trackNumber: entry.ruleset.stripTrackAndDisc ? nil : current.trackNumber,
+      trackTotal: entry.ruleset.stripTrackAndDisc ? nil : current.trackTotal,
+      discNumber: entry.ruleset.stripTrackAndDisc ? nil : current.discNumber,
       clearedFields: clearedFields
     )
   }
@@ -144,12 +147,16 @@ public struct CompilationApplyPlan: Equatable, Sendable {
       CompilationTagDiff(
         field: "Track Number",
         current: current.trackNumber.map(String.init),
-        proposed: proposed.clearedFields.contains(.trackNumber) ? nil : proposed.trackNumber.map(String.init)
+        proposed: proposed.clearedFields.contains(.trackNumber)
+          ? nil
+          : proposed.trackNumber.map(String.init) ?? current.trackNumber.map(String.init)
       ),
       CompilationTagDiff(
         field: "Disc Number",
         current: current.discNumber.map(String.init),
-        proposed: proposed.clearedFields.contains(.discNumber) ? nil : proposed.discNumber.map(String.init)
+        proposed: proposed.clearedFields.contains(.discNumber)
+          ? nil
+          : proposed.discNumber.map(String.init) ?? current.discNumber.map(String.init)
       ),
       CompilationTagDiff(
         field: "Artwork",

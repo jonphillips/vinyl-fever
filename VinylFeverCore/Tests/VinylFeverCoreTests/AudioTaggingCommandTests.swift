@@ -165,4 +165,74 @@ struct AudioTaggingCommandTests {
       ]
     )
   }
+
+  @Test
+  func m4aClearingDropsCompilationAndTrackAtomsWithRealTools() throws {
+    guard let ffmpeg = firstExecutable(named: "ffmpeg"),
+      let ffprobe = firstExecutable(named: "ffprobe")
+    else {
+      return
+    }
+
+    let directory = try temporaryDirectory()
+    let workingFile = directory.appendingPathComponent("tagged.m4a")
+    _ = try runProcess(
+      executableURL: ffmpeg,
+      arguments: [
+        "-nostdin", "-y", "-hide_banner", "-loglevel", "error",
+        "-f", "lavfi",
+        "-i", "anullsrc=r=44100:cl=stereo",
+        "-t", "0.1",
+        "-c:a", "aac",
+        "-metadata", "album=Original",
+        "-metadata", "album_artist=Original Artist",
+        "-metadata", "compilation=1",
+        "-metadata", "track=3/9",
+        "-f", "ipod",
+        workingFile.path(percentEncoded: false),
+      ]
+    )
+
+    let track = ApplyTrackPlan(
+      id: UUID(1),
+      sourceFile: makeAudioFile(id: UUID(1), name: "tagged.m4a", format: .m4a, sortKey: "tagged.m4a"),
+      workingFile: workingFile,
+      tags: ProposedTags(
+        album: "Great Covers",
+        albumArtist: "Jon Phillips",
+        isCompilation: false,
+        clearedFields: [.isCompilation, .trackNumber, .trackTotal, .discNumber]
+      ),
+      trackTotal: 0,
+      coverURL: nil
+    )
+    let commandPlan = try AudioTaggingCommands.plan(
+      for: track,
+      toolPaths: AudioToolPaths(paths: [.ffmpeg: ffmpeg.path(percentEncoded: false)])
+    )
+    for command in commandPlan.commands {
+      _ = try runProcess(executableURL: command.executableURL, arguments: command.arguments)
+    }
+    if let replacement = commandPlan.replacement {
+      _ = try FileManager.default.replaceItemAt(
+        replacement.destination,
+        withItemAt: replacement.source
+      )
+    }
+
+    let output = try runProcess(
+      executableURL: ffprobe,
+      arguments: [
+        "-v", "error",
+        "-show_entries", "format_tags=album,album_artist,compilation,track",
+        "-of", "json",
+        workingFile.path(percentEncoded: false),
+      ]
+    )
+    let json = String(data: output.standardOutput, encoding: .utf8) ?? ""
+    #expect(json.contains(#""album": "Great Covers""#))
+    #expect(json.contains(#""album_artist": "Jon Phillips""#))
+    #expect(!json.contains(#""compilation""#))
+    #expect(!json.contains(#""track""#))
+  }
 }

@@ -16,9 +16,21 @@ public struct MusicAppClient: Sendable {
 
 public struct MusicAlbumReadRequest: Equatable, Sendable {
   public var albumTitle: String
+  public var albumArtist: String?
+  public var includesTitleSiblings: Bool
 
-  public init(albumTitle: String) {
+  public init(albumTitle: String, albumArtist: String? = nil, includesTitleSiblings: Bool = false) {
     self.albumTitle = albumTitle
+    self.albumArtist = albumArtist
+    self.includesTitleSiblings = includesTitleSiblings
+  }
+
+  public init(identity: AlbumIdentity, includesTitleSiblings: Bool = false) {
+    self.init(
+      albumTitle: identity.album,
+      albumArtist: identity.albumArtist,
+      includesTitleSiblings: includesTitleSiblings
+    )
   }
 }
 

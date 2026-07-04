@@ -48,10 +48,16 @@ private struct LiveMusicAppBridge: Sendable {
       let libraryPlaylist = try Self.libraryPlaylist(in: application)
       let tracks = try Self.objects(named: "fileTracks", on: libraryPlaylist)
       let requestedAlbum = AudioTagVerifier.normalizedMetadataString(request.albumTitle)
+      let requestedAlbumArtist = AudioTagVerifier.normalizedMetadataString(request.albumArtist)
       return tracks
         .compactMap { track -> ImportedTrackRef? in
           let ref = Self.importedTrackRef(from: track)
-          guard AudioTagVerifier.normalizedMetadataString(ref.album) == requestedAlbum else {
+          let album = AudioTagVerifier.normalizedMetadataString(ref.album)
+          let albumArtist = AudioTagVerifier.normalizedMetadataString(ref.albumArtist)
+          guard album == requestedAlbum || (request.includesTitleSiblings && Self.isTitleSibling(album, of: requestedAlbum)) else {
+            return nil
+          }
+          guard requestedAlbumArtist == nil || albumArtist == requestedAlbumArtist || request.includesTitleSiblings else {
             return nil
           }
           return ref
@@ -213,10 +219,27 @@ private struct LiveMusicAppBridge: Sendable {
       id: stringValue(named: "persistentID", on: track) ?? "",
       title: stringValue(named: "name", on: track),
       album: stringValue(named: "album", on: track),
+      albumArtist: stringValue(named: "albumArtist", on: track),
       trackNumber: intValue(named: "trackNumber", on: track),
       durationSeconds: doubleValue(named: "duration", on: track),
       location: track.value(forKey: "location") as? URL
     )
+  }
+
+  private static func isTitleSibling(_ title: String?, of target: String?) -> Bool {
+    guard let title, let target else {
+      return false
+    }
+    let titleKey = duplicateTitleKey(title)
+    let targetKey = duplicateTitleKey(target)
+    return titleKey == targetKey || titleKey.hasPrefix(targetKey + " ")
+  }
+
+  private static func duplicateTitleKey(_ value: String) -> String {
+    value
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+      .replacingOccurrences(of: #"[\s]+"#, with: " ", options: .regularExpression)
   }
 
   private static func stringValue(named key: String, on object: NSObject) -> String? {

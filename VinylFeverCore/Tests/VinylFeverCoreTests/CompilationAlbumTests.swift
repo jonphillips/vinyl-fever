@@ -149,6 +149,40 @@ struct CompilationAlbumTests {
       ]
     )
   }
+
+  @Test
+  func applyPlanPreviewKeepsTrackAndDiscWhenStripIsOff() {
+    let entry = CompilationAlbum(
+      id: UUID(10),
+      name: "Great Covers",
+      identity: AlbumIdentity(album: "Great Covers", albumArtist: "Jon Phillips"),
+      ruleset: CompilationRuleset(stripTrackAndDisc: false)
+    )
+    let file = seedFile(id: UUID(1), name: "01.mp3")
+    let plan = CompilationApplyPlan(
+      entry: entry,
+      sourceRoot: URL(fileURLWithPath: "/Incoming"),
+      files: [file],
+      currentTagsByFileID: [
+        file.id: AudioTags(
+          trackNumber: 7,
+          trackTotal: 12,
+          discNumber: 2
+        ),
+      ]
+    )
+
+    expectNoDifference(plan.tracks[0].proposed.trackNumber, 7)
+    expectNoDifference(plan.tracks[0].proposed.trackTotal, 12)
+    expectNoDifference(plan.tracks[0].proposed.discNumber, 2)
+    expectNoDifference(
+      plan.tracks[0].diffs.filter { ["Track Number", "Disc Number"].contains($0.field) },
+      [
+        CompilationTagDiff(field: "Track Number", current: "7", proposed: "7"),
+        CompilationTagDiff(field: "Disc Number", current: "2", proposed: "2"),
+      ]
+    )
+  }
 }
 
 private func seedFile(id: UUID, name: String) -> ScannedAudioFile {

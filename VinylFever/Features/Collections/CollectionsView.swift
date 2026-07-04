@@ -40,6 +40,9 @@ struct CollectionsView: View {
             folder: model.compilationAppendFolder,
             plan: model.compilationApplyPlan,
             applyState: model.compilationApplyState,
+            conversionState: model.compilationConversionState,
+            importState: model.compilationImportState,
+            certificationState: model.compilationCertificationState,
             apply: { plan in
               Task {
                 await model.applyCompilationPlan(plan)
@@ -197,6 +200,9 @@ private struct CompilationAppendSection: View {
   let folder: URL?
   let plan: CompilationApplyPlan?
   let applyState: ApplyRunState
+  let conversionState: ConversionRunState
+  let importState: LibraryImportState
+  let certificationState: CompilationCertificationState
   let apply: (CompilationApplyPlan) -> Void
   @State private var isConfirmingApply = false
 
@@ -223,11 +229,11 @@ private struct CompilationAppendSection: View {
             Button {
               isConfirmingApply = true
             } label: {
-              Label("Apply to Working", systemImage: "hammer")
+              Label("Append to Music", systemImage: "square.and.arrow.down")
             }
-            .disabled(applyState.isRunning)
-            .confirmationDialog("Apply policy stamp into Working?", isPresented: $isConfirmingApply) {
-              Button("Apply") {
+            .disabled(isRunning)
+            .confirmationDialog("Append stamped copies to Music?", isPresented: $isConfirmingApply) {
+              Button("Append") {
                 apply(plan)
               }
               Button("Cancel", role: .cancel) {
@@ -235,6 +241,9 @@ private struct CompilationAppendSection: View {
             }
           }
           CompilationApplyStatus(state: applyState)
+          CompilationConversionStatus(state: conversionState)
+          CompilationImportStatus(state: importState)
+          CompilationCertificationStatus(state: certificationState)
           LazyVStack(alignment: .leading, spacing: 10) {
             ForEach(plan.tracks) { track in
               CompilationTrackPlanRow(track: track)
@@ -245,6 +254,13 @@ private struct CompilationAppendSection: View {
         }
       }
     }
+  }
+
+  private var isRunning: Bool {
+    applyState.isRunning ||
+      conversionState.isRunning ||
+      importState.isRunning ||
+      certificationState.isRunning
   }
 }
 
@@ -384,6 +400,83 @@ private struct CompilationApplyStatus: View {
     case let .completed(result):
       Label(result.exitSummary, systemImage: result.didSucceed ? "checkmark.circle" : "exclamationmark.triangle")
         .foregroundStyle(result.didSucceed ? .green : .orange)
+    case let .failed(message):
+      Label(message, systemImage: "exclamationmark.triangle")
+        .foregroundStyle(.red)
+    }
+  }
+}
+
+private struct CompilationConversionStatus: View {
+  let state: ConversionRunState
+
+  var body: some View {
+    switch state {
+    case .idle:
+      EmptyView()
+    case .running:
+      Label("Converting FLAC outputs", systemImage: "hourglass")
+        .foregroundStyle(.secondary)
+    case let .skipped(message):
+      Label(message, systemImage: "checkmark.circle")
+        .foregroundStyle(.secondary)
+    case let .completed(result):
+      Label(result.exitSummary, systemImage: result.didSucceed ? "checkmark.circle" : "exclamationmark.triangle")
+        .foregroundStyle(result.didSucceed ? .green : .orange)
+    case let .failed(message):
+      Label(message, systemImage: "exclamationmark.triangle")
+        .foregroundStyle(.red)
+    }
+  }
+}
+
+private struct CompilationImportStatus: View {
+  let state: LibraryImportState
+
+  var body: some View {
+    switch state {
+    case .idle:
+      EmptyView()
+    case .requestingPermission:
+      Label("Requesting Music automation", systemImage: "hourglass")
+        .foregroundStyle(.secondary)
+    case .running:
+      Label("Importing into Music", systemImage: "hourglass")
+        .foregroundStyle(.secondary)
+    case let .permission(permission):
+      Label(permission.displayMessage, systemImage: "exclamationmark.triangle")
+        .foregroundStyle(.orange)
+    case let .completed(result):
+      Label(result.exitSummary, systemImage: result.didSucceed ? "checkmark.circle" : "exclamationmark.triangle")
+        .foregroundStyle(result.didSucceed ? .green : .orange)
+    case let .failed(message):
+      Label(message, systemImage: "exclamationmark.triangle")
+        .foregroundStyle(.red)
+    }
+  }
+}
+
+private struct CompilationCertificationStatus: View {
+  let state: CompilationCertificationState
+
+  var body: some View {
+    switch state {
+    case .idle:
+      EmptyView()
+    case let .running(identity):
+      Label("Certifying \(identity.album)", systemImage: "hourglass")
+        .foregroundStyle(.secondary)
+    case let .completed(certification):
+      VStack(alignment: .leading, spacing: 4) {
+        Label(
+          certification.verdict.displayMessage,
+          systemImage: certification.isCertified ? "checkmark.seal" : "exclamationmark.triangle"
+        )
+        .foregroundStyle(certification.isCertified ? .green : .orange)
+        Text("Before \(certification.preImportTrackCount), after \(certification.postImportTrackCount), added \(certification.addedTrackCount)")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
     case let .failed(message):
       Label(message, systemImage: "exclamationmark.triangle")
         .foregroundStyle(.red)
