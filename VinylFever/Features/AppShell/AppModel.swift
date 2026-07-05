@@ -92,6 +92,73 @@ final class AppModel {
     }
   }
 
+  // MARK: - Pipeline stage rollup (derived — drives the M6 pipeline strip)
+
+  /// Coarse "where am I" over the five independent run states, most-advanced wins.
+  /// Derived, never stored. A run only counts toward its stage once it has *succeeded*
+  /// (a failed apply stays at `.planned`, a failed import at `.verified`, …) so the
+  /// strip never reads green while the underlying step actually failed.
+  enum PipelineStage: Int, Comparable {
+    case setup, planned, applied, verified, imported, resolved
+
+    static func < (lhs: Self, rhs: Self) -> Bool { lhs.rawValue < rhs.rawValue }
+  }
+
+  var pipelineStage: PipelineStage {
+    if case let .completed(result) = libraryReadState, result.didResolveAll {
+      return .resolved
+    }
+    if case let .completed(result) = libraryImportState, result.didSucceed {
+      return .imported
+    }
+    if case let .completed(result) = verificationState, result.didVerify {
+      return .verified
+    }
+    if case let .completed(result) = applyState, result.didSucceed {
+      return .applied
+    }
+    if setlistDraft != nil {
+      return .planned
+    }
+    return .setup
+  }
+
+  /// Terminal state: the produced files are all resolved back in the Music library.
+  var isShowComplete: Bool { pipelineStage == .resolved }
+
+  /// The resolved library read, when the show has reached its terminal state. Drives the
+  /// completion pill's `resolved n/n` copy; `nil` until every produced file resolves.
+  var completedLibraryResolution: LibraryResolutionResult? {
+    guard case let .completed(result) = libraryReadState, result.didResolveAll else {
+      return nil
+    }
+    return result
+  }
+
+  /// Reset just the pipeline run states (apply → resolve) plus the remembered apply plan,
+  /// leaving the scanned folder and parsed setlist intact so a plan can be re-run.
+  func resetPlanRun() {
+    applyState = .idle
+    conversionState = .idle
+    verificationState = .idle
+    libraryImportState = .idle
+    libraryReadState = .idle
+    lastSuccessfulApplyPlan = nil
+  }
+
+  /// Terminal "Done": drop the scanned show so `LiveShowsView` falls back to its empty
+  /// state. Clears the folder, the raw + parsed setlist, per-file metadata, and every
+  /// run state. (No persistent imported-show list — that's out of scope for M6.)
+  func clearScannedShow() {
+    scannedShowFolder = nil
+    scanErrorMessage = nil
+    setlistInput = ""
+    setlistDraft = nil
+    setlistErrorMessage = nil
+    currentMetadataByFileID = [:]
+    resetPlanRun()
+  }
+
   func loadSetlistText(from url: URL) {
     do {
       setlistInput = try loadTextFile(at: url)
