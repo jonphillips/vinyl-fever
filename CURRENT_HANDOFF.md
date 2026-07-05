@@ -7,8 +7,8 @@ the active fronts, whose turn it is, and pending decisions — it points at the
 canonical state and never restates PR/slice history. If it disagrees with GitHub,
 GitHub wins; fix this file.
 
-_Last touched: 2026-07-04 (M4 S2 merged #28 — M4 append complete; M5 Setlist
-Normalizer ledger drafted)._
+_Last touched: 2026-07-05 (M6 live-show import UI refactor ledger drafted; S0
+vocabulary→Settings in progress)._
 
 ## Active fronts
 
@@ -27,6 +27,12 @@ Normalizer ledger drafted)._
   duplicate detection + resolve identity-match forgiveness on *real* mis-certify
   evidence) and trusting the **live certify leg** itself. Nothing to dispatch until
   the device check runs.
+- **M6 — live-show import UI refactor**
+  ([ledger](docs/milestones/M6-live-show-import-ui-refactor.md)). UX-only
+  restructure of `LiveShowsView` (fixed header + pipeline strip + four-tab body,
+  vocabulary→Settings, terminal "Done"); no core/schema change. Layout + Done
+  behavior decided (Jon, 2026-07-05). **S0 (vocabulary→Settings) in progress**;
+  S1 (shell) + S2 (content polish) follow.
 - **M5 — Setlist Normalizer (raw notes → `setlist.txt`) — BUILT 2026-07-04, in
   working tree (uncommitted).** ([ledger](docs/milestones/M5-setlist-normalizer.md)).
   Jon asked the architect to implement it directly (not a Codex dispatch). All three

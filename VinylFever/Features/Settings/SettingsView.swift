@@ -8,6 +8,8 @@ struct SettingsView: View {
 
   @FetchAll(AppSetting.all)
   private var persistedSettings: [AppSetting]
+  @FetchAll(SourceLabel.order(by: \.token))
+  private var persistedSourceLabels: [SourceLabel]
 
   private var settings: AppSetting {
     AppSetting.current(from: persistedSettings)
@@ -46,6 +48,16 @@ struct SettingsView: View {
             Label(errorMessage, systemImage: "exclamationmark.triangle")
               .foregroundStyle(.red)
           }
+        }
+
+        Section("Source Labels") {
+          SourceLabelEditor(
+            sourceLabels: SourceLabel.deduplicated(persistedSourceLabels),
+            newSourceLabelToken: $model.newSourceLabelToken,
+            errorMessage: model.sourceLabelErrorMessage,
+            addSourceLabel: model.addSourceLabel,
+            deleteSourceLabel: model.deleteSourceLabel
+          )
         }
       }
       .formStyle(.grouped)
@@ -211,6 +223,72 @@ private struct FrontierKeyRow: View {
       }
     }
     .padding(.vertical, 6)
+  }
+}
+
+/// The source-label vocabulary (SBD, FM, Matrix, …). App-global reference data —
+/// mostly locked built-ins, identical for every show — so it lives in Settings, not
+/// inline on a single show. The per-show Source *picker* stays on the live-show screen.
+private struct SourceLabelEditor: View {
+  let sourceLabels: [SourceLabel]
+  @Binding var newSourceLabelToken: String
+  let errorMessage: String?
+  let addSourceLabel: () -> Void
+  let deleteSourceLabel: (SourceLabel) -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      HStack(spacing: 8) {
+        TextField("Add source label", text: $newSourceLabelToken)
+          .textFieldStyle(.roundedBorder)
+          .frame(width: 220)
+          .onSubmit(addSourceLabel)
+        Button(action: addSourceLabel) {
+          Label("Add", systemImage: "plus")
+        }
+        .disabled(newSourceLabelToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+      }
+      if let errorMessage {
+        Label(errorMessage, systemImage: "exclamationmark.triangle")
+          .foregroundStyle(.red)
+          .font(.callout)
+      }
+      ForEach(sourceLabels) { sourceLabel in
+        SourceLabelRow(
+          sourceLabel: sourceLabel,
+          delete: { deleteSourceLabel(sourceLabel) }
+        )
+      }
+    }
+    .padding(.vertical, 6)
+  }
+}
+
+private struct SourceLabelRow: View {
+  let sourceLabel: SourceLabel
+  let delete: () -> Void
+
+  var body: some View {
+    HStack(spacing: 8) {
+      Text(sourceLabel.token)
+        .font(.callout.monospaced())
+      if sourceLabel.isBuiltIn {
+        Label("Built-in", systemImage: "lock")
+          .labelStyle(.iconOnly)
+          .foregroundStyle(.secondary)
+      }
+      Spacer()
+      Button(action: delete) {
+        Label("Remove", systemImage: "trash")
+      }
+      .disabled(sourceLabel.isBuiltIn)
+      .help(
+        sourceLabel.isBuiltIn
+          ? "Built-in source labels cannot be removed."
+          : "Remove source label"
+      )
+    }
+    .frame(maxWidth: 420)
   }
 }
 
