@@ -7,16 +7,24 @@ the active fronts, whose turn it is, and pending decisions — it points at the
 canonical state and never restates PR/slice history. If it disagrees with GitHub,
 GitHub wins; fix this file.
 
-_Last touched: 2026-07-05 (M6 live-show import UI refactor ledger drafted; S0
-vocabulary→Settings in progress)._
+_Last touched: 2026-07-05 (M6 S1 shell merged #33; S0 vocabulary→Settings merged
+#32; M5 fully landed)._
 
 ## Active fronts
 
+- **M6 — live-show import UI refactor** *(the one unblocked front)*
+  ([ledger](docs/milestones/M6-live-show-import-ui-refactor.md)). UX-only
+  restructure of `LiveShowsView`; no core/schema/run-logic change, so **nothing here
+  waits on the device spike.** Layout + Done behavior decided (Jon, 2026-07-05).
+  **S0 (vocabulary→Settings) merged (#32); S1 (shell + four-tab scaffold) merged
+  (#33)** — header/completion-pill/pipeline-strip/tab-bar + `pipelineStage` /
+  `isShowComplete` / `clearScannedShow()` / `resetPlanRun()`, tab bodies still
+  wrapping the existing sections unchanged. **S2 (content polish) is next.**
 - **M3 — live-show import + library verify**
   ([ledger](docs/milestones/M3-import-and-library-verify.md)). S0 + S1 merged
   (#19, #20). **S2 (library verify) is next**, folding the S1 review carry-over
   (live-read/`location` device check, per-track `add` batching, `add` return
-  shape). S3 (`Working/` cleanup) after.
+  shape). S3 (`Working/` cleanup) after. **Gated on the live-read spike (below).**
 - **M4 — compilation-album append (first Phase 6)**
   ([ledger](docs/milestones/M4-compilation-album-append.md)). **All slices merged —
   append flow complete.** S0+S1 (#26) registry + policy-stamping engine; **S2 merged
@@ -27,29 +35,18 @@ vocabulary→Settings in progress)._
   duplicate detection + resolve identity-match forgiveness on *real* mis-certify
   evidence) and trusting the **live certify leg** itself. Nothing to dispatch until
   the device check runs.
-- **M6 — live-show import UI refactor**
-  ([ledger](docs/milestones/M6-live-show-import-ui-refactor.md)). UX-only
-  restructure of `LiveShowsView` (fixed header + pipeline strip + four-tab body,
-  vocabulary→Settings, terminal "Done"); no core/schema change. Layout + Done
-  behavior decided (Jon, 2026-07-05). **S0 (vocabulary→Settings) in progress**;
-  S1 (shell) + S2 (content polish) follow.
-- **M5 — Setlist Normalizer (raw notes → `setlist.txt`) — BUILT 2026-07-04, in
-  working tree (uncommitted).** ([ledger](docs/milestones/M5-setlist-normalizer.md)).
-  Jon asked the architect to implement it directly (not a Codex dispatch). All three
-  slices done in one pass: model changes + pre-segment + validator + renderer (S0),
-  `SetlistNormalizer` via `LLMClientKit` prompt-and-parse (S1), preview-gate sheet +
-  `setlist.txt` write + Settings Claude-key entry (S2). **`swift test` → 101 tests
-  pass; the macOS app builds.** **Not yet committed / no PR / GUI unrun.** Two
-  follow-ups: (a) commit + PR; (b) the real 18-file corpus isn't in the repo, so S0
-  used inline fixtures — drop the corpus in for the golden-file pass. GUI needs Jon to
-  run once (paste notes, enter key, save).
+
+_M5 (Setlist Normalizer) fully landed (#30/#31): all three slices + the real 18-file
+raw corpus and its golden-file pass are in `main`. No open follow-ups._
 
 ## Next up
 
-1. **Land M5.** It's built + green in the working tree but uncommitted. Review the
-   diff, commit on a branch, open the PR. Then two small follow-ups: drop the real
-   18-file corpus in for a golden-file pass, and run the GUI once end-to-end (paste
-   notes → enter a Claude key in Settings → Normalize → Save `setlist.txt`).
+1. **M6 S2 (content polish)** — the only front that moves without the spike. Extract
+   `PlanActionBar` from `PlanReadinessSummary` (split the button `HStack`/`can*`
+   props from the `*RunStatus` calls) and relocate the status views into the **Output**
+   tab (S1 left it a placeholder); condense `TrackPlanRow` to hoist album-level fields
+   into one header; collapse the Output tab once terminal; and move the Source picker
+   into the header (S1 kept it in the Setlist tab to stay a pure relocation).
 2. **The live-read device check is the master unblocker** for everything else:
    **M3 S2** (library verify), **M3 S3** (`Working/` cleanup), and both M4 remainders
    (Reconcile fast-follow + trusting the live certify leg) all wait on it. Running
@@ -58,9 +55,8 @@ vocabulary→Settings in progress)._
 
 ## Pending Jon decisions
 
-- **M5 implementer** — *resolved 2026-07-04:* architect implemented directly (not
-  Codex). Remaining M5 asks are mechanical: commit + PR, and confirm the 18 raw
-  fixture files can be committed as-is (M5 ledger *Decisions for Jon* #2).
+- **M6** — none open (the two layout/behavior forks were resolved 2026-07-05; see the
+  ledger's *Locked decisions*).
 - **M4 #2 / #3** (identity-match forgiveness; no-match behavior) — **deferred by
   design.** Answer after a real append runs and shows how Apple Music mangles the
   strings; don't pre-guess. Note: S2 merged but its **live** append leg is still
