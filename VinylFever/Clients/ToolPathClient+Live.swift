@@ -53,6 +53,12 @@ extension FileOperationClient {
         }
         _ = try FileManager.default.replaceItemAt(destination, withItemAt: source)
       },
+      removeItem: { url in
+        guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
+          return
+        }
+        try FileManager.default.removeItem(at: url)
+      },
       writeData: { data, destination in
         try data.write(to: destination, options: [.atomic])
       },
@@ -160,70 +166,118 @@ private struct LiveProcessRunner: Sendable {
     process.standardOutput = standardOutput
     process.standardError = standardError
 
-    try process.run()
-    do {
-      return try await withTaskCancellationHandler {
-        try await collectResult(
-          for: process,
-          command: command,
-          standardOutput: standardOutput,
-          standardError: standardError
-        )
-      } onCancel: {
-        process.terminate()
-      }
-    } catch {
-      if process.isRunning {
-        process.terminate()
-      }
-      throw error
-    }
-  }
+    return try await withTaskCancellationHandler {
+      try Task.checkCancellation()
+      return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<ScriptResult, Error>) in
+        // Pipe output is drained through `readabilityHandler` and process exit is
+        // observed through `terminationHandler`. Both fire on Dispatch-managed
+        // threads, so we never occupy a Swift-concurrency cooperative thread with a
+        // blocking `readToEnd()`/`waitUntilExit()` — the source of the intermittent
+        // apply-loop stalls. The continuation resumes exactly once, when both pipes
+        // have reached EOF and the process has terminated.
+        let coordinator = ProcessOutputCoordinator { output, error, exitCode in
+          continuation.resume(
+            returning: ScriptResult(
+              command: command,
+              exitCode: exitCode,
+              standardOutput: output,
+              standardError: error
+            )
+          )
+        }
 
-  private func collectResult(
-    for process: Process,
-    command: ScriptCommand,
-    standardOutput: Pipe,
-    standardError: Pipe
-  ) async throws -> ScriptResult {
-    try await withThrowingTaskGroup(of: ProcessEvent.self) { group in
-      group.addTask {
-        .standardOutput(try standardOutput.fileHandleForReading.readToEnd() ?? Data())
-      }
-      group.addTask {
-        .standardError(try standardError.fileHandleForReading.readToEnd() ?? Data())
-      }
-      group.addTask {
-        process.waitUntilExit()
-        return .exit(process.terminationStatus)
-      }
+        standardOutput.fileHandleForReading.readabilityHandler = { handle in
+          let data = handle.availableData
+          if data.isEmpty {
+            handle.readabilityHandler = nil
+            coordinator.finishStandardOutput()
+          } else {
+            coordinator.appendStandardOutput(data)
+          }
+        }
+        standardError.fileHandleForReading.readabilityHandler = { handle in
+          let data = handle.availableData
+          if data.isEmpty {
+            handle.readabilityHandler = nil
+            coordinator.finishStandardError()
+          } else {
+            coordinator.appendStandardError(data)
+          }
+        }
+        process.terminationHandler = { process in
+          coordinator.finish(exitCode: process.terminationStatus)
+        }
 
-      var output = Data()
-      var error = Data()
-      var exitCode: Int32?
-      for try await event in group {
-        switch event {
-        case let .standardOutput(data):
-          output = data
-        case let .standardError(data):
-          error = data
-        case let .exit(status):
-          exitCode = status
+        do {
+          try process.run()
+        } catch {
+          standardOutput.fileHandleForReading.readabilityHandler = nil
+          standardError.fileHandleForReading.readabilityHandler = nil
+          continuation.resume(throwing: error)
         }
       }
-
-      return ScriptResult(
-        command: command,
-        exitCode: exitCode ?? process.terminationStatus,
-        standardOutput: output,
-        standardError: error
-      )
+    } onCancel: {
+      process.terminate()
     }
   }
 }
 
-private enum ProcessEvent: Sendable {
-  case standardOutput(Data)
-  case standardError(Data)
-  case exit(Int32)
+/// Thread-safe accumulator that resumes a process's continuation once stdout EOF,
+/// stderr EOF, and process termination have all been observed. The completion
+/// handler is invoked exactly once, outside the lock.
+private final class ProcessOutputCoordinator: @unchecked Sendable {
+  private let lock = NSLock()
+  private var standardOutput = Data()
+  private var standardError = Data()
+  private var standardOutputFinished = false
+  private var standardErrorFinished = false
+  private var exitCode: Int32?
+  private var didComplete = false
+  private let onComplete: @Sendable (Data, Data, Int32) -> Void
+
+  init(onComplete: @escaping @Sendable (Data, Data, Int32) -> Void) {
+    self.onComplete = onComplete
+  }
+
+  func appendStandardOutput(_ data: Data) {
+    lock.lock()
+    standardOutput.append(data)
+    lock.unlock()
+  }
+
+  func appendStandardError(_ data: Data) {
+    lock.lock()
+    standardError.append(data)
+    lock.unlock()
+  }
+
+  func finishStandardOutput() {
+    completeIfReady { $0.standardOutputFinished = true }
+  }
+
+  func finishStandardError() {
+    completeIfReady { $0.standardErrorFinished = true }
+  }
+
+  func finish(exitCode: Int32) {
+    completeIfReady { $0.exitCode = exitCode }
+  }
+
+  private func completeIfReady(_ mutate: (ProcessOutputCoordinator) -> Void) {
+    lock.lock()
+    mutate(self)
+    guard !didComplete,
+      standardOutputFinished,
+      standardErrorFinished,
+      let exitCode
+    else {
+      lock.unlock()
+      return
+    }
+    didComplete = true
+    let output = standardOutput
+    let error = standardError
+    lock.unlock()
+    onComplete(output, error, exitCode)
+  }
 }

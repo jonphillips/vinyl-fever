@@ -737,6 +737,11 @@ final class AppModel {
       )
       compilationCertificationState = .completed(certification)
       runLogErrorMessage = nil
+      // A clean append consumes the Working copies, so the Append Preview is now
+      // stale. Clear it (and the chosen folder) so the section resets instead of
+      // lingering after the job is done.
+      compilationApplyPlan = nil
+      compilationAppendFolder = nil
     } catch is CancellationError {
       compilationImportState = .idle
       compilationCertificationState = .idle
