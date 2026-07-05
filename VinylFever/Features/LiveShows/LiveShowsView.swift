@@ -173,11 +173,7 @@ private struct ScannedShowFolderView: View {
         SourceMetadataSection(
           sourceLabels: sourceLabels,
           selectedSourceLabelID: $model.selectedSourceLabelID,
-          newSourceLabelToken: $model.newSourceLabelToken,
-          errorMessage: model.sourceLabelErrorMessage,
-          metadata: metadata,
-          addSourceLabel: model.addSourceLabel,
-          deleteSourceLabel: model.deleteSourceLabel
+          metadata: metadata
         )
         PlanPreviewSection(
           plan: showPlan,
@@ -1238,17 +1234,12 @@ private struct RunFileOutcomeRow: View {
 private struct SourceMetadataSection: View {
   let sourceLabels: [SourceLabel]
   @Binding var selectedSourceLabelID: SourceLabel.ID?
-  @Binding var newSourceLabelToken: String
-  let errorMessage: String?
   let metadata: ShowMetadata?
-  let addSourceLabel: () -> Void
-  let deleteSourceLabel: (SourceLabel) -> Void
 
   var body: some View {
     ScanSection(
       title: "Source & Album Title",
-      systemImage: "record.circle",
-      count: sourceLabels.count
+      systemImage: "record.circle"
     ) {
       VStack(alignment: .leading, spacing: 14) {
         Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 10) {
@@ -1281,64 +1272,12 @@ private struct SourceMetadataSection: View {
           }
         }
 
-        Divider()
-
-        VStack(alignment: .leading, spacing: 10) {
-          Text("Vocabulary")
-            .font(.subheadline.weight(.semibold))
-          HStack(spacing: 8) {
-            TextField("Add source label", text: $newSourceLabelToken)
-              .textFieldStyle(.roundedBorder)
-              .frame(width: 220)
-              .onSubmit(addSourceLabel)
-            Button(action: addSourceLabel) {
-              Label("Add", systemImage: "plus")
-            }
-            .disabled(newSourceLabelToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-          }
-          if let errorMessage {
-            ScanErrorBanner(message: errorMessage)
-          }
-          LazyVStack(alignment: .leading, spacing: 6) {
-            ForEach(sourceLabels) { sourceLabel in
-              SourceLabelRow(
-                sourceLabel: sourceLabel,
-                delete: { deleteSourceLabel(sourceLabel) }
-              )
-            }
-          }
-        }
+        Text("Manage the source-label vocabulary in Settings.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
       }
       .padding(.vertical, 8)
     }
-  }
-}
-
-private struct SourceLabelRow: View {
-  let sourceLabel: SourceLabel
-  let delete: () -> Void
-
-  var body: some View {
-    HStack(spacing: 8) {
-      Text(sourceLabel.token)
-        .font(.callout.monospaced())
-      if sourceLabel.isBuiltIn {
-        Label("Built-in", systemImage: "lock")
-          .labelStyle(.iconOnly)
-          .foregroundStyle(.secondary)
-      }
-      Spacer()
-      Button(action: delete) {
-        Label("Remove", systemImage: "trash")
-      }
-      .disabled(sourceLabel.isBuiltIn)
-      .help(
-        sourceLabel.isBuiltIn
-          ? "Built-in source labels cannot be removed."
-          : "Remove source label"
-      )
-    }
-    .frame(maxWidth: 420)
   }
 }
 
@@ -1558,7 +1497,7 @@ private struct ScanErrorBanner: View {
 private struct ScanSection<Content: View>: View {
   let title: LocalizedStringResource
   let systemImage: String
-  let count: Int
+  var count: Int?
   @ViewBuilder var content: Content
 
   var body: some View {
@@ -1566,9 +1505,11 @@ private struct ScanSection<Content: View>: View {
       HStack(spacing: 8) {
         Label(title, systemImage: systemImage)
           .font(.headline)
-        Text(count, format: .number)
-          .font(.subheadline.monospacedDigit())
-          .foregroundStyle(.secondary)
+        if let count {
+          Text(count, format: .number)
+            .font(.subheadline.monospacedDigit())
+            .foregroundStyle(.secondary)
+        }
       }
       VStack(alignment: .leading, spacing: 0) {
         content
