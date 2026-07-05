@@ -137,6 +137,7 @@ public struct ApplyExecutor: Sendable {
         note: "Copied and tagged."
       )
     } catch is CancellationError {
+      await cleanUpFailedArtifacts(track: track, taggingPlan: taggingPlan)
       return AppliedTrack(
         id: track.id,
         sourceURL: track.sourceFile.url,
@@ -145,6 +146,7 @@ public struct ApplyExecutor: Sendable {
         note: "Apply was cancelled."
       )
     } catch {
+      await cleanUpFailedArtifacts(track: track, taggingPlan: taggingPlan)
       return AppliedTrack(
         id: track.id,
         sourceURL: track.sourceFile.url,
@@ -153,6 +155,21 @@ public struct ApplyExecutor: Sendable {
         note: error.localizedDescription
       )
     }
+  }
+
+  /// Remove the artifacts a failed track leaves behind: the ffmpeg temp output
+  /// (`*.tagtmp.*`, when the tagging plan has one) and the pre-tag working copy.
+  /// Left in place, the working copy trips `existingWorkingDestinations` on the next
+  /// run and skips the whole retry as a conflict. Best-effort — removing a missing
+  /// file is a no-op, and any error here must not mask the original failure.
+  private func cleanUpFailedArtifacts(
+    track: ApplyTrackPlan,
+    taggingPlan: TaggingCommandPlan?
+  ) async {
+    if let temporaryURL = taggingPlan?.replacement?.source {
+      try? await fileOperationClient.removeItem(temporaryURL)
+    }
+    try? await fileOperationClient.removeItem(track.workingFile)
   }
 
   private func run(_ taggingPlan: TaggingCommandPlan) async throws {

@@ -9,6 +9,9 @@ public struct FileOperationClient: Sendable {
   public var directoryFiles: @Sendable (_ url: URL) async throws -> [URL]
   public var copyFile: @Sendable (_ source: URL, _ destination: URL) async throws -> Void
   public var replaceFile: @Sendable (_ source: URL, _ destination: URL) async throws -> Void
+  /// Best-effort delete. Removing a URL that does not exist is a no-op, not an error,
+  /// so failure-path cleanup can call it unconditionally.
+  public var removeItem: @Sendable (_ url: URL) async throws -> Void
   public var writeData: @Sendable (_ data: Data, _ destination: URL) async throws -> Void
   public var reveal: @Sendable (_ url: URL) async throws -> Void
 }
