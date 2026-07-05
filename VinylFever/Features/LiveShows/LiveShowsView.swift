@@ -112,6 +112,8 @@ private struct ScannedShowFolderView: View {
   let openSetlistFile: () -> Void
   let openNormalizer: () -> Void
 
+  @State private var selectedTab: ActivityTab = .setlist
+
   @FetchAll(SourceLabel.order(by: \.token))
   private var persistedSourceLabels: [SourceLabel]
   @FetchAll(AppSetting.all)
@@ -131,115 +133,48 @@ private struct ScannedShowFolderView: View {
         nil
       }
 
-    ScrollView {
-      VStack(alignment: .leading, spacing: 24) {
-        ScanHeader(root: folder.root, openFolder: openFolder)
+    VStack(spacing: 0) {
+      VStack(alignment: .leading, spacing: 16) {
+        ShowHeader(
+          root: folder.root,
+          openFolder: openFolder,
+          done: model.clearScannedShow
+        )
         if let errorMessage = model.scanErrorMessage {
           ScanErrorBanner(message: errorMessage)
         }
-        ScanSection(
-          title: "Audio Files",
-          systemImage: "waveform",
-          count: folder.audioFiles.count
-        ) {
-          if folder.audioFiles.isEmpty {
-            EmptyScanSectionRow(title: "No audio files")
-          } else {
-            LazyVStack(alignment: .leading, spacing: 0) {
-              ForEach(folder.audioFiles) { file in
-                ScannedAudioFileRow(file: file, root: folder.root)
-              }
-            }
-          }
+        if let resolution = model.completedLibraryResolution {
+          CompletionPill(resolution: resolution)
         }
-        ScanSection(
-          title: "Setlists",
-          systemImage: "text.page",
-          count: folder.setlistCandidates.count
-        ) {
-          CandidateList(urls: folder.setlistCandidates, root: folder.root)
-        }
-        SetlistInputSection(
-          setlistInput: $model.setlistInput,
-          draft: $model.setlistDraft,
-          errorMessage: model.setlistErrorMessage,
-          setlistCandidates: folder.setlistCandidates,
-          root: folder.root,
-          parse: model.parseSetlistInput,
-          loadCandidate: model.loadSetlistText(from:),
-          openSetlistFile: openSetlistFile,
-          openNormalizer: openNormalizer
-        )
-        SourceMetadataSection(
-          sourceLabels: sourceLabels,
-          selectedSourceLabelID: $model.selectedSourceLabelID,
-          metadata: metadata
-        )
-        PlanPreviewSection(
-          plan: showPlan,
-          root: folder.root,
-          coverURL: folder.coverCandidates.first,
-          currentMetadataByFileID: model.currentMetadataByFileID,
-          applyState: model.applyState,
-          conversionState: model.conversionState,
-          verificationState: model.verificationState,
-          libraryImportState: model.libraryImportState,
-          libraryReadState: model.libraryReadState,
-          hasRequiredApplyTools: model.hasRequiredApplyTools(for: showPlan),
-          hasRequiredConversionTools: { applyPlan in
-            model.hasRequiredConversionTools(for: applyPlan)
-          },
-          hasSuccessfulApply: { applyPlan in
-            model.hasSuccessfulApply(for: applyPlan)
-          },
-          hasSuccessfulFileVerify: { conversionPlan in
-            model.hasSuccessfulFileVerify(for: conversionPlan)
-          },
-          apply: { plan in
-            Task {
-              await model.applyShowPlan(plan, coverURL: folder.coverCandidates.first)
-            }
-          },
-          convertAndVerify: { applyPlan in
-            Task {
-              await model.convertAndVerify(applyPlan)
-            }
-          },
-          importIntoMusicLibrary: { conversionPlan in
-            Task {
-              await model.importIntoMusicLibrary(for: conversionPlan)
-            }
-          },
-          readMusicLibrary: { conversionPlan in
-            Task {
-              await model.readMusicLibrary(for: conversionPlan)
-            }
-          },
-          revealWorkingDirectory: {
-            Task {
-              await model.revealWorkingDirectory()
-            }
-          },
-          revealOutputDirectory: {
-            Task {
-              await model.revealOutputDirectory()
-            }
-          }
-        )
-        ScanSection(
-          title: "Cover Art",
-          systemImage: "photo",
-          count: folder.coverCandidates.count
-        ) {
-          CandidateList(urls: folder.coverCandidates, root: folder.root)
-        }
-        if let errorMessage = model.runLogErrorMessage {
-          ScanErrorBanner(message: errorMessage)
-        }
-        RunHistorySection()
+        PipelineStrip(stage: model.pipelineStage, selection: $selectedTab)
+        ActivityTabBar(selection: $selectedTab)
       }
       .frame(maxWidth: 980, alignment: .leading)
-      .padding(24)
+      .padding(.horizontal, 24)
+      .padding(.top, 20)
+      .padding(.bottom, 16)
+
+      Divider()
+
+      ScrollView {
+        VStack(alignment: .leading, spacing: 24) {
+          switch selectedTab {
+          case .setlist:
+            setlistTab(sourceLabels: sourceLabels, metadata: metadata)
+          case .plan:
+            planTab(showPlan: showPlan)
+          case .output:
+            OutputTabPlaceholder(stage: model.pipelineStage)
+          case .history:
+            if let errorMessage = model.runLogErrorMessage {
+              ScanErrorBanner(message: errorMessage)
+            }
+            RunHistorySection()
+          }
+        }
+        .frame(maxWidth: 980, alignment: .leading)
+        .padding(24)
+      }
     }
     .task(id: settings) {
       await model.refreshToolStatuses(settings: settings)
@@ -251,6 +186,112 @@ private struct ScannedShowFolderView: View {
     )) {
       await model.refreshCurrentMetadata()
     }
+  }
+
+  // MARK: - Tab bodies (S1 wraps the existing sections unchanged)
+
+  @ViewBuilder
+  private func setlistTab(sourceLabels: [SourceLabel], metadata: ShowMetadata?) -> some View {
+    ScanSection(
+      title: "Audio Files",
+      systemImage: "waveform",
+      count: folder.audioFiles.count
+    ) {
+      if folder.audioFiles.isEmpty {
+        EmptyScanSectionRow(title: "No audio files")
+      } else {
+        LazyVStack(alignment: .leading, spacing: 0) {
+          ForEach(folder.audioFiles) { file in
+            ScannedAudioFileRow(file: file, root: folder.root)
+          }
+        }
+      }
+    }
+    ScanSection(
+      title: "Setlists",
+      systemImage: "text.page",
+      count: folder.setlistCandidates.count
+    ) {
+      CandidateList(urls: folder.setlistCandidates, root: folder.root)
+    }
+    SetlistInputSection(
+      setlistInput: $model.setlistInput,
+      draft: $model.setlistDraft,
+      errorMessage: model.setlistErrorMessage,
+      setlistCandidates: folder.setlistCandidates,
+      root: folder.root,
+      parse: model.parseSetlistInput,
+      loadCandidate: model.loadSetlistText(from:),
+      openSetlistFile: openSetlistFile,
+      openNormalizer: openNormalizer
+    )
+    SourceMetadataSection(
+      sourceLabels: sourceLabels,
+      selectedSourceLabelID: $model.selectedSourceLabelID,
+      metadata: metadata
+    )
+    ScanSection(
+      title: "Cover Art",
+      systemImage: "photo",
+      count: folder.coverCandidates.count
+    ) {
+      CandidateList(urls: folder.coverCandidates, root: folder.root)
+    }
+  }
+
+  @ViewBuilder
+  private func planTab(showPlan: ShowPlan?) -> some View {
+    PlanPreviewSection(
+      plan: showPlan,
+      root: folder.root,
+      coverURL: folder.coverCandidates.first,
+      currentMetadataByFileID: model.currentMetadataByFileID,
+      applyState: model.applyState,
+      conversionState: model.conversionState,
+      verificationState: model.verificationState,
+      libraryImportState: model.libraryImportState,
+      libraryReadState: model.libraryReadState,
+      hasRequiredApplyTools: model.hasRequiredApplyTools(for: showPlan),
+      hasRequiredConversionTools: { applyPlan in
+        model.hasRequiredConversionTools(for: applyPlan)
+      },
+      hasSuccessfulApply: { applyPlan in
+        model.hasSuccessfulApply(for: applyPlan)
+      },
+      hasSuccessfulFileVerify: { conversionPlan in
+        model.hasSuccessfulFileVerify(for: conversionPlan)
+      },
+      apply: { plan in
+        Task {
+          await model.applyShowPlan(plan, coverURL: folder.coverCandidates.first)
+        }
+      },
+      convertAndVerify: { applyPlan in
+        Task {
+          await model.convertAndVerify(applyPlan)
+        }
+      },
+      importIntoMusicLibrary: { conversionPlan in
+        Task {
+          await model.importIntoMusicLibrary(for: conversionPlan)
+        }
+      },
+      readMusicLibrary: { conversionPlan in
+        Task {
+          await model.readMusicLibrary(for: conversionPlan)
+        }
+      },
+      revealWorkingDirectory: {
+        Task {
+          await model.revealWorkingDirectory()
+        }
+      },
+      revealOutputDirectory: {
+        Task {
+          await model.revealOutputDirectory()
+        }
+      }
+    )
   }
 }
 
@@ -1461,9 +1502,23 @@ private struct SetlistTrackEditRow: View {
   }
 }
 
-private struct ScanHeader: View {
+// MARK: - Shell (M6 S1): fixed header + completion pill + pipeline strip + tab bar
+
+/// The four activity tabs the scanned-show body scrolls between. The pipeline strip's
+/// cards select these; the selection itself is view-local `@State`.
+private enum ActivityTab: String, CaseIterable, Identifiable {
+  case setlist = "Setlist"
+  case plan = "Plan"
+  case output = "Output"
+  case history = "History"
+
+  var id: Self { self }
+}
+
+private struct ShowHeader: View {
   let root: URL
   let openFolder: () -> Void
+  let done: () -> Void
 
   var body: some View {
     HStack(alignment: .firstTextBaseline) {
@@ -1480,6 +1535,107 @@ private struct ScanHeader: View {
       Button(action: openFolder) {
         Label("Open Show Folder", systemImage: "folder")
       }
+      Button(action: done) {
+        Label("Done", systemImage: "checkmark.circle")
+      }
+      .help("Clear this show and return to the empty state.")
+    }
+  }
+}
+
+/// Terminal-state summary — only shown once every produced file resolves in the library.
+private struct CompletionPill: View {
+  let resolution: LibraryResolutionResult
+
+  var body: some View {
+    Label(
+      "Imported · resolved \(resolution.resolvedCount)/\(resolution.trackResolutions.count)",
+      systemImage: "checkmark.seal.fill"
+    )
+    .font(.callout.weight(.medium))
+    .foregroundStyle(.green)
+    .padding(.horizontal, 12)
+    .padding(.vertical, 6)
+    .background(Capsule().fill(Color.green.opacity(0.12)))
+  }
+}
+
+/// Four status cards rolling up the five run states; tapping a card selects its tab.
+private struct PipelineStrip: View {
+  let stage: AppModel.PipelineStage
+  @Binding var selection: ActivityTab
+
+  var body: some View {
+    HStack(spacing: 10) {
+      // Files is always reached here — we only render this strip for a scanned folder.
+      card("Files", systemImage: "waveform", tab: .setlist, reached: true)
+      card("Setlist", systemImage: "text.badge.checkmark", tab: .setlist, reached: stage >= .planned)
+      card("Plan", systemImage: "list.bullet.rectangle", tab: .plan, reached: stage >= .verified)
+      card("Music", systemImage: "music.note", tab: .output, reached: stage >= .resolved)
+    }
+  }
+
+  private func card(
+    _ title: LocalizedStringResource,
+    systemImage: String,
+    tab: ActivityTab,
+    reached: Bool
+  ) -> some View {
+    Button {
+      selection = tab
+    } label: {
+      HStack(spacing: 8) {
+        Image(systemName: reached ? "checkmark.circle.fill" : "circle")
+          .foregroundStyle(reached ? .green : .secondary)
+        Label(title, systemImage: systemImage)
+          .labelStyle(.titleOnly)
+          .font(.callout.weight(selection == tab ? .semibold : .regular))
+        Spacer(minLength: 0)
+      }
+      .padding(.horizontal, 12)
+      .padding(.vertical, 8)
+      .frame(maxWidth: .infinity)
+      .background(
+        RoundedRectangle(cornerRadius: 8)
+          .fill(selection == tab ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.06))
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: 8)
+          .strokeBorder(selection == tab ? Color.accentColor.opacity(0.5) : .clear)
+      )
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+  }
+}
+
+private struct ActivityTabBar: View {
+  @Binding var selection: ActivityTab
+
+  var body: some View {
+    Picker("Activity", selection: $selection) {
+      ForEach(ActivityTab.allCases) { tab in
+        Text(tab.rawValue).tag(tab)
+      }
+    }
+    .pickerStyle(.segmented)
+    .labelsHidden()
+  }
+}
+
+/// S1 placeholder — the run-status views still live in the Plan tab this slice; S2
+/// relocates them here (splitting the action bar from the `*RunStatus` calls).
+private struct OutputTabPlaceholder: View {
+  let stage: AppModel.PipelineStage
+
+  var body: some View {
+    let message: LocalizedStringResource = stage >= .applied
+      ? "Run details currently live under the Plan tab. They move here in the next slice."
+      : "Apply and convert a plan to produce run output."
+    ContentUnavailableView {
+      Label("Run Output", systemImage: "waveform.badge.magnifyingglass")
+    } description: {
+      Text(message)
     }
   }
 }
