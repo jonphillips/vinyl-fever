@@ -65,6 +65,27 @@ targets:
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "Apple Development"
         DEVELOPMENT_TEAM: 7MQEE539G9
+  VinylFeverTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "27.0"
+    sources:
+      - VinylFeverTests
+    dependencies:
+      # Hosted in the app (BUNDLE_LOADER below) so `@testable import VinylFever` resolves
+      # against the host's symbols; `link: false` avoids double-linking the app's code and
+      # its VinylFeverCore/Dependencies copies into the test bundle.
+      - target: VinylFever
+        link: false
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.jonphillips.VinylFeverTests
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/VinylFever.app/Contents/MacOS/VinylFever"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "Apple Development"
+        DEVELOPMENT_TEAM: 7MQEE539G9
 schemes:
   VinylFever:
     build:
@@ -72,3 +93,7 @@ schemes:
         VinylFever: all
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - VinylFeverTests

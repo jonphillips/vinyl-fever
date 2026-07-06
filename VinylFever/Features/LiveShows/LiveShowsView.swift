@@ -146,7 +146,15 @@ private struct ScannedShowFolderView: View {
           ScanErrorBanner(message: errorMessage)
         }
         if let resolution = model.completedLibraryResolution {
-          CompletionPill(resolution: resolution)
+          HStack(spacing: 12) {
+            CompletionPill(resolution: resolution)
+            CleanUpFilesButton(
+              didCleanUp: model.didCleanUpProducedFolders,
+              cleanUp: {
+                Task { await model.cleanUpProducedFolders() }
+              }
+            )
+          }
         }
         PipelineStrip(stage: model.pipelineStage, selection: $selectedTab)
         ActivityTabBar(selection: $selectedTab)
@@ -1542,6 +1550,40 @@ private struct CompletionPill: View {
     .padding(.horizontal, 12)
     .padding(.vertical, 6)
     .background(Capsule().fill(Color.green.opacity(0.12)))
+  }
+}
+
+/// Terminal-only action to delete the derived `Working/`/`Output/` folders. Shown beside
+/// the completion pill (so it can't fire before the show resolves in Music) and swapped
+/// for a done confirmation once the folders are gone.
+private struct CleanUpFilesButton: View {
+  let didCleanUp: Bool
+  let cleanUp: () -> Void
+
+  @State private var isConfirming = false
+
+  var body: some View {
+    if didCleanUp {
+      Label("Files cleaned up", systemImage: "checkmark.circle")
+        .font(.callout)
+        .foregroundStyle(.secondary)
+    } else {
+      Button(role: .destructive) {
+        isConfirming = true
+      } label: {
+        Label("Clean Up Files", systemImage: "trash")
+      }
+      .help("Delete the Working and Output folders. The originals and imported Music tracks are kept.")
+      .confirmationDialog(
+        "Delete the Working and Output folders?",
+        isPresented: $isConfirming
+      ) {
+        Button("Delete Folders", role: .destructive, action: cleanUp)
+        Button("Cancel", role: .cancel) {}
+      } message: {
+        Text("Removes this show's Working and Output folders. The original files and the imported Music tracks are left untouched.")
+      }
+    }
   }
 }
 
