@@ -1,6 +1,7 @@
 import AppKit
 import SQLiteData
 import SwiftUI
+import UniformTypeIdentifiers
 import VinylFeverCore
 
 struct CollectionsView: View {
@@ -46,6 +47,14 @@ struct CollectionsView: View {
             apply: { plan in
               Task {
                 await model.applyCompilationPlan(plan)
+              }
+            },
+            setCover: {
+              guard let url = chooseCoverImage() else {
+                return
+              }
+              Task {
+                await model.setCompilationAlbumCover(album: selectedAlbum, imageURL: url)
               }
             }
           )
@@ -102,6 +111,16 @@ struct CollectionsView: View {
     panel.canChooseFiles = false
     panel.canCreateDirectories = false
     panel.prompt = prompt
+    return panel.runModal() == .OK ? panel.url : nil
+  }
+
+  private func chooseCoverImage() -> URL? {
+    let panel = NSOpenPanel()
+    panel.allowsMultipleSelection = false
+    panel.canChooseDirectories = false
+    panel.canChooseFiles = true
+    panel.allowedContentTypes = [.png, .jpeg, .gif, .image]
+    panel.prompt = "Set Cover"
     return panel.runModal() == .OK ? panel.url : nil
   }
 }
@@ -204,21 +223,28 @@ private struct CompilationAppendSection: View {
   let importState: LibraryImportState
   let certificationState: CompilationCertificationState
   let apply: (CompilationApplyPlan) -> Void
+  let setCover: () -> Void
   @State private var isConfirmingApply = false
 
   var body: some View {
     CollectionSection(title: "Append Preview", systemImage: "tag", count: plan?.tracks.count ?? 0) {
       VStack(alignment: .leading, spacing: 14) {
-        VStack(alignment: .leading, spacing: 4) {
-          Text(album.name)
-            .font(.headline)
-          Text("\(album.identity.album) / \(album.identity.albumArtist)")
-            .foregroundStyle(.secondary)
-          if let folder {
-            Text(folder.path(percentEncoded: false))
-              .font(.caption)
+        HStack(alignment: .top) {
+          VStack(alignment: .leading, spacing: 4) {
+            Text(album.name)
+              .font(.headline)
+            Text("\(album.identity.album) / \(album.identity.albumArtist)")
               .foregroundStyle(.secondary)
-              .textSelection(.enabled)
+            if let folder {
+              Text(folder.path(percentEncoded: false))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+            }
+          }
+          Spacer()
+          Button(action: setCover) {
+            Label("Set Cover…", systemImage: "photo")
           }
         }
         if let plan {

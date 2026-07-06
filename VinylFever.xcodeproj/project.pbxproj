@@ -47,7 +47,7 @@
 		AED24466777F0409DA88B3E3 /* CollectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionsView.swift; sourceTree = "<group>"; };
 		C5BA3EE762A82EB875DF3A8E /* VinylFever.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VinylFever.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C6AB4DB3E04DFCEFC5B041DC /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		CC336537557BE54F0DB166E6 /* VinylFeverCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VinylFeverCore; path = VinylFeverCore; sourceTree = SOURCE_ROOT; };
+		CC336537557BE54F0DB166E6 /* VinylFeverCore */ = {isa = PBXFileReference; lastKnownFileType = folder; path = VinylFeverCore; sourceTree = SOURCE_ROOT; };
 		CE24892ADA40E7507D033765 /* AppModelCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelCleanupTests.swift; sourceTree = "<group>"; };
 		EFE8FAAEE05BF9BF9A136EDE /* MusicAppClient+Live.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MusicAppClient+Live.swift"; sourceTree = "<group>"; };
 		F6AB6D74511FA4977973A9A7 /* LiveShowsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveShowsView.swift; sourceTree = "<group>"; };
@@ -450,7 +450,7 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonphillips.VinylFeverTests;
 				SDKROOT = macosx;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VinylFever.app/Contents/MacOS/VinylFever";
@@ -474,7 +474,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonphillips.VinylFever;
 				PRODUCT_NAME = VinylFever;
 				SDKROOT = macosx;
@@ -495,7 +495,7 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonphillips.VinylFeverTests;
 				SDKROOT = macosx;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VinylFever.app/Contents/MacOS/VinylFever";
@@ -519,7 +519,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonphillips.VinylFever;
 				PRODUCT_NAME = VinylFever;
 				SDKROOT = macosx;
