@@ -1,6 +1,6 @@
 removedHashLines: 0
 cleanedLines: 72
-regionCount: 13
+regionCount: 9
 
 [1] prose (4 lines)
     Bruce Hornsby (Solo)
@@ -12,7 +12,7 @@ regionCount: 13
     Matrix Mix> DAT> CD-R> EAC> CD Wave Editor> Wave Lab 4.0> FLAC
     (Unknown mics for aud source half of the mix)
 
-[3] tracklist (9 lines)
+[3] tracklist (38 lines)
     Disc 1 (Early Show - Part 1)
     1. Intro
     2. Spider Fingers >
@@ -22,11 +22,7 @@ regionCount: 13
     4. See The Same Way
     5. Mandolin Rain
     6. Country Doctor >
-
-[4] lineage (1 lines)
     (Barber Nocturne) >
-
-[5] tracklist (14 lines)
     Country Doctor
     Disc 2 (Early Show - Part 2)
     1. Sugaree*
@@ -41,11 +37,7 @@ regionCount: 13
     1. Intro/Terrapin noodling
     2. Terrapin Jam >
     3. Way It Is >
-
-[6] lineage (1 lines)
     (Terrapin Jam) >
-
-[7] tracklist (13 lines)
     Way It Is
     (I Can't Make You Love Me noodling)
     4. Night On The Town
@@ -60,20 +52,20 @@ regionCount: 13
     * w/ Steve Kimock
     Notes:
 
-[8] prose (2 lines)
+[4] prose (2 lines)
     I received this on dat some time ago and it was labeled as a DSBD.
     It is obvious from the very first listen that there is an aud source
 
-[9] lineage (1 lines)
+[5] lineage (1 lines)
     mixed in, making this a true matrix...and a fine one at that.
 
-[10] prose (1 lines)
+[6] prose (1 lines)
     I wish I knew the mic source...if someone knows the info, feel free
 
-[11] tracklist (1 lines)
+[7] tracklist (1 lines)
     to post it here.
 
-[12] prose (12 lines)
+[8] prose (12 lines)
     Anyway, I'm finally getting into some of these Yoshi's '98 shows.
     This is a great solo gig w/ some minor accompaniment by Steve
     Kimock.  While Kimock is certainly audible, he chooses to lay low
@@ -87,6 +79,6 @@ regionCount: 13
     Is.  We then get the more familiar Terp jam in the middle of Way It
     Is.  I could go on and on, but I'll just stop here and let the music
 
-[13] tracklist (2 lines)
+[9] tracklist (2 lines)
     do the talking.  Enjoy!
     Tim

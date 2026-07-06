@@ -126,6 +126,17 @@ final class AppModel {
   /// Terminal state: the produced files are all resolved back in the Music library.
   var isShowComplete: Bool { pipelineStage == .resolved }
 
+  /// Whether any live-show pipeline step is mid-run. Drives the sidebar spinner so the
+  /// slower steps (Import into Music, Read Music) show activity even when the user has
+  /// navigated away from the Output tab.
+  var isLiveShowRunActive: Bool {
+    applyState.isRunning
+      || conversionState.isRunning
+      || verificationState.isRunning
+      || libraryImportState.isRunning
+      || libraryReadState.isRunning
+  }
+
   /// The resolved library read, when the show has reached its terminal state. Drives the
   /// completion pill's `resolved n/n` copy; `nil` until every produced file resolves.
   var completedLibraryResolution: LibraryResolutionResult? {
@@ -170,8 +181,22 @@ final class AppModel {
   }
 
   func parseSetlistInput() {
-    setlistDraft = SetlistParser().parse(setlistInput)
+    let draft = SetlistParser().parse(setlistInput)
+    setlistDraft = draft
     setlistErrorMessage = nil
+    syncSelectedSourceLabel(to: draft.tags.source)
+  }
+
+  /// Point the header Source picker at the source the parser/Normalizer inferred, so a
+  /// show that already names its source (`… (FM)`) shows it without a manual pick. Only
+  /// matches the built-in vocabulary; a custom inferred token still drives the album
+  /// title via `ShowMetadata`'s fallback but leaves the picker on its current value.
+  private func syncSelectedSourceLabel(to source: Field) {
+    let key = SourceLabel.normalizedToken(source.text).lowercased()
+    guard !key.isEmpty else { return }
+    guard let match = SourceLabel.builtIns.first(where: { $0.normalizedTokenKey == key })
+    else { return }
+    selectedSourceLabelID = match.id
   }
 
   // MARK: - Setlist Normalizer (raw notes → setlist.txt)
@@ -235,6 +260,7 @@ final class AppModel {
       // live-show flow can pick it up.
       setlistInput = result.renderedText
       setlistDraft = result.draft
+      syncSelectedSourceLabel(to: result.draft.tags.source)
       setlistNormalizationState = .saved(url)
       runLogErrorMessage = nil
     } catch {

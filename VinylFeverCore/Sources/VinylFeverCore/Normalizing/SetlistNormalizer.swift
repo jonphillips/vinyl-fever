@@ -121,7 +121,9 @@ extension SetlistNormalizer {
     must appear verbatim in the input.
 
     TRACKS. Ordered as recorded. Keep numbered non-song items (intro, banter, tuning). \
-    Attach a short `note` only for musical detail worth keeping (e.g. ">" segue, guest). \
+    Keep a ">" segue chain as ONE track title verbatim — "Help on the Way > Slipknot! > \
+    Franklin's Tower" is a single track, not three; never split a title on ">". \
+    Attach a short `note` only for musical detail worth keeping (e.g. a guest performer). \
     Fix an obvious song-title misspelling when the intended song is clear. Put every \
     discarded line in `dropped` so the human preview can audit it.
 

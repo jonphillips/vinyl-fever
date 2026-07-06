@@ -44,7 +44,7 @@ extension SetlistNormalizationResult {
     removedHashLines: [String],
     nextID: () -> UUID
   ) -> Self {
-    let tags = ShowTags(
+    var tags = ShowTags(
       artist: Field(normalized.tags.artist),
       albumArtist: Field(normalized.tags.albumArtist),
       date: DateField(isoString: normalized.tags.date),
@@ -52,6 +52,11 @@ extension SetlistNormalizationResult {
       location: Field(normalized.tags.location),
       source: Field(normalized.tags.source)
     )
+    // The model contract has no album field — the ALBUM line is always *derived* from
+    // date/location/venue/source. Compose it here (same renderer the setlist.txt uses)
+    // so the editable Album field is populated after normalizing, matching what the
+    // deterministic parser recovers from a re-read ALBUM line instead of coming up blank.
+    tags.album = Field(SetlistText.composedAlbum(tags))
     let tracks = normalized.tracks
       .map { track in
         SetlistTrack(
