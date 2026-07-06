@@ -53,6 +53,10 @@ final class AppModel {
   var libraryImportState: LibraryImportState = .idle
   var libraryReadState: LibraryReadState = .idle
   var lastSuccessfulApplyPlan: ApplyPlan?
+  /// True only just after a successful `cleanUpProducedFolders()`, so the completion UI
+  /// swaps the "Clean Up Files" button for a done confirmation. Reset whenever a run is
+  /// (re)started, since that recreates the folders.
+  var didCleanUpProducedFolders = false
   var compilationSeedCandidates: [CompilationAlbumSeedCandidate] = []
   var selectedCompilationSeedCandidateIDs: Set<CompilationAlbumSeedCandidate.ID> = []
   var compilationSeedState: CollectionSeedState = .idle
@@ -69,6 +73,7 @@ final class AppModel {
   }
 
   func scanShowFolder(at url: URL) {
+    didCleanUpProducedFolders = false
     do {
       scannedShowFolder = try fileSystemClient.scanShowFolder(root: url)
       currentMetadataByFileID = [:]
@@ -155,6 +160,7 @@ final class AppModel {
     libraryImportState = .idle
     libraryReadState = .idle
     lastSuccessfulApplyPlan = nil
+    didCleanUpProducedFolders = false
   }
 
   /// Terminal "Done": drop the scanned show so `LiveShowsView` falls back to its empty
@@ -532,6 +538,30 @@ final class AppModel {
       try await fileOperationClient.reveal(
         scannedShowFolder.root.appendingPathComponent(ApplyPlan.workingDirectoryName, isDirectory: true)
       )
+      runLogErrorMessage = nil
+    } catch {
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
+  /// Delete the derived `Working/` and `Output/` folders once the show is fully
+  /// resolved in Music. Gated on `isShowComplete` so the on-disk copies are only removed
+  /// after Music holds the tracks — the source audio and setlist at the root are left
+  /// untouched. `removeItem` is recursive and a no-op on a missing path, so an absent
+  /// `Output/` (no conversion) is fine.
+  func cleanUpProducedFolders() async {
+    guard let scannedShowFolder, isShowComplete else {
+      return
+    }
+    let root = scannedShowFolder.root
+    do {
+      try await fileOperationClient.removeItem(
+        root.appendingPathComponent(ApplyPlan.workingDirectoryName, isDirectory: true)
+      )
+      try await fileOperationClient.removeItem(
+        root.appendingPathComponent(ConversionPlan.outputDirectoryName, isDirectory: true)
+      )
+      didCleanUpProducedFolders = true
       runLogErrorMessage = nil
     } catch {
       runLogErrorMessage = error.localizedDescription

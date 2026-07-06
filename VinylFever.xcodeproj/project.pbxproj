@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		06B1A9F761F94FBEF51B4122 /* ToolPathClient+Live.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FCF80A0CE45B6E77A178A11 /* ToolPathClient+Live.swift */; };
 		22775209C461BD758C5019E2 /* CollectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AED24466777F0409DA88B3E3 /* CollectionsView.swift */; };
+		24FD7A2E67BA925A1E8ADC15 /* AppModelCleanupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE24892ADA40E7507D033765 /* AppModelCleanupTests.swift */; };
 		315F7D9FE8B6468D86AE2735 /* SetlistNormalizerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68E3D973791AA21665A4AEC0 /* SetlistNormalizerSheet.swift */; };
 		39554429845D1E4F3F48622F /* LLMClientKit in Frameworks */ = {isa = PBXBuildFile; productRef = 209AD90212216A34D3061AD1 /* LLMClientKit */; };
 		497E2DE4FB2B485815B4066A /* VinylFeverCore in Frameworks */ = {isa = PBXBuildFile; productRef = 7C6E06FBA965ABDAC7489C80 /* VinylFeverCore */; };
@@ -23,6 +24,16 @@
 		EAFC74430016C0F3EA8F602C /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6AB4DB3E04DFCEFC5B041DC /* SettingsView.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		6F193142289B7AC8E6351DB3 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A8ADFF8CCB4100A002B23A95 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = FDD826AD9DE28A7B0EDD2334;
+			remoteInfo = VinylFever;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		37594C5E09F565DC70AF0A3C /* LLMClientKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = LLMClientKit; path = "../jon-platform/packages/LLMClientKit"; sourceTree = SOURCE_ROOT; };
 		4B9501DC755058CF461B454F /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
@@ -32,10 +43,12 @@
 		68E3D973791AA21665A4AEC0 /* SetlistNormalizerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetlistNormalizerSheet.swift; sourceTree = "<group>"; };
 		8635979346BE2956055A7DC8 /* VinylFever.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VinylFever.entitlements; sourceTree = "<group>"; };
 		8AD3A453FDC0D3B42EB1247C /* VinylFeverApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VinylFeverApp.swift; sourceTree = "<group>"; };
+		A1E74BD06E9B4E42D2157A7A /* VinylFeverTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VinylFeverTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AED24466777F0409DA88B3E3 /* CollectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionsView.swift; sourceTree = "<group>"; };
 		C5BA3EE762A82EB875DF3A8E /* VinylFever.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VinylFever.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C6AB4DB3E04DFCEFC5B041DC /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		CC336537557BE54F0DB166E6 /* VinylFeverCore */ = {isa = PBXFileReference; lastKnownFileType = folder; path = VinylFeverCore; sourceTree = SOURCE_ROOT; };
+		CC336537557BE54F0DB166E6 /* VinylFeverCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VinylFeverCore; path = VinylFeverCore; sourceTree = SOURCE_ROOT; };
+		CE24892ADA40E7507D033765 /* AppModelCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelCleanupTests.swift; sourceTree = "<group>"; };
 		EFE8FAAEE05BF9BF9A136EDE /* MusicAppClient+Live.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MusicAppClient+Live.swift"; sourceTree = "<group>"; };
 		F6AB6D74511FA4977973A9A7 /* LiveShowsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveShowsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -66,6 +79,14 @@
 				36D9C1BD8B5665BEE891A5D8 /* Features */,
 			);
 			path = VinylFever;
+			sourceTree = "<group>";
+		};
+		161969889E7740BBE3D728E9 /* VinylFeverTests */ = {
+			isa = PBXGroup;
+			children = (
+				CE24892ADA40E7507D033765 /* AppModelCleanupTests.swift */,
+			);
+			path = VinylFeverTests;
 			sourceTree = "<group>";
 		};
 		16EB0E43731EBB68198E3CF9 /* LiveShows */ = {
@@ -110,6 +131,7 @@
 			isa = PBXGroup;
 			children = (
 				C5BA3EE762A82EB875DF3A8E /* VinylFever.app */,
+				A1E74BD06E9B4E42D2157A7A /* VinylFeverTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -127,6 +149,7 @@
 			children = (
 				7591ADA858208560FCBEF6CA /* Packages */,
 				049A125EB1F82AAA03079683 /* VinylFever */,
+				161969889E7740BBE3D728E9 /* VinylFeverTests */,
 				82F110051A55E3158FF9916B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -159,6 +182,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		D61F076DD1B7CD15209A3DED /* VinylFeverTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6908ECF7FD9E387520DAFF47 /* Build configuration list for PBXNativeTarget "VinylFeverTests" */;
+			buildPhases = (
+				0EA2F0C4D52E8B9518EA7510 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AAD8F9590BF8010078268AE7 /* PBXTargetDependency */,
+			);
+			name = VinylFeverTests;
+			packageProductDependencies = (
+			);
+			productName = VinylFeverTests;
+			productReference = A1E74BD06E9B4E42D2157A7A /* VinylFeverTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		FDD826AD9DE28A7B0EDD2334 /* VinylFever */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = C9896727FE93A65DD89A62DD /* Build configuration list for PBXNativeTarget "VinylFever" */;
@@ -191,6 +232,10 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
+					D61F076DD1B7CD15209A3DED = {
+						DevelopmentTeam = 7MQEE539G9;
+						ProvisioningStyle = Automatic;
+					};
 					FDD826AD9DE28A7B0EDD2334 = {
 						DevelopmentTeam = 7MQEE539G9;
 						ProvisioningStyle = Automatic;
@@ -219,11 +264,20 @@
 			projectRoot = "";
 			targets = (
 				FDD826AD9DE28A7B0EDD2334 /* VinylFever */,
+				D61F076DD1B7CD15209A3DED /* VinylFeverTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXSourcesBuildPhase section */
+		0EA2F0C4D52E8B9518EA7510 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				24FD7A2E67BA925A1E8ADC15 /* AppModelCleanupTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		6DE4FAB9D5E85608F8F04645 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -241,6 +295,14 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AAD8F9590BF8010078268AE7 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = FDD826AD9DE28A7B0EDD2334 /* VinylFever */;
+			targetProxy = 6F193142289B7AC8E6351DB3 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		18FFBDB9650E607126311A25 /* Debug */ = {
@@ -374,6 +436,27 @@
 			};
 			name = Release;
 		};
+		6491969C60FFEBED1CC4EFC9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = 7MQEE539G9;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jonphillips.VinylFeverTests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VinylFever.app/Contents/MacOS/VinylFever";
+			};
+			name = Release;
+		};
 		A1B552F9F91F48E18D5845BB /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -391,10 +474,31 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonphillips.VinylFever;
 				PRODUCT_NAME = VinylFever;
 				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		B93E6939627CA413D115863A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = 7MQEE539G9;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jonphillips.VinylFeverTests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VinylFever.app/Contents/MacOS/VinylFever";
 			};
 			name = Debug;
 		};
@@ -415,7 +519,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonphillips.VinylFever;
 				PRODUCT_NAME = VinylFever;
 				SDKROOT = macosx;
@@ -425,6 +529,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		6908ECF7FD9E387520DAFF47 /* Build configuration list for PBXNativeTarget "VinylFeverTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B93E6939627CA413D115863A /* Debug */,
+				6491969C60FFEBED1CC4EFC9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		C9896727FE93A65DD89A62DD /* Build configuration list for PBXNativeTarget "VinylFever" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
