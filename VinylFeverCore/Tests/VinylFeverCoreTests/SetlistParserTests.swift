@@ -33,7 +33,8 @@ struct SetlistParserTests {
         albumArtist: .value("Bruce Hornsby"),
         date: .iso(year: 1996, month: 5, day: 21),
         venue: .value("Pearl Street Grill"),
-        location: .value("Northampton, MA")
+        location: .value("Northampton, MA"),
+        source: .value("SBD")
       )
     )
     expectNoDifference(
@@ -44,6 +45,24 @@ struct SetlistParserTests {
         "Every Little Kiss",
       ]
     )
+  }
+
+  @Test
+  func recoversSourceFromTrailingAlbumParenthetical() {
+    let draft = SetlistParser().parse("ALBUM: 2009-10-17: Buenos Aires, Argentina - Personal Fest (FM)")
+    expectNoDifference(draft.tags.source, .value("FM"))
+  }
+
+  @Test
+  func recoversSourceFromLastParentheticalPastAQualifier() {
+    let draft = SetlistParser().parse("ALBUM: 1997-04-08: Torino, Italy - Teatro Colosseo (1st Set) (SBD)")
+    expectNoDifference(draft.tags.source, .value("SBD"))
+  }
+
+  @Test
+  func doesNotTreatCompilationMarkerAsASource() {
+    let draft = SetlistParser().parse("ALBUM: Christmas & Fan Club Singles 1988-2011 (Compilation)")
+    expectNoDifference(draft.tags.source, .unknown)
   }
 
   @Test

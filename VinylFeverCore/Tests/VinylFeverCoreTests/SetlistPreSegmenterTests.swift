@@ -58,6 +58,46 @@ struct SetlistPreSegmenterTests {
     #expect(lineage?.lines.contains("Taped by John Smith") == true)
   }
 
+  /// A `>`-segued track sitting among the tracklist is one track, not provenance — the
+  /// bare `>` must not pull it into a lineage region (which would drop it as a track).
+  @Test
+  func treatsMusicalSegueLineAsTrackNotLineage() {
+    let result = SetlistPreSegmenter().segment(
+      """
+      1. Help on the Way
+      2. Road Not Taken > Jack Straw > Across the River
+      3. Franklin's Tower
+      """
+    )
+
+    let tracklist = result.regions.first { $0.kind == .tracklist }
+    #expect(tracklist?.lines.contains("2. Road Not Taken > Jack Straw > Across the River") == true)
+    #expect(!result.regions.contains { $0.kind == .lineage })
+  }
+
+  /// A multi-line signal chain whose lines end in `>` (device names, no format token)
+  /// stays lineage by flowing out of the `lineage:` header — not broken into tracks.
+  @Test
+  func keepsArrowedTransferChainAsLineage() {
+    let result = SetlistPreSegmenter().segment(
+      """
+      1. Opener
+      2. Closer
+
+      lineage:
+      FM radio >
+      Yamaha RX-500U receiver >
+      Maxell XLII cassettes >
+      played into soundforge (wav)
+      """
+    )
+
+    let lineage = result.regions.first { $0.kind == .lineage }
+    #expect(lineage?.lines.contains("FM radio >") == true)
+    #expect(lineage?.lines.contains("Yamaha RX-500U receiver >") == true)
+    #expect(lineage?.lines.contains("Maxell XLII cassettes >") == true)
+  }
+
   @Test
   func normalizesCarriageReturnsAndStripsBOM() {
     let result = SetlistPreSegmenter().segment("\u{feff}ARTIST: U2\r\n1. Vertigo\r\n")

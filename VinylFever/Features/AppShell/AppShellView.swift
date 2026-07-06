@@ -7,8 +7,15 @@ struct AppShellView: View {
     NavigationSplitView {
       List(selection: $model.selectedSection) {
         ForEach(AppSection.allCases) { section in
-          Label(section.title, systemImage: section.systemImage)
-            .tag(section)
+          HStack {
+            Label(section.title, systemImage: section.systemImage)
+            if section == .liveShows, model.isLiveShowRunActive {
+              Spacer(minLength: 8)
+              ProgressView()
+                .controlSize(.small)
+            }
+          }
+          .tag(section)
         }
       }
       .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 260)

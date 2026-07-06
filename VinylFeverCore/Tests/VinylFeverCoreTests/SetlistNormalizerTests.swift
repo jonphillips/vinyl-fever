@@ -38,6 +38,11 @@ struct SetlistNormalizerTests {
 
     expectNoDifference(result.draft.tags.artist, .value("Bruce Hornsby and The Range"))
     expectNoDifference(result.draft.tags.source, .value("SBD"))
+    // The composed ALBUM line is folded back into the draft's `album` field (not left
+    // blank), so the editable Album field is populated after normalizing.
+    expectNoDifference(
+      result.draft.tags.album,
+      .value("1996-05-21: Northampton, MA - Pearl Street Grill (SBD)"))
     expectNoDifference(result.draft.tags.date, .iso(year: 1996, month: 5, day: 21))
     expectNoDifference(result.draft.tracks.map(\.title), ["The Way It Is", "Mandolin Rain"])
     expectNoDifference(result.draft.tracks.map(\.note), [nil, "> segue"])

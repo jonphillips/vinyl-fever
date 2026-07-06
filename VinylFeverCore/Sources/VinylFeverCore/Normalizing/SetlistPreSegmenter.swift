@@ -135,7 +135,11 @@ public struct SetlistPreSegmenter: Sendable {
       let trimmed = line.trimmingCharacters(in: .whitespaces)
       guard !trimmed.isEmpty else { continue }
 
-      let kind = classify(trimmed, sawTrackContext: sawTrackContext)
+      let kind = classify(
+        trimmed,
+        sawTrackContext: sawTrackContext,
+        previousKind: regions.last?.kind
+      )
       if kind == .tracklist { sawTrackContext = true }
 
       if var last = regions.last, last.kind == kind {
@@ -149,11 +153,22 @@ public struct SetlistPreSegmenter: Sendable {
     return regions
   }
 
-  private static func classify(_ line: String, sawTrackContext: Bool) -> SetlistRegionKind {
+  private static func classify(
+    _ line: String,
+    sawTrackContext: Bool,
+    previousKind: SetlistRegionKind?
+  ) -> SetlistRegionKind {
     if looksLikeNumberedTrack(line) || isStructuralHeader(line) {
       return .tracklist
     }
     if isLineageLine(line) {
+      return .lineage
+    }
+    // A `>`/`->` line flowing directly out of a lineage line is a signal-chain
+    // continuation (`FM radio >` / `Maxell cassettes >`), whose device names rarely
+    // match a token. Musical segues never follow lineage — they sit among tracks — so
+    // this keeps chains whole without capturing `Song A > Song B`.
+    if previousKind == .lineage, line.contains(">") {
       return .lineage
     }
     if isHeaderTag(line) {
@@ -232,14 +247,26 @@ public struct SetlistPreSegmenter: Sendable {
 
   private static let lineageMarkers: [String] = [
     "source:", "lineage:", "recording:", "transfer:", "taper", "microphone", "mics",
-    "soundboard", "matrix", "neumann", "schoeps", "sennheiser", "->", " > ", "24bit",
+    "soundboard", "matrix", "neumann", "schoeps", "sennheiser", "->", "24bit",
     "16bit", "khz", "sample rate", "seeded", "eac ", "shntool", "flac fingerprint",
     "recorded by", "taped by", "dat master", "cassette master",
   ]
 
+  /// Format/device tokens that mark a `>` arrow as a signal chain (`master DAT > CDR`)
+  /// rather than a musical segue (`Song A > Song B`). The format reserves a bare `>` for
+  /// segues, so `>` only implies lineage when one of these co-occurs — otherwise a segued
+  /// track would be mislabeled provenance and broken out of its tracklist region.
+  private static let transferChainTokens: [String] = [
+    "dat", "cdr", "cd-r", "flac", "wav", "shn", "recorder", "zoom", "tascam",
+    "16/", "24/", "pcm", " dac", " adc", "reel-to-reel",
+  ]
+
   private static func isLineageLine(_ line: String) -> Bool {
     let lower = " " + line.lowercased() + " "
-    return lineageMarkers.contains { lower.contains($0) }
+    if lineageMarkers.contains(where: { lower.contains($0) }) {
+      return true
+    }
+    return line.contains(">") && transferChainTokens.contains { lower.contains($0) }
   }
 
   /// A rough "this is a sentence, not a title" test: multiple words ending in

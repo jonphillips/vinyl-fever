@@ -37,14 +37,19 @@ public struct ShowMetadata: Equatable, Sendable {
     albumTitle
   }
 
+  /// The `(Source)` suffix token. An explicitly chosen `SourceLabel` (the header
+  /// picker) wins as an override; otherwise it falls back to the source the parser
+  /// or Normalizer inferred into `tags.source`, matching `SetlistText`'s renderer so
+  /// the live-app title agrees with the composed `setlist.txt`. `unknown` when absent.
   private var sourceAlbumToken: String {
-    guard
-      let token = source.map({ SourceLabel.normalizedToken($0.token) }),
-      !token.isEmpty
-    else {
-      return "unknown"
+    if let source {
+      let token = SourceLabel.normalizedToken(source.token)
+      if !token.isEmpty {
+        return token
+      }
     }
-    return token
+    let inferred = SourceLabel.normalizedToken(tags.source.text)
+    return inferred.isEmpty ? "unknown" : inferred
   }
 }
 

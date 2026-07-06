@@ -46,6 +46,12 @@ public struct SetlistParser: Sendable {
       tags.artist = Field(value)
     case "ALBUM":
       tags.album = Field(value)
+      // Recover the `(Source)` suffix the format embeds in the ALBUM line (e.g.
+      // `… - Logo (FM)`) into the first-class source field, so a re-parsed
+      // `setlist.txt` carries its source through instead of resetting to unknown.
+      if let source = sourceToken(fromAlbum: value) {
+        tags.source = Field(source)
+      }
     case "ALBUMARTIST":
       tags.albumArtist = Field(value)
     case "DATE":
@@ -59,6 +65,25 @@ public struct SetlistParser: Sendable {
     }
 
     return true
+  }
+
+  /// The source token from an ALBUM value's trailing parenthetical, if any. Uses the
+  /// last `(…)` group — a live show may carry a qualifier before it (e.g.
+  /// `… (1st Set) (SBD)`) — and ignores the `(Compilation)` marker, which is not a
+  /// recording source.
+  private func sourceToken(fromAlbum album: String) -> String? {
+    guard
+      let close = album.lastIndex(of: ")"),
+      let open = album[..<close].lastIndex(of: "(")
+    else {
+      return nil
+    }
+    let inner = album[album.index(after: open)..<close]
+      .trimmingCharacters(in: .whitespaces)
+    guard !inner.isEmpty, inner.lowercased() != "compilation" else {
+      return nil
+    }
+    return inner
   }
 
   private func trackTitle(from line: String) -> String? {

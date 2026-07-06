@@ -137,6 +137,8 @@ private struct ScannedShowFolderView: View {
       VStack(alignment: .leading, spacing: 16) {
         ShowHeader(
           root: folder.root,
+          sourceLabels: sourceLabels,
+          selectedSourceLabelID: $model.selectedSourceLabelID,
           openFolder: openFolder,
           done: model.clearScannedShow
         )
@@ -160,11 +162,11 @@ private struct ScannedShowFolderView: View {
         VStack(alignment: .leading, spacing: 24) {
           switch selectedTab {
           case .setlist:
-            setlistTab(sourceLabels: sourceLabels, metadata: metadata)
+            setlistTab(metadata: metadata)
           case .plan:
             planTab(showPlan: showPlan)
           case .output:
-            OutputTabPlaceholder(stage: model.pipelineStage)
+            outputTab(showPlan: showPlan)
           case .history:
             if let errorMessage = model.runLogErrorMessage {
               ScanErrorBanner(message: errorMessage)
@@ -191,7 +193,7 @@ private struct ScannedShowFolderView: View {
   // MARK: - Tab bodies (S1 wraps the existing sections unchanged)
 
   @ViewBuilder
-  private func setlistTab(sourceLabels: [SourceLabel], metadata: ShowMetadata?) -> some View {
+  private func setlistTab(metadata: ShowMetadata?) -> some View {
     ScanSection(
       title: "Audio Files",
       systemImage: "waveform",
@@ -225,11 +227,7 @@ private struct ScannedShowFolderView: View {
       openSetlistFile: openSetlistFile,
       openNormalizer: openNormalizer
     )
-    SourceMetadataSection(
-      sourceLabels: sourceLabels,
-      selectedSourceLabelID: $model.selectedSourceLabelID,
-      metadata: metadata
-    )
+    AlbumTitleSection(metadata: metadata)
     ScanSection(
       title: "Cover Art",
       systemImage: "photo",
@@ -280,7 +278,22 @@ private struct ScannedShowFolderView: View {
         Task {
           await model.readMusicLibrary(for: conversionPlan)
         }
-      },
+      }
+    )
+  }
+
+  @ViewBuilder
+  private func outputTab(showPlan: ShowPlan?) -> some View {
+    OutputTab(
+      showPlan: showPlan,
+      root: folder.root,
+      coverURL: folder.coverCandidates.first,
+      applyState: model.applyState,
+      conversionState: model.conversionState,
+      verificationState: model.verificationState,
+      libraryImportState: model.libraryImportState,
+      libraryReadState: model.libraryReadState,
+      isShowComplete: model.isShowComplete,
       revealWorkingDirectory: {
         Task {
           await model.revealWorkingDirectory()
@@ -313,8 +326,6 @@ private struct PlanPreviewSection: View {
   let convertAndVerify: (ApplyPlan) -> Void
   let importIntoMusicLibrary: (ConversionPlan) -> Void
   let readMusicLibrary: (ConversionPlan) -> Void
-  let revealWorkingDirectory: () -> Void
-  let revealOutputDirectory: () -> Void
 
   var body: some View {
     ScanSection(
@@ -326,10 +337,9 @@ private struct PlanPreviewSection: View {
         let applyPlan = ApplyPlan(showPlan: plan, showRoot: root, coverURL: coverURL)
         let conversionPlan = ConversionPlan(applyPlan: applyPlan)
         VStack(alignment: .leading, spacing: 16) {
-          PlanReadinessSummary(
+          PlanActionBar(
             plan: plan,
             applyPlan: applyPlan,
-            root: root,
             applyState: applyState,
             conversionState: conversionState,
             verificationState: verificationState,
@@ -342,12 +352,9 @@ private struct PlanPreviewSection: View {
             apply: { apply(plan) },
             convertAndVerify: { convertAndVerify(applyPlan) },
             importIntoMusicLibrary: { importIntoMusicLibrary(conversionPlan) },
-            readMusicLibrary: { readMusicLibrary(conversionPlan) },
-            revealWorkingDirectory: revealWorkingDirectory,
-            revealOutputDirectory: revealOutputDirectory
+            readMusicLibrary: { readMusicLibrary(conversionPlan) }
           )
           ProposedMetadataSummary(plan: plan)
-          ApplyOperationsPreview(applyPlan: applyPlan, root: root)
           if plan.tracks.isEmpty {
             EmptyScanSectionRow(title: "No file-to-track mappings")
           } else {
@@ -370,10 +377,12 @@ private struct PlanPreviewSection: View {
   }
 }
 
-private struct PlanReadinessSummary: View {
+/// The Plan tab's action row: readiness label, the four pipeline buttons (Apply →
+/// Read Music) with their enablement logic, and any blocking plan issues. The
+/// per-step `*RunStatus` walls it used to render now live in the Output tab.
+private struct PlanActionBar: View {
   let plan: ShowPlan
   let applyPlan: ApplyPlan
-  let root: URL
   let applyState: ApplyRunState
   let conversionState: ConversionRunState
   let verificationState: VerificationRunState
@@ -387,8 +396,6 @@ private struct PlanReadinessSummary: View {
   let convertAndVerify: () -> Void
   let importIntoMusicLibrary: () -> Void
   let readMusicLibrary: () -> Void
-  let revealWorkingDirectory: () -> Void
-  let revealOutputDirectory: () -> Void
 
   @State private var isConfirmingApply = false
 
@@ -444,16 +451,6 @@ private struct PlanReadinessSummary: View {
           }
         }
       }
-
-      ApplyRunStatus(state: applyState, revealWorkingDirectory: revealWorkingDirectory)
-      ConversionRunStatus(
-        state: conversionState,
-        plan: conversionPlan,
-        revealOutputDirectory: revealOutputDirectory
-      )
-      VerificationRunStatus(state: verificationState, root: root)
-      LibraryImportStatus(state: libraryImportState, root: root)
-      LibraryReadStatus(state: libraryReadState, root: root)
     }
   }
 
@@ -1010,21 +1007,6 @@ private struct TrackPlanRow: View {
             proposed: trackPlan.proposedTags.title
           )
           TrackMetadataComparisonRow(
-            title: "Artist",
-            current: currentMetadata.tags?.artist,
-            proposed: trackPlan.proposedTags.artist
-          )
-          TrackMetadataComparisonRow(
-            title: "Album",
-            current: currentMetadata.tags?.album,
-            proposed: trackPlan.proposedTags.album
-          )
-          TrackMetadataComparisonRow(
-            title: "Album Artist",
-            current: currentMetadata.tags?.albumArtist,
-            proposed: trackPlan.proposedTags.albumArtist
-          )
-          TrackMetadataComparisonRow(
             title: "Track",
             current: currentMetadata.tags?.trackNumber.map(String.init),
             proposed: trackPlan.proposedTags.trackNumber.map(String.init)
@@ -1272,50 +1254,29 @@ private struct RunFileOutcomeRow: View {
   }
 }
 
-private struct SourceMetadataSection: View {
-  let sourceLabels: [SourceLabel]
-  @Binding var selectedSourceLabelID: SourceLabel.ID?
+private struct AlbumTitleSection: View {
   let metadata: ShowMetadata?
 
   var body: some View {
     ScanSection(
-      title: "Source & Album Title",
+      title: "Album Title",
       systemImage: "record.circle"
     ) {
-      VStack(alignment: .leading, spacing: 14) {
-        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 10) {
-          GridRow {
-            Text("Source")
-              .foregroundStyle(.secondary)
-            Picker("Source", selection: $selectedSourceLabelID) {
-              Text("unknown").tag(SourceLabel.ID?.none)
-              ForEach(sourceLabels) { sourceLabel in
-                Text(sourceLabel.token).tag(SourceLabel.ID?.some(sourceLabel.id))
-              }
-            }
-            .labelsHidden()
-            .frame(maxWidth: 260)
-          }
-
-          GridRow {
-            Text("Album")
-              .foregroundStyle(.secondary)
-            Text(metadata?.albumTitle ?? "Parse a setlist to compute the album title.")
-              .textSelection(.enabled)
-          }
-
-          GridRow {
-            Text("Sort Album")
-              .foregroundStyle(.secondary)
-            Text(metadata?.sortAlbum ?? "Parse a setlist to compute the sort album.")
-              .foregroundStyle(metadata == nil ? .secondary : .primary)
-              .textSelection(.enabled)
-          }
+      Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 10) {
+        GridRow {
+          Text("Album")
+            .foregroundStyle(.secondary)
+          Text(metadata?.albumTitle ?? "Parse a setlist to compute the album title.")
+            .textSelection(.enabled)
         }
 
-        Text("Manage the source-label vocabulary in Settings.")
-          .font(.caption)
-          .foregroundStyle(.secondary)
+        GridRow {
+          Text("Sort Album")
+            .foregroundStyle(.secondary)
+          Text(metadata?.sortAlbum ?? "Parse a setlist to compute the sort album.")
+            .foregroundStyle(metadata == nil ? .secondary : .primary)
+            .textSelection(.enabled)
+        }
       }
       .padding(.vertical, 8)
     }
@@ -1356,8 +1317,16 @@ private struct SetlistInputSection: View {
         if let errorMessage {
           ScanErrorBanner(message: errorMessage)
         }
-        if let draft = Binding($draft) {
-          SetlistDraftEditor(draft: draft)
+        if draft != nil {
+          // Bind through a default rather than `Binding($draft)`: SwiftUI updates a
+          // surviving child's binding *before* re-running this body to drop it, so a
+          // force-unwrapping binding traps the instant `draft` goes nil (e.g. Done
+          // clears the show while the Setlist tab is open). Yielding an empty draft on
+          // nil is read-only churn the removal pass immediately discards.
+          SetlistDraftEditor(draft: Binding(
+            get: { draft ?? SetlistDraft() },
+            set: { draft = $0 }
+          ))
         } else {
           EmptyScanSectionRow(title: "No parsed setlist yet")
         }
@@ -1517,6 +1486,8 @@ private enum ActivityTab: String, CaseIterable, Identifiable {
 
 private struct ShowHeader: View {
   let root: URL
+  let sourceLabels: [SourceLabel]
+  @Binding var selectedSourceLabelID: SourceLabel.ID?
   let openFolder: () -> Void
   let done: () -> Void
 
@@ -1532,6 +1503,20 @@ private struct ShowHeader: View {
           .textSelection(.enabled)
       }
       Spacer(minLength: 24)
+      HStack(spacing: 6) {
+        Text("Source")
+          .font(.callout)
+          .foregroundStyle(.secondary)
+        Picker("Source", selection: $selectedSourceLabelID) {
+          Text("unknown").tag(SourceLabel.ID?.none)
+          ForEach(sourceLabels) { sourceLabel in
+            Text(sourceLabel.token).tag(SourceLabel.ID?.some(sourceLabel.id))
+          }
+        }
+        .labelsHidden()
+        .frame(maxWidth: 180)
+        .help("Source label for this show. Manage the vocabulary in Settings.")
+      }
       Button(action: openFolder) {
         Label("Open Show Folder", systemImage: "folder")
       }
@@ -1623,20 +1608,82 @@ private struct ActivityTabBar: View {
   }
 }
 
-/// S1 placeholder — the run-status views still live in the Plan tab this slice; S2
-/// relocates them here (splitting the action bar from the `*RunStatus` calls).
-private struct OutputTabPlaceholder: View {
-  let stage: AppModel.PipelineStage
+/// The per-step run walls, relocated out of the Plan tab (M6 S2): the five `*RunStatus`
+/// views plus the file-operation preview. Renders nothing until a run has started, and
+/// collapses into a disclosure once the show is complete so the terminal state is quiet.
+private struct OutputTab: View {
+  let showPlan: ShowPlan?
+  let root: URL
+  let coverURL: URL?
+  let applyState: ApplyRunState
+  let conversionState: ConversionRunState
+  let verificationState: VerificationRunState
+  let libraryImportState: LibraryImportState
+  let libraryReadState: LibraryReadState
+  let isShowComplete: Bool
+  let revealWorkingDirectory: () -> Void
+  let revealOutputDirectory: () -> Void
+
+  /// User override for the collapse state; `nil` follows the default (expanded while
+  /// running, collapsed once the show is complete).
+  @State private var isExpandedOverride: Bool?
 
   var body: some View {
-    let message: LocalizedStringResource = stage >= .applied
-      ? "Run details currently live under the Plan tab. They move here in the next slice."
-      : "Apply and convert a plan to produce run output."
-    ContentUnavailableView {
-      Label("Run Output", systemImage: "waveform.badge.magnifyingglass")
-    } description: {
-      Text(message)
+    if let showPlan, hasRunOutput {
+      let applyPlan = ApplyPlan(showPlan: showPlan, showRoot: root, coverURL: coverURL)
+      let conversionPlan = ConversionPlan(applyPlan: applyPlan)
+      ScanSection(
+        title: "Run Output",
+        systemImage: "waveform.badge.magnifyingglass"
+      ) {
+        DisclosureGroup(isExpanded: expansion) {
+          VStack(alignment: .leading, spacing: 12) {
+            ApplyRunStatus(state: applyState, revealWorkingDirectory: revealWorkingDirectory)
+            ConversionRunStatus(
+              state: conversionState,
+              plan: conversionPlan,
+              revealOutputDirectory: revealOutputDirectory
+            )
+            VerificationRunStatus(state: verificationState, root: root)
+            LibraryImportStatus(state: libraryImportState, root: root)
+            LibraryReadStatus(state: libraryReadState, root: root)
+            Divider()
+            ApplyOperationsPreview(applyPlan: applyPlan, root: root)
+          }
+          .padding(.top, 8)
+        } label: {
+          Label(
+            isShowComplete ? "Run details (complete)" : "Run details",
+            systemImage: isShowComplete ? "checkmark.seal" : "waveform"
+          )
+          .font(.callout.weight(.medium))
+          .foregroundStyle(isShowComplete ? .green : .primary)
+        }
+        .padding(.vertical, 8)
+      }
+    } else {
+      ContentUnavailableView {
+        Label("Run Output", systemImage: "waveform.badge.magnifyingglass")
+      } description: {
+        Text("Apply and convert a plan to produce run output.")
+      }
     }
+  }
+
+  /// Run output exists once any of the five run states has left `.idle`.
+  private var hasRunOutput: Bool {
+    applyState != .idle
+      || conversionState != .idle
+      || verificationState != .idle
+      || libraryImportState != .idle
+      || libraryReadState != .idle
+  }
+
+  private var expansion: Binding<Bool> {
+    Binding(
+      get: { isExpandedOverride ?? !isShowComplete },
+      set: { isExpandedOverride = $0 }
+    )
   }
 }
 
