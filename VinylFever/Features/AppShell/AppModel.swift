@@ -1,3 +1,4 @@
+import AppKit
 import Dependencies
 import Foundation
 import LLMClientKit
@@ -703,6 +704,30 @@ final class AppModel {
     }
   }
 
+  /// Sets a curated cover for a registry album from a picked image file. The
+  /// uploaded image becomes both the registry tile (`displayImage`) and the
+  /// artwork stamped onto appended tracks (`fallbackArtwork`) — see
+  /// docs/album-cover-upload.md for why both fields update.
+  func setCompilationAlbumCover(album: CompilationAlbum, imageURL: URL) async {
+    do {
+      let data = try Data(contentsOf: imageURL)
+      guard let normalized = Self.normalizedCoverData(data) else {
+        runLogErrorMessage = "That file isn't a readable image."
+        return
+      }
+      var updated = album
+      updated.displayImage = normalized
+      updated.fallbackArtwork = normalized
+      let record = updated
+      try await database.write { db in
+        try CompilationAlbum.upsert { record }.execute(db)
+      }
+      runLogErrorMessage = nil
+    } catch {
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
   func buildCompilationAppendPlan(entry: CompilationAlbum, sourceFolder: URL) async {
     compilationAppendFolder = sourceFolder
     compilationApplyPlan = nil
@@ -996,6 +1021,63 @@ final class AppModel {
       return "gif"
     }
     return "img"
+  }
+
+  /// Validates that `data` decodes as an image, then re-encodes it as JPEG
+  /// (quality 0.9) with the longest edge capped at ~1000px so covers stay small
+  /// as inline SQLite BLOBs. Returns `nil` for anything that isn't a readable
+  /// image.
+  private static func normalizedCoverData(_ data: Data) -> Data? {
+    guard let image = NSImage(data: data) else {
+      return nil
+    }
+    return jpegData(from: image, longestEdge: 1000, quality: 0.9)
+  }
+
+  /// Draws `image` into an RGBA bitmap rep sized so its longest edge is at most
+  /// `longestEdge` (never upscaling), then encodes it as JPEG. Going through
+  /// `NSBitmapImageRep` gives a predictable, resolution-independent result;
+  /// `NSImage` has no built-in JPEG or downscale.
+  private static func jpegData(from image: NSImage, longestEdge: CGFloat, quality: CGFloat) -> Data? {
+    let sourceSize = image.size
+    guard sourceSize.width > 0, sourceSize.height > 0 else {
+      return nil
+    }
+    let scale = min(1, longestEdge / max(sourceSize.width, sourceSize.height))
+    let targetWidth = Int((sourceSize.width * scale).rounded())
+    let targetHeight = Int((sourceSize.height * scale).rounded())
+    guard targetWidth > 0, targetHeight > 0 else {
+      return nil
+    }
+    guard let rep = NSBitmapImageRep(
+      bitmapDataPlanes: nil,
+      pixelsWide: targetWidth,
+      pixelsHigh: targetHeight,
+      bitsPerSample: 8,
+      samplesPerPixel: 4,
+      hasAlpha: true,
+      isPlanar: false,
+      colorSpaceName: .deviceRGB,
+      bytesPerRow: 0,
+      bitsPerPixel: 0
+    ) else {
+      return nil
+    }
+    rep.size = NSSize(width: targetWidth, height: targetHeight)
+    NSGraphicsContext.saveGraphicsState()
+    defer { NSGraphicsContext.restoreGraphicsState() }
+    guard let context = NSGraphicsContext(bitmapImageRep: rep) else {
+      return nil
+    }
+    NSGraphicsContext.current = context
+    image.draw(
+      in: NSRect(x: 0, y: 0, width: targetWidth, height: targetHeight),
+      from: .zero,
+      operation: .copy,
+      fraction: 1
+    )
+    context.flushGraphics()
+    return rep.representation(using: .jpeg, properties: [.compressionFactor: quality])
   }
 
   func saveToolOverride(_ path: String?, for tool: AudioTool, settings: AppSetting) {
