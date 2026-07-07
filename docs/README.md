@@ -17,6 +17,7 @@ Related source material:
 
 - [reference/MusicWorkbench_Codex_Handoff.md](reference/MusicWorkbench_Codex_Handoff.md)
 - [reference/apple_music_library_strategy.md](reference/apple_music_library_strategy.md)
+- [reference/duplicate-detection-strategy.md](reference/duplicate-detection-strategy.md)
 - [../scripts/shell/music_pipeline.sh](../scripts/shell/music_pipeline.sh)
 - `/Users/jon/code/jon-platform/AGENTS.md`
 
