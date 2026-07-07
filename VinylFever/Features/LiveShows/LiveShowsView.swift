@@ -835,17 +835,17 @@ private struct LibraryReadStatus: View {
         .font(.callout)
         .foregroundStyle(permission == .authorized ? .green : .orange)
     case let .completed(result):
+      let total = result.trackResolutions.count
+      let alreadyPresent = result.resolvedCount
+      let newCount = total - alreadyPresent
       VStack(alignment: .leading, spacing: 8) {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
           Label(
-            result.didResolveAll ? "Music resolved" : "Music unresolved",
-            systemImage: result.didResolveAll ? "checkmark.seal" : "xmark.seal"
+            Self.dedupSummary(total: total, alreadyPresent: alreadyPresent, newCount: newCount),
+            systemImage: alreadyPresent == 0 ? "square.and.arrow.down" : "checkmark.circle.fill"
           )
-          .foregroundStyle(result.didResolveAll ? .green : .orange)
-          Text("\(result.resolvedCount)/\(result.trackResolutions.count) files")
-            .font(.caption.monospacedDigit())
-            .foregroundStyle(.secondary)
-          Text("\(result.libraryTracks.count) Music tracks")
+          .foregroundStyle(newCount == 0 && total > 0 ? Color.secondary : Color.green)
+          Text("\(result.libraryTracks.count) in Music album")
             .font(.caption.monospacedDigit())
             .foregroundStyle(.secondary)
         }
@@ -862,6 +862,21 @@ private struct LibraryReadStatus: View {
         .foregroundStyle(.red)
     }
   }
+
+  /// Pre-import duplicate verdict for the scoped album read: how many produced
+  /// tracks already exist in Music (and would be skipped) versus how many are new.
+  static func dedupSummary(total: Int, alreadyPresent: Int, newCount: Int) -> String {
+    if total == 0 {
+      return "No tracks to import"
+    }
+    if alreadyPresent == 0 {
+      return "All \(total) new — nothing already in Music"
+    }
+    if newCount == 0 {
+      return "All \(total) already in Music — import will skip them"
+    }
+    return "\(alreadyPresent) already in Music · \(newCount) new to import"
+  }
 }
 
 private struct LibraryTrackResolutionRow: View {
@@ -870,8 +885,8 @@ private struct LibraryTrackResolutionRow: View {
 
   var body: some View {
     HStack(alignment: .firstTextBaseline, spacing: 8) {
-      Image(systemName: resolution.isResolved ? "checkmark.circle" : "exclamationmark.triangle")
-        .foregroundStyle(resolution.isResolved ? .green : .orange)
+      Image(systemName: systemImage)
+        .foregroundStyle(iconColor)
         .frame(width: 18)
       VStack(alignment: .leading, spacing: 2) {
         Text(resolution.producedFile.relativePath(from: root))
@@ -885,12 +900,41 @@ private struct LibraryTrackResolutionRow: View {
     }
   }
 
-  private var detail: String {
-    if let libraryRef = resolution.libraryRef {
-      let strategy = resolution.strategy?.displayName ?? "unknown"
-      return "Matched \(libraryRef.id) by \(strategy)."
+  private var systemImage: String {
+    if resolution.isResolved {
+      return "checkmark.circle.fill"
     }
-    return resolution.failure?.displayMessage ?? "Unresolved."
+    switch resolution.failure {
+    case .ambiguous:
+      return "exclamationmark.triangle"
+    case .notFound, .none:
+      return "plus.circle"
+    }
+  }
+
+  private var iconColor: Color {
+    if resolution.isResolved {
+      return .secondary
+    }
+    switch resolution.failure {
+    case .ambiguous:
+      return .orange
+    case .notFound, .none:
+      return .green
+    }
+  }
+
+  private var detail: String {
+    if resolution.isResolved {
+      let strategy = resolution.strategy?.displayName ?? "unknown"
+      return "Already in Music — import will skip (matched by \(strategy))."
+    }
+    switch resolution.failure {
+    case let .ambiguous(strategy, _):
+      return "Multiple \(strategy.displayName) matches in Music — import may create a duplicate."
+    case .notFound, .none:
+      return "New — will import."
+    }
   }
 }
 
