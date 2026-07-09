@@ -21,6 +21,10 @@ struct VinylFeverApp: App {
       // (app-own) access group is correct. Only this seam has an unimplemented testValue,
       // so without it the Normalize path throws the moment the sheet runs.
       $0.setlistNormalizer = .liveValue
+      // Same story as the normalizer: the recipe runner's testValue is unimplemented,
+      // so without this the recipe workbench throws `Unimplemented` the moment a
+      // sample runs. Its liveValue is the deterministic (model-off) engine.
+      $0.collectionRecipeRunner = .liveValue
     }
     _model = State(initialValue: AppModel())
   }
