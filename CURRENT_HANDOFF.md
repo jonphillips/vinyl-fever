@@ -7,11 +7,20 @@ the active fronts, whose turn it is, and pending decisions — it points at the
 canonical state and never restates PR/slice history. If it disagrees with GitHub,
 GitHub wins; fix this file.
 
-_Last touched: 2026-07-05 (M6 S1 shell merged #33; S0 vocabulary→Settings merged
-#32; M5 fully landed)._
+_Last touched: 2026-07-09 (M7 S0 core merged #40; S1 build order authored — Codex's
+turn to open the S1 draft PR)._
 
 ## Active fronts
 
+- **M7 — collection recipes**
+  ([ledger](docs/milestones/M7-collection-recipes.md)). **S0 (tables + deterministic
+  model-off runner) merged (#40)** — `collectionPolicies`/`collectionRecipes`,
+  `CollectionRecipeRunner`, and the shared `TextEvidence` verbatim guard. **S1 (recipe
+  workbench) is specced and ready** — its execution map is authored in the ledger,
+  with the two S1-boundary decisions (new top-level `Policies` section; recipe-run and
+  append kept as separate gestures) recorded there. **Codex's turn: open the S1 draft
+  PR.** No core changes in S1 — app-layer UI + `AppModel` wiring cloning the
+  compilation-append flow.
 - **M6 — live-show import UI refactor** *(the one unblocked front)*
   ([ledger](docs/milestones/M6-live-show-import-ui-refactor.md)). UX-only
   restructure of `LiveShowsView`; no core/schema/run-logic change, so **nothing here
@@ -41,13 +50,17 @@ raw corpus and its golden-file pass are in `main`. No open follow-ups._
 
 ## Next up
 
-1. **M6 S2 (content polish)** — the only front that moves without the spike. Extract
+1. **M7 S1 (recipe workbench)** — specced and ready; Codex opens the draft PR. New
+   top-level `Policies` section: policy/recipe CRUD → live-sample preview over a picked
+   folder → apply through the existing rail. App-layer only, no core. Full execution
+   map + DoD in the [M7 ledger](docs/milestones/M7-collection-recipes.md).
+2. **M6 S2 (content polish)** — moves without the spike. Extract
    `PlanActionBar` from `PlanReadinessSummary` (split the button `HStack`/`can*`
    props from the `*RunStatus` calls) and relocate the status views into the **Output**
    tab (S1 left it a placeholder); condense `TrackPlanRow` to hoist album-level fields
    into one header; collapse the Output tab once terminal; and move the Source picker
    into the header (S1 kept it in the Setlist tab to stay a pure relocation).
-2. **The live-read device check is the master unblocker** for everything else:
+3. **The live-read device check is the master unblocker** for everything else:
    **M3 S2** (library verify), **M3 S3** (`Working/` cleanup), and both M4 remainders
    (Reconcile fast-follow + trusting the live certify leg) all wait on it. Running
    the macOS-27 beta-3 read-back spike **once** clears all four; they don't collide.
