@@ -83,7 +83,7 @@ CREATE TABLE "collectionRecipes" (
   "id"                 TEXT PRIMARY KEY NOT NULL ON CONFLICT REPLACE DEFAULT (uuid()),
   "collectionPolicyID" TEXT NOT NULL REFERENCES "collectionPolicies"("id") ON DELETE CASCADE,
   "name"               TEXT NOT NULL DEFAULT '',
-  "filenamePattern"    TEXT NOT NULL DEFAULT '',      -- regex with one named capture
+  "pattern"            TEXT NOT NULL DEFAULT '',      -- regex; matches the filename (capture ops) or the target field (strip)
   "captureName"        TEXT NOT NULL DEFAULT 'value',
   "targetField"        TEXT NOT NULL DEFAULT 'title',
   "op"                 TEXT NOT NULL DEFAULT 'appendIfAbsent',
@@ -109,7 +109,7 @@ public struct CollectionRecipe: Equatable, Sendable, Identifiable {
   public var id: UUID
   public var collectionPolicyID: CollectionPolicy.ID  // FK — the recipe's owning policy
   public var name: String
-  public var filenamePattern: String         // e.g. #"\[(?<value>[^\]]+)\]"#
+  public var pattern: String                 // e.g. #"\[(?<value>[^\]]+)\]"#
   public var captureName: String
   public var targetField: ProposedTags.Field
   public var op: Op
@@ -161,8 +161,11 @@ public struct RecipeProposal: Equatable, Sendable {
 
 The `liveValue` body runs four bookends:
 
-1. **Extract (deterministic).** Run `filenamePattern` over the filename. No
-   match → return `nil`; the file is untouched.
+1. **Extract (deterministic).** `op` decides where `pattern` looks: the capture
+   ops (`appendIfAbsent`, `setIfEmpty`, `replace`) run it over the **filename** and
+   take the named capture; `strip` runs it over the **current `targetField`
+   value** and removes every match. No match → return `nil`; the file is
+   untouched.
 2. **Classify (LLM, only when `useModel`).** A `ModelRequest` on the
    `.onDevicePreferred` tier with a fixed system prompt carrying the output
    schema and the verbatim guard, plus the user's `prompt`, the captured
@@ -172,10 +175,10 @@ The `liveValue` body runs four bookends:
    `apply = true, value = capture` verbatim — no model call.
 3. **Validate (deterministic, model-free).** The guards:
    - **`value` must appear verbatim in the filename.** This is the
-     anti-hallucination tripwire, and it is already written:
-     `SetlistNormalizationValidator.evidenceAppears(_:in:)` is exactly this
-     check (case- and whitespace-insensitive substring). It stops the model
-     inventing or "correcting" an artist name.
+     anti-hallucination tripwire, and it is already written: `TextEvidence.appears`
+     (extracted from the setlist validator's evidence check) is exactly this test
+     (case- and whitespace-insensitive substring). It stops the model inventing or
+     "correcting" an artist name.
    - **Idempotency.** Skip if `targetField` already contains `value`; running a
      recipe twice never double-appends.
    - **Field scope.** The op may only write `targetField`. No helpful,
@@ -185,11 +188,15 @@ The `liveValue` body runs four bookends:
    `affixTemplate` substitutes `{value}` (default `" ({value})"`). Other ops
    (`setIfEmpty`, `replace`, `strip`) transform the field their own way.
 
+An idempotent no-op — the value is already present, the field is already
+populated, or a `strip` changed nothing — returns `nil` (no proposal), *not* an
+issue: there is simply nothing to review. `issues` is reserved for genuine
+problems that must not auto-apply:
+
 ```swift
 public enum RecipeIssue: Equatable, Sendable {
-  case valueNotInFilename        // the anti-hallucination tripwire (reused idea)
-  case modelOutputUnparseable    // degraded floor → review
-  case alreadyPresent            // idempotency: nothing to do
+  case valueNotInFilename        // the anti-hallucination tripwire
+  case modelOutputUnparseable    // degraded floor → review (produced only on the useModel path)
 }
 ```
 
@@ -234,7 +241,7 @@ extract → validate → emit → preview rail, and the live-sample tuning loop 
 zero model variance.
 
 Because `collectionPolicyID` is a foreign key, the first slice also stands up a
-**minimal `collectionPolicies` table** (`id`, `name`, `description` — the
+**minimal `collectionPolicies` table** (`id`, `name`, `details` — the
 identity fields the [policy model](metadata-policy-model.md) lists) as the FK
 anchor. This is the first concrete instantiation of the Collection Policy
 primitive that document is built around; reconciling the existing

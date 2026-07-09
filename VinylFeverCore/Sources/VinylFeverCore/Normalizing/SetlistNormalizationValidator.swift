@@ -87,7 +87,7 @@ public struct SetlistNormalizationValidator: Sendable {
     if !Self.vocabularyKeys.contains(token.lowercased()) {
       issues.append(.sourceNotInVocabulary(source))
     }
-    if !Self.evidenceAppears(evidence, in: rawInput) {
+    if !TextEvidence.appears(evidence, in: rawInput) {
       issues.append(.sourceEvidenceNotInInput)
     }
     return issues
@@ -104,19 +104,6 @@ public struct SetlistNormalizationValidator: Sendable {
   static func isUnknownWord(_ text: String) -> Bool {
     let lower = text.lowercased()
     return lower == "unknown" || lower == "unknown date" || lower == "n/a"
-  }
-
-  /// Evidence check with the same whitespace floor the input gets — the quoted line
-  /// must actually be present, case- and spacing-insensitive, so a real inference
-  /// passes while an invented one fails.
-  static func evidenceAppears(_ evidence: String, in rawInput: String) -> Bool {
-    let needle = collapseWhitespace(evidence)
-    guard !needle.isEmpty else { return false }
-    return collapseWhitespace(rawInput).contains(needle)
-  }
-
-  private static func collapseWhitespace(_ text: String) -> String {
-    text.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
   }
 
   static func numberedLineCount(in rawInput: String) -> Int {
