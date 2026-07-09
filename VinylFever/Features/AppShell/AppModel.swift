@@ -29,6 +29,8 @@ final class AppModel {
   @Dependency(\.setlistNormalizer) private var setlistNormalizer
   @ObservationIgnored
   @Dependency(\.apiKeyStore) private var apiKeyStore
+  @ObservationIgnored
+  @Dependency(\.collectionRecipeRunner) private var collectionRecipeRunner
 
   var selectedSection: AppSection = .liveShows
   var destination: Destination?
@@ -69,6 +71,20 @@ final class AppModel {
   var compilationConversionState: ConversionRunState = .idle
   var compilationImportState: LibraryImportState = .idle
   var compilationCertificationState: CompilationCertificationState = .idle
+  // Recipe workbench (M7 S1). A recipe run is a distinct gesture from a
+  // compilation append — it points one recipe at a folder, previews the diffs, and
+  // rides the same `copy → Working/ → writeTags` rail on apply.
+  var recipeSampleFolder: URL?
+  var recipeSampleItems: [RecipeSampleItem] = []
+  var recipeSampleState: RecipeSampleState = .idle
+  var recipeApplyState: ApplyRunState = .idle
+  /// The folder read cached from the last `buildRecipeSample`, so editing the recipe
+  /// re-runs only the (fast, pure) engine over these tags instead of re-shelling out
+  /// to the metadata tools for every file on every keystroke.
+  @ObservationIgnored
+  private var recipeSampleSources: [RecipeSampleSource] = []
+  @ObservationIgnored
+  private var recipeSampleScannedCount = 0
 
   enum Destination: Hashable {
   }
@@ -1273,12 +1289,332 @@ final class AppModel {
       return []
     }
   }
+
+  // MARK: - Collection Recipes (M7 S1)
+
+  /// Persist a new policy and return it so the caller can select it. The FK anchor
+  /// a recipe hangs off of.
+  @discardableResult
+  func createPolicy(name: String) -> CollectionPolicy? {
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    let policy = CollectionPolicy(id: uuid(), name: trimmed.isEmpty ? "New Policy" : trimmed)
+    do {
+      try database.write { db in
+        try CollectionPolicy.upsert { policy }.execute(db)
+      }
+      runLogErrorMessage = nil
+      return policy
+    } catch {
+      runLogErrorMessage = error.localizedDescription
+      return nil
+    }
+  }
+
+  func savePolicy(_ policy: CollectionPolicy) {
+    do {
+      try database.write { db in
+        try CollectionPolicy.upsert { policy }.execute(db)
+      }
+      runLogErrorMessage = nil
+    } catch {
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
+  /// Delete a policy. Its recipes vanish with it via the `ON DELETE CASCADE` FK — a
+  /// recipe never outlives its policy (see the M7 schema).
+  func deletePolicy(_ policy: CollectionPolicy) {
+    do {
+      try database.write { db in
+        try CollectionPolicy.find(policy.id).delete().execute(db)
+      }
+      clearRecipeSample()
+      runLogErrorMessage = nil
+    } catch {
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
+  /// Create a default recipe for a policy, persist it, and return it so the editor
+  /// can open on it. Defaults are the covers-style append rule (S0's own example).
+  @discardableResult
+  func createRecipe(for policyID: CollectionPolicy.ID) -> CollectionRecipe? {
+    let recipe = CollectionRecipe(
+      id: uuid(),
+      collectionPolicyID: policyID,
+      name: "New Recipe",
+      pattern: #"\[(?<value>[^\]]+)\]"#
+    )
+    do {
+      try database.write { db in
+        try CollectionRecipe.upsert { recipe }.execute(db)
+      }
+      runLogErrorMessage = nil
+      return recipe
+    } catch {
+      runLogErrorMessage = error.localizedDescription
+      return nil
+    }
+  }
+
+  func saveRecipe(_ recipe: CollectionRecipe) {
+    do {
+      try database.write { db in
+        try CollectionRecipe.upsert { recipe }.execute(db)
+      }
+      runLogErrorMessage = nil
+    } catch {
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
+  func deleteRecipe(_ recipe: CollectionRecipe) {
+    do {
+      try database.write { db in
+        try CollectionRecipe.find(recipe.id).delete().execute(db)
+      }
+      clearRecipeSample()
+      runLogErrorMessage = nil
+    } catch {
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
+  func clearRecipeSample() {
+    recipeSampleFolder = nil
+    recipeSampleItems = []
+    recipeSampleState = .idle
+    recipeApplyState = .idle
+    recipeSampleSources = []
+    recipeSampleScannedCount = 0
+  }
+
+  /// Read a folder once and run one recipe over it — the tuning loop's folder-pick
+  /// entry point. Scans, reads each file's current tags (the expensive shell-outs),
+  /// caches the result, then computes the sample. Clones the compilation append read
+  /// loop; never writes. Editing the recipe afterward goes through
+  /// `recomputeRecipeSample`, which reuses this cache instead of re-reading.
+  func buildRecipeSample(recipe: CollectionRecipe, folder: URL) async {
+    recipeSampleFolder = folder
+    recipeApplyState = .idle
+    recipeSampleItems = []
+    recipeSampleSources = []
+    recipeSampleScannedCount = 0
+    recipeSampleState = .running
+    do {
+      let files = try fileSystemClient.scanAudioFolder(folder)
+      let toolPaths = AudioToolPaths(statuses: toolStatuses)
+      var sources: [RecipeSampleSource] = []
+      for file in files {
+        do {
+          let tags = try await audioMetadataClient.read(
+            AudioMetadataRequest(file: file, toolPaths: toolPaths)
+          )
+          sources.append(RecipeSampleSource(file: file, tags: tags))
+        } catch is CancellationError {
+          throw CancellationError()
+        } catch {
+          // A file we can't read simply doesn't contribute to the sample.
+          continue
+        }
+      }
+      recipeSampleSources = sources
+      recipeSampleScannedCount = files.count
+      await recomputeRecipeSample(recipe: recipe)
+      runLogErrorMessage = nil
+    } catch is CancellationError {
+      recipeSampleState = .idle
+    } catch {
+      recipeSampleItems = []
+      recipeSampleSources = []
+      recipeSampleScannedCount = 0
+      recipeSampleState = .failed(error.localizedDescription)
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
+  /// Re-run the recipe engine over the cached folder read — the fast path the editor
+  /// calls as fields change. No file I/O: only the deterministic runner runs, so
+  /// tuning a pattern doesn't re-shell-out per keystroke. A no-op until a folder has
+  /// been read.
+  func recomputeRecipeSample(recipe: CollectionRecipe) async {
+    guard !recipeSampleSources.isEmpty else { return }
+    recipeApplyState = .idle
+    do {
+      var items: [RecipeSampleItem] = []
+      for source in recipeSampleSources {
+        guard
+          let proposal = try await collectionRecipeRunner.run(
+            recipe: recipe,
+            filename: source.file.url.lastPathComponent,
+            current: source.tags
+          )
+        else { continue }
+        items.append(
+          RecipeSampleItem(
+            file: source.file,
+            currentTags: source.tags,
+            proposal: proposal,
+            fieldLabel: recipe.targetField.displayName,
+            current: source.tags.stringValue(for: recipe.targetField),
+            proposed: proposal.delta.stringValue(for: recipe.targetField)
+          )
+        )
+      }
+      recipeSampleItems = items
+      recipeSampleState = .completed(scanned: recipeSampleScannedCount, proposed: items.count)
+    } catch {
+      // An invalid regex mid-edit throws here; surface it without dropping the cache.
+      recipeSampleItems = []
+      recipeSampleState = .failed(error.localizedDescription)
+    }
+  }
+
+  /// Apply the current sample: drop every issue-flagged item, build an `ApplyPlan`
+  /// whose only change per track is the recipe's single-field delta, and run it
+  /// through the existing rail (`copy → Working/ → writeTags`). Staged copies only —
+  /// not an in-place library edit.
+  func applyRecipePlan() async {
+    guard let folder = recipeSampleFolder else { return }
+    let applicable = recipeSampleItems.filter { !$0.hasIssues }
+    guard let plan = Self.recipeApplyPlan(from: applicable, folder: folder) else {
+      recipeApplyState = .idle
+      return
+    }
+    recipeApplyState = .running(plan)
+    do {
+      let result = try await ApplyExecutor().apply(
+        plan,
+        toolPaths: AudioToolPaths(statuses: toolStatuses)
+      )
+      recipeApplyState = .completed(result)
+      runLogErrorMessage = nil
+    } catch is CancellationError {
+      recipeApplyState = .idle
+    } catch {
+      recipeApplyState = .failed(error.localizedDescription)
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
+  /// Build the write-rail plan from a set of applicable sample items. Pure and
+  /// static so it is unit-testable without the executor: every track carries the
+  /// recipe's single-field delta and the same `copy → writeTags` operation pair as
+  /// `ApplyPlan(compilationPlan:)`, so only the one target field is written.
+  static func recipeApplyPlan(from items: [RecipeSampleItem], folder: URL) -> ApplyPlan? {
+    guard !items.isEmpty else { return nil }
+    let root = folder.standardizedFileURL
+    let workingDirectory = root.appendingPathComponent(
+      ApplyPlan.workingDirectoryName,
+      isDirectory: true
+    )
+    let tracks = items.map { item in
+      ApplyTrackPlan(
+        id: item.file.id,
+        sourceFile: item.file,
+        workingFile: workingDirectory.appendingPathComponent(item.file.url.lastPathComponent),
+        tags: item.proposal.delta,
+        trackTotal: item.currentTags.trackTotal ?? 0,
+        coverURL: nil
+      )
+    }
+    return ApplyPlan(
+      showRoot: root,
+      workingDirectory: workingDirectory,
+      coverURL: nil,
+      tracks: tracks,
+      operations: tracks.flatMap { track in
+        [
+          .copy(source: track.sourceFile.url, destination: track.workingFile),
+          .writeTags(track),
+        ]
+      }
+    )
+  }
 }
 
 private struct MetadataReadOutcome: Sendable {
   var file: ScannedAudioFile
   var status: RunFileOutcome.Status
   var note: String
+}
+
+// MARK: - Recipe workbench support (M7 S1)
+
+/// One row of the live-sample preview: a file the recipe touched, its current tags,
+/// and the proposal — plus the display strings the diff panel renders. An item with
+/// a non-empty `issues` set shows a review flag and is excluded from apply.
+struct RecipeSampleItem: Identifiable, Equatable {
+  var file: ScannedAudioFile
+  var currentTags: AudioTags
+  var proposal: RecipeProposal
+  var fieldLabel: String
+  var current: String?
+  var proposed: String?
+
+  var id: ScannedAudioFile.ID { file.id }
+  var filename: String { file.url.lastPathComponent }
+  var hasIssues: Bool { !proposal.issues.isEmpty }
+}
+
+enum RecipeSampleState: Equatable {
+  case idle
+  case running
+  case completed(scanned: Int, proposed: Int)
+  case failed(String)
+}
+
+/// A file read from the sample folder plus its current tags — cached so recipe edits
+/// re-run the engine without re-reading metadata.
+private struct RecipeSampleSource: Equatable {
+  var file: ScannedAudioFile
+  var tags: AudioTags
+}
+
+extension ProposedTags {
+  /// Read back a single string-valued field from a recipe delta so the preview can
+  /// show `current → proposed`. Mirrors `AudioTags.stringValue(for:)`.
+  func stringValue(for field: Field) -> String? {
+    switch field {
+    case .title: title
+    case .album: album
+    case .sortAlbum: sortAlbum
+    case .artist: artist
+    case .albumArtist: albumArtist
+    case .grouping: grouping
+    default: nil
+    }
+  }
+}
+
+extension ProposedTags.Field {
+  /// Human label for the recipe editor's field picker and the diff panel.
+  var displayName: String {
+    switch self {
+    case .title: "Title"
+    case .album: "Album"
+    case .sortAlbum: "Sort Album"
+    case .artist: "Artist"
+    case .albumArtist: "Album Artist"
+    case .grouping: "Grouping"
+    case .isCompilation: "Compilation"
+    case .trackNumber: "Track Number"
+    case .trackTotal: "Track Total"
+    case .discNumber: "Disc Number"
+    }
+  }
+}
+
+extension CollectionRecipe.Op {
+  /// Human label for the op picker.
+  var displayName: String {
+    switch self {
+    case .appendIfAbsent: "Append if absent"
+    case .setIfEmpty: "Set if empty"
+    case .replace: "Replace"
+    case .strip: "Strip"
+    }
+  }
 }
 
 enum ApplyRunState: Equatable {
@@ -1415,6 +1751,7 @@ enum CompilationCertificationState: Equatable {
 enum AppSection: String, CaseIterable, Identifiable, Hashable {
   case liveShows
   case collections
+  case policies
 
   var id: Self { self }
 
@@ -1424,6 +1761,8 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
       "Live Shows"
     case .collections:
       "Collections"
+    case .policies:
+      "Policies"
     }
   }
 
@@ -1433,6 +1772,8 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
       "music.note.list"
     case .collections:
       "rectangle.stack"
+    case .policies:
+      "slider.horizontal.3"
     }
   }
 }
