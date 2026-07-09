@@ -40,11 +40,11 @@ class of rule into a first-class, previewable, per-collection app surface.
 Full design in [../collection-recipes.md](../collection-recipes.md). The moving
 parts:
 
-- **`collectionPolicies` table** (minimal: `id`, `name`, `description`) — the FK
+- **`collectionPolicies` table** (minimal: `id`, `name`, `details`) — the FK
   anchor and first concrete instance of the Collection Policy primitive.
 - **`collectionRecipes` table** (SQLiteData, STRICT, cloned from
   `compilationAlbums` conventions) holding `{ collectionPolicyID (FK, cascade
-  delete), name, filenamePattern, captureName, targetField, op, affixTemplate,
+  delete), name, pattern, captureName, targetField, op, affixTemplate,
   useModel, prompt, enabled }`.
 - **`CollectionRecipe`** model; `targetField` is the existing
   [`ProposedTags.Field`](../../VinylFeverCore/Sources/VinylFeverCore/Model/ShowPlan.swift)
@@ -95,7 +95,7 @@ template already in the tree:
 
 | File | Contents | Template |
 | --- | --- | --- |
-| `Model/CollectionPolicy.swift` | `@Table struct CollectionPolicy { let id: UUID; var name; var description }` | [CompilationAlbum.swift](../../VinylFeverCore/Sources/VinylFeverCore/Model/CompilationAlbum.swift) |
+| `Model/CollectionPolicy.swift` | `@Table struct CollectionPolicy { let id: UUID; var name; var details }` | [CompilationAlbum.swift](../../VinylFeverCore/Sources/VinylFeverCore/Model/CompilationAlbum.swift) |
 | `Model/CollectionRecipe.swift` | `@Table struct CollectionRecipe` (schema columns) + `Op` enum + `affixTemplate` `{value}` substitution | `CompilationAlbum.swift` |
 | `Recipes/CollectionRecipeRunner.swift` | `@DependencyClient` seam + `liveValue` **model-off path** (extract → validate → emit) | [SetlistNormalizer.swift](../../VinylFeverCore/Sources/VinylFeverCore/Normalizing/SetlistNormalizer.swift) minus `ModelClient` |
 

@@ -101,6 +101,43 @@ public enum VinylFeverDatabase {
         """)
         .execute(db)
     }
+
+    // 'collectionPolicies' before 'collectionRecipes': the recipe FK references it.
+    migrator.registerMigration("Create 'collectionPolicies' table") { db in
+      try #sql("""
+        CREATE TABLE "collectionPolicies" (
+          "id" TEXT PRIMARY KEY NOT NULL ON CONFLICT REPLACE DEFAULT (uuid()),
+          "name" TEXT NOT NULL DEFAULT '',
+          "details" TEXT NOT NULL DEFAULT ''
+        ) STRICT
+        """)
+        .execute(db)
+    }
+
+    migrator.registerMigration("Create 'collectionRecipes' table") { db in
+      try #sql("""
+        CREATE TABLE "collectionRecipes" (
+          "id" TEXT PRIMARY KEY NOT NULL ON CONFLICT REPLACE DEFAULT (uuid()),
+          "collectionPolicyID" TEXT NOT NULL REFERENCES "collectionPolicies"("id") ON DELETE CASCADE,
+          "name" TEXT NOT NULL DEFAULT '',
+          "pattern" TEXT NOT NULL DEFAULT '',
+          "captureName" TEXT NOT NULL DEFAULT 'value',
+          "targetField" TEXT NOT NULL DEFAULT 'title',
+          "op" TEXT NOT NULL DEFAULT 'appendIfAbsent',
+          "affixTemplate" TEXT NOT NULL DEFAULT ' ({value})',
+          "useModel" INTEGER NOT NULL DEFAULT 0,
+          "prompt" TEXT NOT NULL DEFAULT '',
+          "enabled" INTEGER NOT NULL DEFAULT 1
+        ) STRICT
+        """)
+        .execute(db)
+
+      try #sql("""
+        CREATE INDEX "index_collectionRecipes_on_collectionPolicyID"
+          ON "collectionRecipes"("collectionPolicyID")
+        """)
+        .execute(db)
+    }
   }
 
   public static func seedBuiltInSourceLabels(in database: any DatabaseWriter) throws {
