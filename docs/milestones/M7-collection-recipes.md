@@ -86,9 +86,9 @@ parts:
 
 ## S0 execution map
 
-*Detailed for S0 only. S1/S2 stay at the sketch above until S0's carry-over is
-known — the slice-review workflow folds findings into the next slice, so
-speccing them finely now would be thrown away.*
+*S0 and S1 are detailed below. S2 stays at the sketch above until S1's carry-over
+is known — the slice-review workflow folds findings into the next slice, so
+speccing it finely now would be thrown away.*
 
 Everything lands in `VinylFeverCore` (S0 is UI-free). New files, each with a
 template already in the tree:
@@ -125,6 +125,87 @@ idempotency no-op (run twice), the verbatim-guard rejection (capture altered so
 it no longer appears in the filename → `RecipeIssue.valueNotInFilename`), and the
 FK cascade (delete a policy → its recipes vanish).
 
+## S1 execution map
+
+*The app-layer slice: a folder-targeted recipe workbench. S0's runner and the
+existing `ApplyPlan`/`writeTags` rail already cover the machinery, so S1 adds **no
+`VinylFeverCore`** — it is UI + `AppModel` wiring that clones the compilation-append
+flow. Flag any core reach in review.*
+
+**Shape (resolved 2026-07-09).** A recipe run and a collection append stay **two
+separate gestures** for now — author/tune/run a recipe against a Finder folder here;
+append to a compilation over on the Collections screen. No policy↔collection binding
+and no auto-run in S1; whether to fuse them is a "use it, then decide" question (see
+Decisions). The surface is a **new top-level `Policies` sidebar section**, peer to
+Live Shows and Collections — not bolted onto the already-584-line `CollectionsView`,
+and deliberately not implying a binding that isn't built.
+
+The flow mirrors compilation append end-to-end (registry → folder-pick → read tags →
+build plan → preview diffs → apply), so every step has a proven template in
+[CollectionsView.swift](../../VinylFever/Features/Collections/CollectionsView.swift)
+and the `compilation*` methods in
+[AppModel.swift](../../VinylFever/Features/AppShell/AppModel.swift).
+
+New files:
+
+| File | Contents | Template |
+| --- | --- | --- |
+| `VinylFever/Features/Policies/PoliciesView.swift` | Policy registry (CRUD) → recipe editor for the selected policy → live-sample preview → apply. Split into sections the way `CollectionsView` is if it grows. | `CollectionsView.swift` |
+
+Edits to existing files:
+
+- **[AppModel.swift](../../VinylFever/Features/AppShell/AppModel.swift)** — add
+  `AppSection.policies` (title `"Policies"`, an SF Symbol) at the `AppSection` enum
+  (`:1415`); recipe/policy UI state; and two methods cloned from the compilation
+  counterparts: `buildRecipeSample(recipe:folder:)` (clone the append read loop at
+  `:739`–`:758` — `fileSystemClient.scanAudioFolder` → per-file
+  `audioMetadataClient.read` → `collectionRecipeRunner.run(recipe:filename:current:)`,
+  collecting non-`nil` proposals) and `applyRecipePlan(_:)` (clone
+  `applyCompilationPlan` at `:784`).
+- **[AppShellView.swift](../../VinylFever/Features/AppShell/AppShellView.swift)** —
+  route `.policies → PoliciesView(model:)` in the section `switch` (`:23`).
+
+The pieces:
+
+- **Policy + recipe CRUD** against S0's tables. `@FetchAll(CollectionPolicy.order(by:
+  \.name))` for the policy list (create / rename / delete — **delete cascades its
+  recipes** via the FK; make that a visible DoD check). For the selected policy,
+  `@FetchAll` recipes filtered on `collectionPolicyID`. Editor form fields: `name`;
+  `op` picker over `Op.allCases`; `targetField` picker over the **string-valued**
+  fields only (filter `ProposedTags.Field.allCases` by `isStringValued`); `pattern`;
+  `captureName`; `affixTemplate` (surface it only for `appendIfAbsent`); `enabled`.
+  `useModel`/`prompt` are **inert in S1** — render them disabled with an "arrives in
+  S2" affordance and persist their defaults, so S2 lights them up with no migration.
+  Route mutations through `defaultDatabase` writes the way the compilation registry
+  does.
+- **Live-sample preview — the tuning loop.** Folder pick (`NSOpenPanel`, cloned from
+  `CollectionsView.openFolder`) → `buildRecipeSample` runs the **one selected recipe**
+  over each file and shows ~15–20 proposed diffs (filename, field, current → proposed).
+  A proposal carrying non-empty `issues` renders a **review flag** and is excluded
+  from apply — never auto-applied (the setlist "refuse to call it clean" rule). The
+  panel re-runs as the recipe is edited; it does not write. Running a whole policy's
+  recipe set in one pass is a natural fast-follow, **not** an S1 requirement — S1 is
+  single-recipe.
+- **Apply — feeds the existing rail unchanged.** Build an `ApplyPlan` whose
+  `ApplyTrackPlan.tags` is the recipe's single-field `proposal.delta`, with the same
+  `copy → writeTags` operation pair as `ApplyPlan(compilationPlan:)`, then run
+  `ApplyExecutor().apply(plan, toolPaths:)`. Correctness is already guaranteed by the
+  rail: `AudioTaggingCommands.plan` emits a write command only for non-`nil` fields
+  ([:112](../../VinylFeverCore/Sources/VinylFeverCore/Tagging/AudioTaggingCommands.swift)),
+  so the delta changes its one field and leaves every other tag on the copied file
+  intact. Like every other flow, this stages tagged copies under `Working/` — it is
+  **not** an in-place library edit (that would touch the write rail; out of scope —
+  see Decisions).
+
+Tests: `AppModel`-level coverage of `buildRecipeSample` (proposals collected, issue
+items flagged) and `applyRecipePlan` (issue items excluded, single-field delta lands),
+using the injected `collectionRecipeRunner` + fake file/metadata clients — clone the
+compilation apply test support. Pure-view code stays untested.
+
+DoD (from the slice list): a user authors a model-off recipe end-to-end, previews real
+diffs over a chosen folder, applies, and the written tags are verifiable; deleting a
+policy cascades its recipes. No model involved.
+
 ## Out of scope
 
 - Any change to the write rail, `ApplyPlan`, `FileOperation.writeTags`, or the
@@ -148,3 +229,20 @@ FK cascade (delete a policy → its recipes vanish).
   per-file model decision. Only `appendIfAbsent` reads it.
 
 No open decisions. Slice boundaries above are the proposed review units.
+
+## Decisions (resolved 2026-07-09, S1 boundary)
+
+- **Recipe surface → a new top-level `Policies` sidebar section**, peer to Live Shows
+  and Collections. Not nested in `CollectionsView` (already 584 lines) and not
+  attached to a compilation-album record.
+- **Recipe run and collection append stay two separate gestures.** No policy↔
+  collection binding and no auto-run of recipes on append in S1: not every track that
+  lands in a collection meets a recipe's requirements, so coupling them now would
+  over-fit. Run the recipe against a folder here; append on Collections. **Open
+  question, deferred by design:** whether to fuse the two runs once the folder-run
+  flow has been used enough to show the pattern — answer from real use, don't
+  pre-guess.
+- **Recipe apply rides the existing `copy → Working/ → writeTags` rail; no in-place
+  library edit in S1.** In-place tag editing would require a new write-rail path,
+  which is out of scope. Whether recipe cleanup should ultimately write in place
+  rides with the fuse-the-runs question above.
