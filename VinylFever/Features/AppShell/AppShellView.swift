@@ -25,6 +25,8 @@ struct AppShellView: View {
         LiveShowsView(model: model)
       case .collections:
         CollectionsView(model: model)
+      case .policies:
+        PoliciesView(model: model)
       }
     }
   }
