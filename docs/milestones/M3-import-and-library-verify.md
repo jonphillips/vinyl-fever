@@ -204,8 +204,14 @@ box in the slice PR that completes it. GitHub PR state is canonical.
 
 - [x] Slice 0 — Music.app read-surface spike + Apple Events permission
 - [x] Slice 1 — Import `Output/` into Apple Music (explicit)
-- [ ] Slice 2 — Library-level verification
-- [ ] Slice 3 — `Working/` cleanup (confirmed) + partial-output recovery
+- [~] Slice 2 — Library-level verification — **descoped (Jon, 2026-07-10)**
+- [~] Slice 3 — `Working/` cleanup (confirmed) + partial-output recovery — **descoped (Jon, 2026-07-10)**
+
+> **Milestone closed / descoped (Jon, 2026-07-10).** S0+S1 landed and the live
+> import pipeline is validated on-device. S2 (in-app library-verify) and S3
+> (confirmed `Working/` cleanup) are **not being built** — manual verification and
+> cleanup are sufficient in practice. Revisit only if that stops being true; the
+> slice specs below stay as-is for that day.
 
 ### Slice 0 — Music.app read-surface spike + Apple Events permission
 
