@@ -13,6 +13,20 @@ app) is now the active turn)._
 
 ## Active fronts
 
+- **M9 — manual append metadata** *(ungated, no device dependency)*
+  ([ledger](docs/milestones/M9-manual-append-metadata.md)). Dogfooding ask (Jon,
+  2026-07-10): a per-append affordance to type a **Grouping** token and a **Comments**
+  note that ride along with the appended batch — held **ephemerally for that append
+  only**, persisted nowhere. Grouping is a small extension (one more source into the
+  existing `mergedGrouping` union); **Comments is a net-new tag field threaded
+  end-to-end** (model → both parsers → both taggers → conditional diff), which is why
+  it splits into **S0 (comments as a first-class tag, core)** and **S1 (append-time
+  fields, app)**. S1 also bundles two same-screen dogfooding tweaks (bigger registry
+  artwork; the Append Folder action moved out of the header into the selection-gated
+  detail so it only shows once a collection is picked). Neither slice touches the schema
+  or the Music.app live-read gate. Not yet dispatched — architect authored the ledger;
+  Codex may open S0 whenever it wants a green ungated slice.
+
 - **M8 — collection policy binding**
   ([ledger](docs/milestones/M8-collection-policy-binding.md)). **S0 (FK + `ProposedTags`
   merge, core) merged (#46)** — nullable `collectionPolicyID` (`ON DELETE SET NULL`),
@@ -93,12 +107,16 @@ raw corpus and its golden-file pass are in `main`. No open follow-ups._
 3. **One-true-import-folder fix** — ungated standalone slice (front above). Passthrough
    mp3/m4a copy-through into `Output/` so one folder holds every import-ready track.
    Good green slice to slot between spike-gated fronts; needs no device check.
-4. **M8 S1 (bind + fused append, app)** — S0 core merged (#46). Policy picker to set/clear
-   the binding + `buildCompilationAppendPlan` running the bound policy's recipes into S0's
-   plan build, one preview / one apply. Heed the S0 carry-over in the ledger: recipe
-   title/artist/sortAlbum need a preview diff channel; issue-flagged proposals are
-   preview-gated. App-layer; ungated. Full map in the
-   [M8 ledger](docs/milestones/M8-collection-policy-binding.md).
+4. **M9 S0 (comments as a first-class tag, core)** — ungated standalone, good green
+   slice between spike-gated fronts. Thread a `comments` field through the read/write
+   tag path (model → both parsers → both taggers → conditional diff) with an
+   idempotent *append* merge (`appendedComment(source:note:)`), no UI. Follow the
+   `grouping` field line-for-line. Full map + the byte-identical-unbound guarantee in
+   the [M9 ledger](docs/milestones/M9-manual-append-metadata.md); S1 (append-time
+   fields, app) follows.
+
+5. **M8 S1 (bind + fused append, app)** — merged (#48). *(kept for history until the
+   next handoff sweep.)*
 
 ## Pending Jon decisions
 
