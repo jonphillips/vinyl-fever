@@ -241,7 +241,8 @@ No open decisions. Slice boundaries above are the proposed review units.
   over-fit. Run the recipe against a folder here; append on Collections. **Open
   question, deferred by design:** whether to fuse the two runs once the folder-run
   flow has been used enough to show the pattern — answer from real use, don't
-  pre-guess.
+  pre-guess. **Resolved 2026-07-10 → fuse it:** real use surfaced the two-gesture
+  friction; the binding is specced as [M8](M8-collection-policy-binding.md).
 - **Recipe apply rides the existing `copy → Working/ → writeTags` rail; no in-place
   library edit in S1.** In-place tag editing would require a new write-rail path,
   which is out of scope. Whether recipe cleanup should ultimately write in place
