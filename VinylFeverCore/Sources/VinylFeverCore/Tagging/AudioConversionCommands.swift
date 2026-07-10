@@ -70,6 +70,8 @@ public enum AudioConversionCommands {
       ("sort_album", track.tags.sortAlbum),
       ("artist", track.tags.artist),
       ("album_artist", track.tags.albumArtist),
+      ("grouping", track.tags.grouping),
+      ("comment", track.tags.comments),
       ("track", track.tags.trackNumber.map { "\($0)/\(track.tags.trackTotal ?? track.trackTotal)" }),
       ("disc", track.tags.discNumber.map(String.init)),
     ].flatMap { key, value in

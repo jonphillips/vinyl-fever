@@ -99,4 +99,24 @@ struct AudioConversionCommandTests {
       ]
     )
   }
+
+  @Test
+  func carriesGroupingAndCommentsIntoALACMetadata() throws {
+    let applyTrack = makeApplyTrack(format: .flac, coverURL: nil)
+    var taggedTrack = applyTrack
+    taggedTrack.tags.grouping = "Collection | Session"
+    taggedTrack.tags.comments = "Original comment\nAppend note"
+    let track = ConversionTrackPlan(
+      applyTrack: taggedTrack,
+      outputDirectory: applyShowRoot.appendingPathComponent("Output", isDirectory: true)
+    )
+
+    let arguments = try AudioConversionCommands.alacCommand(
+      for: track,
+      toolPaths: AudioToolPaths(paths: [.ffmpeg: "/tools/ffmpeg"])
+    ).arguments
+
+    #expect(arguments.contains { $0 == "grouping=Collection | Session" })
+    #expect(arguments.contains { $0 == "comment=Original comment\nAppend note" })
+  }
 }
