@@ -398,6 +398,10 @@ private struct CompilationTrackPlanRow: View {
   let recipeProposals: [CompilationRecipeProposal]
 
   var body: some View {
+    let hasAppliedRecipeGrouping = recipeProposals.contains {
+      $0.proposal.issues.isEmpty && $0.proposal.delta.grouping != nil
+    }
+
     VStack(alignment: .leading, spacing: 8) {
       HStack {
         Text(track.sourceFile.url.lastPathComponent)
@@ -411,7 +415,9 @@ private struct CompilationTrackPlanRow: View {
         .foregroundStyle(.secondary)
       }
       Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 4) {
-        ForEach(track.diffs) { diff in
+        ForEach(track.diffs.filter { diff in
+          !hasAppliedRecipeGrouping || diff.field != "Grouping"
+        }) { diff in
           GridRow {
             Text(diff.field)
               .foregroundStyle(.secondary)
@@ -430,7 +436,7 @@ private struct CompilationTrackPlanRow: View {
             .font(.caption)
             .fontWeight(.semibold)
           ForEach(recipeProposals) { recipeProposal in
-            RecipeProposalPreview(proposal: recipeProposal.proposal, current: track.current)
+            RecipeProposalPreview(proposal: recipeProposal, current: track.current)
           }
         }
       }
@@ -450,12 +456,12 @@ private struct CompilationTrackPlanRow: View {
 }
 
 private struct RecipeProposalPreview: View {
-  let proposal: RecipeProposal
+  let proposal: CompilationRecipeProposal
   let current: AudioTags
 
   var body: some View {
     VStack(alignment: .leading, spacing: 5) {
-      let diffs = Self.diffs(for: proposal.delta, current: current)
+      let diffs = Self.diffs(for: proposal.previewDelta, current: current)
       if !diffs.isEmpty {
         Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 4) {
           ForEach(diffs) { diff in
@@ -471,17 +477,27 @@ private struct RecipeProposalPreview: View {
           }
         }
       }
-      Text(proposal.reason)
+      if !proposal.heldFields.isEmpty {
+        ForEach(proposal.heldFields.sorted { $0.rawValue < $1.rawValue }, id: \.self) { field in
+          Label(
+            "\(field.displayName) held by collection — not applied",
+            systemImage: "arrow.uturn.left.circle"
+          )
+          .font(.caption2)
+          .foregroundStyle(.secondary)
+        }
+      }
+      Text(proposal.proposal.reason)
         .font(.caption2)
         .foregroundStyle(.secondary)
-      if !proposal.issues.isEmpty {
+      if !proposal.proposal.issues.isEmpty {
         Label(
           "Review required — not applied",
           systemImage: "exclamationmark.triangle"
         )
         .foregroundStyle(.orange)
         .font(.caption2)
-        ForEach(proposal.issues, id: \.self) { issue in
+        ForEach(proposal.proposal.issues, id: \.self) { issue in
           Text(Self.issueMessage(issue))
             .font(.caption2)
             .foregroundStyle(.orange)
@@ -493,7 +509,11 @@ private struct RecipeProposalPreview: View {
 
   private static func diffs(for proposed: ProposedTags, current: AudioTags) -> [CompilationTagDiff] {
     ProposedTags.Field.allCases
-      .filter { $0.isStringValued && proposed.stringValue(for: $0) != nil }
+      .filter {
+        $0.isStringValued
+          && proposed.stringValue(for: $0) != nil
+          && proposed.stringValue(for: $0) != current.stringValue(for: $0)
+      }
       .map { field in
         CompilationTagDiff(
           field: field.displayName,

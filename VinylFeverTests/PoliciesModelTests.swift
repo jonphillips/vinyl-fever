@@ -244,6 +244,44 @@ struct PoliciesModelTests {
     #expect(model.compilationRecipeProposalsByFileID.isEmpty)
   }
 
+  @Test
+  func recipePreviewUsesEffectiveMergedValuesAndMarksCollectionIdentityAsHeld() {
+    let proposals = [
+      CompilationRecipeProposal(
+        recipeID: UUID(40),
+        proposal: RecipeProposal(
+          delta: ProposedTags(
+            title: "First title",
+            album: "Recipe album",
+            grouping: "Recipe grouping"
+          ),
+          reason: "first"
+        )
+      ),
+      CompilationRecipeProposal(
+        recipeID: UUID(41),
+        proposal: RecipeProposal(
+          delta: .delta("Final title", for: .title),
+          reason: "last"
+        )
+      ),
+    ]
+
+    let prepared = AppModel.preparedCompilationRecipeProposals(
+      proposals,
+      merged: ProposedTags(
+        title: "Final title",
+        album: "Collection album",
+        grouping: "Collection grouping | Recipe grouping"
+      )
+    )
+
+    #expect(prepared[0].previewDelta == ProposedTags(grouping: "Collection grouping | Recipe grouping"))
+    #expect(prepared[0].heldFields == [.album])
+    #expect(prepared[1].previewDelta == ProposedTags(title: "Final title"))
+    #expect(prepared[1].heldFields.isEmpty)
+  }
+
   // MARK: - Fixtures
 
   private static func file(_ n: Int, _ name: String) -> ScannedAudioFile {

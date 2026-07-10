@@ -64,6 +64,7 @@ final class AppModel {
   var selectedCompilationSeedCandidateIDs: Set<CompilationAlbumSeedCandidate.ID> = []
   var compilationSeedState: CollectionSeedState = .idle
   var compilationAppendFolder: URL?
+  var compilationAppendAlbumID: CompilationAlbum.ID?
   var compilationAppendFiles: [ScannedAudioFile] = []
   var compilationAppendMetadataByFileID: [ScannedAudioFile.ID: AudioMetadataLoadState] = [:]
   /// All recipe proposals are retained for the append preview. Issue-flagged
@@ -749,6 +750,7 @@ final class AppModel {
 
   func buildCompilationAppendPlan(entry: CompilationAlbum, sourceFolder: URL) async {
     compilationAppendFolder = sourceFolder
+    compilationAppendAlbumID = entry.id
     compilationApplyPlan = nil
     compilationRecipeProposalsByFileID = [:]
     compilationApplyState = .idle
@@ -780,9 +782,10 @@ final class AppModel {
       var recipeProposalsByFileID: [ScannedAudioFile.ID: [CompilationRecipeProposal]] = [:]
       if let policyID = entry.collectionPolicyID {
         let enabledRecipes = try await database.read { db in
-          try CollectionRecipe.order(by: \.name)
+          try CollectionRecipe
+            .where { $0.collectionPolicyID.eq(policyID) && $0.enabled.eq(true) }
+            .order(by: \.name)
             .fetchAll(db)
-            .filter { $0.collectionPolicyID == policyID && $0.enabled }
         }
         for file in files {
           guard let current = currentTagsByFileID[file.id] else { continue }
@@ -810,7 +813,6 @@ final class AppModel {
           }
         }
       }
-      compilationRecipeProposalsByFileID = recipeProposalsByFileID
       let fallbackArtworkURL =
         if let fallbackArtwork = entry.fallbackArtwork {
           sourceFolder
@@ -819,7 +821,7 @@ final class AppModel {
         } else {
           URL?.none
         }
-      compilationApplyPlan = CompilationApplyPlan(
+      let plan = CompilationApplyPlan(
         entry: entry,
         sourceRoot: sourceFolder,
         files: files,
@@ -827,6 +829,20 @@ final class AppModel {
         fallbackArtworkURL: fallbackArtworkURL,
         recipeDeltasByFileID: recipeDeltasByFileID
       )
+      let tracksByID = Dictionary(uniqueKeysWithValues: plan.tracks.map { ($0.id, $0) })
+      var preparedProposalsByFileID: [ScannedAudioFile.ID: [CompilationRecipeProposal]] = [:]
+      for (fileID, proposals) in recipeProposalsByFileID {
+        guard let track = tracksByID[fileID] else {
+          preparedProposalsByFileID[fileID] = proposals
+          continue
+        }
+        preparedProposalsByFileID[fileID] = Self.preparedCompilationRecipeProposals(
+          proposals,
+          merged: track.proposed
+        )
+      }
+      compilationRecipeProposalsByFileID = preparedProposalsByFileID
+      compilationApplyPlan = plan
       runLogErrorMessage = nil
     } catch is CancellationError {
       compilationApplyPlan = nil
@@ -842,6 +858,7 @@ final class AppModel {
   func setCompilationPolicy(_ policyID: CollectionPolicy.ID?, for album: CompilationAlbum) {
     var updated = album
     updated.collectionPolicyID = policyID
+    let retainedFolder = compilationAppendAlbumID == album.id ? compilationAppendFolder : nil
     do {
       try database.write { db in
         try CompilationAlbumRegistry.upsert([updated], in: db)
@@ -851,6 +868,11 @@ final class AppModel {
       compilationApplyPlan = nil
       compilationRecipeProposalsByFileID = [:]
       runLogErrorMessage = nil
+      if let retainedFolder {
+        Task {
+          await buildCompilationAppendPlan(entry: updated, sourceFolder: retainedFolder)
+        }
+      }
     } catch {
       runLogErrorMessage = error.localizedDescription
     }
@@ -1598,15 +1620,78 @@ private struct MetadataReadOutcome: Sendable {
   var note: String
 }
 
-// MARK: - Recipe workbench support (M7 S1)
+// MARK: - Recipe workbench support (M7 S1) / bound append preview (M8 S1)
 
 /// A bound-append proposal keeps the recipe's stable identity beside the runner
 /// output so the preview can render proposals with stable SwiftUI identity.
 struct CompilationRecipeProposal: Identifiable, Equatable {
   let recipeID: CollectionRecipe.ID
   let proposal: RecipeProposal
+  let previewDelta: ProposedTags
+  let heldFields: Set<ProposedTags.Field>
+
+  init(
+    recipeID: CollectionRecipe.ID,
+    proposal: RecipeProposal,
+    previewDelta: ProposedTags? = nil,
+    heldFields: Set<ProposedTags.Field> = []
+  ) {
+    self.recipeID = recipeID
+    self.proposal = proposal
+    self.previewDelta = previewDelta ?? proposal.delta
+    self.heldFields = heldFields
+  }
 
   var id: CollectionRecipe.ID { recipeID }
+}
+
+extension AppModel {
+  /// Projects the final merged plan back onto the recipe rows so the preview shows
+  /// what can actually land on disk. Identity proposals are retained as explicit
+  /// for-information rows, while scalar fields only render on the last applicable
+  /// recipe and grouping renders the final union.
+  static func preparedCompilationRecipeProposals(
+    _ proposals: [CompilationRecipeProposal],
+    merged: ProposedTags
+  ) -> [CompilationRecipeProposal] {
+    var lastApplicableIndexByField: [ProposedTags.Field: Int] = [:]
+    for (index, proposal) in proposals.enumerated() {
+      guard proposal.proposal.issues.isEmpty else { continue }
+      for field in ProposedTags.Field.allCases
+        where proposal.proposal.delta.stringValue(for: field) != nil
+      {
+        lastApplicableIndexByField[field] = index
+      }
+    }
+
+    return proposals.enumerated().map { index, proposal in
+      guard proposal.proposal.issues.isEmpty else { return proposal }
+
+      var previewDelta = ProposedTags()
+      var heldFields: Set<ProposedTags.Field> = []
+      for field in ProposedTags.Field.allCases
+        where proposal.proposal.delta.stringValue(for: field) != nil
+        && lastApplicableIndexByField[field] == index
+      {
+        switch field {
+        case .album, .albumArtist:
+          heldFields.insert(field)
+        case .grouping, .title, .sortAlbum, .artist:
+          guard let value = merged.stringValue(for: field) else { continue }
+          previewDelta.setStringValue(value, for: field)
+        case .isCompilation, .trackNumber, .trackTotal, .discNumber:
+          break
+        }
+      }
+
+      return CompilationRecipeProposal(
+        recipeID: proposal.recipeID,
+        proposal: proposal.proposal,
+        previewDelta: previewDelta,
+        heldFields: heldFields
+      )
+    }
+  }
 }
 
 /// One row of the live-sample preview: a file the recipe touched, its current tags,
@@ -1651,6 +1736,18 @@ extension ProposedTags {
     case .albumArtist: albumArtist
     case .grouping: grouping
     default: nil
+    }
+  }
+
+  mutating func setStringValue(_ value: String, for field: Field) {
+    switch field {
+    case .title: title = value
+    case .album: album = value
+    case .sortAlbum: sortAlbum = value
+    case .artist: artist = value
+    case .albumArtist: albumArtist = value
+    case .grouping: grouping = value
+    default: break
     }
   }
 }
