@@ -123,6 +123,7 @@ public struct ProposedTags: Equatable, Sendable {
   public var artist: String?
   public var albumArtist: String?
   public var grouping: String?
+  public var comments: String?
   public var isCompilation: Bool?
   public var trackNumber: Int?
   public var trackTotal: Int?
@@ -136,6 +137,7 @@ public struct ProposedTags: Equatable, Sendable {
     artist: String? = nil,
     albumArtist: String? = nil,
     grouping: String? = nil,
+    comments: String? = nil,
     isCompilation: Bool? = nil,
     trackNumber: Int? = nil,
     trackTotal: Int? = nil,
@@ -148,6 +150,7 @@ public struct ProposedTags: Equatable, Sendable {
     self.artist = artist
     self.albumArtist = albumArtist
     self.grouping = grouping
+    self.comments = comments
     self.isCompilation = isCompilation
     self.trackNumber = trackNumber
     self.trackTotal = trackTotal
@@ -162,6 +165,7 @@ public struct ProposedTags: Equatable, Sendable {
     case artist
     case albumArtist
     case grouping
+    case comments
     case isCompilation
     case trackNumber
     case trackTotal

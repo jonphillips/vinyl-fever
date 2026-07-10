@@ -71,6 +71,7 @@ public enum AudioTaggingCommands {
     appendFLACTag("ARTIST", value: tags.artist, field: .artist, tags: tags, to: &arguments)
     appendFLACTag("ALBUMARTIST", value: tags.albumArtist, field: .albumArtist, tags: tags, to: &arguments)
     appendFLACTag("GROUPING", value: tags.grouping, field: .grouping, tags: tags, to: &arguments)
+    appendFLACTag("COMMENT", value: tags.comments, field: .comments, tags: tags, to: &arguments)
     appendFLACTag(
       "COMPILATION",
       value: tags.isCompilation == true ? "1" : nil,
@@ -216,6 +217,7 @@ public enum AudioTaggingCommands {
     appendFFmpegMetadata("artist", value: track.tags.artist, field: .artist, tags: track.tags, to: &arguments)
     appendFFmpegMetadata("album_artist", value: track.tags.albumArtist, field: .albumArtist, tags: track.tags, to: &arguments)
     appendFFmpegMetadata("grouping", value: track.tags.grouping, field: .grouping, tags: track.tags, to: &arguments)
+    appendFFmpegMetadata("comment", value: track.tags.comments, field: .comments, tags: track.tags, to: &arguments)
     appendFFmpegMetadata(
       "compilation",
       value: track.tags.isCompilation.map { $0 ? "1" : "" },

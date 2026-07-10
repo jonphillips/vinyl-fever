@@ -21,6 +21,7 @@ public enum FLACMetadataParser {
       sortAlbum: tags.joinedValues(for: ["ALBUMSORT", "ALBUM SORT"]),
       albumArtist: tags.joinedValues(for: ["ALBUMARTIST", "ALBUM ARTIST"]),
       grouping: tags.joinedValues(for: ["GROUPING"]),
+      comments: tags.joinedValues(for: ["COMMENT"]),
       isCompilation: TagValueParser.boolean(tags.firstValue(for: ["COMPILATION"])),
       trackNumber: trackNumber,
       trackTotal: trackTotal,

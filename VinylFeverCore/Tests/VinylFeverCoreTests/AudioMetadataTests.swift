@@ -53,6 +53,7 @@ import Testing
         ARTIST=The Range
         ALBUM=1996-05-21: Northampton, MA - Pearl Street Grill (SBD)
         ALBUMARTIST=Bruce Hornsby
+        COMMENT=Transferred from the source tape
         TRACKNUMBER=02/12
         DISCNUMBER=1
         """,
@@ -74,6 +75,7 @@ import Testing
         artist: "Bruce Hornsby / The Range",
         album: "1996-05-21: Northampton, MA - Pearl Street Grill (SBD)",
         albumArtist: "Bruce Hornsby",
+        comments: "Transferred from the source tape",
         trackNumber: 2,
         trackTotal: 12,
         discNumber: 1,
@@ -154,6 +156,7 @@ import Testing
             "artist": "Bruce Hornsby and The Range",
             "album": "1996-05-21: Northampton, MA - Pearl Street Grill (SBD)",
             "album_artist": "Bruce Hornsby",
+            "comment": "Transferred from the source tape",
             "track": "03/10",
             "disc": "1"
           }
@@ -169,6 +172,7 @@ import Testing
         artist: "Bruce Hornsby and The Range",
         album: "1996-05-21: Northampton, MA - Pearl Street Grill (SBD)",
         albumArtist: "Bruce Hornsby",
+        comments: "Transferred from the source tape",
         trackNumber: 3,
         trackTotal: 10,
         discNumber: 1,

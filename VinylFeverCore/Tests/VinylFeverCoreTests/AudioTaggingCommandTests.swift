@@ -111,6 +111,7 @@ struct AudioTaggingCommandTests {
       album: "Great Covers",
       albumArtist: "Jon Phillips",
       grouping: "Existing | Great Covers",
+      comments: "Transferred from the source tape\nAppend session",
       isCompilation: false,
       clearedFields: [.trackNumber, .trackTotal, .discNumber, .isCompilation]
     )
@@ -137,6 +138,7 @@ struct AudioTaggingCommandTests {
         "--remove-tag=ALBUM", "--set-tag=ALBUM=Great Covers",
         "--remove-tag=ALBUMARTIST", "--set-tag=ALBUMARTIST=Jon Phillips",
         "--remove-tag=GROUPING", "--set-tag=GROUPING=Existing | Great Covers",
+        "--remove-tag=COMMENT", "--set-tag=COMMENT=Transferred from the source tape\nAppend session",
         "--remove-tag=COMPILATION",
         "--remove-tag=TRACKNUMBER",
         "--remove-tag=TRACKTOTAL",
@@ -156,6 +158,7 @@ struct AudioTaggingCommandTests {
         "-metadata", "album=Great Covers",
         "-metadata", "album_artist=Jon Phillips",
         "-metadata", "grouping=Existing | Great Covers",
+        "-metadata", "comment=Transferred from the source tape\nAppend session",
         "-metadata", "compilation=",
         "-metadata", "track=",
         "-metadata", "disc=",

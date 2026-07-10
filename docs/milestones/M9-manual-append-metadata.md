@@ -70,7 +70,7 @@ The asymmetry that sets the two slices:
 
 ## Slices
 
-- [ ] **S0 — `comments` as a first-class tag (core, no UI).** Thread a `comments`
+- [x] **S0 — `comments` as a first-class tag (core, no UI).** Thread a `comments`
   field through the read/write tag path so the pipeline can carry a track comment at
   all, with the *append* semantics above expressed as a pure merge. No append-flow
   wiring, no UI. DoD: `swift test` green; a FLAC and an mp3/m4a fixture round-trip a
