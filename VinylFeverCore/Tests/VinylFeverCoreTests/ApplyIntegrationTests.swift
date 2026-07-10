@@ -155,11 +155,13 @@ struct ApplyIntegrationTests {
     try writeGeneratedAudio(format: .flac, at: sourceURL, ffmpegURL: ffmpegURL)
     try writeGeneratedCover(at: coverURL, ffmpegURL: ffmpegURL)
 
-    let applyPlan = ApplyPlan(
+    var applyPlan = ApplyPlan(
       showPlan: makeSingleFileShowPlan(root: root, sourceURL: sourceURL, format: .flac),
       showRoot: root,
       coverURL: coverURL
     )
+    applyPlan.tracks[0].tags.grouping = "Collection | Session"
+    applyPlan.tracks[0].tags.comments = "Original comment\nAppend note"
     let conversionPlan = ConversionPlan(applyPlan: applyPlan)
     let toolPaths = AudioToolPaths(paths: [
       .metaflac: metaflacURL.path(percentEncoded: false),
@@ -190,6 +192,20 @@ struct ApplyIntegrationTests {
     expectNoDifference(FileManager.default.fileExists(atPath: workingURL.path(percentEncoded: false)), true)
     expectNoDifference(FileManager.default.fileExists(atPath: outputURL.path(percentEncoded: false)), true)
     expectNoDifference(outputURL.deletingLastPathComponent(), root.appendingPathComponent("Output", isDirectory: true))
+
+    let outputProbe = try runProcess(
+      executableURL: ffprobeURL,
+      arguments: [
+        "-v", "error",
+        "-show_streams",
+        "-show_entries", "format_tags=grouping,comment",
+        "-of", "json",
+        outputURL.path(percentEncoded: false),
+      ]
+    )
+    let outputTags = try FFProbeMetadataParser.parse(outputProbe.standardOutput)
+    expectNoDifference(outputTags.grouping, "Collection | Session")
+    expectNoDifference(outputTags.comments, "Original comment\nAppend note")
   }
 
   @Test
