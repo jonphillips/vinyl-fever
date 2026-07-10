@@ -92,6 +92,20 @@ The asymmetry that sets the two slices:
   Append Folder affordance is absent with no selection and present (lower) once a
   registry entry is selected; registry artwork renders at the larger size.
 
+  **Shipped-scope amendment (#52, accepted at review 2026-07-10).** In use, an
+  always-blank Grouping field meant retyping the collection's standing token on every
+  append, so S1 shipped a **persisted default** for Grouping (the deferred
+  "evidence-backed slice" the *Out of scope* note anticipated — the evidence being this
+  dogfooding pass): the Grouping field **pre-fills from the album's saved
+  `ruleset.groupingTokens`** on selection, and a **"Save as Default"** button writes the
+  edited tokens back to the registry (`AppModel.saveCompilationAppendGroupingAsDefault`).
+  The per-append *edit* is still ephemeral and unioned through `mergedGrouping`; only the
+  explicit Save persists. **Comments stays fully ephemeral** — no pre-fill, no persist.
+  S1 also folded in a **process-launch crash fix** surfaced by the debounced preview
+  rebuild: `Process.terminate()` before `Process.run()` raises an ObjC exception, so
+  `ProcessLaunchController` now serializes launch against cancellation
+  ([ToolPathClient+Live.swift](../../VinylFever/Clients/ToolPathClient+Live.swift)).
+
 *Ungated — no device dependency. Comment read/write is deterministic file tagging
 (ffprobe / metaflac / ffmpeg), not the Music.app live-read that gates M3/M4.*
 
@@ -171,10 +185,12 @@ code stays untested.
 
 ## Out of scope
 
-- **Persisting Grouping/Comments** on the registry entry, a policy, or `AppSetting` —
-  ephemeral per-append by decision. If repeat-append retyping becomes a real pain,
-  that is a later, evidence-backed slice (persisted default pre-filling the ephemeral
-  fields), not this one.
+- **Persisting Comments** on the registry entry, a policy, or `AppSetting` — ephemeral
+  per-append by decision; no pre-fill, no persist. *(Grouping persistence was originally
+  out of scope here too, but the S1 dogfooding pass supplied the "real pain" evidence,
+  so Grouping now pre-fills from the registry and has a "Save as Default" — see the S1
+  shipped-scope amendment above. Comments did not clear the same bar and stays
+  ephemeral.)*
 - **Any other tag becoming manually editable at append time.** This milestone adds
   exactly Grouping (existing field, existing merge) and Comments (new field). A general
   per-append tag editor is not the ask.
