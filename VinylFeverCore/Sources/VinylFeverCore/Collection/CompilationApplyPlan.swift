@@ -75,7 +75,8 @@ public struct CompilationApplyPlan: Equatable, Sendable {
     files: [ScannedAudioFile],
     currentTagsByFileID: [ScannedAudioFile.ID: AudioTags],
     fallbackArtworkURL: URL? = nil,
-    recipeDeltasByFileID: [ScannedAudioFile.ID: [ProposedTags]] = [:]
+    recipeDeltasByFileID: [ScannedAudioFile.ID: [ProposedTags]] = [:],
+    commentsNote: String? = nil
   ) {
     let sourceRoot = sourceRoot.standardizedFileURL
     let workingDirectory = sourceRoot.appendingPathComponent(ApplyPlan.workingDirectoryName, isDirectory: true)
@@ -85,7 +86,7 @@ public struct CompilationApplyPlan: Equatable, Sendable {
     .map { file in
       let current = currentTagsByFileID[file.id] ?? AudioTags()
       let artwork: ArtworkDecision = current.hasEmbeddedArtwork ? .keepExisting : .applyFallback
-      let compilationDelta = Self.proposedTags(entry: entry, current: current)
+      let compilationDelta = Self.proposedTags(entry: entry, current: current, commentsNote: commentsNote)
       let proposed = RecipeTagMerge.merge(
         compilation: compilationDelta,
         recipes: recipeDeltasByFileID[file.id] ?? []
@@ -117,8 +118,18 @@ public struct CompilationApplyPlan: Equatable, Sendable {
     )
   }
 
-  private static func proposedTags(entry: CompilationAlbum, current: AudioTags) -> ProposedTags {
+  private static func proposedTags(
+    entry: CompilationAlbum,
+    current: AudioTags,
+    commentsNote: String?
+  ) -> ProposedTags {
     let grouping = mergedGrouping(existing: current.grouping, addedTokens: entry.ruleset.groupingTokens)
+    let comments: String?
+    if let commentsNote, !commentsNote.isEmpty {
+      comments = appendedComment(source: current.comments, note: commentsNote)
+    } else {
+      comments = nil
+    }
     var clearedFields: Set<ProposedTags.Field> = [.isCompilation]
     if entry.ruleset.stripTrackAndDisc {
       clearedFields.formUnion([.trackNumber, .trackTotal, .discNumber])
@@ -127,6 +138,7 @@ public struct CompilationApplyPlan: Equatable, Sendable {
       album: entry.identity.album,
       albumArtist: entry.identity.albumArtist,
       grouping: grouping,
+      comments: comments,
       isCompilation: entry.ruleset.setCompilationFlag ? true : false,
       trackNumber: entry.ruleset.stripTrackAndDisc ? nil : current.trackNumber,
       trackTotal: entry.ruleset.stripTrackAndDisc ? nil : current.trackTotal,
@@ -140,7 +152,7 @@ public struct CompilationApplyPlan: Equatable, Sendable {
     proposed: ProposedTags,
     artwork: ArtworkDecision
   ) -> [CompilationTagDiff] {
-    [
+    var diffs = [
       CompilationTagDiff(field: "Album", current: current.album, proposed: proposed.album),
       CompilationTagDiff(field: "Album Artist", current: current.albumArtist, proposed: proposed.albumArtist),
       CompilationTagDiff(field: "Grouping", current: current.grouping, proposed: proposed.grouping),
@@ -169,6 +181,13 @@ public struct CompilationApplyPlan: Equatable, Sendable {
         proposed: artwork == .keepExisting ? "Keep existing" : "Apply fallback"
       ),
     ]
+    if proposed.comments != nil {
+      diffs.insert(
+        CompilationTagDiff(field: "Comments", current: current.comments, proposed: proposed.comments),
+        at: 3
+      )
+    }
+    return diffs
   }
 
   public static func mergedGrouping(existing: String?, addedTokens: [String]) -> String? {
@@ -176,6 +195,19 @@ public struct CompilationApplyPlan: Equatable, Sendable {
       .components(separatedBy: CompilationRuleset.groupingDelimiter) ?? []
     let tokens = CompilationRuleset.normalizedGroupingTokens(existingTokens + addedTokens)
     return tokens.isEmpty ? nil : tokens.joined(separator: CompilationRuleset.groupingDelimiter)
+  }
+
+  public static let commentsAppendSeparator = "\n"
+
+  public static func appendedComment(source: String?, note: String?) -> String? {
+    guard let note, !note.isEmpty else {
+      return source
+    }
+    guard let source, !source.isEmpty else {
+      return note
+    }
+    let suffix = commentsAppendSeparator + note
+    return source.hasSuffix(suffix) ? source : source + suffix
   }
 }
 

@@ -280,11 +280,71 @@ struct CompilationAlbumTests {
     expectNoDifference(recipePlan.tracks[0].proposed.artist, "Nine Inch Nails")
     expectNoDifference(recipePlan.tracks[0].proposed.album, "Great Covers")
     expectNoDifference(recipePlan.tracks[0].proposed.grouping, "Existing | Collection | Covers")
+    expectNoDifference(recipePlan.tracks[0].proposed.comments, nil)
+    #expect(!recipePlan.tracks[0].diffs.contains { $0.field == "Comments" })
     expectNoDifference(
       recipePlan.tracks[0].diffs.filter { ["Album", "Grouping"].contains($0.field) },
       [
         CompilationTagDiff(field: "Album", current: "Original", proposed: "Great Covers"),
         CompilationTagDiff(field: "Grouping", current: "Existing", proposed: "Existing | Collection | Covers"),
+      ]
+    )
+  }
+
+  @Test
+  func appendsCommentsWithoutAccumulatingAndAddsOneConditionalDiff() {
+    expectNoDifference(
+      CompilationApplyPlan.appendedComment(source: "Source transfer", note: "Append session"),
+      "Source transfer\nAppend session"
+    )
+    expectNoDifference(
+      CompilationApplyPlan.appendedComment(source: nil, note: "Append session"),
+      "Append session"
+    )
+    expectNoDifference(
+      CompilationApplyPlan.appendedComment(source: "Source transfer", note: ""),
+      "Source transfer"
+    )
+    expectNoDifference(
+      CompilationApplyPlan.appendedComment(source: "", note: "Append session"),
+      "Append session"
+    )
+
+    let first = CompilationApplyPlan.appendedComment(
+      source: "Source transfer",
+      note: "Append session"
+    )
+    expectNoDifference(
+      CompilationApplyPlan.appendedComment(source: first, note: "Append session"),
+      first
+    )
+
+    let entry = CompilationAlbum(
+      id: UUID(10),
+      name: "Great Covers",
+      identity: AlbumIdentity(album: "Great Covers", albumArtist: "Jon Phillips"),
+      ruleset: CompilationRuleset(groupingTokens: ["Collection"])
+    )
+    let file = seedFile(id: UUID(1), name: "01.mp3")
+    let plan = CompilationApplyPlan(
+      entry: entry,
+      sourceRoot: URL(fileURLWithPath: "/Incoming"),
+      files: [file],
+      currentTagsByFileID: [
+        file.id: AudioTags(comments: "Source transfer"),
+      ],
+      commentsNote: "Append session"
+    )
+
+    expectNoDifference(plan.tracks[0].proposed.comments, "Source transfer\nAppend session")
+    expectNoDifference(
+      plan.tracks[0].diffs.filter { $0.field == "Comments" },
+      [
+        CompilationTagDiff(
+          field: "Comments",
+          current: "Source transfer",
+          proposed: "Source transfer\nAppend session"
+        ),
       ]
     )
   }

@@ -86,7 +86,7 @@ extension ProposedTags.Field {
     switch self {
     case .title, .album, .sortAlbum, .artist, .albumArtist, .grouping:
       true
-    case .isCompilation, .trackNumber, .trackTotal, .discNumber:
+    case .comments, .isCompilation, .trackNumber, .trackTotal, .discNumber:
       false
     }
   }
