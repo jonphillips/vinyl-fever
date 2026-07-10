@@ -201,6 +201,44 @@ Minor, for the record: dropped recipe `album`/`albumArtist` are silently discard
 within a policy is significant for scalar fields (last-writer-wins), order-insensitive
 for grouping.
 
+### Carry-over from S1 review
+
+S1 landed correctly: all three S0 carry-overs are resolved (issue-flag gate at
+`buildCompilationAppendPlan`, symmetric `clearedFields` restoration in `RecipeTagMerge`,
+recipe edits surfaced through a dedicated preview channel rather than
+`CompilationTrackPlan.diffs`), the unbound plan is asserted byte-identical, and the
+bind/fuse/exclude paths are tested. `swift test` (core) green. M8's slice list (S0 + S1)
+is complete. The items below are **fast-follow candidates**, not slice blockers — there
+is no S2 to inherit them, so triage each into a follow-up or accept as documented:
+
+- **Recipe preview renders the raw delta, not the merge result (load-bearing).**
+  `RecipeProposalPreview.diffs` in
+  [CollectionsView.swift](../../VinylFever/Features/Collections/CollectionsView.swift)
+  shows every string-valued field in `proposal.delta`, but apply runs the delta through
+  `RecipeTagMerge.merge`, which **drops** recipe `album`/`albumArtist` (collection wins)
+  and **unions** `grouping`. So a recipe targeting `album`/`albumArtist` previews an
+  identity change that is never applied — the exact "skipped/for-info, not applied" case
+  from spec line 74, and a direct hit on the "one previewed, one applied" contract; a
+  `grouping` recipe previews a raw token that differs from the unioned value actually
+  written (which also appears, correctly, in the compilation diff row — grouping
+  double-displays). **Exact for the dominant `title`/`artist`/`sortAlbum` recipes**, which
+  is why it did not surface in DoD. Fix path: reflect merge precedence in the recipe
+  channel — filter identity fields out (or mark them "held by collection, not applied")
+  and render `grouping` as the merged result.
+- **Fetch-all-then-filter (efficiency).** `buildCompilationAppendPlan` loads *every*
+  `CollectionRecipe` in the DB via `CollectionRecipe.order(by: \.name).fetchAll(db)` and
+  filters `collectionPolicyID`/`enabled` in memory. Prefer a `.where`-scoped query. Minor
+  at current scale.
+- **Binding change leaves a stale-empty section (UX).** `setCompilationPolicy` clears the
+  plan but leaves `compilationAppendFolder`/files set without rebuilding, so after
+  re-binding with a folder already picked the section shows a selected folder and no plan
+  until re-pick. Intentional per the in-code comment ("cannot drift"); consider
+  auto-rebuilding from the retained folder.
+- **Nits.** `RecipeProposalPreview.diffs` emits a row even when `proposed == current`
+  (no-op shows as "X → X"); recipe precedence is name-alphabetical (deterministic but
+  arbitrary — see the order note above); `CompilationRecipeProposal` sits under the
+  "Recipe workbench support (M7 S1)" MARK though it is M8 support.
+
 ## Out of scope
 
 - Any change to the write rail, `ApplyPlan`, `FileOperation.writeTags`, the preview
