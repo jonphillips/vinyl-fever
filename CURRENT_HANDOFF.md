@@ -7,10 +7,40 @@ the active fronts, whose turn it is, and pending decisions — it points at the
 canonical state and never restates PR/slice history. If it disagrees with GitHub,
 GitHub wins; fix this file.
 
-_Last touched: 2026-07-09 (M7 S0 core merged #40; S1 build order authored — Codex's
-turn to open the S1 draft PR)._
+_Last touched: 2026-07-10 (M8 milestone doc authored — collection↔policy binding,
+answering M7 S1's deferred fuse question; the one-true-import-folder fix filed as a
+standalone ungated slice below. Both are Codex's to open when it reaches them; M7 S1
+remains the active turn)._
 
 ## Active fronts
+
+- **M8 — collection policy binding**
+  ([ledger](docs/milestones/M8-collection-policy-binding.md)). Specced, **not yet
+  started.** Answers the fuse-the-runs question M7 S1 deferred by design: bind a
+  `CollectionPolicy` to a `CompilationAlbum` (nullable FK, `ON DELETE SET NULL`) so one
+  append runs the policy's recipes **and** the compilation stamping in one preview /
+  one apply. No new pipeline — a pure `ProposedTags` merge (collection wins album
+  identity; grouping unions) plus binding wiring. S0 (FK + merge, core) then S1 (bind +
+  fused append, app). Ungated — no device dependency. **Sequenced after M7 S1** (it
+  builds on the recipe runner S1 exercises).
+
+- **Standalone fix — one true import folder** *(ungated, no milestone)*. Today the
+  convert stage sends transcoded FLAC to `Output/` but leaves already-compatible
+  mp3/m4a marked `verifyWorkingOnly` in `Working/`
+  ([ConversionPlan.swift](VinylFeverCore/Sources/VinylFeverCore/Model/ConversionPlan.swift),
+  `ConversionTrackPlan.init(applyTrack:outputDirectory:)`), so the finished set is
+  split across two folders and Working still holds the transcoded-FLAC intermediates —
+  the user hand-combines/sorts/deletes every append. **Slice DoD:** every import-ready
+  track lands in **one** folder regardless of source format — passthrough mp3/m4a get a
+  plain copy (no re-encode) into `Output/` and every track's `verificationFile` points
+  there; `Working/` becomes pure scratch. Contained to
+  [ConversionPlan.swift](VinylFeverCore/Sources/VinylFeverCore/Model/ConversionPlan.swift)
+  (give passthrough tracks a real `Output` destination) +
+  [ConversionExecutor.swift](VinylFeverCore/Sources/VinylFeverCore/Apply/ConversionExecutor.swift)
+  (copy-through for passthrough, which today only converts); deterministic, fixture-
+  testable, no device check. Related to but **distinct from** M3 S3 (`Working/`
+  cleanup, which *is* spike-gated) — this one need not wait. Codex may open it any time
+  it wants a green ungated slice between gated fronts.
 
 - **M7 — collection recipes**
   ([ledger](docs/milestones/M7-collection-recipes.md)). **S0 (tables + deterministic
@@ -65,6 +95,12 @@ raw corpus and its golden-file pass are in `main`. No open follow-ups._
    (Reconcile fast-follow + trusting the live certify leg) all wait on it. Running
    the macOS-27 beta-3 read-back spike **once** clears all four; they don't collide.
    This is Jon's spike to run.
+4. **One-true-import-folder fix** — ungated standalone slice (front above). Passthrough
+   mp3/m4a copy-through into `Output/` so one folder holds every import-ready track.
+   Good green slice to slot between spike-gated fronts; needs no device check.
+5. **M8 S0 (FK + `ProposedTags` merge)** — the fuse-the-runs milestone, sequenced after
+   M7 S1 lands. Core-only, ungated. Full map in the
+   [M8 ledger](docs/milestones/M8-collection-policy-binding.md).
 
 ## Pending Jon decisions
 
