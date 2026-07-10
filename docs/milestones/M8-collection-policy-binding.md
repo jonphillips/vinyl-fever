@@ -88,7 +88,7 @@ speculatively.
 
 ## Slices
 
-- **S0 — FK column + merge (core, no UI).** Add the nullable
+- [x] **S0 — FK column + merge (core, no UI).** Add the nullable
   `collectionPolicyID` migration (`ON DELETE SET NULL`) and the `CompilationAlbum`
   field; write the `ProposedTags` merge with the precedence above; extend the
   `CompilationApplyPlan` build to accept per-file recipe deltas and fold them into

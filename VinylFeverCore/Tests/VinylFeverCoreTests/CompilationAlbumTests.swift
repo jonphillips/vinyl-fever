@@ -75,6 +75,32 @@ struct CompilationAlbumTests {
   }
 
   @Test
+  func deletingBoundPolicyUnbindsAlbumButKeepsIt() throws {
+    let database = try VinylFeverDatabase.open(path: temporaryDatabasePath())
+    let policy = CollectionPolicy(id: UUID(11), name: "Great Covers")
+    let album = CompilationAlbum(
+      id: UUID(12),
+      name: "Great Covers",
+      identity: AlbumIdentity(album: "Great Covers", albumArtist: "Various Artists"),
+      collectionPolicyID: policy.id
+    )
+
+    try database.write { db in
+      try CollectionPolicy.upsert { policy }.execute(db)
+      try CompilationAlbum.upsert { album }.execute(db)
+    }
+    try database.write { db in
+      try CollectionPolicy.find(policy.id).delete().execute(db)
+    }
+
+    let persisted = try database.read { db in
+      try CompilationAlbum.find(album.id).fetchOne(db)
+    }
+    expectNoDifference(persisted?.id, album.id)
+    expectNoDifference(persisted?.collectionPolicyID, nil)
+  }
+
+  @Test
   func candidatesSkipUnreadableFilesReportProgressAndStayOrdered() async throws {
     let root = URL(fileURLWithPath: "/Music/Parent")
     let albumA = root.appendingPathComponent("AlbumA")
@@ -191,6 +217,74 @@ struct CompilationAlbumTests {
           trackTotal: 0,
           cover: "/Incoming/front.jpg"
         ),
+      ]
+    )
+  }
+
+  @Test
+  func applyPlanMergesRecipeDeltasAndUnboundPlanStaysUnchanged() {
+    let entry = CompilationAlbum(
+      id: UUID(10),
+      name: "Great Covers",
+      identity: AlbumIdentity(album: "Great Covers", albumArtist: "Various Artists"),
+      ruleset: CompilationRuleset(groupingTokens: ["Collection"])
+    )
+    let file = seedFile(id: UUID(1), name: "01.mp3")
+    let current = AudioTags(
+      title: "Hurt",
+      album: "Original",
+      albumArtist: "Original Artist",
+      grouping: "Existing",
+      trackNumber: 1
+    )
+    let baseArguments = (
+      entry: entry,
+      sourceRoot: URL(fileURLWithPath: "/Incoming"),
+      files: [file],
+      currentTagsByFileID: [file.id: current]
+    )
+
+    let unboundPlan = CompilationApplyPlan(
+      entry: baseArguments.entry,
+      sourceRoot: baseArguments.sourceRoot,
+      files: baseArguments.files,
+      currentTagsByFileID: baseArguments.currentTagsByFileID
+    )
+    let explicitEmptyPlan = CompilationApplyPlan(
+      entry: baseArguments.entry,
+      sourceRoot: baseArguments.sourceRoot,
+      files: baseArguments.files,
+      currentTagsByFileID: baseArguments.currentTagsByFileID,
+      recipeDeltasByFileID: [:]
+    )
+    expectNoDifference(explicitEmptyPlan, unboundPlan)
+
+    let recipePlan = CompilationApplyPlan(
+      entry: baseArguments.entry,
+      sourceRoot: baseArguments.sourceRoot,
+      files: baseArguments.files,
+      currentTagsByFileID: baseArguments.currentTagsByFileID,
+      recipeDeltasByFileID: [
+        file.id: [
+          ProposedTags(
+            title: "Hurt (Nine Inch Nails)",
+            album: "Recipe Album",
+            artist: "Nine Inch Nails",
+            grouping: "Covers"
+          ),
+        ],
+      ]
+    )
+
+    expectNoDifference(recipePlan.tracks[0].proposed.title, "Hurt (Nine Inch Nails)")
+    expectNoDifference(recipePlan.tracks[0].proposed.artist, "Nine Inch Nails")
+    expectNoDifference(recipePlan.tracks[0].proposed.album, "Great Covers")
+    expectNoDifference(recipePlan.tracks[0].proposed.grouping, "Existing | Collection | Covers")
+    expectNoDifference(
+      recipePlan.tracks[0].diffs.filter { ["Album", "Grouping"].contains($0.field) },
+      [
+        CompilationTagDiff(field: "Album", current: "Original", proposed: "Great Covers"),
+        CompilationTagDiff(field: "Grouping", current: "Existing", proposed: "Existing | Collection | Covers"),
       ]
     )
   }

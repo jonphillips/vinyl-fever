@@ -138,6 +138,15 @@ public enum VinylFeverDatabase {
         """)
         .execute(db)
     }
+
+    migrator.registerMigration("Bind compilation albums to collection policies") { db in
+      try #sql("""
+        ALTER TABLE "compilationAlbums"
+          ADD COLUMN "collectionPolicyID" TEXT
+          REFERENCES "collectionPolicies"("id") ON DELETE SET NULL
+        """)
+        .execute(db)
+    }
   }
 
   public static func seedBuiltInSourceLabels(in database: any DatabaseWriter) throws {
