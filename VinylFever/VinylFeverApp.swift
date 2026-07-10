@@ -23,7 +23,8 @@ struct VinylFeverApp: App {
       $0.setlistNormalizer = .liveValue
       // Same story as the normalizer: the recipe runner's testValue is unimplemented,
       // so without this the recipe workbench throws `Unimplemented` the moment a
-      // sample runs. Its liveValue is the deterministic (model-off) engine.
+      // sample runs. Its liveValue runs the deterministic engine for model-off recipes
+      // and the on-device classify stage (reading `\.modelClient`) behind `useModel`.
       $0.collectionRecipeRunner = .liveValue
     }
     _model = State(initialValue: AppModel())

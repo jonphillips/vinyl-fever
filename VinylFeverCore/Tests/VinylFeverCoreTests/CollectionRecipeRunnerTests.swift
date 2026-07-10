@@ -1,5 +1,6 @@
 import CustomDump
 import Foundation
+import LLMClientKit
 import SQLiteData
 import Testing
 @testable import VinylFeverCore
@@ -150,6 +151,106 @@ struct CollectionRecipeRunnerTests {
     #expect(!TextEvidence.appears("Johnny Cash", in: filename))
   }
 
+  // MARK: - The model classify stage (S2)
+
+  /// The covers acceptance case: an on-device model keeps a real cover artist and
+  /// rejects a `[Live]`/`[Remaster]` annotation carried by the same bracket pattern.
+  @Test
+  func modelClassifiesCoverArtistApplyAndRejectsAnnotations() async throws {
+    let runner = coversModelRunner()
+
+    let applied = try await runner.run(
+      recipe: coversModelRecipe(),
+      filename: "Hurt [Nine Inch Nails].m4a",
+      current: AudioTags(title: "Hurt")
+    )
+    expectNoDifference(applied?.delta.title, "Hurt (Nine Inch Nails)")
+    expectNoDifference(applied?.issues, [])
+    expectNoDifference(applied?.reason, "Nine Inch Nails is the original artist.")
+
+    // `[Live]` matches the same pattern but the model rejects it → no proposal.
+    let rejected = try await runner.run(
+      recipe: coversModelRecipe(),
+      filename: "Hurt [Live].m4a",
+      current: AudioTags(title: "Hurt")
+    )
+    expectNoDifference(rejected, nil)
+  }
+
+  /// A hallucinated value the model returns is caught by stage 3's verbatim guard and
+  /// forced into review — never silently applied.
+  @Test
+  func hallucinatedModelValueIsFlaggedForReview() async throws {
+    let runner = runner(returning: #"{"apply": true, "value": "Johnny Cash", "reason": "guess"}"#)
+    let proposal = try await runner.run(
+      recipe: coversModelRecipe(),
+      filename: "Hurt [Nine Inch Nails].m4a",
+      current: AudioTags(title: "Hurt")
+    )
+    expectNoDifference(proposal?.issues, [.valueNotInFilename])
+  }
+
+  /// An unparseable response degrades to the deterministic candidate, flagged so it is
+  /// preview-gated and cannot land on disk.
+  @Test
+  func unparseableModelOutputDegradesToFlaggedReview() async throws {
+    let runner = runner(returning: "sorry, I can't help with that")
+    let proposal = try await runner.run(
+      recipe: coversModelRecipe(),
+      filename: "Hurt [Nine Inch Nails].m4a",
+      current: AudioTags(title: "Hurt")
+    )
+    // The deterministic candidate is surfaced so the human sees what would happen…
+    expectNoDifference(proposal?.delta.title, "Hurt (Nine Inch Nails)")
+    // …but flagged, so the apply path excludes it.
+    expectNoDifference(proposal?.issues, [.modelOutputUnparseable])
+  }
+
+  /// A model-on run is idempotent: the second pass over an already-stamped title is a
+  /// no-op even though the model would still say "apply".
+  @Test
+  func modelPathIsIdempotent() async throws {
+    let runner = coversModelRunner()
+    let proposal = try await runner.run(
+      recipe: coversModelRecipe(),
+      filename: "Hurt [Nine Inch Nails].m4a",
+      current: AudioTags(title: "Hurt (Nine Inch Nails)")
+    )
+    expectNoDifference(proposal, nil)
+  }
+
+  /// `apply: true` with no `value` falls back to the captured candidate rather than
+  /// failing — the candidate is in the filename by construction, so it stays clean.
+  @Test
+  func modelApplyWithoutValueFallsBackToCandidate() async throws {
+    let runner = runner(returning: #"{"apply": true}"#)
+    let proposal = try await runner.run(
+      recipe: coversModelRecipe(),
+      filename: "Hurt [Nine Inch Nails].m4a",
+      current: AudioTags(title: "Hurt")
+    )
+    expectNoDifference(proposal?.delta.title, "Hurt (Nine Inch Nails)")
+    expectNoDifference(proposal?.issues, [])
+  }
+
+  /// A model-off recipe never reaches the model — the deterministic engine handles it,
+  /// even though the runner has a `ModelClient` in hand.
+  @Test
+  func modelOffRecipeNeverCallsTheModel() async throws {
+    let runner = LiveCollectionRecipeRunner(
+      modelClient: StubModelClient { _ in
+        Issue.record("model-off recipe must not call the model")
+        return ModelResponse(text: "")
+      }
+    )
+    let proposal = try await runner.run(
+      recipe: coversRecipe(), // useModel defaults to false
+      filename: "Hurt [Nine Inch Nails].m4a",
+      current: AudioTags(title: "Hurt")
+    )
+    expectNoDifference(proposal?.delta.title, "Hurt (Nine Inch Nails)")
+  }
+
   // MARK: - Persistence + FK cascade
 
   @Test
@@ -201,6 +302,38 @@ struct CollectionRecipeRunnerTests {
       affixTemplate: affixTemplate,
       enabled: enabled
     )
+  }
+
+  /// The covers recipe with the model classify stage turned on.
+  private func coversModelRecipe() -> CollectionRecipe {
+    var recipe = coversRecipe()
+    recipe.useModel = true
+    recipe.prompt = "Keep the bracketed original artist; reject Live/Remaster annotations."
+    return recipe
+  }
+
+  /// A runner whose model always returns `text`.
+  private func runner(returning text: String) -> LiveCollectionRecipeRunner {
+    LiveCollectionRecipeRunner(modelClient: StubModelClient.constant(text))
+  }
+
+  /// A runner whose stub reads the candidate out of the user prompt and rejects
+  /// `[Live]`/`[Remaster]` annotations, standing in for the on-device covers classifier.
+  private func coversModelRunner() -> LiveCollectionRecipeRunner {
+    LiveCollectionRecipeRunner(modelClient: StubModelClient { request in
+      let prompt = request.messages.last { $0.role == .user }?.text ?? ""
+      let candidate = prompt
+        .split(separator: "\n")
+        .last { !$0.isEmpty && !$0.hasPrefix("Decide") }
+        .map(String.init) ?? ""
+      let annotations = ["Live", "Remaster", "Remastered", "Demo"]
+      if annotations.contains(where: { candidate.localizedCaseInsensitiveContains($0) }) {
+        return ModelResponse(text: #"{"apply": false, "value": "", "reason": "annotation, not an artist"}"#)
+      }
+      return ModelResponse(
+        text: #"{"apply": true, "value": "\#(candidate)", "reason": "\#(candidate) is the original artist."}"#
+      )
+    })
   }
 }
 
