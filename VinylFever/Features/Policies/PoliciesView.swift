@@ -64,6 +64,7 @@ struct PoliciesView: View {
               draftRecipe = nil
             },
             pickFolder: pickSampleFolder,
+            runModelPreview: runModelPreview,
             apply: { Task { await model.applyRecipePlan() } }
           )
         }
@@ -87,7 +88,17 @@ struct PoliciesView: View {
   /// Re-run the live sample whenever the recipe is edited. Reuses the cached folder
   /// read (engine only, no re-reading of metadata); a no-op until a folder is chosen,
   /// so editing before picking a folder is silent.
+  ///
+  /// A model-on recipe is **not** re-run here: each file is an on-device inference, so
+  /// firing it on every keystroke would stampede the model. Those recipes re-run only on
+  /// an explicit "Run Model Preview" (or a folder re-pick). Deterministic recipes stay
+  /// live — the engine is cheap.
   private func runPreview() {
+    guard let recipe = draftRecipe, !recipe.useModel else { return }
+    Task { await model.recomputeRecipeSample(recipe: recipe) }
+  }
+
+  private func runModelPreview() {
     guard let recipe = draftRecipe else { return }
     Task { await model.recomputeRecipeSample(recipe: recipe) }
   }
@@ -293,6 +304,7 @@ private struct RecipeEditorSection: View {
   let save: () -> Void
   let delete: () -> Void
   let pickFolder: () -> Void
+  let runModelPreview: () -> Void
   let apply: () -> Void
 
   private var applicableCount: Int {
@@ -311,6 +323,12 @@ private struct RecipeEditorSection: View {
             Label("Delete", systemImage: "trash")
           }
           Spacer()
+          if recipe.useModel, sampleFolder != nil {
+            Button(action: runModelPreview) {
+              Label("Run Model Preview", systemImage: "cpu")
+            }
+            .disabled(sampleState == .running)
+          }
           Button(action: pickFolder) {
             Label(sampleFolder == nil ? "Choose Sample Folder…" : "Change Folder…", systemImage: "folder")
           }
@@ -406,17 +424,27 @@ private struct RecipeEditorForm: View {
         Toggle("Enabled", isOn: $recipe.enabled)
           .labelsHidden()
       }
-      GridRow {
-        Text("Model").foregroundStyle(.secondary)
-        VStack(alignment: .leading, spacing: 4) {
-          Toggle("Use on-device model", isOn: $recipe.useModel)
-            .disabled(true)
-          TextField("Classification prompt", text: $recipe.prompt, axis: .vertical)
-            .textFieldStyle(.roundedBorder)
-            .disabled(true)
-          Label("The model classify stage arrives in S2.", systemImage: "clock")
-            .font(.caption)
-            .foregroundStyle(.secondary)
+      if recipe.op != .strip {
+        GridRow {
+          Text("Model").foregroundStyle(.secondary)
+          VStack(alignment: .leading, spacing: 4) {
+            Toggle("Classify each file with the on-device model", isOn: $recipe.useModel)
+            if recipe.useModel {
+              TextField(
+                "What should the model keep vs. reject? (e.g. keep the original artist, reject Live/Remaster)",
+                text: $recipe.prompt,
+                axis: .vertical
+              )
+              .textFieldStyle(.roundedBorder)
+              .lineLimit(2...5)
+              Label(
+                "The pattern still gates candidates; the model then decides apply/skip and the verbatim value. Preview runs on-device — use “Run Model Preview” after editing.",
+                systemImage: "cpu"
+              )
+              .font(.caption)
+              .foregroundStyle(.secondary)
+            }
+          }
         }
       }
     }
