@@ -7,22 +7,24 @@ the active fronts, whose turn it is, and pending decisions — it points at the
 canonical state and never restates PR/slice history. If it disagrees with GitHub,
 GitHub wins; fix this file.
 
-_Last touched: 2026-07-10 (M8 milestone doc authored — collection↔policy binding,
-answering M7 S1's deferred fuse question; the one-true-import-folder fix filed as a
-standalone ungated slice below. Both are Codex's to open when it reaches them; M7 S1
-remains the active turn)._
+_Last touched: 2026-07-10 (M8 S0 merged (#46) — FK + `ProposedTags` merge core; the S0
+review carry-over folded into the S1 execution map (#47). M8 S1 (bind + fused append,
+app) is now the active turn)._
 
 ## Active fronts
 
 - **M8 — collection policy binding**
-  ([ledger](docs/milestones/M8-collection-policy-binding.md)). Specced, **not yet
-  started.** Answers the fuse-the-runs question M7 S1 deferred by design: bind a
-  `CollectionPolicy` to a `CompilationAlbum` (nullable FK, `ON DELETE SET NULL`) so one
-  append runs the policy's recipes **and** the compilation stamping in one preview /
-  one apply. No new pipeline — a pure `ProposedTags` merge (collection wins album
-  identity; grouping unions) plus binding wiring. S0 (FK + merge, core) then S1 (bind +
-  fused append, app). Ungated — no device dependency. **Sequenced after M7 S1** (it
-  builds on the recipe runner S1 exercises).
+  ([ledger](docs/milestones/M8-collection-policy-binding.md)). **S0 (FK + `ProposedTags`
+  merge, core) merged (#46)** — nullable `collectionPolicyID` (`ON DELETE SET NULL`),
+  `RecipeTagMerge` (collection wins album identity; grouping unions), and
+  `CompilationApplyPlan` accepting pre-computed recipe deltas. The S0 review carry-over is
+  folded into the ledger's S1 execution map (#47) — chiefly that recipe
+  `title`/`artist`/`sortAlbum` need a preview diff channel (they write but won't show
+  otherwise), the `RecipeTagMerge` `clearedFields` asymmetry, and issue-gating being S1's
+  job. **S1 (bind + fused append, app) is the active turn** — policy picker to set/clear the
+  binding + `buildCompilationAppendPlan` running the bound policy's recipes into S0's plan
+  build, one preview / one apply, issue-flagged proposals preview-gated. Ungated — no
+  device dependency.
 
 - **Standalone fix — one true import folder** *(ungated, no milestone)*. Today the
   convert stage sends transcoded FLAC to `Output/` but leaves already-compatible
@@ -43,14 +45,11 @@ remains the active turn)._
   it wants a green ungated slice between gated fronts.
 
 - **M7 — collection recipes**
-  ([ledger](docs/milestones/M7-collection-recipes.md)). **S0 (tables + deterministic
-  model-off runner) merged (#40)** — `collectionPolicies`/`collectionRecipes`,
-  `CollectionRecipeRunner`, and the shared `TextEvidence` verbatim guard. **S1 (recipe
-  workbench) is specced and ready** — its execution map is authored in the ledger,
-  with the two S1-boundary decisions (new top-level `Policies` section; recipe-run and
-  append kept as separate gestures) recorded there. **Codex's turn: open the S1 draft
-  PR.** No core changes in S1 — app-layer UI + `AppModel` wiring cloning the
-  compilation-append flow.
+  ([ledger](docs/milestones/M7-collection-recipes.md)). **All slices merged — recipe
+  workbench complete.** S0 (tables + deterministic runner) #40; S1 (recipe workbench,
+  `Policies` section) #42 + runner-wiring fix #43; S2 (model-on classify stage) #44. The
+  S1-boundary "fuse the two runs" question it deferred by design is now M8's subject
+  (front above). No open follow-ups.
 - **M6 — live-show import UI refactor** *(the one unblocked front)*
   ([ledger](docs/milestones/M6-live-show-import-ui-refactor.md)). UX-only
   restructure of `LiveShowsView`; no core/schema/run-logic change, so **nothing here
@@ -80,26 +79,25 @@ raw corpus and its golden-file pass are in `main`. No open follow-ups._
 
 ## Next up
 
-1. **M7 S1 (recipe workbench)** — specced and ready; Codex opens the draft PR. New
-   top-level `Policies` section: policy/recipe CRUD → live-sample preview over a picked
-   folder → apply through the existing rail. App-layer only, no core. Full execution
-   map + DoD in the [M7 ledger](docs/milestones/M7-collection-recipes.md).
-2. **M6 S2 (content polish)** — moves without the spike. Extract
+1. **M6 S2 (content polish)** — moves without the spike. Extract
    `PlanActionBar` from `PlanReadinessSummary` (split the button `HStack`/`can*`
    props from the `*RunStatus` calls) and relocate the status views into the **Output**
    tab (S1 left it a placeholder); condense `TrackPlanRow` to hoist album-level fields
    into one header; collapse the Output tab once terminal; and move the Source picker
    into the header (S1 kept it in the Setlist tab to stay a pure relocation).
-3. **The live-read device check is the master unblocker** for everything else:
+2. **The live-read device check is the master unblocker** for everything else:
    **M3 S2** (library verify), **M3 S3** (`Working/` cleanup), and both M4 remainders
    (Reconcile fast-follow + trusting the live certify leg) all wait on it. Running
    the macOS-27 beta-3 read-back spike **once** clears all four; they don't collide.
    This is Jon's spike to run.
-4. **One-true-import-folder fix** — ungated standalone slice (front above). Passthrough
+3. **One-true-import-folder fix** — ungated standalone slice (front above). Passthrough
    mp3/m4a copy-through into `Output/` so one folder holds every import-ready track.
    Good green slice to slot between spike-gated fronts; needs no device check.
-5. **M8 S0 (FK + `ProposedTags` merge)** — the fuse-the-runs milestone, sequenced after
-   M7 S1 lands. Core-only, ungated. Full map in the
+4. **M8 S1 (bind + fused append, app)** — S0 core merged (#46). Policy picker to set/clear
+   the binding + `buildCompilationAppendPlan` running the bound policy's recipes into S0's
+   plan build, one preview / one apply. Heed the S0 carry-over in the ledger: recipe
+   title/artist/sortAlbum need a preview diff channel; issue-flagged proposals are
+   preview-gated. App-layer; ungated. Full map in the
    [M8 ledger](docs/milestones/M8-collection-policy-binding.md).
 
 ## Pending Jon decisions

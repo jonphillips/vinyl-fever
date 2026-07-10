@@ -163,6 +163,44 @@ test support. Pure-view code stays untested.
 DoD: as the slice list. Add an explicit regression check that an unbound album's
 built plan is unchanged.
 
+### Carry-over from S0 review
+
+S0's core landed correctly (FK + `SET NULL`, precedence, byte-identical unbound
+guarantee). Three items surfaced in review that S1 must resolve — do not inherit
+them as tacit assumptions:
+
+- **Recipe-owned fields have no preview channel (load-bearing).** `title` / `artist` /
+  `sortAlbum` land in `CompilationTrackPlan.proposed` (and are written to disk via
+  `ApplyPlan`), but `CompilationApplyPlan.diffs()` emits no row for them — it stays
+  collection-shaped (Album/Album Artist/Grouping/Compilation/Track/Disc/Artwork) so
+  the byte-identical unbound guarantee holds. A recipe that rewrites titles — the
+  canonical case — would therefore **apply without appearing in the preview**, which
+  breaks "one previewed, one applied." S1 must surface recipe edits, and **must not**
+  rely on `CompilationTrackPlan.diffs` to carry them. Fix path: emit *conditional*
+  Title/Artist/SortAlbum diff rows (only when `proposed.<field> != nil` — `proposedTags`
+  never sets these, so unbound plans stay byte-identical), or render a dedicated
+  recipe-diff channel from `proposal.delta`.
+- **`clearedFields` union is asymmetric with the value restoration (defensive).**
+  `RecipeTagMerge.merge` restores identity/structural *values* from the compilation
+  delta but unions `clearedFields` blindly, so a recipe delta carrying `.album` or a
+  structural field survives into the result (the S0 test asserts `album == "Great Covers"`
+  while `clearedFields` contains `.album`). Masked today — real recipes never populate
+  `clearedFields` and can't target structural fields, and the write layer resolves
+  value-over-clear. But the **diff layer resolves clear-over-value** for Track/Disc
+  Number, the opposite precedence, so any future producer emitting a structural
+  `clearedField` yields a preview/apply divergence. `merge` is public API over arbitrary
+  `[ProposedTags]`; harden it by restoring the identity/structural `clearedFields`
+  membership from `compilation.clearedFields`, symmetric with the value restoration.
+- **DoD move.** "Issue-flagged delta carried but marked non-appliable" cannot be met at
+  the S0 layer (`ProposedTags` has no issue channel; issues live on `RecipeProposal`).
+  S0's ledger box stays ticked for the core, but this DoD item is **inherited by S1** —
+  S1 collects `proposal.issues` and gates issue-flagged proposals out of apply.
+
+Minor, for the record: dropped recipe `album`/`albumArtist` are silently discarded
+(spec line 74 wants a skipped/for-info diff — no channel exists yet); and recipe order
+within a policy is significant for scalar fields (last-writer-wins), order-insensitive
+for grouping.
+
 ## Out of scope
 
 - Any change to the write rail, `ApplyPlan`, `FileOperation.writeTags`, the preview
