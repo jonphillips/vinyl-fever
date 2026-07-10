@@ -78,7 +78,7 @@ The asymmetry that sets the two slices:
   comment preserves the original + separator + note; appending to an empty comment
   yields just the note; the merge is idempotent; a plan built with **no** note is
   byte-identical to today (no Comments diff row, no `comment` write arg).
-- [ ] **S1 — Append-time Grouping + Comments fields + Collections UX polish (app
+- [x] **S1 — Append-time Grouping + Comments fields + Collections UX polish (app
   layer).** Two ephemeral text fields on the append surface feeding the plan build so
   both appear in the one preview; one apply writes both. Values live in `AppModel`
   append-scratch state, cleared when the append completes or the folder/album selection

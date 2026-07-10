@@ -245,6 +245,71 @@ struct PoliciesModelTests {
   }
 
   @Test
+  func appendScratchReachesGroupingAndCommentsInTheOnePreviewAndApplyPlan() async throws {
+    let file = Self.file(50, "song.flac")
+    let entry = CompilationAlbum(
+      id: UUID(51),
+      name: "Covers",
+      identity: AlbumIdentity(album: "Covers", albumArtist: "Various Artists"),
+      ruleset: CompilationRuleset(groupingTokens: ["Collection"])
+    )
+    let current = AudioTags(grouping: "Existing", comments: "Source note")
+    let folder = URL(filePath: "/tmp/append-scratch-folder")
+    let model = withDependencies {
+      $0.fileSystemClient.scanAudioFolder = { _ in [file] }
+      $0.audioMetadataClient.read = { _ in current }
+    } operation: {
+      AppModel()
+    }
+    await model.buildCompilationAppendPlan(entry: entry, sourceFolder: folder)
+
+    model.compilationAppendGrouping = "Session"
+    model.compilationAppendComments = "Append note"
+    await model.buildCompilationAppendPlan(entry: entry, sourceFolder: folder)
+
+    let plan = try #require(model.compilationApplyPlan)
+    let track = try #require(plan.tracks.first)
+    #expect(track.proposed.grouping == "Existing | Collection | Session")
+    #expect(track.proposed.comments == "Source note\nAppend note")
+    #expect(track.diffs.contains { $0.field == "Comments" })
+    #expect(ApplyPlan(compilationPlan: plan).tracks.first?.tags.comments == "Source note\nAppend note")
+  }
+
+  @Test
+  func appendScratchClearsWhenTheNextFolderIsChosen() async throws {
+    let file = Self.file(60, "song.flac")
+    let entry = CompilationAlbum(
+      id: UUID(61),
+      name: "Covers",
+      identity: AlbumIdentity(album: "Covers", albumArtist: "Various Artists")
+    )
+    let model = withDependencies {
+      $0.fileSystemClient.scanAudioFolder = { _ in [file] }
+      $0.audioMetadataClient.read = { _ in AudioTags() }
+    } operation: {
+      AppModel()
+    }
+    model.compilationAppendGrouping = "First append"
+    model.compilationAppendComments = "First note"
+
+    await model.buildCompilationAppendPlan(
+      entry: entry,
+      sourceFolder: URL(filePath: "/tmp/first-append")
+    )
+    await model.buildCompilationAppendPlan(
+      entry: entry,
+      sourceFolder: URL(filePath: "/tmp/second-append")
+    )
+
+    #expect(model.compilationAppendGrouping.isEmpty)
+    #expect(model.compilationAppendComments.isEmpty)
+    let track = try #require(model.compilationApplyPlan?.tracks.first)
+    #expect(track.proposed.grouping == nil)
+    #expect(track.proposed.comments == nil)
+    #expect(track.diffs.allSatisfy { $0.field != "Comments" })
+  }
+
+  @Test
   func recipePreviewUsesEffectiveMergedValuesAndMarksCollectionIdentityAsHeld() {
     let proposals = [
       CompilationRecipeProposal(
