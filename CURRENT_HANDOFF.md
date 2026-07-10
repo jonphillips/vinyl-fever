@@ -7,22 +7,24 @@ the active fronts, whose turn it is, and pending decisions — it points at the
 canonical state and never restates PR/slice history. If it disagrees with GitHub,
 GitHub wins; fix this file.
 
-_Last touched: 2026-07-10 (M8 milestone doc authored — collection↔policy binding,
-answering M7 S1's deferred fuse question; the one-true-import-folder fix filed as a
-standalone ungated slice below. Both are Codex's to open when it reaches them; M7 S1
-remains the active turn)._
+_Last touched: 2026-07-10 (M8 S0 merged (#46) — FK + `ProposedTags` merge core; the S0
+review carry-over folded into the S1 execution map (#47). M8 S1 (bind + fused append,
+app) is now the active turn)._
 
 ## Active fronts
 
 - **M8 — collection policy binding**
-  ([ledger](docs/milestones/M8-collection-policy-binding.md)). Specced, **not yet
-  started.** Answers the fuse-the-runs question M7 S1 deferred by design: bind a
-  `CollectionPolicy` to a `CompilationAlbum` (nullable FK, `ON DELETE SET NULL`) so one
-  append runs the policy's recipes **and** the compilation stamping in one preview /
-  one apply. No new pipeline — a pure `ProposedTags` merge (collection wins album
-  identity; grouping unions) plus binding wiring. S0 (FK + merge, core) then S1 (bind +
-  fused append, app). Ungated — no device dependency. **Sequenced after M7 S1** (it
-  builds on the recipe runner S1 exercises).
+  ([ledger](docs/milestones/M8-collection-policy-binding.md)). **S0 (FK + `ProposedTags`
+  merge, core) merged (#46)** — nullable `collectionPolicyID` (`ON DELETE SET NULL`),
+  `RecipeTagMerge` (collection wins album identity; grouping unions), and
+  `CompilationApplyPlan` accepting pre-computed recipe deltas. The S0 review carry-over is
+  folded into the ledger's S1 execution map (#47) — chiefly that recipe
+  `title`/`artist`/`sortAlbum` need a preview diff channel (they write but won't show
+  otherwise), the `RecipeTagMerge` `clearedFields` asymmetry, and issue-gating being S1's
+  job. **S1 (bind + fused append, app) is the active turn** — policy picker to set/clear the
+  binding + `buildCompilationAppendPlan` running the bound policy's recipes into S0's plan
+  build, one preview / one apply, issue-flagged proposals preview-gated. Ungated — no
+  device dependency.
 
 - **Standalone fix — one true import folder** *(ungated, no milestone)*. Today the
   convert stage sends transcoded FLAC to `Output/` but leaves already-compatible
@@ -98,8 +100,11 @@ raw corpus and its golden-file pass are in `main`. No open follow-ups._
 4. **One-true-import-folder fix** — ungated standalone slice (front above). Passthrough
    mp3/m4a copy-through into `Output/` so one folder holds every import-ready track.
    Good green slice to slot between spike-gated fronts; needs no device check.
-5. **M8 S0 (FK + `ProposedTags` merge)** — the fuse-the-runs milestone, sequenced after
-   M7 S1 lands. Core-only, ungated. Full map in the
+5. **M8 S1 (bind + fused append, app)** — S0 core merged (#46). Policy picker to set/clear
+   the binding + `buildCompilationAppendPlan` running the bound policy's recipes into S0's
+   plan build, one preview / one apply. Heed the S0 carry-over in the ledger: recipe
+   title/artist/sortAlbum need a preview diff channel; issue-flagged proposals are
+   preview-gated. App-layer; ungated. Full map in the
    [M8 ledger](docs/milestones/M8-collection-policy-binding.md).
 
 ## Pending Jon decisions
