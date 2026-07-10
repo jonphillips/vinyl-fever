@@ -65,6 +65,12 @@ final class AppModel {
   var compilationSeedState: CollectionSeedState = .idle
   var compilationAppendFolder: URL?
   var compilationAppendAlbumID: CompilationAlbum.ID?
+  /// Per-append metadata entered in the append surface. These values are never
+  /// persisted and are cleared when a new album/folder append begins.
+  var compilationAppendGrouping = ""
+  var compilationAppendComments = ""
+  @ObservationIgnored
+  private var compilationAppendRebuildTask: Task<Void, Never>?
   var compilationAppendFiles: [ScannedAudioFile] = []
   var compilationAppendMetadataByFileID: [ScannedAudioFile.ID: AudioMetadataLoadState] = [:]
   /// All recipe proposals are retained for the append preview. Issue-flagged
@@ -749,6 +755,12 @@ final class AppModel {
   }
 
   func buildCompilationAppendPlan(entry: CompilationAlbum, sourceFolder: URL) async {
+    let isNewAppend = compilationAppendAlbumID != entry.id || compilationAppendFolder != sourceFolder
+    if isNewAppend {
+      clearCompilationAppendScratch(
+        defaultGrouping: entry.ruleset.groupingTokens.joined(separator: CompilationRuleset.groupingDelimiter)
+      )
+    }
     compilationAppendFolder = sourceFolder
     compilationAppendAlbumID = entry.id
     compilationApplyPlan = nil
@@ -821,13 +833,24 @@ final class AppModel {
         } else {
           URL?.none
         }
+      var planningEntry = entry
+      let manualGroupingTokens = compilationAppendGrouping
+        .components(separatedBy: CompilationRuleset.groupingDelimiter)
+      if !manualGroupingTokens.isEmpty {
+        planningEntry.ruleset = CompilationRuleset(
+          stripTrackAndDisc: entry.ruleset.stripTrackAndDisc,
+          setCompilationFlag: entry.ruleset.setCompilationFlag,
+          groupingTokens: entry.ruleset.groupingTokens + manualGroupingTokens
+        )
+      }
       let plan = CompilationApplyPlan(
-        entry: entry,
+        entry: planningEntry,
         sourceRoot: sourceFolder,
         files: files,
         currentTagsByFileID: currentTagsByFileID,
         fallbackArtworkURL: fallbackArtworkURL,
-        recipeDeltasByFileID: recipeDeltasByFileID
+        recipeDeltasByFileID: recipeDeltasByFileID,
+        commentsNote: compilationAppendComments
       )
       let tracksByID = Dictionary(uniqueKeysWithValues: plan.tracks.map { ($0.id, $0) })
       var preparedProposalsByFileID: [ScannedAudioFile.ID: [CompilationRecipeProposal]] = [:]
@@ -851,6 +874,52 @@ final class AppModel {
       compilationApplyState = .failed(error.localizedDescription)
       runLogErrorMessage = error.localizedDescription
     }
+  }
+
+  func scheduleCompilationAppendPlanRebuild(entry: CompilationAlbum, sourceFolder: URL) {
+    compilationAppendRebuildTask?.cancel()
+    compilationAppendRebuildTask = Task { @MainActor [weak self] in
+      try? await Task.sleep(for: .milliseconds(300))
+      guard !Task.isCancelled, let self else { return }
+      await self.buildCompilationAppendPlan(entry: entry, sourceFolder: sourceFolder)
+    }
+  }
+
+  func applyCurrentCompilationAppend(entry: CompilationAlbum) async {
+    guard let folder = compilationAppendFolder else { return }
+    await buildCompilationAppendPlan(entry: entry, sourceFolder: folder)
+    guard let plan = compilationApplyPlan else { return }
+    await applyCompilationPlan(plan)
+  }
+
+  func saveCompilationAppendGroupingAsDefault(for album: CompilationAlbum) {
+    var updated = album
+    updated.ruleset = CompilationRuleset(
+      stripTrackAndDisc: album.ruleset.stripTrackAndDisc,
+      setCompilationFlag: album.ruleset.setCompilationFlag,
+      groupingTokens: compilationAppendGrouping
+        .components(separatedBy: CompilationRuleset.groupingDelimiter)
+    )
+    let retainedFolder = compilationAppendAlbumID == album.id ? compilationAppendFolder : nil
+    do {
+      try database.write { db in
+        try CompilationAlbumRegistry.upsert([updated], in: db)
+      }
+      runLogErrorMessage = nil
+      if let retainedFolder {
+        Task {
+          await buildCompilationAppendPlan(entry: updated, sourceFolder: retainedFolder)
+        }
+      }
+    } catch {
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
+  func clearCompilationAppendScratch(defaultGrouping: String = "") {
+    compilationAppendRebuildTask?.cancel()
+    compilationAppendGrouping = defaultGrouping
+    compilationAppendComments = ""
   }
 
   /// Bind or clear the collection policy for one compilation album through the
@@ -987,6 +1056,7 @@ final class AppModel {
       // lingering after the job is done.
       compilationApplyPlan = nil
       compilationAppendFolder = nil
+      clearCompilationAppendScratch()
     } catch is CancellationError {
       compilationImportState = .idle
       compilationCertificationState = .idle
@@ -1679,7 +1749,7 @@ extension AppModel {
         case .grouping, .title, .sortAlbum, .artist:
           guard let value = merged.stringValue(for: field) else { continue }
           previewDelta.setStringValue(value, for: field)
-        case .isCompilation, .trackNumber, .trackTotal, .discNumber:
+        case .comments, .isCompilation, .trackNumber, .trackTotal, .discNumber:
           break
         }
       }
@@ -1762,6 +1832,7 @@ extension ProposedTags.Field {
     case .artist: "Artist"
     case .albumArtist: "Album Artist"
     case .grouping: "Grouping"
+    case .comments: "Comments"
     case .isCompilation: "Compilation"
     case .trackNumber: "Track Number"
     case .trackTotal: "Track Total"

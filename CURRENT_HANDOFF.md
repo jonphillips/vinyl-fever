@@ -7,25 +7,28 @@ the active fronts, whose turn it is, and pending decisions — it points at the
 canonical state and never restates PR/slice history. If it disagrees with GitHub,
 GitHub wins; fix this file.
 
-_Last touched: 2026-07-10 (M8 S0 merged (#46) — FK + `ProposedTags` merge core; the S0
-review carry-over folded into the S1 execution map (#47). M8 S1 (bind + fused append,
-app) is now the active turn)._
+_Last touched: 2026-07-10 (architect review of #50/#51/#52. M9 S0 merged (#51); M9 S1
+reviewed & approved (#52, open — Jon to merge), with Grouping persistence accepted as
+in-scope and the M9 ledger amended to match. M6 S2 found only partly landed by #50 —
+row-condensing only; PlanActionBar + Output-tab work still open)._
 
 ## Active fronts
 
 - **M9 — manual append metadata** *(ungated, no device dependency)*
-  ([ledger](docs/milestones/M9-manual-append-metadata.md)). Dogfooding ask (Jon,
-  2026-07-10): a per-append affordance to type a **Grouping** token and a **Comments**
-  note that ride along with the appended batch — held **ephemerally for that append
-  only**, persisted nowhere. Grouping is a small extension (one more source into the
-  existing `mergedGrouping` union); **Comments is a net-new tag field threaded
-  end-to-end** (model → both parsers → both taggers → conditional diff), which is why
-  it splits into **S0 (comments as a first-class tag, core)** and **S1 (append-time
-  fields, app)**. S1 also bundles two same-screen dogfooding tweaks (bigger registry
-  artwork; the Append Folder action moved out of the header into the selection-gated
-  detail so it only shows once a collection is picked). Neither slice touches the schema
-  or the Music.app live-read gate. Not yet dispatched — architect authored the ledger;
-  Codex may open S0 whenever it wants a green ungated slice.
+  ([ledger](docs/milestones/M9-manual-append-metadata.md)). **Both slices done.**
+  **S0 (comments as a first-class tag, core) merged (#51)** — `comments` threaded model →
+  both parsers → both taggers → conditional diff, with the pure idempotent
+  `appendedComment(source:note:)` merge (newline separator constant) and the
+  byte-identical-unbound guarantee holding. **S1 (append-time fields + Collections UX,
+  app) reviewed & approved (#52, open — merge is Jon's to land)** — ephemeral Grouping +
+  Comments fields feeding the one preview / one apply, bigger registry artwork, Append
+  Folder relocated into the selection-gated detail. **Accepted scope beyond the original
+  ledger** (architect call, 2026-07-10): Grouping now **pre-fills from the registry and
+  gains a "Save as Default" persist** (the deferred evidence-backed slice, pulled in
+  because the dogfooding pass was the evidence — ledger amended to match); **Comments
+  stays fully ephemeral.** #52 also folds in a real **process-launch crash fix**
+  (`ProcessLaunchController` — `terminate()` before `run()` throws) surfaced by the
+  debounced preview rebuild. No schema or live-read-gate touch. No open follow-ups.
 
 - **M8 — collection policy binding**
   ([ledger](docs/milestones/M8-collection-policy-binding.md)). **S0 (FK + `ProposedTags`
@@ -71,7 +74,12 @@ app) is now the active turn)._
   **S0 (vocabulary→Settings) merged (#32); S1 (shell + four-tab scaffold) merged
   (#33)** — header/completion-pill/pipeline-strip/tab-bar + `pipelineStage` /
   `isShowComplete` / `clearScannedShow()` / `resetPlanRun()`, tab bodies still
-  wrapping the existing sections unchanged. **S2 (content polish) is next.**
+  wrapping the existing sections unchanged. **S2 (content polish) is only partly
+  landed:** #50 shipped just the `TrackPlanRow` / `LibraryTrackResolutionRow` condensing
+  (album-level fields hoisted) and did **not** update the M6 ledger. **Still open in
+  S2:** extract `PlanActionBar` from `PlanReadinessSummary`, move the status views into
+  the Output tab and collapse it once terminal, and move the Source picker into the
+  header. Reopen these as an S2 remainder (or S2b).
 - **M3 — live-show import + library verify**
   ([ledger](docs/milestones/M3-import-and-library-verify.md)). S0 + S1 merged
   (#19, #20). **S2 (library verify) is next**, folding the S1 review carry-over
@@ -93,12 +101,14 @@ raw corpus and its golden-file pass are in `main`. No open follow-ups._
 
 ## Next up
 
-1. **M6 S2 (content polish)** — moves without the spike. Extract
-   `PlanActionBar` from `PlanReadinessSummary` (split the button `HStack`/`can*`
-   props from the `*RunStatus` calls) and relocate the status views into the **Output**
-   tab (S1 left it a placeholder); condense `TrackPlanRow` to hoist album-level fields
-   into one header; collapse the Output tab once terminal; and move the Source picker
-   into the header (S1 kept it in the Setlist tab to stay a pure relocation).
+0. **Merge M9 S1 (#52)** — reviewed & approved (scope amendment accepted, ledger and
+   this file updated). Jon lands the merge; then M9 is fully done.
+1. **M6 S2 remainder** — the row-condensing landed (#50); the rest moves without the
+   spike. Extract `PlanActionBar` from `PlanReadinessSummary` (split the button
+   `HStack`/`can*` props from the `*RunStatus` calls) and relocate the status views into
+   the **Output** tab (S1 left it a placeholder); collapse the Output tab once terminal;
+   and move the Source picker into the header (S1 kept it in the Setlist tab to stay a
+   pure relocation). Also mark M6 S2 in its ledger — #50 didn't.
 2. **The live-read device check is the master unblocker** for everything else:
    **M3 S2** (library verify), **M3 S3** (`Working/` cleanup), and both M4 remainders
    (Reconcile fast-follow + trusting the live certify leg) all wait on it. Running
@@ -107,16 +117,6 @@ raw corpus and its golden-file pass are in `main`. No open follow-ups._
 3. **One-true-import-folder fix** — ungated standalone slice (front above). Passthrough
    mp3/m4a copy-through into `Output/` so one folder holds every import-ready track.
    Good green slice to slot between spike-gated fronts; needs no device check.
-4. **M9 S0 (comments as a first-class tag, core)** — ungated standalone, good green
-   slice between spike-gated fronts. Thread a `comments` field through the read/write
-   tag path (model → both parsers → both taggers → conditional diff) with an
-   idempotent *append* merge (`appendedComment(source:note:)`), no UI. Follow the
-   `grouping` field line-for-line. Full map + the byte-identical-unbound guarantee in
-   the [M9 ledger](docs/milestones/M9-manual-append-metadata.md); S1 (append-time
-   fields, app) follows.
-
-5. **M8 S1 (bind + fused append, app)** — merged (#48). *(kept for history until the
-   next handoff sweep.)*
 
 ## Pending Jon decisions
 

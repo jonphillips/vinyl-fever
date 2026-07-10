@@ -19,13 +19,7 @@ struct CollectionsView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 24) {
         CollectionHeader(
-          seedFolder: openSeedFolder,
-          appendFolder: {
-            if let selectedAlbum {
-              openAppendFolder(album: selectedAlbum)
-            }
-          },
-          canAppend: selectedAlbum != nil
+          seedFolder: openSeedFolder
         )
         CollectionRegistrySection(
           albums: albums,
@@ -42,16 +36,30 @@ struct CollectionsView: View {
             album: selectedAlbum,
             policies: policies,
             folder: model.compilationAppendFolder,
+            appendGrouping: $model.compilationAppendGrouping,
+            appendComments: $model.compilationAppendComments,
             plan: model.compilationApplyPlan,
             recipeProposalsByFileID: model.compilationRecipeProposalsByFileID,
             applyState: model.compilationApplyState,
             conversionState: model.compilationConversionState,
             importState: model.compilationImportState,
             certificationState: model.compilationCertificationState,
-            apply: { plan in
-              Task {
-                await model.applyCompilationPlan(plan)
+            appendFolder: {
+              openAppendFolder(album: selectedAlbum)
+            },
+            rebuildPlan: {
+              guard let folder = model.compilationAppendFolder else {
+                return
               }
+              model.scheduleCompilationAppendPlanRebuild(entry: selectedAlbum, sourceFolder: folder)
+            },
+            apply: {
+              Task {
+                await model.applyCurrentCompilationAppend(entry: selectedAlbum)
+              }
+            },
+            saveGroupingAsDefault: {
+              model.saveCompilationAppendGroupingAsDefault(for: selectedAlbum)
             },
             setCover: {
               guard let url = chooseCoverImage() else {
@@ -71,21 +79,24 @@ struct CollectionsView: View {
       .padding(24)
     }
     .navigationTitle("Collections")
+    .onChange(of: selectedAlbumID) { oldValue, newValue in
+      guard oldValue != newValue else {
+        return
+      }
+      let defaultGrouping = newValue
+        .flatMap { id in albums.first { $0.id == id } }
+        .map { $0.ruleset.groupingTokens.joined(separator: CompilationRuleset.groupingDelimiter) }
+        ?? ""
+      model.clearCompilationAppendScratch(defaultGrouping: defaultGrouping)
+      model.compilationApplyPlan = nil
+      model.compilationAppendFolder = nil
+      model.compilationAppendAlbumID = nil
+    }
     .toolbar {
       ToolbarItem {
         Button(action: openSeedFolder) {
           Label("Seed", systemImage: "rectangle.stack.badge.plus")
         }
-      }
-      ToolbarItem {
-        Button {
-          if let selectedAlbum {
-            openAppendFolder(album: selectedAlbum)
-          }
-        } label: {
-          Label("Append", systemImage: "plus")
-        }
-        .disabled(selectedAlbum == nil)
       }
     }
     .task(id: AppSetting.current(from: persistedSettings)) {
@@ -134,8 +145,6 @@ struct CollectionsView: View {
 
 private struct CollectionHeader: View {
   let seedFolder: () -> Void
-  let appendFolder: () -> Void
-  let canAppend: Bool
 
   var body: some View {
     HStack(alignment: .firstTextBaseline, spacing: 12) {
@@ -150,10 +159,6 @@ private struct CollectionHeader: View {
       Button(action: seedFolder) {
         Label("Seed Registry", systemImage: "rectangle.stack.badge.plus")
       }
-      Button(action: appendFolder) {
-        Label("Append Folder", systemImage: "plus")
-      }
-      .disabled(!canAppend)
     }
   }
 }
@@ -225,13 +230,18 @@ private struct CompilationAppendSection: View {
   let album: CompilationAlbum
   let policies: [CollectionPolicy]
   let folder: URL?
+  @Binding var appendGrouping: String
+  @Binding var appendComments: String
   let plan: CompilationApplyPlan?
   let recipeProposalsByFileID: [ScannedAudioFile.ID: [CompilationRecipeProposal]]
   let applyState: ApplyRunState
   let conversionState: ConversionRunState
   let importState: LibraryImportState
   let certificationState: CompilationCertificationState
-  let apply: (CompilationApplyPlan) -> Void
+  let appendFolder: () -> Void
+  let rebuildPlan: () -> Void
+  let apply: () -> Void
+  let saveGroupingAsDefault: () -> Void
   let setCover: () -> Void
   let setPolicy: (CollectionPolicy.ID?) -> Void
   @State private var isConfirmingApply = false
@@ -256,10 +266,38 @@ private struct CompilationAppendSection: View {
               policies: policies,
               setPolicy: setPolicy
             )
+            if folder != nil {
+              VStack(alignment: .leading, spacing: 8) {
+                Text("This append only")
+                  .font(.subheadline)
+                  .fontWeight(.semibold)
+                LabeledContent("Grouping") {
+                  HStack {
+                    TextField("Optional token", text: $appendGrouping)
+                    Button("Save as Default", action: saveGroupingAsDefault)
+                  }
+                  .onChange(of: appendGrouping) { rebuildPlan() }
+                  .onSubmit(rebuildPlan)
+                }
+                LabeledContent("Comments") {
+                  TextField("Optional note", text: $appendComments)
+                    .onChange(of: appendComments) { rebuildPlan() }
+                    .onSubmit(rebuildPlan)
+                }
+                Text("Preview updates shortly after editing.")
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+              }
+            }
           }
           Spacer()
-          Button(action: setCover) {
-            Label("Set Cover…", systemImage: "photo")
+          VStack(alignment: .trailing, spacing: 8) {
+            Button(action: appendFolder) {
+              Label("Append Folder", systemImage: "plus")
+            }
+            Button(action: setCover) {
+              Label("Set Cover…", systemImage: "photo")
+            }
           }
         }
         if let plan {
@@ -275,7 +313,7 @@ private struct CompilationAppendSection: View {
             .disabled(isRunning)
             .confirmationDialog("Append stamped copies to Music?", isPresented: $isConfirmingApply) {
               Button("Append") {
-                apply(plan)
+                apply()
               }
               Button("Cancel", role: .cancel) {
               }
@@ -336,7 +374,7 @@ private struct CompilationAlbumRow: View {
 
   var body: some View {
     HStack(spacing: 12) {
-      ArtworkThumbnail(data: album.displayImage)
+      ArtworkThumbnail(data: album.displayImage, size: 68)
       VStack(alignment: .leading, spacing: 4) {
         Text(album.name)
           .font(.headline)
@@ -699,6 +737,12 @@ private struct EmptyCollectionRow: View {
 
 private struct ArtworkThumbnail: View {
   let data: Data?
+  let size: CGFloat
+
+  init(data: Data?, size: CGFloat = 44) {
+    self.data = data
+    self.size = size
+  }
 
   var body: some View {
     Group {
@@ -712,7 +756,7 @@ private struct ArtworkThumbnail: View {
           .foregroundStyle(.secondary)
       }
     }
-    .frame(width: 44, height: 44)
+    .frame(width: size, height: size)
     .background(Color.secondary.opacity(0.08))
     .clipShape(RoundedRectangle(cornerRadius: 6))
   }

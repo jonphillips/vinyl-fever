@@ -150,6 +150,7 @@ private struct ToolVersionError: LocalizedError {
 private struct LiveProcessRunner: Sendable {
   func run(_ command: ScriptCommand) async throws -> ScriptResult {
     let process = Process()
+    let launchController = ProcessLaunchController(process: process)
     process.executableURL = command.executableURL
     process.arguments = command.arguments
     if let workingDirectory = command.workingDirectory {
@@ -166,7 +167,7 @@ private struct LiveProcessRunner: Sendable {
     process.standardOutput = standardOutput
     process.standardError = standardError
 
-    return try await withTaskCancellationHandler {
+    let result = try await withTaskCancellationHandler {
       try Task.checkCancellation()
       return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<ScriptResult, Error>) in
         // Pipe output is drained through `readabilityHandler` and process exit is
@@ -209,7 +210,7 @@ private struct LiveProcessRunner: Sendable {
         }
 
         do {
-          try process.run()
+          try launchController.run()
         } catch {
           standardOutput.fileHandleForReading.readabilityHandler = nil
           standardError.fileHandleForReading.readabilityHandler = nil
@@ -217,6 +218,44 @@ private struct LiveProcessRunner: Sendable {
         }
       }
     } onCancel: {
+      launchController.cancel()
+    }
+    try Task.checkCancellation()
+    return result
+  }
+}
+
+/// Serializes process launch against the cancellation handler. `Process.terminate()`
+/// raises an Objective-C exception when called before `Process.run()`, so the
+/// cancellation handler must never inspect or mutate the process concurrently with
+/// its launch.
+final class ProcessLaunchController: @unchecked Sendable {
+  private let lock = NSLock()
+  private let process: Process
+  private var cancellationRequested = false
+  private var didLaunch = false
+
+  init(process: Process) {
+    self.process = process
+  }
+
+  func run() throws {
+    lock.lock()
+    defer { lock.unlock() }
+    guard !cancellationRequested else {
+      throw CancellationError()
+    }
+    try process.run()
+    didLaunch = true
+  }
+
+  func cancel() {
+    lock.lock()
+    cancellationRequested = true
+    let shouldTerminate = didLaunch
+    lock.unlock()
+
+    if shouldTerminate {
       process.terminate()
     }
   }

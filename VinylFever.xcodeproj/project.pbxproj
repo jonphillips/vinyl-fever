@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		06B1A9F761F94FBEF51B4122 /* ToolPathClient+Live.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FCF80A0CE45B6E77A178A11 /* ToolPathClient+Live.swift */; };
+		194C11E283B2D45619EBDFAE /* LiveProcessRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE5CD532AC4970417B1B4142 /* LiveProcessRunnerTests.swift */; };
 		22775209C461BD758C5019E2 /* CollectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AED24466777F0409DA88B3E3 /* CollectionsView.swift */; };
 		24FD7A2E67BA925A1E8ADC15 /* AppModelCleanupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE24892ADA40E7507D033765 /* AppModelCleanupTests.swift */; };
 		2BEF6A89647B4F292BD9F65D /* PoliciesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C31F0056F9D91F1791025ED1 /* PoliciesView.swift */; };
@@ -55,6 +56,7 @@
 		CE24892ADA40E7507D033765 /* AppModelCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelCleanupTests.swift; sourceTree = "<group>"; };
 		EFE8FAAEE05BF9BF9A136EDE /* MusicAppClient+Live.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MusicAppClient+Live.swift"; sourceTree = "<group>"; };
 		F6AB6D74511FA4977973A9A7 /* LiveShowsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveShowsView.swift; sourceTree = "<group>"; };
+		FE5CD532AC4970417B1B4142 /* LiveProcessRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveProcessRunnerTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -89,6 +91,7 @@
 			isa = PBXGroup;
 			children = (
 				CE24892ADA40E7507D033765 /* AppModelCleanupTests.swift */,
+				FE5CD532AC4970417B1B4142 /* LiveProcessRunnerTests.swift */,
 				2394A4F11A73AE071EDAA272 /* PoliciesModelTests.swift */,
 			);
 			path = VinylFeverTests;
@@ -289,6 +292,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				24FD7A2E67BA925A1E8ADC15 /* AppModelCleanupTests.swift in Sources */,
+				194C11E283B2D45619EBDFAE /* LiveProcessRunnerTests.swift in Sources */,
 				742071989BB20655102865DD /* PoliciesModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
