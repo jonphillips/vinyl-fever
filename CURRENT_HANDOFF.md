@@ -7,135 +7,77 @@ the active fronts, whose turn it is, and pending decisions — it points at the
 canonical state and never restates PR/slice history. If it disagrees with GitHub,
 GitHub wins; fix this file.
 
-_Last touched: 2026-07-10 (architect review of #50/#51/#52. M9 S0 merged (#51); M9 S1
-reviewed & approved (#52, open — Jon to merge), with Grouping persistence accepted as
-in-scope and the M9 ledger amended to match. M6 S2 found only partly landed by #50 —
-row-condensing only; PlanActionBar + Output-tab work still open)._
+_Last touched: 2026-07-10 (handoff cleanup. M7/M8/M9 retired — all slices merged, no
+open work; history in their ledgers/PRs. Live-read spike confirmed cleared on-device
+(Jon). M3 descoped/closed (Jon) — live pipeline works on-device; S2/S3 automation slices
+not needed. M10 authored.)_
 
 ## Active fronts
 
-- **M9 — manual append metadata** *(ungated, no device dependency)*
-  ([ledger](docs/milestones/M9-manual-append-metadata.md)). **Both slices done.**
-  **S0 (comments as a first-class tag, core) merged (#51)** — `comments` threaded model →
-  both parsers → both taggers → conditional diff, with the pure idempotent
-  `appendedComment(source:note:)` merge (newline separator constant) and the
-  byte-identical-unbound guarantee holding. **S1 (append-time fields + Collections UX,
-  app) reviewed & approved (#52, open — merge is Jon's to land)** — ephemeral Grouping +
-  Comments fields feeding the one preview / one apply, bigger registry artwork, Append
-  Folder relocated into the selection-gated detail. **Accepted scope beyond the original
-  ledger** (architect call, 2026-07-10): Grouping now **pre-fills from the registry and
-  gains a "Save as Default" persist** (the deferred evidence-backed slice, pulled in
-  because the dogfooding pass was the evidence — ledger amended to match); **Comments
-  stays fully ephemeral.** #52 also folds in a real **process-launch crash fix**
-  (`ProcessLaunchController` — `terminate()` before `run()` throws) surfaced by the
-  debounced preview rebuild. No schema or live-read-gate touch. No open follow-ups.
+- **M10 — collection inbox (drag-drop track append)** *(ungated for S0/S1 staging/drain;
+  the append it feeds reaches Music.app exactly as M8/M9)*
+  ([ledger](docs/milestones/M10-collection-inbox.md)). **Authored 2026-07-10, all slices
+  open.** Drop loose song files onto a compilation album → copy into an app-owned Inbox
+  under Application Support (`Inbox/<albumID>/`) → the existing
+  `buildCompilationAppendPlan(entry:sourceFolder:)` consumes that folder unchanged →
+  certified append **trashes** the album's staged copies so the Inbox drains. New input
+  adapter + new home, **not** a new pipeline. **S0** Inbox store (core, filesystem is
+  truth, no schema); **S1** drop target + drain wiring + no-policy nudge (app); **S2**
+  Inbox visibility surface (the "assurance it emptied" ask). Load-bearing decisions
+  locked (fixed AppSupport root; Trash-after-certify-under-root-only); the rest are
+  Codex-callable defaults. Codex may open S0 any time — no device check.
 
-- **M8 — collection policy binding**
-  ([ledger](docs/milestones/M8-collection-policy-binding.md)). **S0 (FK + `ProposedTags`
-  merge, core) merged (#46)** — nullable `collectionPolicyID` (`ON DELETE SET NULL`),
-  `RecipeTagMerge` (collection wins album identity; grouping unions), and
-  `CompilationApplyPlan` accepting pre-computed recipe deltas. The S0 review carry-over is
-  folded into the ledger's S1 execution map (#47) — chiefly that recipe
-  `title`/`artist`/`sortAlbum` need a preview diff channel (they write but won't show
-  otherwise), the `RecipeTagMerge` `clearedFields` asymmetry, and issue-gating being S1's
-  job. **S1 (bind + fused append, app) is the active turn** — policy picker to set/clear the
-  binding + `buildCompilationAppendPlan` running the bound policy's recipes into S0's plan
-  build, one preview / one apply, issue-flagged proposals preview-gated. Ungated — no
-  device dependency.
+- **M6 — live-show import UI refactor** — **S2 remainder only**
+  ([ledger](docs/milestones/M6-live-show-import-ui-refactor.md)). UX-only, ungated. #50
+  landed just the `TrackPlanRow`/`LibraryTrackResolutionRow` condensing (and didn't tick
+  the ledger). Still open: extract `PlanActionBar` from `PlanReadinessSummary`; relocate
+  the run-status views into the **Output** tab (S1 left it a placeholder) and collapse it
+  once terminal; move the Source picker into the header. Mark S2 in the ledger when it
+  lands.
 
-- **Standalone fix — one true import folder** *(ungated, no milestone)*. Today the
-  convert stage sends transcoded FLAC to `Output/` but leaves already-compatible
-  mp3/m4a marked `verifyWorkingOnly` in `Working/`
+- **M4 — compilation-album append** *(append flow complete; in daily use — it is the base
+  M8/M9/M10 build on)* ([ledger](docs/milestones/M4-compilation-album-append.md)). All
+  slices merged (#26/#28). The spike clears the **live certify leg** (pre/post reads
+  around `MusicAppClient.add` — now trustable). The one real remainder is the **Reconcile
+  fast-follow** (re-point the registry entry when identity drift is found + sharpen
+  same-title/different-owner duplicate detection), and it is **evidence-gated by design**:
+  build it only when a real append actually spawns a `Great Covers 2` drift. None observed
+  in daily use yet — so nothing to dispatch.
+
+- **Standalone — one-true-import-folder fix** *(ungated, no milestone)*. Passthrough
+  mp3/m4a still land `verifyWorkingOnly` in `Working/` while transcoded FLAC goes to
+  `Output/`, so a finished set is split across two folders
   ([ConversionPlan.swift](VinylFeverCore/Sources/VinylFeverCore/Model/ConversionPlan.swift),
-  `ConversionTrackPlan.init(applyTrack:outputDirectory:)`), so the finished set is
-  split across two folders and Working still holds the transcoded-FLAC intermediates —
-  the user hand-combines/sorts/deletes every append. **Slice DoD:** every import-ready
-  track lands in **one** folder regardless of source format — passthrough mp3/m4a get a
-  plain copy (no re-encode) into `Output/` and every track's `verificationFile` points
-  there; `Working/` becomes pure scratch. Contained to
-  [ConversionPlan.swift](VinylFeverCore/Sources/VinylFeverCore/Model/ConversionPlan.swift)
-  (give passthrough tracks a real `Output` destination) +
-  [ConversionExecutor.swift](VinylFeverCore/Sources/VinylFeverCore/Apply/ConversionExecutor.swift)
-  (copy-through for passthrough, which today only converts); deterministic, fixture-
-  testable, no device check. Related to but **distinct from** M3 S3 (`Working/`
-  cleanup, which *is* spike-gated) — this one need not wait. Codex may open it any time
-  it wants a green ungated slice between gated fronts.
+  [ConversionExecutor.swift](VinylFeverCore/Sources/VinylFeverCore/Apply/ConversionExecutor.swift)).
+  **DoD:** every import-ready track lands in **one** folder — passthrough mp3/m4a get a
+  plain copy (no re-encode) into `Output/`, every track's `verificationFile` points there,
+  `Working/` becomes pure scratch. Deterministic, fixture-testable, no device check. A good
+  green slice to slot between other fronts.
 
-- **M7 — collection recipes**
-  ([ledger](docs/milestones/M7-collection-recipes.md)). **All slices merged — recipe
-  workbench complete.** S0 (tables + deterministic runner) #40; S1 (recipe workbench,
-  `Policies` section) #42 + runner-wiring fix #43; S2 (model-on classify stage) #44. The
-  S1-boundary "fuse the two runs" question it deferred by design is now M8's subject
-  (front above). No open follow-ups.
-- **M6 — live-show import UI refactor** *(the one unblocked front)*
-  ([ledger](docs/milestones/M6-live-show-import-ui-refactor.md)). UX-only
-  restructure of `LiveShowsView`; no core/schema/run-logic change, so **nothing here
-  waits on the device spike.** Layout + Done behavior decided (Jon, 2026-07-05).
-  **S0 (vocabulary→Settings) merged (#32); S1 (shell + four-tab scaffold) merged
-  (#33)** — header/completion-pill/pipeline-strip/tab-bar + `pipelineStage` /
-  `isShowComplete` / `clearScannedShow()` / `resetPlanRun()`, tab bodies still
-  wrapping the existing sections unchanged. **S2 (content polish) is only partly
-  landed:** #50 shipped just the `TrackPlanRow` / `LibraryTrackResolutionRow` condensing
-  (album-level fields hoisted) and did **not** update the M6 ledger. **Still open in
-  S2:** extract `PlanActionBar` from `PlanReadinessSummary`, move the status views into
-  the Output tab and collapse it once terminal, and move the Source picker into the
-  header. Reopen these as an S2 remainder (or S2b).
-- **M3 — live-show import + library verify**
-  ([ledger](docs/milestones/M3-import-and-library-verify.md)). S0 + S1 merged
-  (#19, #20). **S2 (library verify) is next**, folding the S1 review carry-over
-  (live-read/`location` device check, per-track `add` batching, `add` return
-  shape). S3 (`Working/` cleanup) after. **Gated on the live-read spike (below).**
-- **M4 — compilation-album append (first Phase 6)**
-  ([ledger](docs/milestones/M4-compilation-album-append.md)). **All slices merged —
-  append flow complete.** S0+S1 (#26) registry + policy-stamping engine; **S2 merged
-  (#28)** — append + import + `.compilationCertify` drift certification, with the #28
-  review's two comparator fixes folded in-branch (`028de3e`). **Two things remain,
-  both deferred by design, both gated on the live-read spike:** the **Reconcile
-  fast-follow** (re-point entry on drift + sharpen same-title/different-owner
-  duplicate detection + resolve identity-match forgiveness on *real* mis-certify
-  evidence) and trusting the **live certify leg** itself. Nothing to dispatch until
-  the device check runs.
+## Recently landed (detail lives in the ledgers/PRs, not here)
 
-_M5 (Setlist Normalizer) fully landed (#30/#31): all three slices + the real 18-file
-raw corpus and its golden-file pass are in `main`. No open follow-ups._
+M5 setlist normalizer (#30/#31) · M7 collection recipes (#40/#42/#43/#44) · M8 policy
+binding (#46/#48) · M9 manual append metadata (#51/#52/#53). No open follow-ups on any.
 
 ## Next up
 
-0. **Merge M9 S1 (#52)** — reviewed & approved (scope amendment accepted, ledger and
-   this file updated). Jon lands the merge; then M9 is fully done.
-1. **M6 S2 remainder** — the row-condensing landed (#50); the rest moves without the
-   spike. Extract `PlanActionBar` from `PlanReadinessSummary` (split the button
-   `HStack`/`can*` props from the `*RunStatus` calls) and relocate the status views into
-   the **Output** tab (S1 left it a placeholder); collapse the Output tab once terminal;
-   and move the Source picker into the header (S1 kept it in the Setlist tab to stay a
-   pure relocation). Also mark M6 S2 in its ledger — #50 didn't.
-2. **The live-read device check is the master unblocker** for everything else:
-   **M3 S2** (library verify), **M3 S3** (`Working/` cleanup), and both M4 remainders
-   (Reconcile fast-follow + trusting the live certify leg) all wait on it. Running
-   the macOS-27 beta-3 read-back spike **once** clears all four; they don't collide.
-   This is Jon's spike to run.
-3. **One-true-import-folder fix** — ungated standalone slice (front above). Passthrough
-   mp3/m4a copy-through into `Output/` so one folder holds every import-ready track.
-   Good green slice to slot between spike-gated fronts; needs no device check.
+1. **M10 S0** — Inbox store (core, ungated). Ready to start.
+2. **M6 S2 remainder** — the UI splits above; ungated, moves any time.
+3. **One-true-import-folder fix** — ungated standalone; single folder for every
+   import-ready track.
+
+*(The M4 Reconcile fast-follow is evidence-gated, not spike-gated — see below — so it is
+not queued here.)*
 
 ## Pending Jon decisions
 
-- **M6** — none open (the two layout/behavior forks were resolved 2026-07-05; see the
-  ledger's *Locked decisions*).
-- **M4 #2 / #3** (identity-match forgiveness; no-match behavior) — **deferred by
-  design.** Answer after a real append runs and shows how Apple Music mangles the
-  strings; don't pre-guess. Note: S2 merged but its **live** append leg is still
-  gated on the beta-3 read-back check, so the evidence isn't in hand yet — these ride
-  with the Reconcile fast-follow. M4 #1 decided (folder-seed only); #4/#5/#6 rode
-  their documented defaults.
-- **M3 live-read / `location` carry-over** — the Slice 0→1 review flagged that the
-  live ScriptingBridge read + location-primary matching were never exercised
-  against a real imported album (Music's "copy to Media folder" may make
-  `location` point at the copied path, not `Output/`). Needs a device check before
-  Slice 2 leans on it. See the carry-over notes in the M3 ledger.
+- **M4 identity-drift decisions (#2/#3) + the Reconcile fast-follow.** Still evidence-
+  gated: decide the identity-match-forgiveness and no-match behavior *when* a real append
+  actually mangles a title into a `Great Covers 2`. Daily use has surfaced none yet, so
+  there is nothing to decide today — this stays parked until the evidence appears.
 
 ## The rule
 
-PR draft ⇄ ready is the handoff signal (whose turn). On approving a slice, update
-this file's **Next up** as part of the approval — don't leave the pointer stale.
-History lives in the PRs and the milestone ledgers, never here.
+PR draft ⇄ ready is the handoff signal (whose turn). On approving a slice, update this
+file's **Next up** as part of the approval. History lives in the PRs and the milestone
+ledgers, never here.
