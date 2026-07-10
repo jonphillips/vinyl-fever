@@ -262,6 +262,7 @@ struct PoliciesModelTests {
       AppModel()
     }
     await model.buildCompilationAppendPlan(entry: entry, sourceFolder: folder)
+    #expect(model.compilationAppendGrouping == "Collection")
 
     model.compilationAppendGrouping = "Session"
     model.compilationAppendComments = "Append note"
@@ -307,6 +308,32 @@ struct PoliciesModelTests {
     #expect(track.proposed.grouping == nil)
     #expect(track.proposed.comments == nil)
     #expect(track.diffs.allSatisfy { $0.field != "Comments" })
+  }
+
+  @Test
+  func savesAppendGroupingAsTheCollectionDefault() async throws {
+    let database = try VinylFeverDatabase.open(path: Self.temporaryDatabasePath())
+    let entry = CompilationAlbum(
+      id: UUID(70),
+      name: "Covers",
+      identity: AlbumIdentity(album: "Covers", albumArtist: "Various Artists")
+    )
+    try await database.write { db in
+      try CompilationAlbum.upsert { entry }.execute(db)
+    }
+    let model = withDependencies {
+      $0.defaultDatabase = database
+    } operation: {
+      AppModel()
+    }
+    model.compilationAppendGrouping = "Saved default | Extra"
+
+    model.saveCompilationAppendGroupingAsDefault(for: entry)
+
+    let saved = try await database.read { db in
+      try CompilationAlbum.find(entry.id).fetchOne(db)
+    }
+    #expect(saved?.ruleset.groupingTokens == ["Saved default", "Extra"])
   }
 
   @Test

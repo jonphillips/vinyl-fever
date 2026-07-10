@@ -51,14 +51,15 @@ struct CollectionsView: View {
               guard let folder = model.compilationAppendFolder else {
                 return
               }
+              model.scheduleCompilationAppendPlanRebuild(entry: selectedAlbum, sourceFolder: folder)
+            },
+            apply: {
               Task {
-                await model.buildCompilationAppendPlan(entry: selectedAlbum, sourceFolder: folder)
+                await model.applyCurrentCompilationAppend(entry: selectedAlbum)
               }
             },
-            apply: { plan in
-              Task {
-                await model.applyCompilationPlan(plan)
-              }
+            saveGroupingAsDefault: {
+              model.saveCompilationAppendGroupingAsDefault(for: selectedAlbum)
             },
             setCover: {
               guard let url = chooseCoverImage() else {
@@ -82,7 +83,11 @@ struct CollectionsView: View {
       guard oldValue != newValue else {
         return
       }
-      model.clearCompilationAppendScratch()
+      let defaultGrouping = newValue
+        .flatMap { id in albums.first { $0.id == id } }
+        .map { $0.ruleset.groupingTokens.joined(separator: CompilationRuleset.groupingDelimiter) }
+        ?? ""
+      model.clearCompilationAppendScratch(defaultGrouping: defaultGrouping)
       model.compilationApplyPlan = nil
       model.compilationAppendFolder = nil
       model.compilationAppendAlbumID = nil
@@ -235,7 +240,8 @@ private struct CompilationAppendSection: View {
   let certificationState: CompilationCertificationState
   let appendFolder: () -> Void
   let rebuildPlan: () -> Void
-  let apply: (CompilationApplyPlan) -> Void
+  let apply: () -> Void
+  let saveGroupingAsDefault: () -> Void
   let setCover: () -> Void
   let setPolicy: (CollectionPolicy.ID?) -> Void
   @State private var isConfirmingApply = false
@@ -266,14 +272,19 @@ private struct CompilationAppendSection: View {
                   .font(.subheadline)
                   .fontWeight(.semibold)
                 LabeledContent("Grouping") {
-                  TextField("Optional token", text: $appendGrouping)
-                    .onSubmit(rebuildPlan)
+                  HStack {
+                    TextField("Optional token", text: $appendGrouping)
+                    Button("Save as Default", action: saveGroupingAsDefault)
+                  }
+                  .onChange(of: appendGrouping) { rebuildPlan() }
+                  .onSubmit(rebuildPlan)
                 }
                 LabeledContent("Comments") {
                   TextField("Optional note", text: $appendComments)
+                    .onChange(of: appendComments) { rebuildPlan() }
                     .onSubmit(rebuildPlan)
                 }
-                Text("Press Return in either field to refresh the preview.")
+                Text("Preview updates shortly after editing.")
                   .font(.caption)
                   .foregroundStyle(.secondary)
               }
@@ -302,7 +313,7 @@ private struct CompilationAppendSection: View {
             .disabled(isRunning)
             .confirmationDialog("Append stamped copies to Music?", isPresented: $isConfirmingApply) {
               Button("Append") {
-                apply(plan)
+                apply()
               }
               Button("Cancel", role: .cancel) {
               }

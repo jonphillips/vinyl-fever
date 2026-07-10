@@ -69,6 +69,8 @@ final class AppModel {
   /// persisted and are cleared when a new album/folder append begins.
   var compilationAppendGrouping = ""
   var compilationAppendComments = ""
+  @ObservationIgnored
+  private var compilationAppendRebuildTask: Task<Void, Never>?
   var compilationAppendFiles: [ScannedAudioFile] = []
   var compilationAppendMetadataByFileID: [ScannedAudioFile.ID: AudioMetadataLoadState] = [:]
   /// All recipe proposals are retained for the append preview. Issue-flagged
@@ -755,7 +757,9 @@ final class AppModel {
   func buildCompilationAppendPlan(entry: CompilationAlbum, sourceFolder: URL) async {
     let isNewAppend = compilationAppendAlbumID != entry.id || compilationAppendFolder != sourceFolder
     if isNewAppend {
-      clearCompilationAppendScratch()
+      clearCompilationAppendScratch(
+        defaultGrouping: entry.ruleset.groupingTokens.joined(separator: CompilationRuleset.groupingDelimiter)
+      )
     }
     compilationAppendFolder = sourceFolder
     compilationAppendAlbumID = entry.id
@@ -872,8 +876,49 @@ final class AppModel {
     }
   }
 
-  func clearCompilationAppendScratch() {
-    compilationAppendGrouping = ""
+  func scheduleCompilationAppendPlanRebuild(entry: CompilationAlbum, sourceFolder: URL) {
+    compilationAppendRebuildTask?.cancel()
+    compilationAppendRebuildTask = Task { @MainActor [weak self] in
+      try? await Task.sleep(for: .milliseconds(300))
+      guard !Task.isCancelled, let self else { return }
+      await self.buildCompilationAppendPlan(entry: entry, sourceFolder: sourceFolder)
+    }
+  }
+
+  func applyCurrentCompilationAppend(entry: CompilationAlbum) async {
+    guard let folder = compilationAppendFolder else { return }
+    await buildCompilationAppendPlan(entry: entry, sourceFolder: folder)
+    guard let plan = compilationApplyPlan else { return }
+    await applyCompilationPlan(plan)
+  }
+
+  func saveCompilationAppendGroupingAsDefault(for album: CompilationAlbum) {
+    var updated = album
+    updated.ruleset = CompilationRuleset(
+      stripTrackAndDisc: album.ruleset.stripTrackAndDisc,
+      setCompilationFlag: album.ruleset.setCompilationFlag,
+      groupingTokens: compilationAppendGrouping
+        .components(separatedBy: CompilationRuleset.groupingDelimiter)
+    )
+    let retainedFolder = compilationAppendAlbumID == album.id ? compilationAppendFolder : nil
+    do {
+      try database.write { db in
+        try CompilationAlbumRegistry.upsert([updated], in: db)
+      }
+      runLogErrorMessage = nil
+      if let retainedFolder {
+        Task {
+          await buildCompilationAppendPlan(entry: updated, sourceFolder: retainedFolder)
+        }
+      }
+    } catch {
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
+  func clearCompilationAppendScratch(defaultGrouping: String = "") {
+    compilationAppendRebuildTask?.cancel()
+    compilationAppendGrouping = defaultGrouping
     compilationAppendComments = ""
   }
 
