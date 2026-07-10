@@ -59,6 +59,7 @@ public struct CompilationAlbum: Equatable, Identifiable, Sendable {
   public var groupingTokensText: String
   public var seedFolderPath: String?
   public var seedWarningsText: String
+  public var collectionPolicyID: CollectionPolicy.ID?
 
   public init(
     id: UUID,
@@ -68,7 +69,8 @@ public struct CompilationAlbum: Equatable, Identifiable, Sendable {
     fallbackArtwork: Data? = nil,
     ruleset: CompilationRuleset = CompilationRuleset(),
     seedFolderPath: String? = nil,
-    seedWarnings: [String] = []
+    seedWarnings: [String] = [],
+    collectionPolicyID: CollectionPolicy.ID? = nil
   ) {
     self.id = id
     self.name = name
@@ -81,6 +83,7 @@ public struct CompilationAlbum: Equatable, Identifiable, Sendable {
     self.groupingTokensText = ruleset.groupingTokens.joined(separator: CompilationRuleset.groupingDelimiter)
     self.seedFolderPath = seedFolderPath
     self.seedWarningsText = seedWarnings.joined(separator: "\n")
+    self.collectionPolicyID = collectionPolicyID
   }
 
   public var identity: AlbumIdentity {

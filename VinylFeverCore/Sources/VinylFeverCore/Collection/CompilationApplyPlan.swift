@@ -74,7 +74,8 @@ public struct CompilationApplyPlan: Equatable, Sendable {
     sourceRoot: URL,
     files: [ScannedAudioFile],
     currentTagsByFileID: [ScannedAudioFile.ID: AudioTags],
-    fallbackArtworkURL: URL? = nil
+    fallbackArtworkURL: URL? = nil,
+    recipeDeltasByFileID: [ScannedAudioFile.ID: [ProposedTags]] = [:]
   ) {
     let sourceRoot = sourceRoot.standardizedFileURL
     let workingDirectory = sourceRoot.appendingPathComponent(ApplyPlan.workingDirectoryName, isDirectory: true)
@@ -84,7 +85,11 @@ public struct CompilationApplyPlan: Equatable, Sendable {
     .map { file in
       let current = currentTagsByFileID[file.id] ?? AudioTags()
       let artwork: ArtworkDecision = current.hasEmbeddedArtwork ? .keepExisting : .applyFallback
-      let proposed = Self.proposedTags(entry: entry, current: current)
+      let compilationDelta = Self.proposedTags(entry: entry, current: current)
+      let proposed = RecipeTagMerge.merge(
+        compilation: compilationDelta,
+        recipes: recipeDeltasByFileID[file.id] ?? []
+      )
       return CompilationTrackPlan(
         id: file.id,
         sourceFile: file,
