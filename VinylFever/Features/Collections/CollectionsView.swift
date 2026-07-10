@@ -8,6 +8,8 @@ struct CollectionsView: View {
   @Bindable var model: AppModel
   @FetchAll(CompilationAlbum.order(by: \.name))
   private var albums: [CompilationAlbum]
+  @FetchAll(CollectionPolicy.order(by: \.name))
+  private var policies: [CollectionPolicy]
   @FetchAll(AppSetting.all)
   private var persistedSettings: [AppSetting]
   @State private var selectedAlbumID: CompilationAlbum.ID?
@@ -38,8 +40,10 @@ struct CollectionsView: View {
         if let selectedAlbum {
           CompilationAppendSection(
             album: selectedAlbum,
+            policies: policies,
             folder: model.compilationAppendFolder,
             plan: model.compilationApplyPlan,
+            recipeProposalsByFileID: model.compilationRecipeProposalsByFileID,
             applyState: model.compilationApplyState,
             conversionState: model.compilationConversionState,
             importState: model.compilationImportState,
@@ -56,6 +60,9 @@ struct CollectionsView: View {
               Task {
                 await model.setCompilationAlbumCover(album: selectedAlbum, imageURL: url)
               }
+            },
+            setPolicy: { policyID in
+              model.setCompilationPolicy(policyID, for: selectedAlbum)
             }
           )
         }
@@ -216,14 +223,17 @@ private struct CollectionSeedSection: View {
 
 private struct CompilationAppendSection: View {
   let album: CompilationAlbum
+  let policies: [CollectionPolicy]
   let folder: URL?
   let plan: CompilationApplyPlan?
+  let recipeProposalsByFileID: [ScannedAudioFile.ID: [CompilationRecipeProposal]]
   let applyState: ApplyRunState
   let conversionState: ConversionRunState
   let importState: LibraryImportState
   let certificationState: CompilationCertificationState
   let apply: (CompilationApplyPlan) -> Void
   let setCover: () -> Void
+  let setPolicy: (CollectionPolicy.ID?) -> Void
   @State private var isConfirmingApply = false
 
   var body: some View {
@@ -241,6 +251,11 @@ private struct CompilationAppendSection: View {
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
             }
+            CollectionPolicyPicker(
+              album: album,
+              policies: policies,
+              setPolicy: setPolicy
+            )
           }
           Spacer()
           Button(action: setCover) {
@@ -272,7 +287,10 @@ private struct CompilationAppendSection: View {
           CompilationCertificationStatus(state: certificationState)
           LazyVStack(alignment: .leading, spacing: 10) {
             ForEach(plan.tracks) { track in
-              CompilationTrackPlanRow(track: track)
+              CompilationTrackPlanRow(
+                track: track,
+                recipeProposals: recipeProposalsByFileID[track.id] ?? []
+              )
             }
           }
         } else {
@@ -287,6 +305,28 @@ private struct CompilationAppendSection: View {
       conversionState.isRunning ||
       importState.isRunning ||
       certificationState.isRunning
+  }
+}
+
+private struct CollectionPolicyPicker: View {
+  let album: CompilationAlbum
+  let policies: [CollectionPolicy]
+  let setPolicy: (CollectionPolicy.ID?) -> Void
+
+  var body: some View {
+    Picker(
+      "Collection Policy",
+      selection: Binding(
+        get: { album.collectionPolicyID },
+        set: setPolicy
+      )
+    ) {
+      Text("None").tag(CollectionPolicy.ID?.none)
+      ForEach(policies) { policy in
+        Text(policy.name).tag(CollectionPolicy.ID?.some(policy.id))
+      }
+    }
+    .pickerStyle(.menu)
   }
 }
 
@@ -355,8 +395,13 @@ private struct CollectionSeedCandidateRow: View {
 
 private struct CompilationTrackPlanRow: View {
   let track: CompilationTrackPlan
+  let recipeProposals: [CompilationRecipeProposal]
 
   var body: some View {
+    let hasAppliedRecipeGrouping = recipeProposals.contains {
+      $0.proposal.issues.isEmpty && $0.proposal.delta.grouping != nil
+    }
+
     VStack(alignment: .leading, spacing: 8) {
       HStack {
         Text(track.sourceFile.url.lastPathComponent)
@@ -370,7 +415,9 @@ private struct CompilationTrackPlanRow: View {
         .foregroundStyle(.secondary)
       }
       Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 4) {
-        ForEach(track.diffs) { diff in
+        ForEach(track.diffs.filter { diff in
+          !hasAppliedRecipeGrouping || diff.field != "Grouping"
+        }) { diff in
           GridRow {
             Text(diff.field)
               .foregroundStyle(.secondary)
@@ -383,6 +430,16 @@ private struct CompilationTrackPlanRow: View {
         }
       }
       .font(.caption)
+      if !recipeProposals.isEmpty {
+        VStack(alignment: .leading, spacing: 8) {
+          Text("Recipe edits")
+            .font(.caption)
+            .fontWeight(.semibold)
+          ForEach(recipeProposals) { recipeProposal in
+            RecipeProposalPreview(proposal: recipeProposal, current: track.current)
+          }
+        }
+      }
       if track.proposed.isCompilation == false {
         Label(
           "Clearing the per-track Compilation flag is intentional: the album is unified by Album Artist + Grouping, not the iTunes compilation checkbox (which fragments tracks in Music).",
@@ -395,6 +452,84 @@ private struct CompilationTrackPlanRow: View {
     .padding(12)
     .background(Color.secondary.opacity(0.08))
     .clipShape(RoundedRectangle(cornerRadius: 6))
+  }
+}
+
+private struct RecipeProposalPreview: View {
+  let proposal: CompilationRecipeProposal
+  let current: AudioTags
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 5) {
+      let diffs = Self.diffs(for: proposal.previewDelta, current: current)
+      if !diffs.isEmpty {
+        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 4) {
+          ForEach(diffs) { diff in
+            GridRow {
+              Text(diff.field)
+                .foregroundStyle(.secondary)
+              Text(diff.current ?? "none")
+              Image(systemName: "arrow.right")
+                .foregroundStyle(.secondary)
+              Text(diff.proposed ?? "removed")
+                .fontWeight(.medium)
+            }
+          }
+        }
+      }
+      if !proposal.heldFields.isEmpty {
+        ForEach(proposal.heldFields.sorted { $0.rawValue < $1.rawValue }, id: \.self) { field in
+          Label(
+            "\(field.displayName) held by collection — not applied",
+            systemImage: "arrow.uturn.left.circle"
+          )
+          .font(.caption2)
+          .foregroundStyle(.secondary)
+        }
+      }
+      Text(proposal.proposal.reason)
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+      if !proposal.proposal.issues.isEmpty {
+        Label(
+          "Review required — not applied",
+          systemImage: "exclamationmark.triangle"
+        )
+        .foregroundStyle(.orange)
+        .font(.caption2)
+        ForEach(proposal.proposal.issues, id: \.self) { issue in
+          Text(Self.issueMessage(issue))
+            .font(.caption2)
+            .foregroundStyle(.orange)
+        }
+      }
+    }
+    .padding(.leading, 12)
+  }
+
+  private static func diffs(for proposed: ProposedTags, current: AudioTags) -> [CompilationTagDiff] {
+    ProposedTags.Field.allCases
+      .filter {
+        $0.isStringValued
+          && proposed.stringValue(for: $0) != nil
+          && proposed.stringValue(for: $0) != current.stringValue(for: $0)
+      }
+      .map { field in
+        CompilationTagDiff(
+          field: field.displayName,
+          current: current.stringValue(for: field),
+          proposed: proposed.stringValue(for: field)
+        )
+      }
+  }
+
+  private static func issueMessage(_ issue: RecipeIssue) -> String {
+    switch issue {
+    case .valueNotInFilename:
+      "The proposed value was not evidenced by the filename."
+    case .modelOutputUnparseable:
+      "The model output could not be parsed."
+    }
   }
 }
 

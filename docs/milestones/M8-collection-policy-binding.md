@@ -98,7 +98,7 @@ speculatively.
   unioned, title/artist taken from recipes; an issue-flagged delta is carried but
   marked non-appliable; running twice is a no-op; deleting a bound policy sets the
   album's `collectionPolicyID` to `NULL` (album survives).
-- **S1 — Bind + fused append (app layer).** Policy picker on the collection detail
+- [x] **S1 — Bind + fused append (app layer).** Policy picker on the collection detail
   (set/clear `collectionPolicyID`); `buildCompilationAppendPlan` loads the bound
   policy's enabled recipes and `await`s `collectionRecipeRunner.run` per file, passing
   the collected deltas into S0's plan build; `CompilationAppendSection` renders recipe
@@ -200,6 +200,46 @@ Minor, for the record: dropped recipe `album`/`albumArtist` are silently discard
 (spec line 74 wants a skipped/for-info diff — no channel exists yet); and recipe order
 within a policy is significant for scalar fields (last-writer-wins), order-insensitive
 for grouping.
+
+### Carry-over from S1 review
+
+S1 landed correctly: all three S0 carry-overs are resolved (issue-flag gate at
+`buildCompilationAppendPlan`, symmetric `clearedFields` restoration in `RecipeTagMerge`,
+recipe edits surfaced through a dedicated preview channel rather than
+`CompilationTrackPlan.diffs`), the unbound plan is asserted byte-identical, and the
+bind/fuse/exclude paths are tested. `swift test` (core) green. M8's slice list (S0 + S1)
+is complete. The three fast-follow candidates below are implemented in the follow-up
+work on the S1 branch; they were not slice blockers and do not create an S2.
+
+- [x] **Recipe preview renders the raw delta, not the merge result (load-bearing).**
+  `RecipeProposalPreview.diffs` in
+  [CollectionsView.swift](../../VinylFever/Features/Collections/CollectionsView.swift)
+  shows every string-valued field in `proposal.delta`, but apply runs the delta through
+  `RecipeTagMerge.merge`, which **drops** recipe `album`/`albumArtist` (collection wins)
+  and **unions** `grouping`. So a recipe targeting `album`/`albumArtist` previews an
+  identity change that is never applied — the exact "skipped/for-info, not applied" case
+  from spec line 74, and a direct hit on the "one previewed, one applied" contract; a
+  `grouping` recipe previews a raw token that differs from the unioned value actually
+  written (which also appears, correctly, in the compilation diff row — grouping
+  double-displays). **Exact for the dominant `title`/`artist`/`sortAlbum` recipes**, which
+  is why it did not surface in DoD. Fix path: reflect merge precedence in the recipe
+  channel — filter identity fields out (or mark them "held by collection, not applied")
+  and render `grouping` as the merged result. The preview now projects the final merged
+  plan, labels collection-held identity fields as not applied, and shows grouping in one
+  channel only.
+- [x] **Fetch-all-then-filter (efficiency).** `buildCompilationAppendPlan` loads *every*
+  `CollectionRecipe` in the DB via `CollectionRecipe.order(by: \.name).fetchAll(db)` and
+  filters `collectionPolicyID`/`enabled` in memory. Prefer a `.where`-scoped query. Minor
+  at current scale. The query is now scoped to the bound policy and enabled recipes.
+- [x] **Binding change leaves a stale-empty section (UX).** `setCompilationPolicy` clears the
+  plan but leaves `compilationAppendFolder`/files set without rebuilding, so after
+  re-binding with a folder already picked the section shows a selected folder and no plan
+  until re-pick. Intentional per the in-code comment ("cannot drift"); consider
+  auto-rebuilding from the retained folder. It now rebuilds when the retained folder
+  belongs to the album whose binding changed.
+- **Remaining nit.** Recipe precedence remains name-alphabetical (deterministic but
+  arbitrary — see the order note above). No-op rows and the M8 support MARK were cleaned
+  up with the preview follow-up.
 
 ## Out of scope
 

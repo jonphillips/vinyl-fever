@@ -1,5 +1,6 @@
 import Dependencies
 import Foundation
+import SQLiteData
 import Testing
 import VinylFeverCore
 
@@ -122,6 +123,165 @@ struct PoliciesModelTests {
     #expect(AppModel.recipeApplyPlan(from: [], folder: URL(filePath: "/tmp/folder")) == nil)
   }
 
+  // MARK: - Compilation append binding
+
+  @Test
+  func boundAppendFusesEnabledRecipeDeltasAndExcludesIssueDeltasFromApply() async throws {
+    let database = try VinylFeverDatabase.open(path: Self.temporaryDatabasePath())
+    let policy = CollectionPolicy(id: UUID(20), name: "Covers")
+    let cleanRecipe = CollectionRecipe(
+      id: UUID(21),
+      collectionPolicyID: policy.id,
+      name: "Title rewrite",
+      pattern: "",
+      targetField: .title
+    )
+    let flaggedRecipe = CollectionRecipe(
+      id: UUID(22),
+      collectionPolicyID: policy.id,
+      name: "Sort album rewrite",
+      pattern: "",
+      targetField: .sortAlbum
+    )
+    let disabledRecipe = CollectionRecipe(
+      id: UUID(23),
+      collectionPolicyID: policy.id,
+      name: "Disabled recipe",
+      pattern: "",
+      targetField: .artist,
+      enabled: false
+    )
+    try await database.write { db in
+      try CollectionPolicy.upsert { policy }.execute(db)
+      try CollectionRecipe.upsert { cleanRecipe }.execute(db)
+      try CollectionRecipe.upsert { flaggedRecipe }.execute(db)
+      try CollectionRecipe.upsert { disabledRecipe }.execute(db)
+    }
+
+    let file = Self.file(10, "song.flac")
+    let entry = CompilationAlbum(
+      id: UUID(24),
+      name: "Covers",
+      identity: AlbumIdentity(album: "Covers", albumArtist: "Various Artists"),
+      collectionPolicyID: policy.id
+    )
+    let model = withDependencies {
+      $0.defaultDatabase = database
+      $0.fileSystemClient.scanAudioFolder = { _ in [file] }
+      $0.audioMetadataClient.read = { _ in
+        AudioTags(title: "Song", sortAlbum: "Original")
+      }
+      $0.collectionRecipeRunner.run = { recipe, _, _ in
+        switch recipe.id {
+        case cleanRecipe.id:
+          RecipeProposal(
+            delta: .delta("Song (Live)", for: .title),
+            reason: "title rewrite"
+          )
+        case flaggedRecipe.id:
+          RecipeProposal(
+            delta: .delta("Flagged Sort", for: .sortAlbum),
+            reason: "sort rewrite",
+            issues: [.valueNotInFilename]
+          )
+        default:
+          // If the disabled recipe were accidentally loaded, this would make the
+          // regression visible in the resulting plan.
+          RecipeProposal(
+            delta: .delta("Disabled", for: .artist),
+            reason: "disabled recipe"
+          )
+        }
+      }
+    } operation: {
+      AppModel()
+    }
+
+    await model.buildCompilationAppendPlan(entry: entry, sourceFolder: URL(filePath: "/tmp/folder"))
+
+    let plan = try #require(model.compilationApplyPlan)
+    let track = try #require(plan.tracks.first)
+    #expect(track.proposed.title == "Song (Live)")
+    #expect(track.proposed.artist == nil)
+    #expect(track.proposed.sortAlbum == nil)
+    #expect(model.compilationRecipeProposalsByFileID[file.id]?.count == 2)
+    #expect(model.compilationRecipeProposalsByFileID[file.id]?.contains { !$0.proposal.issues.isEmpty } == true)
+
+    let applyPlan = ApplyPlan(compilationPlan: plan)
+    #expect(applyPlan.tracks.first?.tags.title == "Song (Live)")
+    #expect(applyPlan.tracks.first?.tags.sortAlbum == nil)
+  }
+
+  @Test
+  func unboundAppendPlanIsUnchangedAndDoesNotRunRecipes() async throws {
+    let file = Self.file(30, "song.flac")
+    let entry = CompilationAlbum(
+      id: UUID(31),
+      name: "Covers",
+      identity: AlbumIdentity(album: "Covers", albumArtist: "Various Artists")
+    )
+    let current = AudioTags(title: "Song", album: "Original", sortAlbum: "Original")
+    let folder = URL(filePath: "/tmp/unbound-folder")
+    let model = withDependencies {
+      $0.fileSystemClient.scanAudioFolder = { _ in [file] }
+      $0.audioMetadataClient.read = { _ in current }
+      $0.collectionRecipeRunner.run = { _, _, _ in
+        RecipeProposal(delta: .delta("Must not run", for: .title), reason: "unexpected")
+      }
+    } operation: {
+      AppModel()
+    }
+
+    await model.buildCompilationAppendPlan(entry: entry, sourceFolder: folder)
+
+    let expected = CompilationApplyPlan(
+      entry: entry,
+      sourceRoot: folder,
+      files: [file],
+      currentTagsByFileID: [file.id: current]
+    )
+    #expect(model.compilationApplyPlan == expected)
+    #expect(model.compilationRecipeProposalsByFileID.isEmpty)
+  }
+
+  @Test
+  func recipePreviewUsesEffectiveMergedValuesAndMarksCollectionIdentityAsHeld() {
+    let proposals = [
+      CompilationRecipeProposal(
+        recipeID: UUID(40),
+        proposal: RecipeProposal(
+          delta: ProposedTags(
+            title: "First title",
+            album: "Recipe album",
+            grouping: "Recipe grouping"
+          ),
+          reason: "first"
+        )
+      ),
+      CompilationRecipeProposal(
+        recipeID: UUID(41),
+        proposal: RecipeProposal(
+          delta: .delta("Final title", for: .title),
+          reason: "last"
+        )
+      ),
+    ]
+
+    let prepared = AppModel.preparedCompilationRecipeProposals(
+      proposals,
+      merged: ProposedTags(
+        title: "Final title",
+        album: "Collection album",
+        grouping: "Collection grouping | Recipe grouping"
+      )
+    )
+
+    #expect(prepared[0].previewDelta == ProposedTags(grouping: "Collection grouping | Recipe grouping"))
+    #expect(prepared[0].heldFields == [.album])
+    #expect(prepared[1].previewDelta == ProposedTags(title: "Final title"))
+    #expect(prepared[1].heldFields.isEmpty)
+  }
+
   // MARK: - Fixtures
 
   private static func file(_ n: Int, _ name: String) -> ScannedAudioFile {
@@ -157,5 +317,11 @@ struct PoliciesModelTests {
       current: "Song",
       proposed: proposed
     )
+  }
+
+  private static func temporaryDatabasePath() -> String {
+    FileManager.default.temporaryDirectory
+      .appendingPathComponent("vinyl-fever-m8-s1-\(UUID().uuidString).sqlite")
+      .path
   }
 }

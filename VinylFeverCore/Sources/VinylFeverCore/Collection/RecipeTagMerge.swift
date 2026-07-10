@@ -41,6 +41,15 @@ public enum RecipeTagMerge {
     merged.trackTotal = compilation.trackTotal
     merged.discNumber = compilation.discNumber
 
+    // Recipe producers cannot override the collection's identity or structural
+    // values, so their cleared-field membership must not override those fields
+    // either. Keep recipe clears for any future recipe-owned fields.
+    let collectionOwnedFields: Set<ProposedTags.Field> = [
+      .album, .albumArtist, .isCompilation, .trackNumber, .trackTotal, .discNumber,
+    ]
+    merged.clearedFields.subtract(collectionOwnedFields)
+    merged.clearedFields.formUnion(compilation.clearedFields.intersection(collectionOwnedFields))
+
     return merged
   }
 }
