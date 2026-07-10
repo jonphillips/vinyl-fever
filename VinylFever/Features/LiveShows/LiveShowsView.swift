@@ -362,7 +362,7 @@ private struct PlanPreviewSection: View {
             importIntoMusicLibrary: { importIntoMusicLibrary(conversionPlan) },
             readMusicLibrary: { readMusicLibrary(conversionPlan) }
           )
-          ProposedMetadataSummary(plan: plan)
+          PlanMetadataHeader(plan: plan)
           if plan.tracks.isEmpty {
             EmptyScanSectionRow(title: "No file-to-track mappings")
           } else {
@@ -938,15 +938,19 @@ private struct LibraryTrackResolutionRow: View {
   }
 }
 
-private struct ProposedMetadataSummary: View {
+private struct PlanMetadataHeader: View {
   let plan: ShowPlan
 
   var body: some View {
-    Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 8) {
-      ProposedMetadataRow(title: "Album", value: plan.metadata.albumTitle)
-      ProposedMetadataRow(title: "Sort Album", value: plan.metadata.sortAlbum)
-      ProposedMetadataRow(title: "Artist", value: plan.metadata.tags.artist.displayText)
-      ProposedMetadataRow(title: "Album Artist", value: plan.metadata.tags.albumArtist.displayText)
+    VStack(alignment: .leading, spacing: 8) {
+      Label("Album metadata", systemImage: "music.note.list")
+        .font(.subheadline.weight(.semibold))
+      Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 8) {
+        ProposedMetadataRow(title: "Album", value: plan.metadata.albumTitle)
+        ProposedMetadataRow(title: "Sort Album", value: plan.metadata.sortAlbum)
+        ProposedMetadataRow(title: "Artist", value: plan.metadata.tags.artist.displayText)
+        ProposedMetadataRow(title: "Album Artist", value: plan.metadata.tags.albumArtist.displayText)
+      }
     }
   }
 }
@@ -1030,19 +1034,24 @@ private struct TrackPlanRow: View {
   let currentMetadata: AudioMetadataLoadState
 
   var body: some View {
-    HStack(alignment: .top, spacing: 12) {
-      Text(trackPlan.proposedTags.trackNumber.map(String.init) ?? "-")
-        .font(.callout.monospacedDigit())
-        .foregroundStyle(.secondary)
-        .frame(width: 28, alignment: .trailing)
-      VStack(alignment: .leading, spacing: 6) {
-        Text(trackPlan.proposedFilename)
-          .font(.callout.monospaced())
-          .textSelection(.enabled)
-        Text(trackPlan.sourceFile.url.relativePath(from: root))
-          .font(.caption)
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(alignment: .top, spacing: 12) {
+        Text(trackPlan.proposedTags.trackNumber.map(String.init) ?? "-")
+          .font(.callout.monospacedDigit())
           .foregroundStyle(.secondary)
-          .textSelection(.enabled)
+          .frame(width: 28, alignment: .trailing)
+        VStack(alignment: .leading, spacing: 4) {
+          Text(trackPlan.proposedFilename)
+            .font(.callout.monospaced())
+            .textSelection(.enabled)
+          Text(trackPlan.sourceFile.url.relativePath(from: root))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .textSelection(.enabled)
+        }
+      }
+
+      if !metadataChanges.isEmpty {
         Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 4) {
           GridRow {
             Text("")
@@ -1053,40 +1062,63 @@ private struct TrackPlanRow: View {
               .font(.caption.weight(.semibold))
               .foregroundStyle(.secondary)
           }
-          TrackMetadataComparisonRow(
-            title: "Title",
-            current: currentMetadata.tags?.title,
-            proposed: trackPlan.proposedTags.title
-          )
-          TrackMetadataComparisonRow(
-            title: "Track",
-            current: currentMetadata.tags?.trackNumber.map(String.init),
-            proposed: trackPlan.proposedTags.trackNumber.map(String.init)
-          )
-          TrackMetadataComparisonRow(
-            title: "Disc",
-            current: currentMetadata.tags?.discNumber.map(String.init),
-            proposed: trackPlan.proposedTags.discNumber.map(String.init)
-          )
-          TrackMetadataComparisonRow(
-            title: "Duration",
-            current: currentMetadata.tags?.durationSeconds.map(Self.durationText),
-            proposed: nil
-          )
+          ForEach(metadataChanges) { change in
+            TrackMetadataComparisonRow(
+              title: change.title,
+              current: change.current,
+              proposed: change.proposed
+            )
+          }
         }
-        CurrentMetadataStatus(state: currentMetadata)
       }
+
+      CurrentMetadataStatus(state: currentMetadata)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.vertical, 8)
   }
 
-  private static func durationText(_ seconds: Double) -> String {
-    let roundedSeconds = Int(seconds.rounded())
-    let minutes = roundedSeconds / 60
-    let remainder = roundedSeconds % 60
-    return "\(minutes):\(String(format: "%02d", remainder))"
+  private var metadataChanges: [TrackMetadataChange] {
+    guard let currentTags = currentMetadata.tags else {
+      return []
+    }
+
+    return [
+      TrackMetadataChange(
+        id: "title",
+        title: "Title",
+        current: currentTags.title,
+        proposed: trackPlan.proposedTags.title
+      ),
+      TrackMetadataChange(
+        id: "track",
+        title: "Track",
+        current: currentTags.trackNumber.map(String.init),
+        proposed: trackPlan.proposedTags.trackNumber.map(String.init)
+      ),
+      TrackMetadataChange(
+        id: "disc",
+        title: "Disc",
+        current: currentTags.discNumber.map(String.init),
+        proposed: trackPlan.proposedTags.discNumber.map(String.init)
+      ),
+    ].filter { change in
+      normalized(change.current) != normalized(change.proposed)
+    }
   }
+
+  private func normalized(_ value: String?) -> String? {
+    guard let value else { return nil }
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+  }
+}
+
+private struct TrackMetadataChange: Identifiable {
+  let id: String
+  let title: LocalizedStringResource
+  let current: String?
+  let proposed: String?
 }
 
 private struct TrackMetadataComparisonRow: View {
