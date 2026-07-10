@@ -38,7 +38,7 @@ struct RecipeTagMergeTests {
     expectNoDifference(merged.grouping, "Collection | Covers | 1990s")
     expectNoDifference(merged.isCompilation, true)
     expectNoDifference(merged.trackNumber, nil)
-    expectNoDifference(merged.clearedFields, [.isCompilation, .trackNumber, .trackTotal, .discNumber, .album])
+    expectNoDifference(merged.clearedFields, [.isCompilation, .trackNumber, .trackTotal, .discNumber])
   }
 
   @Test

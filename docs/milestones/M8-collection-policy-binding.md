@@ -98,7 +98,7 @@ speculatively.
   unioned, title/artist taken from recipes; an issue-flagged delta is carried but
   marked non-appliable; running twice is a no-op; deleting a bound policy sets the
   album's `collectionPolicyID` to `NULL` (album survives).
-- **S1 — Bind + fused append (app layer).** Policy picker on the collection detail
+- [x] **S1 — Bind + fused append (app layer).** Policy picker on the collection detail
   (set/clear `collectionPolicyID`); `buildCompilationAppendPlan` loads the bound
   policy's enabled recipes and `await`s `collectionRecipeRunner.run` per file, passing
   the collected deltas into S0's plan build; `CompilationAppendSection` renders recipe

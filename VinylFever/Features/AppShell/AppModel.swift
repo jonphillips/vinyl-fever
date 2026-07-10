@@ -66,6 +66,9 @@ final class AppModel {
   var compilationAppendFolder: URL?
   var compilationAppendFiles: [ScannedAudioFile] = []
   var compilationAppendMetadataByFileID: [ScannedAudioFile.ID: AudioMetadataLoadState] = [:]
+  /// All recipe proposals are retained for the append preview. Issue-flagged
+  /// proposals stay visible here but their deltas never enter the apply plan.
+  var compilationRecipeProposalsByFileID: [ScannedAudioFile.ID: [CompilationRecipeProposal]] = [:]
   var compilationApplyPlan: CompilationApplyPlan?
   var compilationApplyState: ApplyRunState = .idle
   var compilationConversionState: ConversionRunState = .idle
@@ -747,6 +750,7 @@ final class AppModel {
   func buildCompilationAppendPlan(entry: CompilationAlbum, sourceFolder: URL) async {
     compilationAppendFolder = sourceFolder
     compilationApplyPlan = nil
+    compilationRecipeProposalsByFileID = [:]
     compilationApplyState = .idle
     compilationConversionState = .idle
     compilationImportState = .idle
@@ -772,6 +776,41 @@ final class AppModel {
           compilationAppendMetadataByFileID[file.id] = .failed(error.localizedDescription)
         }
       }
+      var recipeDeltasByFileID: [ScannedAudioFile.ID: [ProposedTags]] = [:]
+      var recipeProposalsByFileID: [ScannedAudioFile.ID: [CompilationRecipeProposal]] = [:]
+      if let policyID = entry.collectionPolicyID {
+        let enabledRecipes = try await database.read { db in
+          try CollectionRecipe.order(by: \.name)
+            .fetchAll(db)
+            .filter { $0.collectionPolicyID == policyID && $0.enabled }
+        }
+        for file in files {
+          guard let current = currentTagsByFileID[file.id] else { continue }
+          var proposals: [CompilationRecipeProposal] = []
+          var applicableDeltas: [ProposedTags] = []
+          for recipe in enabledRecipes {
+            guard let proposal = try await collectionRecipeRunner.run(
+              recipe: recipe,
+              filename: file.url.lastPathComponent,
+              current: current
+            ) else {
+              continue
+            }
+            proposals.append(
+              CompilationRecipeProposal(recipeID: recipe.id, proposal: proposal)
+            )
+            guard proposal.issues.isEmpty else { continue }
+            applicableDeltas.append(proposal.delta)
+          }
+          if !proposals.isEmpty {
+            recipeProposalsByFileID[file.id] = proposals
+          }
+          if !applicableDeltas.isEmpty {
+            recipeDeltasByFileID[file.id] = applicableDeltas
+          }
+        }
+      }
+      compilationRecipeProposalsByFileID = recipeProposalsByFileID
       let fallbackArtworkURL =
         if let fallbackArtwork = entry.fallbackArtwork {
           sourceFolder
@@ -785,7 +824,8 @@ final class AppModel {
         sourceRoot: sourceFolder,
         files: files,
         currentTagsByFileID: currentTagsByFileID,
-        fallbackArtworkURL: fallbackArtworkURL
+        fallbackArtworkURL: fallbackArtworkURL,
+        recipeDeltasByFileID: recipeDeltasByFileID
       )
       runLogErrorMessage = nil
     } catch is CancellationError {
@@ -793,6 +833,25 @@ final class AppModel {
     } catch {
       compilationApplyPlan = nil
       compilationApplyState = .failed(error.localizedDescription)
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
+  /// Bind or clear the collection policy for one compilation album through the
+  /// same registry upsert rail used by cover edits and seeded entries.
+  func setCompilationPolicy(_ policyID: CollectionPolicy.ID?, for album: CompilationAlbum) {
+    var updated = album
+    updated.collectionPolicyID = policyID
+    do {
+      try database.write { db in
+        try CompilationAlbumRegistry.upsert([updated], in: db)
+      }
+      // The current preview was built from the previous binding. Require a new
+      // folder read so the displayed plan and the persisted binding cannot drift.
+      compilationApplyPlan = nil
+      compilationRecipeProposalsByFileID = [:]
+      runLogErrorMessage = nil
+    } catch {
       runLogErrorMessage = error.localizedDescription
     }
   }
@@ -1540,6 +1599,15 @@ private struct MetadataReadOutcome: Sendable {
 }
 
 // MARK: - Recipe workbench support (M7 S1)
+
+/// A bound-append proposal keeps the recipe's stable identity beside the runner
+/// output so the preview can render proposals with stable SwiftUI identity.
+struct CompilationRecipeProposal: Identifiable, Equatable {
+  let recipeID: CollectionRecipe.ID
+  let proposal: RecipeProposal
+
+  var id: CollectionRecipe.ID { recipeID }
+}
 
 /// One row of the live-sample preview: a file the recipe touched, its current tags,
 /// and the proposal — plus the display strings the diff panel renders. An item with
