@@ -83,6 +83,10 @@ final class AppModel {
   var compilationConversionState: ConversionRunState = .idle
   var compilationImportState: LibraryImportState = .idle
   var compilationCertificationState: CompilationCertificationState = .idle
+  /// Per-album pending counts across the whole Inbox root, for the standing visibility
+  /// surface. Refreshed after stage, after a certified-append drain, and on the
+  /// Collections screen's `.task`.
+  var inboxSummary: [InboxAlbumSummary] = []
   // Recipe workbench (M7 S1). A recipe run is a distinct gesture from a
   // compilation append — it points one recipe at a folder, previews the diffs, and
   // rides the same `copy → Working/ → writeTags` rail on apply.
@@ -767,7 +771,29 @@ final class AppModel {
     do {
       _ = try collectionInboxClient.stage(audioFiles, entry.id)
       let inboxFolder = try collectionInboxClient.stagingDirectory(entry.id)
+      refreshInboxSummary()
       await buildCompilationAppendPlan(entry: entry, sourceFolder: inboxFolder)
+    } catch {
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
+  /// Load per-album staged counts from the Inbox store into observable state for the
+  /// standing visibility surface.
+  func refreshInboxSummary() {
+    do {
+      inboxSummary = try collectionInboxClient.summary()
+    } catch {
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
+  /// Manual per-album Clear: abandon a staged queue without appending. The caller (the
+  /// Inbox visibility surface) is responsible for confirming with the user first.
+  func clearInboxQueue(albumID: CompilationAlbum.ID) {
+    do {
+      try collectionInboxClient.drain(albumID)
+      refreshInboxSummary()
     } catch {
       runLogErrorMessage = error.localizedDescription
     }
@@ -1107,6 +1133,7 @@ final class AppModel {
     }
     do {
       try collectionInboxClient.drain(plan.entry.id)
+      refreshInboxSummary()
     } catch {
       runLogErrorMessage = error.localizedDescription
     }

@@ -59,6 +59,7 @@ struct CollectionInboxAppendTests {
         inboxRoot.appendingPathComponent(id.uuidString, isDirectory: true)
       }
       $0.collectionInboxClient.drain = { drained.record($0) }
+      $0.collectionInboxClient.summary = { [] }
     } operation: {
       AppModel()
     }
@@ -97,6 +98,82 @@ struct CollectionInboxAppendTests {
     model.drainInboxIfStaged(plan: plan)
 
     #expect(drained.ids.isEmpty)
+  }
+
+  /// A staged drop shows up in `inboxSummary` with the right count once refreshed.
+  @Test
+  func stagingADropIsReflectedInInboxSummary() async throws {
+    let temp = try Self.makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: temp) }
+    let inboxRoot = temp.appendingPathComponent("Inbox", isDirectory: true)
+
+    let source = temp.appendingPathComponent("one-hit-wonder.m4a")
+    try Data("audio".utf8).write(to: source)
+
+    let album = Self.album()
+    let model = withDependencies {
+      $0.collectionInboxClient = .live(root: inboxRoot)
+      $0.fileSystemClient.scanAudioFolder = { _ in [] }
+    } operation: {
+      AppModel()
+    }
+
+    await model.stageDroppedFilesForAppend(entry: album, files: [source])
+
+    #expect(model.inboxSummary == [InboxAlbumSummary(albumID: album.id, fileCount: 1)])
+  }
+
+  /// A manual Clear (drain without appending) zeroes that album out of the summary.
+  @Test
+  func clearInboxQueueZeroesTheSummary() async throws {
+    let temp = try Self.makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: temp) }
+    let inboxRoot = temp.appendingPathComponent("Inbox", isDirectory: true)
+
+    let source = temp.appendingPathComponent("one-hit-wonder.m4a")
+    try Data("audio".utf8).write(to: source)
+
+    let album = Self.album()
+    let model = withDependencies {
+      $0.collectionInboxClient = .live(root: inboxRoot)
+      $0.fileSystemClient.scanAudioFolder = { _ in [] }
+    } operation: {
+      AppModel()
+    }
+
+    await model.stageDroppedFilesForAppend(entry: album, files: [source])
+    #expect(!model.inboxSummary.isEmpty)
+
+    model.clearInboxQueue(albumID: album.id)
+
+    #expect(model.inboxSummary.isEmpty)
+  }
+
+  /// A staged album ID with no backing registry entry (a since-deleted album) still surfaces
+  /// in `inboxSummary` — the store has no concept of the registry, so orphan detection is the
+  /// view's job of resolving the ID, not the model's job of filtering it out.
+  @Test
+  func refreshInboxSummaryRepresentsAnOrphanedAlbumID() throws {
+    let temp = try Self.makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: temp) }
+    let inboxRoot = temp.appendingPathComponent("Inbox", isDirectory: true)
+
+    let source = temp.appendingPathComponent("orphan-song.m4a")
+    try Data("audio".utf8).write(to: source)
+
+    let orphanedAlbumID = CompilationAlbum.ID(uuidString: "22222222-2222-2222-2222-222222222222")!
+    let liveClient = CollectionInboxClient.live(root: inboxRoot)
+    _ = try liveClient.stage([source], orphanedAlbumID)
+
+    let model = withDependencies {
+      $0.collectionInboxClient = liveClient
+    } operation: {
+      AppModel()
+    }
+
+    model.refreshInboxSummary()
+
+    #expect(model.inboxSummary == [InboxAlbumSummary(albumID: orphanedAlbumID, fileCount: 1)])
   }
 
   // MARK: - Fixtures

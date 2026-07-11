@@ -21,6 +21,13 @@ struct CollectionsView: View {
         CollectionHeader(
           seedFolder: openSeedFolder
         )
+        InboxSummarySection(
+          summary: model.inboxSummary,
+          albums: albums,
+          clear: { albumID in
+            model.clearInboxQueue(albumID: albumID)
+          }
+        )
         CollectionRegistrySection(
           albums: albums,
           selectedAlbumID: $selectedAlbumID,
@@ -108,6 +115,9 @@ struct CollectionsView: View {
     .task(id: AppSetting.current(from: persistedSettings)) {
       await model.refreshToolStatuses(settings: AppSetting.current(from: persistedSettings))
     }
+    .task {
+      model.refreshInboxSummary()
+    }
   }
 
   private func openSeedFolder() {
@@ -175,6 +185,76 @@ private struct CollectionHeader: View {
         Label("Seed Registry", systemImage: "rectangle.stack.badge.plus")
       }
     }
+  }
+}
+
+/// The standing Inbox visibility surface: per-album pending counts from
+/// `CollectionInboxClient.summary()`, an aggregate line, and a manual per-album Clear for
+/// abandoning a queue without appending. An entry whose `albumID` no longer resolves against
+/// the registry (a since-deleted album) renders as "Unknown album" and is still clearable.
+private struct InboxSummarySection: View {
+  let summary: [InboxAlbumSummary]
+  let albums: [CompilationAlbum]
+  let clear: (CompilationAlbum.ID) -> Void
+
+  private var totalTracks: Int {
+    summary.reduce(0) { $0 + $1.fileCount }
+  }
+
+  var body: some View {
+    CollectionSection(title: "Inbox", systemImage: "tray", count: totalTracks) {
+      if summary.isEmpty {
+        EmptyCollectionRow(title: "Inbox empty")
+      } else {
+        VStack(alignment: .leading, spacing: 8) {
+          Text(
+            "\(totalTracks) track\(totalTracks == 1 ? "" : "s") staged across "
+              + "\(summary.count) album\(summary.count == 1 ? "" : "s")"
+          )
+          .foregroundStyle(.secondary)
+          LazyVStack(alignment: .leading, spacing: 0) {
+            ForEach(summary) { entry in
+              InboxSummaryRow(
+                title: albums.first { $0.id == entry.albumID }?.name,
+                fileCount: entry.fileCount,
+                clear: { clear(entry.albumID) }
+              )
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+private struct InboxSummaryRow: View {
+  let title: String?
+  let fileCount: Int
+  let clear: () -> Void
+  @State private var isConfirmingClear = false
+
+  var body: some View {
+    HStack {
+      Text(title ?? "Unknown album")
+        .foregroundStyle(title == nil ? .secondary : .primary)
+      Spacer()
+      Text("\(fileCount)")
+        .foregroundStyle(.secondary)
+      Button("Clear") {
+        isConfirmingClear = true
+      }
+      .buttonStyle(.borderless)
+      .confirmationDialog(
+        "Clear the staged queue for \(title ?? "this album")?",
+        isPresented: $isConfirmingClear
+      ) {
+        Button("Clear", role: .destructive) {
+          clear()
+        }
+        Button("Cancel", role: .cancel) {}
+      }
+    }
+    .padding(.vertical, 6)
   }
 }
 
