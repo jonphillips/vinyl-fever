@@ -91,7 +91,7 @@ Consequences that fall out of this shape, each a decision:
 
 ## Slices
 
-- [ ] **S0 — Collection Inbox store (core, no UI).** A `CollectionInboxClient`
+- [x] **S0 — Collection Inbox store (core, no UI).** A `CollectionInboxClient`
   `@DependencyClient` owning the app-owned staging root and per-album subfolders:
   resolve `Inbox/<albumID>/` under Application Support (creating on demand), **copy**
   dropped source URLs in (preserve originals; collision-suffix, never overwrite), list
@@ -103,7 +103,7 @@ Consequences that fall out of this shape, each a decision:
   — Codex's call, stated in the PR); `contents`/`summary` counts match the directory;
   `drain` moves an album's files to Trash and leaves the subfolder empty/absent; drain
   refuses any path not under the Inbox root.
-- [ ] **S1 — Drop-to-append + Inbox drain wiring (app).** A drop target on the
+- [x] **S1 — Drop-to-append + Inbox drain wiring (app).** A drop target on the
   compilation-album surface stages dropped audio files via the S0 store and drives the
   existing append preview; a certified append drains the album's Inbox folder; an album
   with no bound policy shows a non-blocking nudge. DoD: dropping file(s) onto an album
@@ -113,7 +113,7 @@ Consequences that fall out of this shape, each a decision:
   certified append trashes** the album's staged copies and resets the section; a
   **folder-picked** append still never drains; an album with `collectionPolicyID == nil`
   shows the "no policy bound" nudge and the drop still stamps compilation identity.
-- [ ] **S2 — Inbox visibility surface (app).** A standing Inbox panel on the Collections
+- [x] **S2 — Inbox visibility surface (app).** A standing Inbox panel on the Collections
   screen: per-album pending counts from `CollectionInboxClient.summary()`, an aggregate
   "N tracks staged across M albums" / "Inbox empty" state, and a manual per-album
   **Clear** (drain, with confirm) for abandoning a queue without appending. DoD: staging

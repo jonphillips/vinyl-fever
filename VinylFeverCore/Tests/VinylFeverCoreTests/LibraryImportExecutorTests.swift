@@ -6,28 +6,32 @@ import Testing
 
 @Suite(.serialized)
 struct LibraryImportExecutorTests {
+  // A short deadline / tiny interval keeps the poll loop instant in tests without a clock
+  // dependency; success cases resolve on the first read and never sleep.
+  private static let fastImporter = MusicWatchFolderImporter(
+    deadline: .milliseconds(20),
+    pollInterval: .milliseconds(1)
+  )
+  private static let watchFolder = URL(filePath: "/tmp/AutomaticallyAdd")
+
   @Test
-  func importsProducedFilesAndRecordsOutcomes() async throws {
+  func dropsProducedFilesAndRecordsOutcomes() async throws {
     let plan = makeConversionPlan(format: .flac)
     let runLog = RunLogRecorder()
     let music = MusicAppRecorder(
       albumReads: [
         [],
         [libraryRef(for: plan.tracks[0])],
-      ],
-      addResult: .success([])
+      ]
     )
 
     let result = try await withDependencies {
-      $0.musicAppClient.readAlbumTracks = { request in
-        try await music.readAlbumTracks(request)
-      }
-      $0.musicAppClient.add = { urls in
-        try await music.add(urls)
-      }
+      $0.musicAppClient.readAlbumTracks = { try await music.readAlbumTracks($0) }
+      $0.musicAppClient.importViaWatchFolder = { try await music.importViaWatchFolder($0, $1) }
       $0.runLogClient = runLog.client
     } operation: {
-      try await LibraryImportExecutor().importToLibrary(plan)
+      try await LibraryImportExecutor(importer: Self.fastImporter)
+        .importToLibrary(plan, watchFolder: Self.watchFolder)
     }
 
     expectNoDifference(result.run.kind, .importLibrary)
@@ -35,9 +39,9 @@ struct LibraryImportExecutorTests {
     expectNoDifference(result.didSucceed, true)
     expectNoDifference(result.tracks.map(\.status), [.imported])
 
-    let addedURLs = await music.addedURLs()
+    let dropped = await music.droppedFiles()
     let outcomes = await runLog.fileOutcomes().map(RunOutcomeSnapshot.init(request:))
-    expectNoDifference(addedURLs, [[plan.tracks[0].verificationFile]])
+    expectNoDifference(dropped, [DroppedBatch(urls: [plan.tracks[0].verificationFile], folder: Self.watchFolder)])
     expectNoDifference(
       outcomes,
       [
@@ -51,60 +55,52 @@ struct LibraryImportExecutorTests {
   }
 
   @Test
-  func importsWorkingFilesWhenNoConversionIsRequired() async throws {
+  func dropsWorkingFilesWhenNoConversionIsRequired() async throws {
     let plan = makeConversionPlan(format: .mp3)
     let music = MusicAppRecorder(
       albumReads: [
         [],
         [libraryRef(for: plan.tracks[0])],
-      ],
-      addResult: .success([])
+      ]
     )
 
     _ = try await withDependencies {
-      $0.musicAppClient.readAlbumTracks = { request in
-        try await music.readAlbumTracks(request)
-      }
-      $0.musicAppClient.add = { urls in
-        try await music.add(urls)
-      }
+      $0.musicAppClient.readAlbumTracks = { try await music.readAlbumTracks($0) }
+      $0.musicAppClient.importViaWatchFolder = { try await music.importViaWatchFolder($0, $1) }
       $0.runLogClient = RunLogRecorder().client
     } operation: {
-      try await LibraryImportExecutor().importToLibrary(plan)
+      try await LibraryImportExecutor(importer: Self.fastImporter)
+        .importToLibrary(plan, watchFolder: Self.watchFolder)
     }
 
-    let addedURLs = await music.addedURLs()
-    expectNoDifference(addedURLs, [[plan.tracks[0].workingFile]])
+    let dropped = await music.droppedFiles()
+    expectNoDifference(dropped.map(\.urls), [[plan.tracks[0].workingFile]])
   }
 
   @Test
-  func surfacesAlreadyPresentFilesWithoutAddingAgain() async throws {
+  func surfacesAlreadyPresentFilesWithoutDroppingAgain() async throws {
     let plan = makeConversionPlan(format: .flac)
     let runLog = RunLogRecorder()
     let music = MusicAppRecorder(
       albumReads: [
         [libraryRef(for: plan.tracks[0])],
-      ],
-      addResult: .failure(MusicAppRecorderError.addFailed)
+      ]
     )
 
     let result = try await withDependencies {
-      $0.musicAppClient.readAlbumTracks = { request in
-        try await music.readAlbumTracks(request)
-      }
-      $0.musicAppClient.add = { urls in
-        try await music.add(urls)
-      }
+      $0.musicAppClient.readAlbumTracks = { try await music.readAlbumTracks($0) }
+      $0.musicAppClient.importViaWatchFolder = { try await music.importViaWatchFolder($0, $1) }
       $0.runLogClient = runLog.client
     } operation: {
-      try await LibraryImportExecutor().importToLibrary(plan)
+      try await LibraryImportExecutor(importer: Self.fastImporter)
+        .importToLibrary(plan, watchFolder: Self.watchFolder)
     }
 
     expectNoDifference(result.exitSummary, "already present")
     expectNoDifference(result.didSucceed, true)
     expectNoDifference(result.tracks.map(\.status), [.alreadyPresent])
-    let addedURLs = await music.addedURLs()
-    expectNoDifference(addedURLs, [])
+    let dropped = await music.droppedFiles()
+    expectNoDifference(dropped, [])
 
     let outcomes = await runLog.fileOutcomes().map(RunOutcomeSnapshot.init(request:))
     expectNoDifference(
@@ -120,83 +116,61 @@ struct LibraryImportExecutorTests {
   }
 
   @Test
-  func recordsFailedAddsAndContinuesTheRun() async throws {
+  func recordsFilesMusicHasNotYetIngestedAsDropped() async throws {
     let plan = makeConversionPlan(format: .flac)
     let runLog = RunLogRecorder()
-    let music = MusicAppRecorder(
-      albumReads: [
-        [],
-        [],
-      ],
-      addResult: .failure(MusicAppRecorderError.addFailed)
-    )
+    // Every poll read comes back empty — Music has not ingested the drop yet.
+    let music = MusicAppRecorder(albumReads: [[]])
 
     let result = try await withDependencies {
-      $0.musicAppClient.readAlbumTracks = { request in
-        try await music.readAlbumTracks(request)
-      }
-      $0.musicAppClient.add = { urls in
-        try await music.add(urls)
-      }
+      $0.musicAppClient.readAlbumTracks = { try await music.readAlbumTracks($0) }
+      $0.musicAppClient.importViaWatchFolder = { try await music.importViaWatchFolder($0, $1) }
       $0.runLogClient = runLog.client
     } operation: {
-      try await LibraryImportExecutor().importToLibrary(plan)
+      try await LibraryImportExecutor(importer: Self.fastImporter)
+        .importToLibrary(plan, watchFolder: Self.watchFolder)
     }
 
-    expectNoDifference(result.exitSummary, "1 of 1 failed")
-    expectNoDifference(result.didSucceed, false)
-    expectNoDifference(result.tracks.map(\.status), [.failed("Music add failed.")])
+    // The file was copied into the watch folder, so the import succeeded even though the poll
+    // never confirmed ingest — Music imports the folder on its own schedule.
+    expectNoDifference(result.exitSummary, "dropped (awaiting Music)")
+    expectNoDifference(result.didSucceed, true)
+    expectNoDifference(result.tracks.map(\.status), [.dropped])
 
-    let outcomes = await runLog.fileOutcomes().map(RunOutcomeSnapshot.init(request:))
-    expectNoDifference(
-      outcomes,
-      [
-        RunOutcomeSnapshot(
-          status: .failed,
-          producedPath: nil,
-          note: "Music add failed."
-        ),
-      ]
-    )
+    let dropped = await music.droppedFiles()
+    expectNoDifference(dropped.map(\.urls), [[plan.tracks[0].verificationFile]])
   }
+}
+
+private struct DroppedBatch: Equatable, Sendable {
+  var urls: [URL]
+  var folder: URL
 }
 
 private actor MusicAppRecorder {
   private var albumReads: [[ImportedTrackRef]]
-  private let addResult: Result<[ImportedTrackRef], Error>
-  private var added: [[URL]] = []
+  private var lastRead: [ImportedTrackRef] = []
+  private var dropped: [DroppedBatch] = []
 
-  init(albumReads: [[ImportedTrackRef]], addResult: Result<[ImportedTrackRef], Error>) {
+  init(albumReads: [[ImportedTrackRef]]) {
     self.albumReads = albumReads
-    self.addResult = addResult
   }
 
-  func readAlbumTracks(_ request: MusicAlbumReadRequest) throws -> [ImportedTrackRef] {
+  func readAlbumTracks(_ request: MusicAlbumReadRequest) -> [ImportedTrackRef] {
     _ = request
     guard !albumReads.isEmpty else {
-      return []
+      return lastRead
     }
-    return albumReads.removeFirst()
+    lastRead = albumReads.removeFirst()
+    return lastRead
   }
 
-  func add(_ urls: [URL]) throws -> [ImportedTrackRef] {
-    added.append(urls)
-    return try addResult.get()
+  func importViaWatchFolder(_ urls: [URL], _ folder: URL) {
+    dropped.append(DroppedBatch(urls: urls, folder: folder))
   }
 
-  func addedURLs() -> [[URL]] {
-    added
-  }
-}
-
-private enum MusicAppRecorderError: LocalizedError {
-  case addFailed
-
-  var errorDescription: String? {
-    switch self {
-    case .addFailed:
-      "Music add failed."
-    }
+  func droppedFiles() -> [DroppedBatch] {
+    dropped
   }
 }
 

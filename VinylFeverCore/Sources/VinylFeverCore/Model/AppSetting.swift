@@ -7,17 +7,24 @@ public struct AppSetting: Equatable, Hashable, Identifiable, Sendable {
   public var metaflacPath: String?
   public var ffmpegPath: String?
   public var ffprobePath: String?
+  /// The Music "Automatically Add" folder. Files copied here are imported by Music's
+  /// own folder watcher, sidestepping the timeout-prone `add` Apple Event. Stored as a
+  /// plain path (the app is not sandboxed, so no security-scoped bookmark is needed even
+  /// when the library lives on an external volume).
+  public var musicWatchFolderPath: String?
 
   public init(
     id: UUID = Self.singletonID,
     metaflacPath: String? = nil,
     ffmpegPath: String? = nil,
-    ffprobePath: String? = nil
+    ffprobePath: String? = nil,
+    musicWatchFolderPath: String? = nil
   ) {
     self.id = id
     self.metaflacPath = Self.normalizedPath(metaflacPath)
     self.ffmpegPath = Self.normalizedPath(ffmpegPath)
     self.ffprobePath = Self.normalizedPath(ffprobePath)
+    self.musicWatchFolderPath = Self.normalizedPath(musicWatchFolderPath)
   }
 }
 
@@ -46,6 +53,18 @@ extension AppSetting {
       ffmpegPath: ffmpegPath,
       ffprobePath: ffprobePath
     )
+  }
+
+  /// The configured Music watch folder as a file URL, or `nil` when unset. Existence
+  /// and writability are validated at import time, not here.
+  public var musicWatchFolderURL: URL? {
+    musicWatchFolderPath.map { URL(filePath: $0) }
+  }
+
+  public func withMusicWatchFolderPath(_ path: String?) -> Self {
+    var copy = self
+    copy.musicWatchFolderPath = Self.normalizedPath(path)
+    return copy
   }
 
   public func withOverridePath(_ path: String?, for tool: AudioTool) -> Self {

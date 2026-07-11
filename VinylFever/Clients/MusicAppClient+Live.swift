@@ -17,6 +17,9 @@ extension MusicAppClient {
       add: { urls in
         try await bridge.add(urls)
       },
+      importViaWatchFolder: { urls, watchFolder in
+        try await bridge.importViaWatchFolder(urls, into: watchFolder)
+      },
       readAlbumTracks: { request in
         try await bridge.readAlbumTracks(request)
       }
@@ -101,6 +104,61 @@ private struct LiveMusicAppBridge: Sendable {
         return Self.importedTrackRefs(from: result)
       }
       .value
+    }
+  }
+
+  /// Copies each file into Music's "Automatically Add" folder so Music ingests it via its
+  /// folder watcher — no Apple Event, nothing that can time out on a busy Music. Runs off
+  /// the main actor because it is blocking file IO. Colliding names are disambiguated so a
+  /// re-drop never clobbers a file the watcher is mid-import on.
+  func importViaWatchFolder(_ urls: [URL], into watchFolder: URL) async throws {
+    try await Task.detached(priority: .userInitiated) {
+      let fileManager = FileManager.default
+      var isDirectory: ObjCBool = false
+      guard
+        fileManager.fileExists(atPath: watchFolder.path(percentEncoded: false), isDirectory: &isDirectory),
+        isDirectory.boolValue
+      else {
+        throw MusicAppLiveError.watchFolderUnavailable(watchFolder)
+      }
+      guard fileManager.isWritableFile(atPath: watchFolder.path(percentEncoded: false)) else {
+        throw MusicAppLiveError.watchFolderNotWritable(watchFolder)
+      }
+
+      for url in urls {
+        let destination = Self.uniqueDestination(
+          for: url.lastPathComponent,
+          in: watchFolder,
+          fileManager: fileManager
+        )
+        try fileManager.copyItem(at: url.standardizedFileURL, to: destination)
+      }
+    }
+    .value
+  }
+
+  /// Returns a destination URL in `folder` for `fileName`, appending a short suffix if a
+  /// file already sits there (Music removes files after importing, so a collision means a
+  /// prior drop is still pending — never overwrite it).
+  private static func uniqueDestination(
+    for fileName: String,
+    in folder: URL,
+    fileManager: FileManager
+  ) -> URL {
+    let candidate = folder.appending(path: fileName)
+    guard fileManager.fileExists(atPath: candidate.path(percentEncoded: false)) else {
+      return candidate
+    }
+    let base = (fileName as NSString).deletingPathExtension
+    let ext = (fileName as NSString).pathExtension
+    var attempt = 2
+    while true {
+      let suffixed = ext.isEmpty ? "\(base) \(attempt)" : "\(base) \(attempt).\(ext)"
+      let url = folder.appending(path: suffixed)
+      if !fileManager.fileExists(atPath: url.path(percentEncoded: false)) {
+        return url
+      }
+      attempt += 1
     }
   }
 
@@ -370,6 +428,8 @@ private enum MusicAppLiveError: LocalizedError {
   case musicAppUnavailable
   case scriptingBridgeReadFailed(String)
   case timedOut
+  case watchFolderUnavailable(URL)
+  case watchFolderNotWritable(URL)
 
   var errorDescription: String? {
     switch self {
@@ -385,6 +445,10 @@ private enum MusicAppLiveError: LocalizedError {
       "Music scripting bridge value '\(key)' could not be read."
     case .timedOut:
       "Music did not respond in time. It may be busy or blocked on a dialog; try again."
+    case let .watchFolderUnavailable(url):
+      "The Automatically Add folder isn't there: \(url.path(percentEncoded: false)). Check it in Settings — is the drive mounted?"
+    case let .watchFolderNotWritable(url):
+      "The Automatically Add folder isn't writable: \(url.path(percentEncoded: false))."
     }
   }
 }

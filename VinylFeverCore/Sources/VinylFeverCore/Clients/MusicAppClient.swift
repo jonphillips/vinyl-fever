@@ -11,6 +11,11 @@ public struct MusicAppClient: Sendable {
     .unavailable("Music automation is not configured.")
   }
   public var add: @Sendable (_ urls: [URL]) async throws -> [ImportedTrackRef]
+  /// Copies `urls` into Music's "Automatically Add" `watchFolder` so Music's folder
+  /// watcher imports them on its own schedule. Unlike `add`, this sends no Apple Event
+  /// and cannot time out on a busy Music; the caller confirms the import by polling
+  /// `readAlbumTracks`.
+  public var importViaWatchFolder: @Sendable (_ urls: [URL], _ watchFolder: URL) async throws -> Void
   public var readAlbumTracks: @Sendable (_ request: MusicAlbumReadRequest) async throws -> [ImportedTrackRef]
 }
 
