@@ -797,6 +797,8 @@ private struct ImportedTrackRow: View {
       "checkmark.circle"
     case .alreadyPresent:
       "checkmark.circle"
+    case .dropped:
+      "arrow.down.circle"
     case .failed:
       "exclamationmark.triangle"
     }
@@ -808,6 +810,8 @@ private struct ImportedTrackRow: View {
       .green
     case .alreadyPresent:
       .secondary
+    case .dropped:
+      .blue
     case .failed:
       .red
     }

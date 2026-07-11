@@ -21,6 +21,10 @@ public struct CollectionInboxClient: Sendable {
   public var contents: @Sendable (_ albumID: CompilationAlbum.ID) throws -> [URL]
   /// Per-album staged counts across the whole Inbox root.
   public var summary: @Sendable () throws -> [InboxAlbumSummary]
+  /// Move specific staged `files` for `albumID` to Trash, leaving the rest of the queue (and its
+  /// subfolder) intact. Refuses any path that is not a direct child of `albumID`'s staging
+  /// subfolder, so a user-picked source file can never be trashed. Missing files are skipped.
+  public var remove: @Sendable (_ files: [URL], _ albumID: CompilationAlbum.ID) throws -> Void
   /// Move `albumID`'s staged files to Trash and leave its subfolder absent. Refuses to act on
   /// any path outside the Inbox root.
   public var drain: @Sendable (_ albumID: CompilationAlbum.ID) throws -> Void
@@ -107,6 +111,23 @@ struct CollectionInboxStore: Sendable {
       .sorted { $0.albumID.uuidString < $1.albumID.uuidString }
   }
 
+  func remove(files: [URL], albumID: CompilationAlbum.ID) throws {
+    let directory = albumDirectory(albumID).standardizedFileURL
+    for file in files {
+      let standardized = file.standardizedFileURL
+      // A removable file must be a direct child of *this album's* staging folder. The root
+      // guard alone isn't enough — it would also admit a sibling album's staged file.
+      try assertUnderRoot(standardized)
+      guard standardized.deletingLastPathComponent().standardizedFileURL == directory else {
+        throw CollectionInboxError.pathOutsideInboxRoot(standardized)
+      }
+      guard FileManager.default.fileExists(atPath: standardized.path(percentEncoded: false)) else {
+        continue
+      }
+      try FileManager.default.trashItem(at: standardized, resultingItemURL: nil)
+    }
+  }
+
   func drain(albumID: CompilationAlbum.ID) throws {
     let directory = albumDirectory(albumID)
     try assertUnderRoot(directory)
@@ -162,6 +183,7 @@ extension CollectionInboxClient {
       stage: { try store.stage(files: $0, albumID: $1) },
       contents: { try store.contents(albumID: $0) },
       summary: { try store.summary() },
+      remove: { try store.remove(files: $0, albumID: $1) },
       drain: { try store.drain(albumID: $0) }
     )
   }

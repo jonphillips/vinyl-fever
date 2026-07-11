@@ -104,6 +104,47 @@ struct CollectionInboxClientTests {
   }
 
   @Test
+  func removeTrashesOnlyTheNamedFilesAndLeavesTheRest() throws {
+    let harness = try InboxHarness()
+    let albumID = UUID()
+    _ = try harness.client.stage(
+      files: [
+        try harness.makeSource(named: "keep.flac", contents: "keep", subfolder: "s1"),
+        try harness.makeSource(named: "drop.flac", contents: "drop", subfolder: "s2"),
+      ],
+      albumID: albumID
+    )
+    let staged = try harness.client.contents(albumID: albumID)
+    let toRemove = try #require(staged.first { $0.lastPathComponent == "drop.flac" })
+
+    try harness.client.remove(files: [toRemove], albumID: albumID)
+
+    #expect(try harness.contentsNames(albumID) == ["keep.flac"])
+    // A missing file is skipped rather than throwing, so removing again is a no-op.
+    #expect(throws: Never.self) {
+      try harness.client.remove(files: [toRemove], albumID: albumID)
+    }
+  }
+
+  @Test
+  func removeRefusesAFileOutsideTheAlbumSubfolder() throws {
+    let harness = try InboxHarness()
+    let albumID = UUID()
+    let otherAlbumID = UUID()
+    let staged = try harness.client.stage(
+      files: [try harness.makeSource(named: "sibling.flac", contents: "x")],
+      albumID: otherAlbumID
+    )
+    // A file that belongs to a *different* album still lives under the Inbox root, but must
+    // not be removable through another album's queue.
+    #expect(throws: CollectionInboxError.self) {
+      try harness.client.remove(files: staged, albumID: albumID)
+    }
+    // The sibling album's file survives.
+    #expect(try harness.contentsNames(otherAlbumID) == ["sibling.flac"])
+  }
+
+  @Test
   func drainIsANoOpForAnUnstagedAlbum() throws {
     let harness = try InboxHarness()
     // Never throws even though nothing was ever staged.

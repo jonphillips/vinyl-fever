@@ -147,6 +147,14 @@ public enum VinylFeverDatabase {
         """)
         .execute(db)
     }
+
+    migrator.registerMigration("Add Music watch folder to app settings") { db in
+      try #sql("""
+        ALTER TABLE "appSettings"
+          ADD COLUMN "musicWatchFolderPath" TEXT
+        """)
+        .execute(db)
+    }
   }
 
   public static func seedBuiltInSourceLabels(in database: any DatabaseWriter) throws {

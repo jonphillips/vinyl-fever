@@ -50,6 +50,7 @@ final class AppModel {
   var toolStatuses = AudioTool.allCases.map { ToolStatus.missing(tool: $0) }
   var hasResolvedToolStatuses = false
   var toolStatusErrorMessage: String?
+  var musicWatchFolderErrorMessage: String?
   var runLogErrorMessage: String?
   var currentMetadataByFileID: [ScannedAudioFile.ID: AudioMetadataLoadState] = [:]
   var applyState: ApplyRunState = .idle
@@ -82,7 +83,6 @@ final class AppModel {
   var compilationApplyState: ApplyRunState = .idle
   var compilationConversionState: ConversionRunState = .idle
   var compilationImportState: LibraryImportState = .idle
-  var compilationCertificationState: CompilationCertificationState = .idle
   /// Per-album pending counts across the whole Inbox root, for the standing visibility
   /// surface. Refreshed after stage, after a certified-append drain, and on the
   /// Collections screen's `.task`.
@@ -522,7 +522,8 @@ final class AppModel {
     libraryImportState = .running(plan)
     libraryReadState = .idle
     do {
-      let result = try await LibraryImportExecutor().importToLibrary(plan)
+      let watchFolder = try resolvedMusicWatchFolder()
+      let result = try await LibraryImportExecutor().importToLibrary(plan, watchFolder: watchFolder)
       libraryImportState = .completed(result)
       runLogErrorMessage = nil
     } catch is CancellationError {
@@ -799,6 +800,71 @@ final class AppModel {
     }
   }
 
+  /// Whether the current Append Preview was built from `album`'s own Inbox staging folder (a
+  /// drop-staged queue) rather than a user-picked folder. Only an Inbox-sourced queue exposes
+  /// the destructive Clear Queue / per-item Remove affordances, since those trash app-owned
+  /// copies. This is a pure comparison for cheap per-render use — the Inbox client independently
+  /// re-guards every trash to the real Inbox root, so a user-picked folder can never be trashed.
+  func isAppendSourcedFromInbox(album: CompilationAlbum) -> Bool {
+    compilationAppendAlbumID == album.id
+      && compilationAppendFolder?.lastPathComponent == album.id.uuidString
+  }
+
+  /// Clear the whole append queue behind the current preview. When the preview is sourced from
+  /// `album`'s Inbox this trashes the staged copies; a user-picked folder is left on disk and
+  /// only the preview is discarded. Either way the Append Preview resets. The caller confirms
+  /// with the user first.
+  func clearCurrentAppendQueue(album: CompilationAlbum) {
+    if isAppendSourcedFromInbox(album: album) {
+      do {
+        try collectionInboxClient.drain(album.id)
+        refreshInboxSummary()
+      } catch {
+        runLogErrorMessage = error.localizedDescription
+        return
+      }
+    }
+    resetCompilationAppendPreview()
+  }
+
+  /// Remove one staged item from the current Inbox-sourced queue and rebuild the preview.
+  /// No-op unless the preview is sourced from `album`'s Inbox — a user-picked folder's files are
+  /// never trashed. Removing the last item trashes the now-empty subfolder and resets the
+  /// preview, matching a completed or cleared append.
+  func removeAppendQueueItem(album: CompilationAlbum, file: URL) async {
+    guard isAppendSourcedFromInbox(album: album) else { return }
+    do {
+      try collectionInboxClient.remove([file], album.id)
+    } catch {
+      runLogErrorMessage = error.localizedDescription
+      return
+    }
+    let remaining = (try? collectionInboxClient.contents(album.id)) ?? []
+    guard !remaining.isEmpty else {
+      try? collectionInboxClient.drain(album.id)
+      refreshInboxSummary()
+      resetCompilationAppendPreview()
+      return
+    }
+    refreshInboxSummary()
+    guard let stagingFolder = try? collectionInboxClient.stagingDirectory(album.id) else {
+      return
+    }
+    // Same album + folder, so `buildCompilationAppendPlan` treats this as a rebuild and keeps
+    // the per-append Grouping/Comments scratch the user has already entered.
+    await buildCompilationAppendPlan(entry: album, sourceFolder: stagingFolder)
+  }
+
+  /// Discard the Append Preview and the chosen source folder without touching any files. Mirrors
+  /// the reset a certified append performs once it consumes the Working copies.
+  private func resetCompilationAppendPreview() {
+    compilationApplyPlan = nil
+    compilationRecipeProposalsByFileID = [:]
+    compilationAppendFolder = nil
+    compilationAppendAlbumID = nil
+    clearCompilationAppendScratch()
+  }
+
   func buildCompilationAppendPlan(entry: CompilationAlbum, sourceFolder: URL) async {
     let isNewAppend = compilationAppendAlbumID != entry.id || compilationAppendFolder != sourceFolder
     if isNewAppend {
@@ -813,7 +879,6 @@ final class AppModel {
     compilationApplyState = .idle
     compilationConversionState = .idle
     compilationImportState = .idle
-    compilationCertificationState = .idle
     do {
       let files = try fileSystemClient.scanAudioFolder(sourceFolder)
       compilationAppendFiles = files
@@ -997,7 +1062,6 @@ final class AppModel {
     compilationApplyState = .running(applyPlan)
     compilationConversionState = .idle
     compilationImportState = .idle
-    compilationCertificationState = .idle
 
     do {
       if let artwork = plan.entry.fallbackArtwork,
@@ -1021,12 +1085,10 @@ final class AppModel {
       compilationApplyState = .idle
       compilationConversionState = .idle
       compilationImportState = .idle
-      compilationCertificationState = .idle
     } catch {
       compilationApplyState = .failed(error.localizedDescription)
       compilationConversionState = .idle
       compilationImportState = .idle
-      compilationCertificationState = .failed(error.localizedDescription)
       runLogErrorMessage = error.localizedDescription
     }
   }
@@ -1036,7 +1098,6 @@ final class AppModel {
     let toolPaths = AudioToolPaths(statuses: toolStatuses)
     guard conversionPlan.requiredTools.allSatisfy({ toolStatus(for: $0).resolvedPath != nil }) else {
       compilationConversionState = .failed("Required conversion and verification tools are missing.")
-      compilationCertificationState = .failed("Required conversion and verification tools are missing.")
       return
     }
 
@@ -1046,17 +1107,14 @@ final class AppModel {
         let result = try await ConversionExecutor().convert(conversionPlan, toolPaths: toolPaths)
         compilationConversionState = .completed(result)
         guard result.didSucceed else {
-          compilationCertificationState = .failed("Conversion did not finish cleanly.")
           return
         }
       } catch is CancellationError {
         compilationConversionState = .idle
         compilationImportState = .idle
-        compilationCertificationState = .idle
         return
       } catch {
         compilationConversionState = .failed(error.localizedDescription)
-        compilationCertificationState = .failed(error.localizedDescription)
         runLogErrorMessage = error.localizedDescription
         return
       }
@@ -1068,39 +1126,44 @@ final class AppModel {
     let permission = await musicAppClient.requestAutomationPermission()
     guard permission == .authorized else {
       compilationImportState = .permission(permission)
-      compilationCertificationState = .failed(permission.displayMessage)
       return
     }
 
     compilationImportState = .running(conversionPlan)
-    compilationCertificationState = .running(plan.entry.identity)
 
     do {
-      let request = MusicAlbumReadRequest(identity: plan.entry.identity, includesTitleSiblings: true)
-      let preImportTracks = try await musicAppClient.readAlbumTracks(request)
-      let importResult = try await importCompilationFiles(conversionPlan)
+      let watchFolder = try resolvedMusicWatchFolder()
+      // A single read of the album's current tracks lets the importer skip anything already
+      // present; the importer's own poll then confirms the dropped files land in Music.
+      // The dedup read is best-effort: it only lets us skip tracks already in the library. If
+      // Music is slow to answer (common with a large library on an external volume), we proceed
+      // with no dedup rather than blocking the drop — the copy into the watch folder is the real
+      // work and must not hinge on a scripting query.
+      let existingLibraryTracks: [ImportedTrackRef]
+      do {
+        let request = MusicAlbumReadRequest(identity: plan.entry.identity, includesTitleSiblings: true)
+        existingLibraryTracks = try await musicAppClient.readAlbumTracks(request)
+      } catch is CancellationError {
+        compilationImportState = .idle
+        return
+      } catch {
+        existingLibraryTracks = []
+      }
+      let importResult = try await importCompilationFiles(
+        conversionPlan,
+        watchFolder: watchFolder,
+        existingLibraryTracks: existingLibraryTracks
+      )
       compilationImportState = .completed(importResult)
-      let postImportTracks = try await musicAppClient.readAlbumTracks(request)
-      let verdict = AppendCertificationComparator.verdict(
-        identity: plan.entry.identity,
-        preImportTracks: preImportTracks,
-        postImportTracks: postImportTracks,
-        addedTrackCount: importResult.importedCount
-      )
-      let certification = try await recordCompilationCertification(
-        plan: plan,
-        preImportTracks: preImportTracks,
-        postImportTracks: postImportTracks,
-        addedTrackCount: importResult.importedCount,
-        verdict: verdict
-      )
-      compilationCertificationState = .completed(certification)
       runLogErrorMessage = nil
-      // A certified append into Apple Music is the "verify" that makes it safe to drain
-      // the album's staged copies. Keyed off the folder location, not a "was this a drop"
-      // flag, so there is one truth: only an append sourced from the album's own Inbox
-      // folder drains; a user-picked folder is never touched.
-      drainInboxIfStaged(plan: plan)
+      // The files being safely copied into Music's watch folder is what makes it safe to drain the
+      // album's staged copies (Music now owns a copy and will ingest it). Keyed off the folder
+      // location, not a "was this a drop" flag, so there is one truth: only an append sourced from
+      // the album's own Inbox folder drains; a user-picked folder is never touched. A hard failure
+      // (only a copy error now) keeps the staged copies so the user can retry from the Inbox.
+      if importResult.didSucceed {
+        drainInboxIfStaged(plan: plan)
+      }
       // A clean append consumes the Working copies, so the Append Preview is now
       // stale. Clear it (and the chosen folder) so the section resets instead of
       // lingering after the job is done.
@@ -1109,15 +1172,13 @@ final class AppModel {
       clearCompilationAppendScratch()
     } catch is CancellationError {
       compilationImportState = .idle
-      compilationCertificationState = .idle
     } catch {
       compilationImportState = .failed(error.localizedDescription)
-      compilationCertificationState = .failed(error.localizedDescription)
       runLogErrorMessage = error.localizedDescription
     }
   }
 
-  /// Drain the album's Inbox folder only when the just-certified append was sourced from that
+  /// Drain the album's Inbox folder only when the just-completed append was sourced from that
   /// folder. The store's `drain` is itself guarded to the Inbox root; this compares the plan's
   /// source folder to the album's staging directory so a folder-picked append never drains.
   func drainInboxIfStaged(plan: CompilationApplyPlan) {
@@ -1139,7 +1200,11 @@ final class AppModel {
     }
   }
 
-  private func importCompilationFiles(_ plan: ConversionPlan) async throws -> ImportResult {
+  private func importCompilationFiles(
+    _ plan: ConversionPlan,
+    watchFolder: URL,
+    existingLibraryTracks: [ImportedTrackRef]
+  ) async throws -> ImportResult {
     let run = try await runLogClient.open(
       RunLogOpenRequest(
         showRootPath: plan.showRoot.path(percentEncoded: false),
@@ -1149,11 +1214,10 @@ final class AppModel {
     )
 
     do {
-      let producedFiles = plan.tracks.map(\.verificationFile)
-      let refs = try await musicAppClient.add(producedFiles)
-      let importedTracks = CompilationImportReducer.importedTracks(
+      let importedTracks = try await MusicWatchFolderImporter().importTracks(
         plan: plan,
-        addedRefs: refs
+        watchFolder: watchFolder,
+        existingLibraryTracks: existingLibraryTracks
       )
       for track in importedTracks {
         _ = try await runLogClient.appendFileOutcome(
@@ -1180,73 +1244,13 @@ final class AppModel {
   }
 
   private func compilationImportExitSummary(for tracks: [ImportedTrack]) -> String {
-    if tracks.isEmpty {
-      return "no files"
-    }
-    let importedCount = tracks.count { $0.status == .imported }
-    let alreadyPresentCount = tracks.count { $0.status == .alreadyPresent }
-    switch (importedCount, alreadyPresentCount) {
-    case (0, _):
-      return "already present"
-    case (_, 0):
-      return "imported"
-    default:
-      return "\(importedCount) imported, \(alreadyPresentCount) already present"
-    }
-  }
-
-  private func recordCompilationCertification(
-    plan: CompilationApplyPlan,
-    preImportTracks: [ImportedTrackRef],
-    postImportTracks: [ImportedTrackRef],
-    addedTrackCount: Int,
-    verdict: AppendVerdict
-  ) async throws -> AppendCertification {
-    let identity = plan.entry.identity
-    let run = try await runLogClient.open(
-      RunLogOpenRequest(
-        showRootPath: plan.sourceRoot.path(percentEncoded: false),
-        kind: .compilationCertify,
-        command: compilationCertificationCommandText(identity: identity, addedTrackCount: addedTrackCount)
-      )
-    )
-    let preCount = AppendCertificationComparator.exactMatches(identity: identity, in: preImportTracks).count
-    let postCount = AppendCertificationComparator.exactMatches(identity: identity, in: postImportTracks).count
-    _ = try await runLogClient.appendFileOutcome(
-      RunLogFileOutcomeRequest(
-        runID: run.id,
-        sourcePath: plan.sourceRoot.path(percentEncoded: false),
-        status: verdict.isCertified ? .created : .failed,
-        note: verdict.displayMessage
-      )
-    )
-    let closedRun = try await runLogClient.close(
-      RunLogCloseRequest(runID: run.id, exitSummary: verdict.displayMessage)
-    )
-    return AppendCertification(
-      run: closedRun,
-      identity: identity,
-      addedTrackCount: addedTrackCount,
-      preImportTrackCount: preCount,
-      postImportTrackCount: postCount,
-      verdict: verdict
-    )
+    LibraryImportSummary.text(for: tracks)
   }
 
   private func compilationImportCommandText(for plan: ConversionPlan) -> String {
     plan.tracks
-      .map { "add \($0.verificationFile.path(percentEncoded: false))" }
+      .map { "drop \($0.verificationFile.path(percentEncoded: false))" }
       .joined(separator: "\n")
-  }
-
-  private func compilationCertificationCommandText(
-    identity: AlbumIdentity,
-    addedTrackCount: Int
-  ) -> String {
-    """
-    read Music album "\(identity.album)" / "\(identity.albumArtist)"
-    certify added track count \(addedTrackCount)
-    """
   }
 
   private func imageFileExtension(for data: Data) -> String {
@@ -1329,6 +1333,48 @@ final class AppModel {
     } catch {
       toolStatusErrorMessage = error.localizedDescription
     }
+  }
+
+  func saveMusicWatchFolder(_ path: String?, settings: AppSetting) {
+    let updatedSettings = settings.withMusicWatchFolderPath(path)
+    do {
+      try database.write { db in
+        try AppSetting.upsert { updatedSettings }.execute(db)
+      }
+      musicWatchFolderErrorMessage = nil
+    } catch {
+      musicWatchFolderErrorMessage = error.localizedDescription
+    }
+  }
+
+  /// Reads the configured Music "Automatically Add" folder and confirms it is a writable
+  /// directory before an import commits to it. Throws a `MusicImportSetupError` whose
+  /// message points the user at Settings — the app never falls back to a guessed default,
+  /// since the library can live on an external volume.
+  private func resolvedMusicWatchFolder() throws -> URL {
+    let settings = currentAppSetting()
+    guard let url = settings.musicWatchFolderURL else {
+      throw MusicImportSetupError.notConfigured
+    }
+    let fileManager = FileManager.default
+    var isDirectory: ObjCBool = false
+    guard
+      fileManager.fileExists(atPath: url.path(percentEncoded: false), isDirectory: &isDirectory),
+      isDirectory.boolValue
+    else {
+      throw MusicImportSetupError.missing(url)
+    }
+    guard fileManager.isWritableFile(atPath: url.path(percentEncoded: false)) else {
+      throw MusicImportSetupError.notWritable(url)
+    }
+    return url
+  }
+
+  private func currentAppSetting() -> AppSetting {
+    let settings = (try? database.read { db in
+      try AppSetting.find(AppSetting.singletonID).fetchOne(db)
+    }) ?? nil
+    return settings ?? .default
   }
 
   private func loadTextFile(at url: URL) throws -> String {
@@ -2042,20 +2088,6 @@ struct CompilationSeedProgress: Equatable {
   var total: Int
 }
 
-enum CompilationCertificationState: Equatable {
-  case idle
-  case running(AlbumIdentity)
-  case completed(AppendCertification)
-  case failed(String)
-
-  var isRunning: Bool {
-    if case .running = self {
-      return true
-    }
-    return false
-  }
-}
-
 enum AppSection: String, CaseIterable, Identifiable, Hashable {
   case liveShows
   case collections
@@ -2082,6 +2114,26 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
       "rectangle.stack"
     case .policies:
       "slider.horizontal.3"
+    }
+  }
+}
+
+/// Raised before an import commits when the Music "Automatically Add" folder isn't set up.
+/// Every message directs the user to Settings, since the folder can't be inferred (the
+/// library may live on an external volume).
+private enum MusicImportSetupError: LocalizedError {
+  case notConfigured
+  case missing(URL)
+  case notWritable(URL)
+
+  var errorDescription: String? {
+    switch self {
+    case .notConfigured:
+      "Set Music's “Automatically Add” folder in Settings before importing."
+    case let .missing(url):
+      "Music's “Automatically Add” folder wasn't found at \(url.path(percentEncoded: false)). Is the drive mounted? Check it in Settings."
+    case let .notWritable(url):
+      "Music's “Automatically Add” folder isn't writable: \(url.path(percentEncoded: false))."
     }
   }
 }

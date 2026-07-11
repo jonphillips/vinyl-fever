@@ -78,6 +78,8 @@ public struct ImportedTrack: Equatable, Identifiable, Sendable {
         return "Already present as Music item \(libraryRef.id)."
       }
       return "Already present."
+    case .dropped:
+      return "Dropped into Music's Automatically Add folder; Music will import it."
     case let .failed(message):
       return message
     }
@@ -87,11 +89,16 @@ public struct ImportedTrack: Equatable, Identifiable, Sendable {
 public enum MusicImportStatus: Equatable, Sendable {
   case imported
   case alreadyPresent
+  /// The file was copied into Music's "Automatically Add" folder, but we could not confirm via
+  /// scripting that Music had ingested it (a read timed out, or the track had not appeared before
+  /// the deadline). The drop itself succeeded, so this is a success, not a failure — Music ingests
+  /// the folder on its own schedule.
+  case dropped
   case failed(String)
 
   public var didSucceed: Bool {
     switch self {
-    case .imported, .alreadyPresent:
+    case .imported, .alreadyPresent, .dropped:
       true
     case .failed:
       false
@@ -104,6 +111,8 @@ public enum MusicImportStatus: Equatable, Sendable {
       .created
     case .alreadyPresent:
       .skipped
+    case .dropped:
+      .created
     case .failed:
       .failed
     }
@@ -115,6 +124,8 @@ public enum MusicImportStatus: Equatable, Sendable {
       "Imported"
     case .alreadyPresent:
       "Already present"
+    case .dropped:
+      "Dropped"
     case .failed:
       "Failed"
     }
@@ -144,8 +155,44 @@ public struct ImportResult: Equatable, Sendable {
     tracks.count { $0.status == .alreadyPresent }
   }
 
+  public var droppedCount: Int {
+    tracks.count { $0.status == .dropped }
+  }
+
   public var failedCount: Int {
     tracks.count { !$0.didSucceed }
+  }
+}
+
+/// Builds the one-line run-log summary of an import's per-track outcomes. A single outcome
+/// category reads as a bare label ("imported"); mixed categories are counted and joined
+/// ("2 imported, 1 dropped (awaiting Music)").
+public enum LibraryImportSummary {
+  public static func text(for tracks: [ImportedTrack]) -> String {
+    let failedCount = tracks.count { !$0.didSucceed }
+    if failedCount > 0 {
+      return "\(failedCount) of \(tracks.count) failed"
+    }
+    if tracks.isEmpty {
+      return "no files"
+    }
+    var parts: [(count: Int, label: String)] = []
+    let importedCount = tracks.count { $0.status == .imported }
+    let droppedCount = tracks.count { $0.status == .dropped }
+    let alreadyPresentCount = tracks.count { $0.status == .alreadyPresent }
+    if importedCount > 0 {
+      parts.append((importedCount, "imported"))
+    }
+    if droppedCount > 0 {
+      parts.append((droppedCount, "dropped (awaiting Music)"))
+    }
+    if alreadyPresentCount > 0 {
+      parts.append((alreadyPresentCount, "already present"))
+    }
+    if parts.count == 1 {
+      return parts[0].label
+    }
+    return parts.map { "\($0.count) \($0.label)" }.joined(separator: ", ")
   }
 }
 

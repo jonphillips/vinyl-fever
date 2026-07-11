@@ -53,7 +53,6 @@ struct CollectionsView: View {
             applyState: model.compilationApplyState,
             conversionState: model.compilationConversionState,
             importState: model.compilationImportState,
-            certificationState: model.compilationCertificationState,
             isInboxSourced: model.isAppendSourcedFromInbox(album: selectedAlbum),
             clearQueue: {
               model.clearCurrentAppendQueue(album: selectedAlbum)
@@ -420,7 +419,6 @@ private struct CompilationAppendSection: View {
   let applyState: ApplyRunState
   let conversionState: ConversionRunState
   let importState: LibraryImportState
-  let certificationState: CompilationCertificationState
   /// Whether the queue behind this preview is the album's drop-staged Inbox (vs. a picked
   /// folder). Gates the destructive per-item Remove — only app-owned staged copies are removable.
   let isInboxSourced: Bool
@@ -537,7 +535,6 @@ private struct CompilationAppendSection: View {
           CompilationApplyStatus(state: applyState)
           CompilationConversionStatus(state: conversionState)
           CompilationImportStatus(state: importState)
-          CompilationCertificationStatus(state: certificationState)
           LazyVStack(alignment: .leading, spacing: 10) {
             ForEach(plan.tracks) { track in
               // Removing a queued item trashes an app-owned staged copy, so only offer it for
@@ -562,8 +559,7 @@ private struct CompilationAppendSection: View {
   private var isRunning: Bool {
     applyState.isRunning ||
       conversionState.isRunning ||
-      importState.isRunning ||
-      certificationState.isRunning
+      importState.isRunning
   }
 }
 
@@ -924,33 +920,6 @@ private struct CompilationImportStatus: View {
   }
 }
 
-private struct CompilationCertificationStatus: View {
-  let state: CompilationCertificationState
-
-  var body: some View {
-    switch state {
-    case .idle:
-      EmptyView()
-    case let .running(identity):
-      Label("Certifying \(identity.album)", systemImage: "hourglass")
-        .foregroundStyle(.secondary)
-    case let .completed(certification):
-      VStack(alignment: .leading, spacing: 4) {
-        Label(
-          certification.verdict.displayMessage,
-          systemImage: certification.isCertified ? "checkmark.seal" : "exclamationmark.triangle"
-        )
-        .foregroundStyle(certification.isCertified ? .green : .orange)
-        Text("Before \(certification.preImportTrackCount), after \(certification.postImportTrackCount), added \(certification.addedTrackCount)")
-          .font(.caption)
-          .foregroundStyle(.secondary)
-      }
-    case let .failed(message):
-      Label(message, systemImage: "exclamationmark.triangle")
-        .foregroundStyle(.red)
-    }
-  }
-}
 
 private struct CollectionSection<Content: View>: View {
   let title: String

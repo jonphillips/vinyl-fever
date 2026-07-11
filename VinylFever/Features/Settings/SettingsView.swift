@@ -1,3 +1,4 @@
+import AppKit
 import Dependencies
 import SQLiteData
 import SwiftUI
@@ -36,6 +37,26 @@ struct SettingsView: View {
         if let errorMessage = model.toolStatusErrorMessage {
           Label(errorMessage, systemImage: "exclamationmark.triangle")
             .foregroundStyle(.red)
+        }
+
+        Section {
+          MusicWatchFolderRow(
+            folderPath: settings.musicWatchFolderPath ?? "",
+            errorMessage: model.musicWatchFolderErrorMessage,
+            save: { path in model.saveMusicWatchFolder(path, settings: settings) }
+          )
+        } header: {
+          Text("Apple Music Import")
+        } footer: {
+          Text(
+            "Vinyl Fever imports by copying files into Music's “Automatically Add” folder "
+              + "instead of scripting Music directly, which avoids the “Music did not respond "
+              + "in time” errors. Point this at "
+              + "…/Media.localized/Automatically Add to Music.localized inside your Music library "
+              + "(on its external drive)."
+          )
+          .font(.callout)
+          .foregroundStyle(.secondary)
         }
 
         Section("Frontier Model") {
@@ -172,6 +193,71 @@ private struct ToolStatusRow: View {
   private var hasDraftChange: Bool {
     draftOverridePath.trimmingCharacters(in: .whitespacesAndNewlines)
       != overridePath.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+}
+
+/// Pick or clear Music's "Automatically Add" folder — the drop target the importer copies
+/// files into. A folder picker (rather than a text field) so the path is real and the app
+/// records access to the external volume by touching it.
+private struct MusicWatchFolderRow: View {
+  let folderPath: String
+  let errorMessage: String?
+  let save: (String?) -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      if folderPath.isEmpty {
+        Label("No folder configured — imports are disabled.", systemImage: "folder.badge.questionmark")
+          .foregroundStyle(.secondary)
+      } else {
+        LabeledContent("Folder") {
+          Text(folderPath)
+            .font(.callout.monospaced())
+            .textSelection(.enabled)
+            .lineLimit(3)
+            .truncationMode(.middle)
+        }
+      }
+
+      HStack(spacing: 8) {
+        Button {
+          if let chosen = chooseFolder() {
+            save(chosen)
+          }
+        } label: {
+          Label("Choose…", systemImage: "folder")
+        }
+        Button {
+          save(nil)
+        } label: {
+          Label("Clear", systemImage: "xmark")
+        }
+        .disabled(folderPath.isEmpty)
+      }
+
+      if let errorMessage {
+        Label(errorMessage, systemImage: "exclamationmark.triangle")
+          .foregroundStyle(.red)
+          .font(.callout)
+      }
+    }
+    .padding(.vertical, 6)
+  }
+
+  private func chooseFolder() -> String? {
+    let panel = NSOpenPanel()
+    panel.canChooseDirectories = true
+    panel.canChooseFiles = false
+    panel.allowsMultipleSelection = false
+    panel.prompt = "Choose"
+    panel.message = "Select Music's “Automatically Add” folder."
+    if !folderPath.isEmpty {
+      panel.directoryURL = URL(filePath: folderPath)
+    }
+    guard panel.runModal() == .OK, let url = panel.url else {
+      return nil
+    }
+    return url.path(percentEncoded: false)
   }
 }
 
