@@ -31,6 +31,8 @@ final class AppModel {
   @Dependency(\.apiKeyStore) private var apiKeyStore
   @ObservationIgnored
   @Dependency(\.collectionRecipeRunner) private var collectionRecipeRunner
+  @ObservationIgnored
+  @Dependency(\.collectionInboxClient) private var collectionInboxClient
 
   var selectedSection: AppSection = .liveShows
   var destination: Destination?
@@ -754,6 +756,23 @@ final class AppModel {
     }
   }
 
+  /// Stage loose audio files dropped onto a compilation album into that album's app-owned
+  /// Inbox folder, then point the existing append rail at the Inbox folder. The Inbox dir is
+  /// just another `sourceFolder`, so the preview (recipes, Grouping/Comments, compilation
+  /// stamping) is identical to a folder pick — a second drop re-stages and rebuilds. Draining
+  /// happens later, only when the append certifies (see `appendCompilationToMusic`).
+  func stageDroppedFilesForAppend(entry: CompilationAlbum, files: [URL]) async {
+    let audioFiles = files.filter { !$0.hasDirectoryPath }
+    guard !audioFiles.isEmpty else { return }
+    do {
+      _ = try collectionInboxClient.stage(audioFiles, entry.id)
+      let inboxFolder = try collectionInboxClient.stagingDirectory(entry.id)
+      await buildCompilationAppendPlan(entry: entry, sourceFolder: inboxFolder)
+    } catch {
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
   func buildCompilationAppendPlan(entry: CompilationAlbum, sourceFolder: URL) async {
     let isNewAppend = compilationAppendAlbumID != entry.id || compilationAppendFolder != sourceFolder
     if isNewAppend {
@@ -1051,6 +1070,11 @@ final class AppModel {
       )
       compilationCertificationState = .completed(certification)
       runLogErrorMessage = nil
+      // A certified append into Apple Music is the "verify" that makes it safe to drain
+      // the album's staged copies. Keyed off the folder location, not a "was this a drop"
+      // flag, so there is one truth: only an append sourced from the album's own Inbox
+      // folder drains; a user-picked folder is never touched.
+      drainInboxIfStaged(plan: plan)
       // A clean append consumes the Working copies, so the Append Preview is now
       // stale. Clear it (and the chosen folder) so the section resets instead of
       // lingering after the job is done.
@@ -1063,6 +1087,27 @@ final class AppModel {
     } catch {
       compilationImportState = .failed(error.localizedDescription)
       compilationCertificationState = .failed(error.localizedDescription)
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
+  /// Drain the album's Inbox folder only when the just-certified append was sourced from that
+  /// folder. The store's `drain` is itself guarded to the Inbox root; this compares the plan's
+  /// source folder to the album's staging directory so a folder-picked append never drains.
+  func drainInboxIfStaged(plan: CompilationApplyPlan) {
+    // Cheap, side-effect-free pre-check: an Inbox folder is named for its album's UUID. This
+    // gates out folder-picked appends before touching the client, so we never materialize an
+    // empty staging dir for a user-picked folder. The `stagingDirectory` confirm then ties it
+    // to the app's real Inbox root, and the store's `drain` is independently root-guarded.
+    guard plan.sourceRoot.lastPathComponent == plan.entry.id.uuidString else { return }
+    guard let stagingFolder = try? collectionInboxClient.stagingDirectory(plan.entry.id),
+      plan.sourceRoot.standardizedFileURL == stagingFolder.standardizedFileURL
+    else {
+      return
+    }
+    do {
+      try collectionInboxClient.drain(plan.entry.id)
+    } catch {
       runLogErrorMessage = error.localizedDescription
     }
   }

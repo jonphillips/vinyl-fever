@@ -21,6 +21,7 @@
 		6AAC484EE4FCEE3EF361E526 /* AppShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59513EA8B3113F9F15330147 /* AppShellView.swift */; };
 		742071989BB20655102865DD /* PoliciesModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2394A4F11A73AE071EDAA272 /* PoliciesModelTests.swift */; };
 		922A693A808062926F4158D9 /* SwiftUINavigation in Frameworks */ = {isa = PBXBuildFile; productRef = A25F349E47368726A30A4DF2 /* SwiftUINavigation */; };
+		A0449BF27BAF51439049A186 /* CollectionInboxAppendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D4CD6D94E922DC5DDBA0BD1 /* CollectionInboxAppendTests.swift */; };
 		B7760BDB855168DC4B52C4C9 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B9501DC755058CF461B454F /* AppModel.swift */; };
 		CCA54B8CA7EF47661C400FFD /* LiveShowsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6AB6D74511FA4977973A9A7 /* LiveShowsView.swift */; };
 		D9300F0E5225EB93AE024E5B /* VinylFeverApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AD3A453FDC0D3B42EB1247C /* VinylFeverApp.swift */; };
@@ -43,6 +44,7 @@
 		4B9501DC755058CF461B454F /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		5749E1A3637D488CA2EE906D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		59513EA8B3113F9F15330147 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
+		5D4CD6D94E922DC5DDBA0BD1 /* CollectionInboxAppendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionInboxAppendTests.swift; sourceTree = "<group>"; };
 		5FCF80A0CE45B6E77A178A11 /* ToolPathClient+Live.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ToolPathClient+Live.swift"; sourceTree = "<group>"; };
 		68E3D973791AA21665A4AEC0 /* SetlistNormalizerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetlistNormalizerSheet.swift; sourceTree = "<group>"; };
 		8635979346BE2956055A7DC8 /* VinylFever.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VinylFever.entitlements; sourceTree = "<group>"; };
@@ -91,6 +93,7 @@
 			isa = PBXGroup;
 			children = (
 				CE24892ADA40E7507D033765 /* AppModelCleanupTests.swift */,
+				5D4CD6D94E922DC5DDBA0BD1 /* CollectionInboxAppendTests.swift */,
 				FE5CD532AC4970417B1B4142 /* LiveProcessRunnerTests.swift */,
 				2394A4F11A73AE071EDAA272 /* PoliciesModelTests.swift */,
 			);
@@ -292,6 +295,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				24FD7A2E67BA925A1E8ADC15 /* AppModelCleanupTests.swift in Sources */,
+				A0449BF27BAF51439049A186 /* CollectionInboxAppendTests.swift in Sources */,
 				194C11E283B2D45619EBDFAE /* LiveProcessRunnerTests.swift in Sources */,
 				742071989BB20655102865DD /* PoliciesModelTests.swift in Sources */,
 			);

@@ -23,7 +23,10 @@ struct CollectionsView: View {
         )
         CollectionRegistrySection(
           albums: albums,
-          selectedAlbumID: $selectedAlbumID
+          selectedAlbumID: $selectedAlbumID,
+          onDropAudio: { album, urls in
+            stageDroppedFiles(onto: album, urls: urls)
+          }
         )
         CollectionSeedSection(
           candidates: model.compilationSeedCandidates,
@@ -71,6 +74,9 @@ struct CollectionsView: View {
             },
             setPolicy: { policyID in
               model.setCompilationPolicy(policyID, for: selectedAlbum)
+            },
+            onDropAudio: { urls in
+              stageDroppedFiles(onto: selectedAlbum, urls: urls)
             }
           )
         }
@@ -110,6 +116,15 @@ struct CollectionsView: View {
     }
     Task {
       await model.seedCompilationAlbums(from: url)
+    }
+  }
+
+  /// Stage audio files dropped onto a Collection: select that album (so the append section
+  /// tracks it) and hand the URLs to the Inbox-backed append rail.
+  private func stageDroppedFiles(onto album: CompilationAlbum, urls: [URL]) {
+    selectedAlbumID = album.id
+    Task {
+      await model.stageDroppedFilesForAppend(entry: album, files: urls)
     }
   }
 
@@ -166,6 +181,7 @@ private struct CollectionHeader: View {
 private struct CollectionRegistrySection: View {
   let albums: [CompilationAlbum]
   @Binding var selectedAlbumID: CompilationAlbum.ID?
+  let onDropAudio: (CompilationAlbum, [URL]) -> Void
 
   var body: some View {
     CollectionSection(title: "Registry", systemImage: "rectangle.stack", count: albums.count) {
@@ -174,19 +190,42 @@ private struct CollectionRegistrySection: View {
       } else {
         LazyVStack(alignment: .leading, spacing: 0) {
           ForEach(albums) { album in
-            Button {
-              selectedAlbumID = album.id
-            } label: {
-              CompilationAlbumRow(
-                album: album,
-                isSelected: selectedAlbumID == album.id
-              )
-            }
-            .buttonStyle(.plain)
+            CompilationAlbumDropRow(
+              album: album,
+              isSelected: selectedAlbumID == album.id,
+              select: { selectedAlbumID = album.id },
+              onDropAudio: { urls in onDropAudio(album, urls) }
+            )
           }
         }
       }
     }
+  }
+}
+
+/// A registry row that is both a selection button and a drop target: dropping loose song files
+/// onto it stages them to *that* album's Inbox and drives the append preview.
+private struct CompilationAlbumDropRow: View {
+  let album: CompilationAlbum
+  let isSelected: Bool
+  let select: () -> Void
+  let onDropAudio: ([URL]) -> Void
+  @State private var isDropTargeted = false
+
+  var body: some View {
+    Button(action: select) {
+      CompilationAlbumRow(album: album, isSelected: isSelected)
+    }
+    .buttonStyle(.plain)
+    .overlay {
+      RoundedRectangle(cornerRadius: 6)
+        .strokeBorder(Color.accentColor, lineWidth: 2)
+        .opacity(isDropTargeted ? 1 : 0)
+    }
+    .dropDestination(for: URL.self) { urls, _ in
+      onDropAudio(urls)
+      return true
+    } isTargeted: { isDropTargeted = $0 }
   }
 }
 
@@ -244,11 +283,17 @@ private struct CompilationAppendSection: View {
   let saveGroupingAsDefault: () -> Void
   let setCover: () -> Void
   let setPolicy: (CollectionPolicy.ID?) -> Void
+  let onDropAudio: ([URL]) -> Void
   @State private var isConfirmingApply = false
 
   var body: some View {
     CollectionSection(title: "Append Preview", systemImage: "tag", count: plan?.tracks.count ?? 0) {
       VStack(alignment: .leading, spacing: 14) {
+        CompilationAppendDropZone(
+          albumName: album.name,
+          hasBoundPolicy: album.collectionPolicyID != nil,
+          onDropAudio: onDropAudio
+        )
         HStack(alignment: .top) {
           VStack(alignment: .leading, spacing: 4) {
             Text(album.name)
@@ -343,6 +388,56 @@ private struct CompilationAppendSection: View {
       conversionState.isRunning ||
       importState.isRunning ||
       certificationState.isRunning
+  }
+}
+
+/// The always-present drop target for the selected album: dropping songs here stages them to the
+/// album's Inbox and builds the append preview. When no policy is bound it also carries a
+/// non-blocking nudge — the drop still stamps compilation identity regardless.
+private struct CompilationAppendDropZone: View {
+  let albumName: String
+  let hasBoundPolicy: Bool
+  let onDropAudio: ([URL]) -> Void
+  @State private var isDropTargeted = false
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 10) {
+        Image(systemName: "square.and.arrow.down.on.square")
+          .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 2) {
+          Text("Drop songs here to append to “\(albumName)”")
+            .fontWeight(.medium)
+          Text("Files copy into this album's Inbox and preview like a folder pick.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        Spacer()
+      }
+      if !hasBoundPolicy {
+        Label(
+          "No policy bound — dropped tracks get compilation identity but no recipe cleanup. Bind a policy to auto-tag.",
+          systemImage: "info.circle"
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      }
+    }
+    .padding(12)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Color.secondary.opacity(isDropTargeted ? 0.16 : 0.06))
+    .overlay {
+      RoundedRectangle(cornerRadius: 8)
+        .strokeBorder(
+          isDropTargeted ? Color.accentColor : Color.secondary.opacity(0.35),
+          style: StrokeStyle(lineWidth: isDropTargeted ? 2 : 1, dash: [6, 4])
+        )
+    }
+    .clipShape(RoundedRectangle(cornerRadius: 8))
+    .dropDestination(for: URL.self) { urls, _ in
+      onDropAudio(urls)
+      return true
+    } isTargeted: { isDropTargeted = $0 }
   }
 }
 

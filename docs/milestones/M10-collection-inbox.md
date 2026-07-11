@@ -91,7 +91,7 @@ Consequences that fall out of this shape, each a decision:
 
 ## Slices
 
-- [ ] **S0 — Collection Inbox store (core, no UI).** A `CollectionInboxClient`
+- [x] **S0 — Collection Inbox store (core, no UI).** A `CollectionInboxClient`
   `@DependencyClient` owning the app-owned staging root and per-album subfolders:
   resolve `Inbox/<albumID>/` under Application Support (creating on demand), **copy**
   dropped source URLs in (preserve originals; collision-suffix, never overwrite), list
