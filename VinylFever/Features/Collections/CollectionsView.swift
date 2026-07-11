@@ -54,6 +54,15 @@ struct CollectionsView: View {
             conversionState: model.compilationConversionState,
             importState: model.compilationImportState,
             certificationState: model.compilationCertificationState,
+            isInboxSourced: model.isAppendSourcedFromInbox(album: selectedAlbum),
+            clearQueue: {
+              model.clearCurrentAppendQueue(album: selectedAlbum)
+            },
+            removeItem: { file in
+              Task {
+                await model.removeAppendQueueItem(album: selectedAlbum, file: file.url)
+              }
+            },
             appendFolder: {
               openAppendFolder(album: selectedAlbum)
             },
@@ -263,17 +272,22 @@ private struct CollectionRegistrySection: View {
   @Binding var selectedAlbumID: CompilationAlbum.ID?
   let onDropAudio: (CompilationAlbum, [URL]) -> Void
 
+  private let columns = Array(repeating: GridItem(.flexible(), spacing: 16), count: 3)
+
   var body: some View {
     CollectionSection(title: "Registry", systemImage: "rectangle.stack", count: albums.count) {
       if albums.isEmpty {
         EmptyCollectionRow(title: "No compilation albums registered")
       } else {
-        LazyVStack(alignment: .leading, spacing: 0) {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
           ForEach(albums) { album in
-            CompilationAlbumDropRow(
+            CompilationAlbumTileButton(
               album: album,
               isSelected: selectedAlbumID == album.id,
-              select: { selectedAlbumID = album.id },
+              // Tap toggles: a second tap on the selected tile deselects it.
+              toggleSelect: {
+                selectedAlbumID = selectedAlbumID == album.id ? nil : album.id
+              },
               onDropAudio: { urls in onDropAudio(album, urls) }
             )
           }
@@ -283,22 +297,22 @@ private struct CollectionRegistrySection: View {
   }
 }
 
-/// A registry row that is both a selection button and a drop target: dropping loose song files
+/// A registry tile that is both a selection button and a drop target: dropping loose song files
 /// onto it stages them to *that* album's Inbox and drives the append preview.
-private struct CompilationAlbumDropRow: View {
+private struct CompilationAlbumTileButton: View {
   let album: CompilationAlbum
   let isSelected: Bool
-  let select: () -> Void
+  let toggleSelect: () -> Void
   let onDropAudio: ([URL]) -> Void
   @State private var isDropTargeted = false
 
   var body: some View {
-    Button(action: select) {
-      CompilationAlbumRow(album: album, isSelected: isSelected)
+    Button(action: toggleSelect) {
+      CompilationAlbumTile(album: album, isSelected: isSelected)
     }
     .buttonStyle(.plain)
     .overlay {
-      RoundedRectangle(cornerRadius: 6)
+      RoundedRectangle(cornerRadius: 10)
         .strokeBorder(Color.accentColor, lineWidth: 2)
         .opacity(isDropTargeted ? 1 : 0)
     }
@@ -306,6 +320,56 @@ private struct CompilationAlbumDropRow: View {
       onDropAudio(urls)
       return true
     } isTargeted: { isDropTargeted = $0 }
+  }
+}
+
+/// A cover-forward registry card: square artwork on top, title and identity beneath — so the
+/// Registry reads like a shelf of albums rather than a list of rows.
+private struct CompilationAlbumTile: View {
+  let album: CompilationAlbum
+  let isSelected: Bool
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      RoundedRectangle(cornerRadius: 8)
+        .fill(Color.secondary.opacity(0.08))
+        .aspectRatio(1, contentMode: .fit)
+        .overlay {
+          if let data = album.displayImage, let image = NSImage(data: data) {
+            Image(nsImage: image)
+              .resizable()
+              .scaledToFill()
+          } else {
+            Image(systemName: "square.stack")
+              .font(.largeTitle)
+              .foregroundStyle(.secondary)
+          }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(alignment: .topTrailing) {
+          if isSelected {
+            Image(systemName: "checkmark.circle.fill")
+              .font(.title3)
+              .foregroundStyle(.tint)
+              .padding(4)
+              .background(.background, in: Circle())
+              .padding(6)
+          }
+        }
+      VStack(alignment: .leading, spacing: 2) {
+        Text(album.name)
+          .font(.subheadline)
+          .fontWeight(.semibold)
+          .lineLimit(1)
+        Text("\(album.identity.album) / \(album.identity.albumArtist)")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+      }
+    }
+    .padding(8)
+    .background(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
+    .clipShape(RoundedRectangle(cornerRadius: 10))
   }
 }
 
@@ -357,6 +421,11 @@ private struct CompilationAppendSection: View {
   let conversionState: ConversionRunState
   let importState: LibraryImportState
   let certificationState: CompilationCertificationState
+  /// Whether the queue behind this preview is the album's drop-staged Inbox (vs. a picked
+  /// folder). Gates the destructive per-item Remove — only app-owned staged copies are removable.
+  let isInboxSourced: Bool
+  let clearQueue: () -> Void
+  let removeItem: (ScannedAudioFile) -> Void
   let appendFolder: () -> Void
   let rebuildPlan: () -> Void
   let apply: () -> Void
@@ -365,6 +434,7 @@ private struct CompilationAppendSection: View {
   let setPolicy: (CollectionPolicy.ID?) -> Void
   let onDropAudio: ([URL]) -> Void
   @State private var isConfirmingApply = false
+  @State private var isConfirmingClear = false
 
   var body: some View {
     CollectionSection(title: "Append Preview", systemImage: "tag", count: plan?.tracks.count ?? 0) {
@@ -430,6 +500,26 @@ private struct CompilationAppendSection: View {
             Label("\(plan.tracks.count) files ready", systemImage: "checkmark.circle")
               .foregroundStyle(.green)
             Spacer()
+            Button(role: .destructive) {
+              isConfirmingClear = true
+            } label: {
+              Label("Clear Queue", systemImage: "trash")
+            }
+            .disabled(isRunning)
+            .confirmationDialog(
+              "Clear the entire append queue?",
+              isPresented: $isConfirmingClear
+            ) {
+              Button("Clear Queue", role: .destructive) {
+                clearQueue()
+              }
+              Button("Cancel", role: .cancel) {}
+            } message: {
+              let clearMessage: String = isInboxSourced
+                ? "Removes all \(plan.tracks.count) staged files from this album's Inbox. Your originals are untouched."
+                : "Discards this preview. The picked folder is left on disk."
+              Text(clearMessage)
+            }
             Button {
               isConfirmingApply = true
             } label: {
@@ -450,9 +540,15 @@ private struct CompilationAppendSection: View {
           CompilationCertificationStatus(state: certificationState)
           LazyVStack(alignment: .leading, spacing: 10) {
             ForEach(plan.tracks) { track in
+              // Removing a queued item trashes an app-owned staged copy, so only offer it for
+              // an Inbox-sourced queue and never for a user-picked folder.
+              let removeAction: (() -> Void)? = isInboxSourced && !isRunning
+                ? { removeItem(track.sourceFile) }
+                : nil
               CompilationTrackPlanRow(
                 track: track,
-                recipeProposals: recipeProposalsByFileID[track.id] ?? []
+                recipeProposals: recipeProposalsByFileID[track.id] ?? [],
+                remove: removeAction
               )
             }
           }
@@ -543,37 +639,6 @@ private struct CollectionPolicyPicker: View {
   }
 }
 
-private struct CompilationAlbumRow: View {
-  let album: CompilationAlbum
-  let isSelected: Bool
-
-  var body: some View {
-    HStack(spacing: 12) {
-      ArtworkThumbnail(data: album.displayImage, size: 68)
-      VStack(alignment: .leading, spacing: 4) {
-        Text(album.name)
-          .font(.headline)
-        Text("\(album.identity.album) / \(album.identity.albumArtist)")
-          .foregroundStyle(.secondary)
-        if !album.ruleset.groupingTokens.isEmpty {
-          Text(album.ruleset.groupingTokens.formatted())
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
-      }
-      Spacer()
-      if isSelected {
-        Image(systemName: "checkmark.circle.fill")
-          .foregroundStyle(.tint)
-      }
-    }
-    .padding(.vertical, 8)
-    .padding(.horizontal, 10)
-    .background(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
-    .clipShape(RoundedRectangle(cornerRadius: 6))
-  }
-}
-
 private struct CollectionSeedCandidateRow: View {
   let candidate: CompilationAlbumSeedCandidate
   let isSelected: Bool
@@ -609,6 +674,8 @@ private struct CollectionSeedCandidateRow: View {
 private struct CompilationTrackPlanRow: View {
   let track: CompilationTrackPlan
   let recipeProposals: [CompilationRecipeProposal]
+  /// When non-nil, shows a per-item Remove control that drops this file from the append queue.
+  var remove: (() -> Void)?
 
   var body: some View {
     let hasAppliedRecipeGrouping = recipeProposals.contains {
@@ -626,6 +693,13 @@ private struct CompilationTrackPlanRow: View {
         )
         .font(.caption)
         .foregroundStyle(.secondary)
+        if let remove {
+          Button(role: .destructive, action: remove) {
+            Image(systemName: "minus.circle")
+          }
+          .buttonStyle(.borderless)
+          .help("Remove this file from the append queue")
+        }
       }
       Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 4) {
         ForEach(track.diffs.filter { diff in
