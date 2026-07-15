@@ -761,6 +761,19 @@ final class AppModel {
     }
   }
 
+  /// Persists an edited registry record. The entry's identity and rules only affect future
+  /// append plans; no already-imported Music tracks are retagged here.
+  func updateCompilationAlbum(_ album: CompilationAlbum) async {
+    do {
+      try await database.write { db in
+        try CompilationAlbum.upsert { album }.execute(db)
+      }
+      runLogErrorMessage = nil
+    } catch {
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
   /// Stage loose audio files dropped onto a compilation album into that album's app-owned
   /// Inbox folder, then point the existing append rail at the Inbox folder. The Inbox dir is
   /// just another `sourceFolder`, so the preview (recipes, Grouping/Comments, compilation
@@ -1270,7 +1283,7 @@ final class AppModel {
   /// (quality 0.9) with the longest edge capped at ~1000px so covers stay small
   /// as inline SQLite BLOBs. Returns `nil` for anything that isn't a readable
   /// image.
-  private static func normalizedCoverData(_ data: Data) -> Data? {
+  static func normalizedCoverData(_ data: Data) -> Data? {
     guard let image = NSImage(data: data) else {
       return nil
     }

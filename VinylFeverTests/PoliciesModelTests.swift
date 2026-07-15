@@ -337,6 +337,43 @@ struct PoliciesModelTests {
   }
 
   @Test
+  func updatesCompilationAlbumRegistryRecord() async throws {
+    let database = try VinylFeverDatabase.open(path: Self.temporaryDatabasePath())
+    let entry = CompilationAlbum(
+      id: UUID(71),
+      name: "Covers",
+      identity: AlbumIdentity(album: "Covers", albumArtist: "Various Artists")
+    )
+    try await database.write { db in
+      try CompilationAlbum.upsert { entry }.execute(db)
+    }
+    let model = withDependencies {
+      $0.defaultDatabase = database
+    } operation: {
+      AppModel()
+    }
+    var updated = entry
+    updated.name = "Great Covers"
+    updated.identity = AlbumIdentity(album: "Great Covers", albumArtist: "Jon Phillips")
+    updated.ruleset = CompilationRuleset(
+      stripTrackAndDisc: false,
+      setCompilationFlag: true,
+      groupingTokens: ["Great Covers", "great covers", "Power Pop :: Covers", "Invalid|Token"]
+    )
+    updated.displayImage = Data([1, 2, 3])
+    updated.fallbackArtwork = updated.displayImage
+
+    await model.updateCompilationAlbum(updated)
+
+    let saved = try await database.read { db in
+      try CompilationAlbum.find(entry.id).fetchOne(db)
+    }
+    #expect(saved == updated)
+    #expect(saved?.ruleset.groupingTokens == ["Great Covers", "Power Pop :: Covers"])
+    #expect(model.runLogErrorMessage == nil)
+  }
+
+  @Test
   func recipePreviewUsesEffectiveMergedValuesAndMarksCollectionIdentityAsHeld() {
     let proposals = [
       CompilationRecipeProposal(
