@@ -13,6 +13,7 @@ struct CollectionsView: View {
   @FetchAll(AppSetting.all)
   private var persistedSettings: [AppSetting]
   @State private var selectedAlbumID: CompilationAlbum.ID?
+  @State private var editingAlbum: CompilationAlbum?
 
   var body: some View {
     let selectedAlbum = albums.first { $0.id == selectedAlbumID }
@@ -31,6 +32,7 @@ struct CollectionsView: View {
         CollectionRegistrySection(
           albums: albums,
           selectedAlbumID: $selectedAlbumID,
+          edit: { editingAlbum = $0 },
           onDropAudio: { album, urls in
             stageDroppedFiles(onto: album, urls: urls)
           }
@@ -120,6 +122,9 @@ struct CollectionsView: View {
         }
       }
     }
+    .sheet(item: $editingAlbum) { album in
+      CompilationAlbumEditSheet(album: album, model: model)
+    }
     .task(id: AppSetting.current(from: persistedSettings)) {
       await model.refreshToolStatuses(settings: AppSetting.current(from: persistedSettings))
     }
@@ -165,15 +170,17 @@ struct CollectionsView: View {
     return panel.runModal() == .OK ? panel.url : nil
   }
 
-  private func chooseCoverImage() -> URL? {
-    let panel = NSOpenPanel()
-    panel.allowsMultipleSelection = false
-    panel.canChooseDirectories = false
-    panel.canChooseFiles = true
-    panel.allowedContentTypes = [.png, .jpeg, .gif, .image]
-    panel.prompt = "Set Cover"
-    return panel.runModal() == .OK ? panel.url : nil
-  }
+}
+
+@MainActor
+private func chooseCoverImage() -> URL? {
+  let panel = NSOpenPanel()
+  panel.allowsMultipleSelection = false
+  panel.canChooseDirectories = false
+  panel.canChooseFiles = true
+  panel.allowedContentTypes = [.png, .jpeg, .gif, .image]
+  panel.prompt = "Set Cover"
+  return panel.runModal() == .OK ? panel.url : nil
 }
 
 private struct CollectionHeader: View {
@@ -269,6 +276,7 @@ private struct InboxSummaryRow: View {
 private struct CollectionRegistrySection: View {
   let albums: [CompilationAlbum]
   @Binding var selectedAlbumID: CompilationAlbum.ID?
+  let edit: (CompilationAlbum) -> Void
   let onDropAudio: (CompilationAlbum, [URL]) -> Void
 
   private let columns = Array(repeating: GridItem(.flexible(), spacing: 16), count: 3)
@@ -287,6 +295,7 @@ private struct CollectionRegistrySection: View {
               toggleSelect: {
                 selectedAlbumID = selectedAlbumID == album.id ? nil : album.id
               },
+              edit: { edit(album) },
               onDropAudio: { urls in onDropAudio(album, urls) }
             )
           }
@@ -302,6 +311,7 @@ private struct CompilationAlbumTileButton: View {
   let album: CompilationAlbum
   let isSelected: Bool
   let toggleSelect: () -> Void
+  let edit: () -> Void
   let onDropAudio: ([URL]) -> Void
   @State private var isDropTargeted = false
 
@@ -310,6 +320,13 @@ private struct CompilationAlbumTileButton: View {
       CompilationAlbumTile(album: album, isSelected: isSelected)
     }
     .buttonStyle(.plain)
+    .contextMenu {
+      Button("Edit…", action: edit)
+    }
+    .simultaneousGesture(
+      TapGesture(count: 2)
+        .onEnded(edit)
+    )
     .overlay {
       RoundedRectangle(cornerRadius: 10)
         .strokeBorder(Color.accentColor, lineWidth: 2)
@@ -319,6 +336,184 @@ private struct CompilationAlbumTileButton: View {
       onDropAudio(urls)
       return true
     } isTargeted: { isDropTargeted = $0 }
+  }
+}
+
+/// An edit-only surface for the registry record. It changes the metadata used by subsequent
+/// appends, not tags already imported into Music.
+private struct CompilationAlbumEditSheet: View {
+  @Environment(\.dismiss) private var dismiss
+  @Bindable var model: AppModel
+
+  private let album: CompilationAlbum
+  @State private var name: String
+  @State private var albumName: String
+  @State private var albumArtist: String
+  @State private var stripTrackAndDisc: Bool
+  @State private var setCompilationFlag: Bool
+  @State private var groupingTokens: String
+  @State private var coverData: Data?
+  @State private var coverErrorMessage: String?
+
+  init(album: CompilationAlbum, model: AppModel) {
+    self.album = album
+    self.model = model
+    _name = State(initialValue: album.name)
+    _albumName = State(initialValue: album.identity.album)
+    _albumArtist = State(initialValue: album.identity.albumArtist)
+    _stripTrackAndDisc = State(initialValue: album.ruleset.stripTrackAndDisc)
+    _setCompilationFlag = State(initialValue: album.ruleset.setCompilationFlag)
+    _groupingTokens = State(
+      initialValue: album.ruleset.groupingTokens.joined(separator: CompilationRuleset.groupingDelimiter)
+    )
+    _coverData = State(initialValue: album.displayImage ?? album.fallbackArtwork)
+  }
+
+  var body: some View {
+    NavigationStack {
+      Form {
+        Section("Registry entry") {
+          LabeledContent("Name") {
+            TextField("Name", text: $name)
+              .labelsHidden()
+              .frame(minWidth: 260, idealWidth: 320, maxWidth: 360)
+          }
+          LabeledContent("Album") {
+            TextField("Album", text: $albumName)
+              .labelsHidden()
+              .frame(minWidth: 260, idealWidth: 320, maxWidth: 360)
+          }
+          LabeledContent("Album Artist") {
+            TextField("Album Artist", text: $albumArtist)
+              .labelsHidden()
+              .frame(minWidth: 260, idealWidth: 320, maxWidth: 360)
+          }
+        }
+
+        Section("Append rules") {
+          Toggle("Strip track and disc numbers", isOn: $stripTrackAndDisc)
+          Toggle("Set the Compilation flag", isOn: $setCompilationFlag)
+          LabeledContent("Grouping") {
+            TextField("Token | Token", text: $groupingTokens)
+              .labelsHidden()
+              .frame(minWidth: 260, idealWidth: 320, maxWidth: 360)
+          }
+          Text("Separate tokens with \(CompilationRuleset.groupingDelimiter). Blank, duplicate, and pipe-containing tokens are ignored.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: 440, alignment: .leading)
+        }
+
+        Section("Cover art") {
+          HStack(spacing: 12) {
+            coverPreview
+            VStack(alignment: .leading, spacing: 8) {
+              Button("Set Cover…") {
+                setCover()
+              }
+              Button("Remove cover", role: .destructive) {
+                coverData = nil
+                coverErrorMessage = nil
+              }
+              .disabled(coverData == nil)
+            }
+          }
+          if let coverErrorMessage {
+            Text(coverErrorMessage)
+              .font(.caption)
+              .foregroundStyle(.red)
+          }
+        }
+
+        Section {
+          Text("Edits apply to future appends only; already-imported tracks in Music are unchanged.")
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: 440, alignment: .leading)
+        }
+      }
+      .navigationTitle("Edit Compilation Album")
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel") { dismiss() }
+        }
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Save") { save() }
+            .disabled(!canSave)
+        }
+      }
+    }
+    .frame(minWidth: 600, minHeight: 480)
+  }
+
+  @ViewBuilder
+  private var coverPreview: some View {
+    RoundedRectangle(cornerRadius: 8)
+      .fill(Color.secondary.opacity(0.08))
+      .frame(width: 100, height: 100)
+      .overlay {
+        if let coverData, let image = NSImage(data: coverData) {
+          Image(nsImage: image)
+            .resizable()
+            .scaledToFill()
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        } else {
+          Image(systemName: "photo")
+            .font(.title2)
+            .foregroundStyle(.secondary)
+        }
+      }
+  }
+
+  private var canSave: Bool {
+    !trimmed(albumName).isEmpty && !trimmed(albumArtist).isEmpty
+  }
+
+  private func setCover() {
+    guard let url = chooseCoverImage() else {
+      return
+    }
+    do {
+      let data = try Data(contentsOf: url)
+      guard let normalized = AppModel.normalizedCoverData(data) else {
+        coverErrorMessage = "That file isn't a readable image."
+        return
+      }
+      coverData = normalized
+      coverErrorMessage = nil
+    } catch {
+      coverErrorMessage = error.localizedDescription
+    }
+  }
+
+  private func save() {
+    let albumName = trimmed(albumName)
+    let albumArtist = trimmed(albumArtist)
+    guard !albumName.isEmpty, !albumArtist.isEmpty else {
+      return
+    }
+
+    var updated = album
+    updated.name = trimmed(name).isEmpty ? albumName : trimmed(name)
+    updated.identity = AlbumIdentity(album: albumName, albumArtist: albumArtist)
+    updated.ruleset = CompilationRuleset(
+      stripTrackAndDisc: stripTrackAndDisc,
+      setCompilationFlag: setCompilationFlag,
+      groupingTokens: groupingTokens.components(separatedBy: CompilationRuleset.groupingDelimiter)
+    )
+    updated.displayImage = coverData
+    updated.fallbackArtwork = coverData
+
+    Task {
+      await model.updateCompilationAlbum(updated)
+      dismiss()
+    }
+  }
+
+  private func trimmed(_ value: String) -> String {
+    value.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 }
 
