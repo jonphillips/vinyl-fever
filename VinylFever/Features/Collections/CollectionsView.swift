@@ -172,6 +172,7 @@ struct CollectionsView: View {
 
 }
 
+@MainActor
 private func chooseCoverImage() -> URL? {
   let panel = NSOpenPanel()
   panel.allowsMultipleSelection = false
@@ -375,14 +376,17 @@ private struct CompilationAlbumEditSheet: View {
           LabeledContent("Name") {
             TextField("Name", text: $name)
               .labelsHidden()
+              .frame(minWidth: 260, idealWidth: 320, maxWidth: 360)
           }
           LabeledContent("Album") {
             TextField("Album", text: $albumName)
               .labelsHidden()
+              .frame(minWidth: 260, idealWidth: 320, maxWidth: 360)
           }
           LabeledContent("Album Artist") {
             TextField("Album Artist", text: $albumArtist)
               .labelsHidden()
+              .frame(minWidth: 260, idealWidth: 320, maxWidth: 360)
           }
         }
 
@@ -392,10 +396,13 @@ private struct CompilationAlbumEditSheet: View {
           LabeledContent("Grouping") {
             TextField("Token | Token", text: $groupingTokens)
               .labelsHidden()
+              .frame(minWidth: 260, idealWidth: 320, maxWidth: 360)
           }
           Text("Separate tokens with \(CompilationRuleset.groupingDelimiter). Blank, duplicate, and pipe-containing tokens are ignored.")
             .font(.caption)
             .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: 440, alignment: .leading)
         }
 
         Section("Cover art") {
@@ -423,6 +430,8 @@ private struct CompilationAlbumEditSheet: View {
           Text("Edits apply to future appends only; already-imported tracks in Music are unchanged.")
             .font(.callout)
             .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: 440, alignment: .leading)
         }
       }
       .navigationTitle("Edit Compilation Album")
@@ -436,7 +445,7 @@ private struct CompilationAlbumEditSheet: View {
         }
       }
     }
-    .frame(minWidth: 520, minHeight: 520)
+    .frame(minWidth: 600, minHeight: 480)
   }
 
   @ViewBuilder
