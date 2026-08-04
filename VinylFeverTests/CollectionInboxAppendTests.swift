@@ -100,6 +100,52 @@ struct CollectionInboxAppendTests {
     #expect(drained.ids.isEmpty)
   }
 
+  /// Confirming an Append Preview must run the already-reviewed plan. Rebuilding here used to
+  /// synchronously scan and re-read every staged file before exposing any progress, so the action
+  /// could look inert (or stall) even though the preview was ready.
+  @Test
+  func applyingPreviewDoesNotRebuildIt() async {
+    let album = Self.album()
+    let sourceFolder = URL(filePath: "/tmp/append-preview")
+    let scanRecorder = FolderScanRecorder()
+    let run = RunRecord(
+      id: UUID(3),
+      showRootPath: sourceFolder.path(percentEncoded: false),
+      kind: .apply,
+      startedAt: .distantPast,
+      command: "apply"
+    )
+    let model = withDependencies {
+      $0.fileSystemClient.scanAudioFolder = { folder in
+        scanRecorder.record(folder)
+        struct UnexpectedRebuild: Error {}
+        throw UnexpectedRebuild()
+      }
+      $0.runLogClient.open = { _ in run }
+      $0.runLogClient.close = { request in
+        var closed = run
+        closed.finishedAt = .distantPast
+        closed.exitSummary = request.exitSummary
+        return closed
+      }
+      $0.musicAppClient.requestAutomationPermission = { .denied }
+    } operation: {
+      AppModel()
+    }
+    model.compilationAppendFolder = sourceFolder
+    model.compilationAppendAlbumID = album.id
+    model.compilationApplyPlan = CompilationApplyPlan(
+      entry: album,
+      sourceRoot: sourceFolder,
+      tracks: []
+    )
+
+    await model.applyCurrentCompilationAppend(entry: album)
+
+    #expect(scanRecorder.folders.isEmpty)
+    #expect(model.compilationImportState == .permission(.denied))
+  }
+
   /// A staged drop shows up in `inboxSummary` with the right count once refreshed.
   @Test
   func stagingADropIsReflectedInInboxSummary() async throws {
@@ -205,5 +251,19 @@ private final class DrainRecorder: @unchecked Sendable {
 
   var ids: [CompilationAlbum.ID] {
     lock.withLock { _ids }
+  }
+}
+
+/// Thread-safe observation for a `@Sendable` dependency closure.
+private final class FolderScanRecorder: @unchecked Sendable {
+  private let lock = NSLock()
+  private var _folders: [URL] = []
+
+  func record(_ folder: URL) {
+    lock.withLock { _folders.append(folder) }
+  }
+
+  var folders: [URL] {
+    lock.withLock { _folders }
   }
 }
