@@ -83,10 +83,11 @@ final class AppModel {
   var compilationApplyState: ApplyRunState = .idle
   var compilationConversionState: ConversionRunState = .idle
   var compilationImportState: LibraryImportState = .idle
-  /// Per-album pending counts across the whole Inbox root, for the standing visibility
-  /// surface. Refreshed after stage, after a certified-append drain, and on the
+  /// Per-album pending counts and filenames across the whole Inbox root, for the standing
+  /// visibility surface. Refreshed after stage, after a certified-append drain, and on the
   /// Collections screen's `.task`.
   var inboxSummary: [InboxAlbumSummary] = []
+  var inboxFilesByAlbumID: [CompilationAlbum.ID: [URL]] = [:]
   // Recipe workbench (M7 S1). A recipe run is a distinct gesture from a
   // compilation append — it points one recipe at a folder, previews the diffs, and
   // rides the same `copy → Working/ → writeTags` rail on apply.
@@ -792,11 +793,29 @@ final class AppModel {
     }
   }
 
-  /// Load per-album staged counts from the Inbox store into observable state for the
-  /// standing visibility surface.
+  /// Load per-album staged counts and filenames from the Inbox store into observable state for
+  /// the standing visibility surface.
   func refreshInboxSummary() {
     do {
-      inboxSummary = try collectionInboxClient.summary()
+      let summary = try collectionInboxClient.summary()
+      inboxSummary = summary
+      inboxFilesByAlbumID = try Dictionary(
+        uniqueKeysWithValues: summary.map { entry in
+          (entry.albumID, try collectionInboxClient.contents(entry.albumID))
+        }
+      )
+    } catch {
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
+  /// Reveal the app-owned Working folder for the current append preview. This is useful after a
+  /// partial apply: successful tracks remain there while failed tracks are cleaned up for retry.
+  func revealCompilationWorkingDirectory() async {
+    guard let plan = compilationApplyPlan else { return }
+    do {
+      try await fileOperationClient.reveal(plan.workingDirectory)
+      runLogErrorMessage = nil
     } catch {
       runLogErrorMessage = error.localizedDescription
     }

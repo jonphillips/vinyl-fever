@@ -167,6 +167,13 @@ struct CollectionInboxAppendTests {
     await model.stageDroppedFilesForAppend(entry: album, files: [source])
 
     #expect(model.inboxSummary == [InboxAlbumSummary(albumID: album.id, fileCount: 1)])
+    #expect(
+      model.inboxFilesByAlbumID[album.id] == [
+        inboxRoot.appendingPathComponent(album.id.uuidString, isDirectory: true)
+          .appendingPathComponent("one-hit-wonder.m4a")
+          .standardizedFileURL,
+      ]
+    )
   }
 
   /// A manual Clear (drain without appending) zeroes that album out of the summary.
@@ -193,6 +200,7 @@ struct CollectionInboxAppendTests {
     model.clearInboxQueue(albumID: album.id)
 
     #expect(model.inboxSummary.isEmpty)
+    #expect(model.inboxFilesByAlbumID.isEmpty)
   }
 
   /// A staged album ID with no backing registry entry (a since-deleted album) still surfaces
@@ -220,6 +228,13 @@ struct CollectionInboxAppendTests {
     model.refreshInboxSummary()
 
     #expect(model.inboxSummary == [InboxAlbumSummary(albumID: orphanedAlbumID, fileCount: 1)])
+    #expect(
+      model.inboxFilesByAlbumID[orphanedAlbumID] == [
+        inboxRoot.appendingPathComponent(orphanedAlbumID.uuidString, isDirectory: true)
+          .appendingPathComponent("orphan-song.m4a")
+          .standardizedFileURL,
+      ]
+    )
   }
 
   // MARK: - Fixtures
