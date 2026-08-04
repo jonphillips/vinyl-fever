@@ -54,12 +54,18 @@ struct CollectionsView: View {
             plan: model.compilationApplyPlan,
             recipeProposalsByFileID: model.compilationRecipeProposalsByFileID,
             applyState: model.compilationApplyState,
+            artworkRepairState: model.compilationArtworkRepairState,
             conversionState: model.compilationConversionState,
             importState: model.compilationImportState,
             isInboxSourced: model.isAppendSourcedFromInbox(album: selectedAlbum),
             revealWorkingFolder: {
               Task {
                 await model.revealCompilationWorkingDirectory()
+              }
+            },
+            stripArtwork: { file in
+              Task {
+                await model.stripArtworkFromCurrentCompilationAppend(album: selectedAlbum, file: file)
               }
             },
             clearQueue: {
@@ -640,12 +646,14 @@ private struct CompilationAppendSection: View {
   let plan: CompilationApplyPlan?
   let recipeProposalsByFileID: [ScannedAudioFile.ID: [CompilationRecipeProposal]]
   let applyState: ApplyRunState
+  let artworkRepairState: CompilationArtworkRepairState
   let conversionState: ConversionRunState
   let importState: LibraryImportState
   /// Whether the queue behind this preview is the album's drop-staged Inbox (vs. a picked
   /// folder). Gates the destructive per-item Remove — only app-owned staged copies are removable.
   let isInboxSourced: Bool
   let revealWorkingFolder: () -> Void
+  let stripArtwork: (URL) -> Void
   let clearQueue: () -> Void
   let removeItem: (ScannedAudioFile) -> Void
   let appendFolder: () -> Void
@@ -657,6 +665,7 @@ private struct CompilationAppendSection: View {
   let onDropAudio: ([URL]) -> Void
   @State private var isConfirmingApply = false
   @State private var isConfirmingClear = false
+  @State private var artworkRemovalCandidate: AppliedTrack?
 
   var body: some View {
     CollectionSection(title: "Append Preview", systemImage: "tag", count: plan?.tracks.count ?? 0) {
@@ -756,7 +765,32 @@ private struct CompilationAppendSection: View {
               }
             }
           }
-          CompilationApplyStatus(state: applyState, revealWorkingFolder: revealWorkingFolder)
+          CompilationApplyStatus(
+            state: applyState,
+            repairState: artworkRepairState,
+            revealWorkingFolder: revealWorkingFolder,
+            stripArtwork: isInboxSourced ? { artworkRemovalCandidate = $0 } : nil
+          )
+          .confirmationDialog(
+            "Strip embedded artwork?",
+            isPresented: Binding(
+              get: { artworkRemovalCandidate != nil },
+              set: { if !$0 { artworkRemovalCandidate = nil } }
+            )
+          ) {
+            Button("Strip Artwork", role: .destructive) {
+              guard let candidate = artworkRemovalCandidate else { return }
+              artworkRemovalCandidate = nil
+              stripArtwork(candidate.sourceURL)
+            }
+            Button("Cancel", role: .cancel) {
+              artworkRemovalCandidate = nil
+            }
+          } message: {
+            Text(
+              "This removes embedded artwork from Vinyl Fever's staged copy of \(artworkRemovalCandidate?.sourceURL.lastPathComponent ?? "this file"). Your original file is untouched. Existing Working copies will be discarded so the whole queue can be rebuilt."
+            )
+          }
           CompilationConversionStatus(state: conversionState)
           CompilationImportStatus(state: importState)
           LazyVStack(alignment: .leading, spacing: 10) {
@@ -782,6 +816,7 @@ private struct CompilationAppendSection: View {
 
   private var isRunning: Bool {
     applyState.isRunning ||
+      artworkRepairState.isRunning ||
       conversionState.isRunning ||
       importState.isRunning
   }
@@ -1077,7 +1112,9 @@ private struct CollectionSeedStatus: View {
 
 private struct CompilationApplyStatus: View {
   let state: ApplyRunState
+  let repairState: CompilationArtworkRepairState
   let revealWorkingFolder: () -> Void
+  let stripArtwork: ((AppliedTrack) -> Void)?
 
   var body: some View {
     switch state {
@@ -1112,12 +1149,20 @@ private struct CompilationApplyStatus: View {
                   .font(.caption)
                   .foregroundStyle(.secondary)
                   .textSelection(.enabled)
+                if canStripArtwork(from: track) {
+                  Button("Strip embedded artwork…") {
+                    stripArtwork?(track)
+                  }
+                  .buttonStyle(.link)
+                  .disabled(repairState.isRunning)
+                }
               }
             }
           }
           .padding(10)
           .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
         }
+        repairStatus
       }
     case let .failed(message):
       Label(message, systemImage: "exclamationmark.triangle")
@@ -1133,6 +1178,39 @@ private struct CompilationApplyStatus: View {
   private var createdCount: Int {
     guard case let .completed(result) = state else { return 0 }
     return result.appliedTracks.count { $0.status == .created }
+  }
+
+  @ViewBuilder
+  private var repairStatus: some View {
+    switch repairState {
+    case .idle:
+      EmptyView()
+    case let .running(file):
+      Label("Removing artwork from \(file.lastPathComponent)", systemImage: "hourglass")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    case let .failed(file, message):
+      VStack(alignment: .leading, spacing: 2) {
+        Text("Could not repair \(file.lastPathComponent)")
+          .font(.caption.weight(.medium))
+        Text(message)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .textSelection(.enabled)
+      }
+      .padding(8)
+      .background(.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+    }
+  }
+
+  private func canStripArtwork(from track: AppliedTrack) -> Bool {
+    guard stripArtwork != nil else { return false }
+    return switch track.sourceURL.pathExtension.lowercased() {
+    case AudioFormat.mp3.rawValue, AudioFormat.m4a.rawValue:
+      true
+    default:
+      false
+    }
   }
 }
 
