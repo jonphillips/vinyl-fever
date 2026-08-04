@@ -188,6 +188,41 @@ struct CollectionInboxAppendTests {
     )
   }
 
+  /// Resuming a staged queue removes stale derived Working copies before rebuilding the Inbox
+  /// preview. The source copies remain intact, so a fresh append does not trip destination
+  /// conflicts from a prior partial run.
+  @Test
+  func resumingInboxRebuildsTheQueueAndClearsWorking() async throws {
+    let temp = try Self.makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: temp) }
+    let inbox = CollectionInboxClient.live(root: temp.appendingPathComponent("Inbox", isDirectory: true))
+    let album = Self.album()
+    let staging = try inbox.stagingDirectory(album.id)
+    let stagedFile = staging.appendingPathComponent("queued.mp3")
+    try Data("source".utf8).write(to: stagedFile)
+    let working = staging.appendingPathComponent(ApplyPlan.workingDirectoryName, isDirectory: true)
+    try FileManager.default.createDirectory(at: working, withIntermediateDirectories: true)
+    try Data("derived".utf8).write(to: working.appendingPathComponent("queued.mp3"))
+    let model = AppModel()
+
+    await withDependencies {
+      $0.collectionInboxClient = inbox
+      $0.fileSystemClient.scanAudioFolder = { _ in [] }
+      $0.fileOperationClient.removeItem = { url in
+        guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else { return }
+        try FileManager.default.removeItem(at: url)
+      }
+    } operation: {
+      await model.resumeInboxAppend(entry: album)
+    }
+
+    #expect(model.compilationAppendFolder?.standardizedFileURL == staging.standardizedFileURL)
+    #expect(model.compilationAppendAlbumID == album.id)
+    #expect(model.compilationApplyPlan != nil)
+    #expect(FileManager.default.fileExists(atPath: stagedFile.path(percentEncoded: false)))
+    #expect(!FileManager.default.fileExists(atPath: working.path(percentEncoded: false)))
+  }
+
   /// A manual Clear (drain without appending) zeroes that album out of the summary.
   @Test
   func clearInboxQueueZeroesTheSummary() async throws {

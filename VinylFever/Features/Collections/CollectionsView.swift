@@ -28,6 +28,9 @@ struct CollectionsView: View {
           albums: albums,
           clear: { albumID in
             model.clearInboxQueue(albumID: albumID)
+          },
+          resume: { album in
+            resumeInbox(album)
           }
         )
         CollectionRegistrySection(
@@ -163,6 +166,17 @@ struct CollectionsView: View {
     }
   }
 
+  /// The Inbox is a durable queue, not merely a counter. Selecting the album first lets SwiftUI
+  /// render its append rail; yielding once lets the normal selection reset complete before the
+  /// Inbox-backed preview is rebuilt.
+  private func resumeInbox(_ album: CompilationAlbum) {
+    selectedAlbumID = album.id
+    Task { @MainActor in
+      await Task.yield()
+      await model.resumeInboxAppend(entry: album)
+    }
+  }
+
   private func openAppendFolder(album: CompilationAlbum) {
     guard let url = openFolder(prompt: "Append") else {
       return
@@ -224,6 +238,7 @@ private struct InboxSummarySection: View {
   let filesByAlbumID: [CompilationAlbum.ID: [URL]]
   let albums: [CompilationAlbum]
   let clear: (CompilationAlbum.ID) -> Void
+  let resume: (CompilationAlbum) -> Void
 
   private var totalTracks: Int {
     summary.reduce(0) { $0 + $1.fileCount }
@@ -242,11 +257,13 @@ private struct InboxSummarySection: View {
           .foregroundStyle(.secondary)
           LazyVStack(alignment: .leading, spacing: 0) {
             ForEach(summary) { entry in
+              let album = albums.first { $0.id == entry.albumID }
               InboxSummaryRow(
-                title: albums.first { $0.id == entry.albumID }?.name,
+                album: album,
                 fileCount: entry.fileCount,
                 files: filesByAlbumID[entry.albumID] ?? [],
-                clear: { clear(entry.albumID) }
+                clear: { clear(entry.albumID) },
+                resume: { resume($0) }
               )
             }
           }
@@ -257,11 +274,15 @@ private struct InboxSummarySection: View {
 }
 
 private struct InboxSummaryRow: View {
-  let title: String?
+  let album: CompilationAlbum?
   let fileCount: Int
   let files: [URL]
   let clear: () -> Void
+  let resume: (CompilationAlbum) -> Void
   @State private var isConfirmingClear = false
+  @State private var isConfirmingResume = false
+
+  private var title: String? { album?.name }
 
   var body: some View {
     DisclosureGroup {
@@ -288,6 +309,27 @@ private struct InboxSummaryRow: View {
         Spacer()
         Text("\(fileCount)")
           .foregroundStyle(.secondary)
+        if album != nil {
+          Button("Resume") {
+            isConfirmingResume = true
+          }
+          .buttonStyle(.borderless)
+          .confirmationDialog(
+            "Resume \(fileCount) staged file\(fileCount == 1 ? "" : "s")?",
+            isPresented: $isConfirmingResume
+          ) {
+            Button("Resume Queue") {
+              if let album {
+                resume(album)
+              }
+            }
+            Button("Cancel", role: .cancel) {}
+          } message: {
+            Text(
+              "Rebuilds this album's Append Preview from its staged Inbox files. Any existing Working copies will be discarded so retrying starts clean; your original files are untouched."
+            )
+          }
+        }
         Button("Clear") {
           isConfirmingClear = true
         }
