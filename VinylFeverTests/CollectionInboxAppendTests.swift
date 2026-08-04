@@ -140,7 +140,19 @@ struct CollectionInboxAppendTests {
       tracks: []
     )
 
-    await model.applyCurrentCompilationAppend(entry: album)
+    await withDependencies {
+      $0.runLogClient.open = { _ in run }
+      $0.runLogClient.close = { request in
+        var closed = run
+        closed.finishedAt = .distantPast
+        closed.exitSummary = request.exitSummary
+        return closed
+      }
+      $0.fileOperationClient.createDirectory = { _ in }
+      $0.musicAppClient.requestAutomationPermission = { .denied }
+    } operation: {
+      await model.applyCurrentCompilationAppend(entry: album)
+    }
 
     #expect(scanRecorder.folders.isEmpty)
     #expect(model.compilationImportState == .permission(.denied))
@@ -167,6 +179,13 @@ struct CollectionInboxAppendTests {
     await model.stageDroppedFilesForAppend(entry: album, files: [source])
 
     #expect(model.inboxSummary == [InboxAlbumSummary(albumID: album.id, fileCount: 1)])
+    #expect(
+      model.inboxFilesByAlbumID[album.id] == [
+        inboxRoot.appendingPathComponent(album.id.uuidString, isDirectory: true)
+          .appendingPathComponent("one-hit-wonder.m4a")
+          .standardizedFileURL,
+      ]
+    )
   }
 
   /// A manual Clear (drain without appending) zeroes that album out of the summary.
@@ -193,6 +212,7 @@ struct CollectionInboxAppendTests {
     model.clearInboxQueue(albumID: album.id)
 
     #expect(model.inboxSummary.isEmpty)
+    #expect(model.inboxFilesByAlbumID.isEmpty)
   }
 
   /// A staged album ID with no backing registry entry (a since-deleted album) still surfaces
@@ -220,6 +240,84 @@ struct CollectionInboxAppendTests {
     model.refreshInboxSummary()
 
     #expect(model.inboxSummary == [InboxAlbumSummary(albumID: orphanedAlbumID, fileCount: 1)])
+    #expect(
+      model.inboxFilesByAlbumID[orphanedAlbumID] == [
+        inboxRoot.appendingPathComponent(orphanedAlbumID.uuidString, isDirectory: true)
+          .appendingPathComponent("orphan-song.m4a")
+          .standardizedFileURL,
+      ]
+    )
+  }
+
+  /// The repair rail can only replace the app-owned Inbox copy. On success it discards the
+  /// derived Working folder and rebuilds the preview, so a retry cannot conflict with files from
+  /// the partial append.
+  @Test
+  func strippingArtworkRepairsTheStagedCopyAndClearsWorking() async throws {
+    let temp = try Self.makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: temp) }
+    let inbox = CollectionInboxClient.live(root: temp.appendingPathComponent("Inbox", isDirectory: true))
+    let album = Self.album()
+    let staging = try inbox.stagingDirectory(album.id)
+    let stagedFile = staging.appendingPathComponent("broken-cover.mp3")
+    try Data("before".utf8).write(to: stagedFile)
+    let working = staging.appendingPathComponent(ApplyPlan.workingDirectoryName, isDirectory: true)
+    try FileManager.default.createDirectory(at: working, withIntermediateDirectories: true)
+    try Data("derived".utf8).write(to: working.appendingPathComponent("broken-cover.mp3"))
+
+    let file = ScannedAudioFile(
+      id: UUID(4),
+      url: stagedFile,
+      format: .mp3,
+      sortKey: stagedFile.lastPathComponent
+    )
+    let plan = CompilationApplyPlan(
+      entry: album,
+      sourceRoot: staging,
+      tracks: [
+        CompilationTrackPlan(
+          id: file.id,
+          sourceFile: file,
+          workingFile: working.appendingPathComponent(file.url.lastPathComponent),
+          current: AudioTags(),
+          proposed: ProposedTags(),
+          artwork: .keepExisting,
+          fallbackArtworkURL: nil,
+          diffs: []
+        ),
+      ]
+    )
+    let model = AppModel()
+    model.toolStatuses = [
+      ToolStatus(tool: .ffmpeg, resolvedPath: "/tools/ffmpeg", version: nil, source: .userOverride),
+    ]
+    model.compilationAppendFolder = staging
+    model.compilationAppendAlbumID = album.id
+    model.compilationApplyPlan = plan
+
+    await withDependencies {
+      $0.collectionInboxClient = inbox
+      $0.fileSystemClient.scanAudioFolder = { _ in [] }
+      $0.scriptClient.run = { command in
+        let replacement = URL(filePath: try #require(command.arguments.last))
+        try Data("after".utf8).write(to: replacement)
+        return ScriptResult(command: command, exitCode: 0, standardOutput: Data(), standardError: Data())
+      }
+      $0.fileOperationClient.replaceFile = { source, destination in
+        _ = try FileManager.default.replaceItemAt(destination, withItemAt: source)
+      }
+      $0.fileOperationClient.removeItem = { url in
+        guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else { return }
+        try FileManager.default.removeItem(at: url)
+      }
+      $0.uuid = .incrementing
+    } operation: {
+      await model.stripArtworkFromCurrentCompilationAppend(album: album, file: stagedFile)
+    }
+
+    #expect(try Data(contentsOf: stagedFile) == Data("after".utf8))
+    #expect(!FileManager.default.fileExists(atPath: working.path(percentEncoded: false)))
+    #expect(model.compilationArtworkRepairState == .idle)
   }
 
   // MARK: - Fixtures

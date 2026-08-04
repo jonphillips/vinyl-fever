@@ -18,6 +18,8 @@ final class AppModel {
   @ObservationIgnored
   @Dependency(\.audioMetadataClient) private var audioMetadataClient
   @ObservationIgnored
+  @Dependency(\.scriptClient) private var scriptClient
+  @ObservationIgnored
   @Dependency(\.runLogClient) private var runLogClient
   @ObservationIgnored
   @Dependency(\.musicAppClient) private var musicAppClient
@@ -81,12 +83,14 @@ final class AppModel {
   var compilationRecipeProposalsByFileID: [ScannedAudioFile.ID: [CompilationRecipeProposal]] = [:]
   var compilationApplyPlan: CompilationApplyPlan?
   var compilationApplyState: ApplyRunState = .idle
+  var compilationArtworkRepairState: CompilationArtworkRepairState = .idle
   var compilationConversionState: ConversionRunState = .idle
   var compilationImportState: LibraryImportState = .idle
-  /// Per-album pending counts across the whole Inbox root, for the standing visibility
-  /// surface. Refreshed after stage, after a certified-append drain, and on the
+  /// Per-album pending counts and filenames across the whole Inbox root, for the standing
+  /// visibility surface. Refreshed after stage, after a certified-append drain, and on the
   /// Collections screen's `.task`.
   var inboxSummary: [InboxAlbumSummary] = []
+  var inboxFilesByAlbumID: [CompilationAlbum.ID: [URL]] = [:]
   // Recipe workbench (M7 S1). A recipe run is a distinct gesture from a
   // compilation append — it points one recipe at a folder, previews the diffs, and
   // rides the same `copy → Working/ → writeTags` rail on apply.
@@ -792,11 +796,29 @@ final class AppModel {
     }
   }
 
-  /// Load per-album staged counts from the Inbox store into observable state for the
-  /// standing visibility surface.
+  /// Load per-album staged counts and filenames from the Inbox store into observable state for
+  /// the standing visibility surface.
   func refreshInboxSummary() {
     do {
-      inboxSummary = try collectionInboxClient.summary()
+      let summary = try collectionInboxClient.summary()
+      inboxSummary = summary
+      inboxFilesByAlbumID = try Dictionary(
+        uniqueKeysWithValues: summary.map { entry in
+          (entry.albumID, try collectionInboxClient.contents(entry.albumID))
+        }
+      )
+    } catch {
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
+  /// Reveal the app-owned Working folder for the current append preview. This is useful after a
+  /// partial apply: successful tracks remain there while failed tracks are cleaned up for retry.
+  func revealCompilationWorkingDirectory() async {
+    guard let plan = compilationApplyPlan else { return }
+    do {
+      try await fileOperationClient.reveal(plan.workingDirectory)
+      runLogErrorMessage = nil
     } catch {
       runLogErrorMessage = error.localizedDescription
     }
@@ -868,6 +890,79 @@ final class AppModel {
     await buildCompilationAppendPlan(entry: album, sourceFolder: stagingFolder)
   }
 
+  /// Repair one app-owned Inbox copy after ffmpeg rejects its embedded artwork. The confirmed
+  /// action never touches the user's original dropped file. It also discards derived Working
+  /// copies so the next append starts as one clean queue instead of tripping over successful
+  /// copies from the partial run.
+  func stripArtworkFromCurrentCompilationAppend(album: CompilationAlbum, file: URL) async {
+    guard isAppendSourcedFromInbox(album: album), let plan = compilationApplyPlan else {
+      compilationArtworkRepairState = .failed(file, "This recovery is only available for a staged Inbox queue.")
+      return
+    }
+    guard !compilationApplyState.isRunning,
+      !compilationConversionState.isRunning,
+      !compilationImportState.isRunning
+    else {
+      return
+    }
+    let sourceURL = file.standardizedFileURL
+    guard let track = plan.tracks.first(where: { $0.sourceFile.url.standardizedFileURL == sourceURL }) else {
+      compilationArtworkRepairState = .failed(sourceURL, "That file is no longer in the current append preview.")
+      return
+    }
+    guard track.sourceFile.format == .mp3 || track.sourceFile.format == .m4a else {
+      compilationArtworkRepairState = .failed(
+        sourceURL,
+        "Removing embedded artwork is available for MP3 and M4A files."
+      )
+      return
+    }
+
+    do {
+      // `contents` only returns direct children of this album's app-owned staging directory.
+      // Requiring an exact match prevents this repair rail from ever replacing a picked source
+      // file, even if the view state is stale.
+      let stagedFiles = try collectionInboxClient.contents(album.id)
+      guard stagedFiles.contains(where: { $0.standardizedFileURL == sourceURL }) else {
+        compilationArtworkRepairState = .failed(sourceURL, "That staged file could not be found.")
+        return
+      }
+
+      let temporaryURL = artworkRepairTemporaryURL(for: sourceURL)
+      compilationArtworkRepairState = .running(sourceURL)
+      do {
+        let command = try AudioArtworkRepairCommands.stripEmbeddedArtwork(
+          from: sourceURL,
+          to: temporaryURL,
+          format: track.sourceFile.format,
+          toolPaths: AudioToolPaths(statuses: toolStatuses)
+        )
+        let result = try await scriptClient.run(command)
+        guard result.isSuccessful else {
+          throw AudioArtworkRepairError.commandFailed(
+            tool: command.tool,
+            exitCode: result.exitCode,
+            output: result.combinedOutputText
+          )
+        }
+        try await fileOperationClient.replaceFile(temporaryURL, sourceURL)
+      } catch {
+        try? await fileOperationClient.removeItem(temporaryURL)
+        throw error
+      }
+
+      try await fileOperationClient.removeItem(plan.workingDirectory)
+      await buildCompilationAppendPlan(entry: album, sourceFolder: plan.sourceRoot)
+      compilationArtworkRepairState = .idle
+      runLogErrorMessage = nil
+    } catch is CancellationError {
+      compilationArtworkRepairState = .idle
+    } catch {
+      compilationArtworkRepairState = .failed(sourceURL, error.localizedDescription)
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
   /// Discard the Append Preview and the chosen source folder without touching any files. Mirrors
   /// the reset a certified append performs once it consumes the Working copies.
   private func resetCompilationAppendPreview() {
@@ -875,7 +970,17 @@ final class AppModel {
     compilationRecipeProposalsByFileID = [:]
     compilationAppendFolder = nil
     compilationAppendAlbumID = nil
+    compilationArtworkRepairState = .idle
     clearCompilationAppendScratch()
+  }
+
+  private func artworkRepairTemporaryURL(for sourceURL: URL) -> URL {
+    sourceURL
+      .deletingLastPathComponent()
+      .appendingPathComponent(
+        ".\(sourceURL.deletingPathExtension().lastPathComponent).artwork-repair-\(uuid().uuidString)"
+      )
+      .appendingPathExtension(sourceURL.pathExtension)
   }
 
   func buildCompilationAppendPlan(entry: CompilationAlbum, sourceFolder: URL) async {
@@ -890,6 +995,7 @@ final class AppModel {
     compilationApplyPlan = nil
     compilationRecipeProposalsByFileID = [:]
     compilationApplyState = .idle
+    compilationArtworkRepairState = .idle
     compilationConversionState = .idle
     compilationImportState = .idle
     do {
@@ -1996,6 +2102,19 @@ enum ApplyRunState: Equatable {
   case running(ApplyPlan)
   case completed(ApplyResult)
   case failed(String)
+
+  var isRunning: Bool {
+    if case .running = self {
+      return true
+    }
+    return false
+  }
+}
+
+enum CompilationArtworkRepairState: Equatable {
+  case idle
+  case running(URL)
+  case failed(URL, String)
 
   var isRunning: Bool {
     if case .running = self {

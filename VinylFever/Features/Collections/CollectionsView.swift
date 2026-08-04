@@ -24,6 +24,7 @@ struct CollectionsView: View {
         )
         InboxSummarySection(
           summary: model.inboxSummary,
+          filesByAlbumID: model.inboxFilesByAlbumID,
           albums: albums,
           clear: { albumID in
             model.clearInboxQueue(albumID: albumID)
@@ -53,9 +54,20 @@ struct CollectionsView: View {
             plan: model.compilationApplyPlan,
             recipeProposalsByFileID: model.compilationRecipeProposalsByFileID,
             applyState: model.compilationApplyState,
+            artworkRepairState: model.compilationArtworkRepairState,
             conversionState: model.compilationConversionState,
             importState: model.compilationImportState,
             isInboxSourced: model.isAppendSourcedFromInbox(album: selectedAlbum),
+            revealWorkingFolder: {
+              Task {
+                await model.revealCompilationWorkingDirectory()
+              }
+            },
+            stripArtwork: { file in
+              Task {
+                await model.stripArtworkFromCurrentCompilationAppend(album: selectedAlbum, file: file)
+              }
+            },
             clearQueue: {
               model.clearCurrentAppendQueue(album: selectedAlbum)
             },
@@ -209,6 +221,7 @@ private struct CollectionHeader: View {
 /// the registry (a since-deleted album) renders as "Unknown album" and is still clearable.
 private struct InboxSummarySection: View {
   let summary: [InboxAlbumSummary]
+  let filesByAlbumID: [CompilationAlbum.ID: [URL]]
   let albums: [CompilationAlbum]
   let clear: (CompilationAlbum.ID) -> Void
 
@@ -232,6 +245,7 @@ private struct InboxSummarySection: View {
               InboxSummaryRow(
                 title: albums.first { $0.id == entry.albumID }?.name,
                 fileCount: entry.fileCount,
+                files: filesByAlbumID[entry.albumID] ?? [],
                 clear: { clear(entry.albumID) }
               )
             }
@@ -245,28 +259,48 @@ private struct InboxSummarySection: View {
 private struct InboxSummaryRow: View {
   let title: String?
   let fileCount: Int
+  let files: [URL]
   let clear: () -> Void
   @State private var isConfirmingClear = false
 
   var body: some View {
-    HStack {
-      Text(title ?? "Unknown album")
-        .foregroundStyle(title == nil ? .secondary : .primary)
-      Spacer()
-      Text("\(fileCount)")
-        .foregroundStyle(.secondary)
-      Button("Clear") {
-        isConfirmingClear = true
-      }
-      .buttonStyle(.borderless)
-      .confirmationDialog(
-        "Clear the staged queue for \(title ?? "this album")?",
-        isPresented: $isConfirmingClear
-      ) {
-        Button("Clear", role: .destructive) {
-          clear()
+    DisclosureGroup {
+      if files.isEmpty {
+        Text("No staged filenames are available.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      } else {
+        LazyVStack(alignment: .leading, spacing: 4) {
+          ForEach(files, id: \.self) { file in
+            Label(file.lastPathComponent, systemImage: "music.note")
+              .font(.caption)
+              .lineLimit(1)
+              .truncationMode(.middle)
+          }
         }
-        Button("Cancel", role: .cancel) {}
+        .padding(.leading, 8)
+        .padding(.top, 6)
+      }
+    } label: {
+      HStack {
+        Text(title ?? "Unknown album")
+          .foregroundStyle(title == nil ? .secondary : .primary)
+        Spacer()
+        Text("\(fileCount)")
+          .foregroundStyle(.secondary)
+        Button("Clear") {
+          isConfirmingClear = true
+        }
+        .buttonStyle(.borderless)
+        .confirmationDialog(
+          "Clear the staged queue for \(title ?? "this album")?",
+          isPresented: $isConfirmingClear
+        ) {
+          Button("Clear", role: .destructive) {
+            clear()
+          }
+          Button("Cancel", role: .cancel) {}
+        }
       }
     }
     .padding(.vertical, 6)
@@ -612,11 +646,14 @@ private struct CompilationAppendSection: View {
   let plan: CompilationApplyPlan?
   let recipeProposalsByFileID: [ScannedAudioFile.ID: [CompilationRecipeProposal]]
   let applyState: ApplyRunState
+  let artworkRepairState: CompilationArtworkRepairState
   let conversionState: ConversionRunState
   let importState: LibraryImportState
   /// Whether the queue behind this preview is the album's drop-staged Inbox (vs. a picked
   /// folder). Gates the destructive per-item Remove — only app-owned staged copies are removable.
   let isInboxSourced: Bool
+  let revealWorkingFolder: () -> Void
+  let stripArtwork: (URL) -> Void
   let clearQueue: () -> Void
   let removeItem: (ScannedAudioFile) -> Void
   let appendFolder: () -> Void
@@ -628,6 +665,7 @@ private struct CompilationAppendSection: View {
   let onDropAudio: ([URL]) -> Void
   @State private var isConfirmingApply = false
   @State private var isConfirmingClear = false
+  @State private var artworkRemovalCandidate: AppliedTrack?
 
   var body: some View {
     CollectionSection(title: "Append Preview", systemImage: "tag", count: plan?.tracks.count ?? 0) {
@@ -727,7 +765,32 @@ private struct CompilationAppendSection: View {
               }
             }
           }
-          CompilationApplyStatus(state: applyState)
+          CompilationApplyStatus(
+            state: applyState,
+            repairState: artworkRepairState,
+            revealWorkingFolder: revealWorkingFolder,
+            stripArtwork: isInboxSourced ? { artworkRemovalCandidate = $0 } : nil
+          )
+          .confirmationDialog(
+            "Strip embedded artwork?",
+            isPresented: Binding(
+              get: { artworkRemovalCandidate != nil },
+              set: { if !$0 { artworkRemovalCandidate = nil } }
+            )
+          ) {
+            Button("Strip Artwork", role: .destructive) {
+              guard let candidate = artworkRemovalCandidate else { return }
+              artworkRemovalCandidate = nil
+              stripArtwork(candidate.sourceURL)
+            }
+            Button("Cancel", role: .cancel) {
+              artworkRemovalCandidate = nil
+            }
+          } message: {
+            Text(
+              "This removes embedded artwork from Vinyl Fever's staged copy of \(artworkRemovalCandidate?.sourceURL.lastPathComponent ?? "this file"). Your original file is untouched. Existing Working copies will be discarded so the whole queue can be rebuilt."
+            )
+          }
           CompilationConversionStatus(state: conversionState)
           CompilationImportStatus(state: importState)
           LazyVStack(alignment: .leading, spacing: 10) {
@@ -753,6 +816,7 @@ private struct CompilationAppendSection: View {
 
   private var isRunning: Bool {
     applyState.isRunning ||
+      artworkRepairState.isRunning ||
       conversionState.isRunning ||
       importState.isRunning
   }
@@ -1048,6 +1112,9 @@ private struct CollectionSeedStatus: View {
 
 private struct CompilationApplyStatus: View {
   let state: ApplyRunState
+  let repairState: CompilationArtworkRepairState
+  let revealWorkingFolder: () -> Void
+  let stripArtwork: ((AppliedTrack) -> Void)?
 
   var body: some View {
     switch state {
@@ -1057,11 +1124,92 @@ private struct CompilationApplyStatus: View {
       Label("Applying tags to Working copies", systemImage: "hourglass")
         .foregroundStyle(.secondary)
     case let .completed(result):
-      Label(result.exitSummary, systemImage: result.didSucceed ? "checkmark.circle" : "exclamationmark.triangle")
-        .foregroundStyle(result.didSucceed ? .green : .orange)
+      VStack(alignment: .leading, spacing: 8) {
+        Label(result.exitSummary, systemImage: result.didSucceed ? "checkmark.circle" : "exclamationmark.triangle")
+          .foregroundStyle(result.didSucceed ? .green : .orange)
+        if !result.appliedTracks.isEmpty {
+          HStack(spacing: 8) {
+            Text("\(createdCount) Working cop\(createdCount == 1 ? "y" : "ies") created")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+            Button("Reveal Working", action: revealWorkingFolder)
+              .buttonStyle(.link)
+          }
+        }
+        if !failedTracks.isEmpty {
+          VStack(alignment: .leading, spacing: 6) {
+            Label("Files that could not be prepared", systemImage: "exclamationmark.triangle")
+              .font(.subheadline)
+              .foregroundStyle(.orange)
+            ForEach(failedTracks) { track in
+              VStack(alignment: .leading, spacing: 2) {
+                Text(track.sourceURL.lastPathComponent)
+                  .font(.callout.weight(.medium))
+                Text(track.note)
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+                  .textSelection(.enabled)
+                if canStripArtwork(from: track) {
+                  Button("Strip embedded artwork…") {
+                    stripArtwork?(track)
+                  }
+                  .buttonStyle(.link)
+                  .disabled(repairState.isRunning)
+                }
+              }
+            }
+          }
+          .padding(10)
+          .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+        }
+        repairStatus
+      }
     case let .failed(message):
       Label(message, systemImage: "exclamationmark.triangle")
         .foregroundStyle(.red)
+    }
+  }
+
+  private var failedTracks: [AppliedTrack] {
+    guard case let .completed(result) = state else { return [] }
+    return result.appliedTracks.filter { $0.status == .failed }
+  }
+
+  private var createdCount: Int {
+    guard case let .completed(result) = state else { return 0 }
+    return result.appliedTracks.count { $0.status == .created }
+  }
+
+  @ViewBuilder
+  private var repairStatus: some View {
+    switch repairState {
+    case .idle:
+      EmptyView()
+    case let .running(file):
+      Label("Removing artwork from \(file.lastPathComponent)", systemImage: "hourglass")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    case let .failed(file, message):
+      VStack(alignment: .leading, spacing: 2) {
+        Text("Could not repair \(file.lastPathComponent)")
+          .font(.caption.weight(.medium))
+        Text(message)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .textSelection(.enabled)
+      }
+      .padding(8)
+      .background(.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+    }
+  }
+
+  private func canStripArtwork(from track: AppliedTrack) -> Bool {
+    guard stripArtwork != nil else { return false }
+    return switch track.sourceURL.pathExtension.lowercased() {
+    case AudioFormat.mp3.rawValue, AudioFormat.m4a.rawValue:
+      true
+    default:
+      false
     }
   }
 }

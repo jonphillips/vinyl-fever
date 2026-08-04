@@ -6,6 +6,42 @@ import Testing
 @Suite
 struct AudioTaggingCommandTests {
   @Test
+  func constructsArtworkStrippingCommand() throws {
+    let source = URL(fileURLWithPath: "/Inbox/broken-cover.mp3")
+    let replacement = URL(fileURLWithPath: "/Inbox/.broken-cover.artwork-repair.mp3")
+    let command = try AudioArtworkRepairCommands.stripEmbeddedArtwork(
+      from: source,
+      to: replacement,
+      format: .mp3,
+      toolPaths: AudioToolPaths(paths: [.ffmpeg: "/tools/ffmpeg"])
+    )
+
+    expectNoDifference(command.tool, .ffmpeg)
+    expectNoDifference(command.executableURL, URL(fileURLWithPath: "/tools/ffmpeg"))
+    expectNoDifference(
+      command.arguments,
+      [
+        "-nostdin", "-y", "-hide_banner", "-loglevel", "error",
+        "-i", "/Inbox/broken-cover.mp3",
+        "-map", "0:a?", "-map_metadata", "0", "-c", "copy",
+        "/Inbox/.broken-cover.artwork-repair.mp3",
+      ]
+    )
+  }
+
+  @Test
+  func refusesArtworkStrippingForFLAC() throws {
+    #expect(throws: AudioArtworkRepairError.unsupportedFormat(.flac)) {
+      try AudioArtworkRepairCommands.stripEmbeddedArtwork(
+        from: URL(fileURLWithPath: "/Inbox/broken-cover.flac"),
+        to: URL(fileURLWithPath: "/Inbox/replacement.flac"),
+        format: .flac,
+        toolPaths: AudioToolPaths(paths: [.ffmpeg: "/tools/ffmpeg"])
+      )
+    }
+  }
+
+  @Test
   func constructsPinnedTaggingCommands() throws {
     let toolPaths = AudioToolPaths(paths: [
       .metaflac: "/tools/metaflac",
