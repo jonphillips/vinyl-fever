@@ -1009,9 +1009,16 @@ final class AppModel {
   }
 
   func applyCurrentCompilationAppend(entry: CompilationAlbum) async {
-    guard let folder = compilationAppendFolder else { return }
-    await buildCompilationAppendPlan(entry: entry, sourceFolder: folder)
-    guard let plan = compilationApplyPlan else { return }
+    // The preview is the review contract: once the user confirms it, apply that exact plan.
+    // Rebuilding here used to re-read every file serially with no visible state before the
+    // executor began, which made a confirmed append appear to do nothing (and could leave it
+    // stuck in metadata reads). A pending text-edit rebuild must not race the applied plan.
+    guard compilationAppendAlbumID == entry.id, let plan = compilationApplyPlan else {
+      compilationApplyState = .failed("Build an append preview before appending.")
+      return
+    }
+    compilationAppendRebuildTask?.cancel()
+    compilationAppendRebuildTask = nil
     await applyCompilationPlan(plan)
   }
 
