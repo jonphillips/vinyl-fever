@@ -796,6 +796,26 @@ final class AppModel {
     }
   }
 
+  /// Reopen a non-empty app-owned Inbox queue as the current Append Preview. Working is derived
+  /// output from a prior interrupted append, not part of the queue, so discard it before the
+  /// rebuild; otherwise those files would block a clean retry as destination conflicts.
+  /// The caller confirms this reset in the Inbox UI.
+  func resumeInboxAppend(entry: CompilationAlbum) async {
+    do {
+      let stagedFiles = try collectionInboxClient.contents(entry.id)
+      guard !stagedFiles.isEmpty else {
+        runLogErrorMessage = "There are no staged files to resume."
+        return
+      }
+      let inboxFolder = try collectionInboxClient.stagingDirectory(entry.id)
+      let workingDirectory = inboxFolder.appendingPathComponent(ApplyPlan.workingDirectoryName, isDirectory: true)
+      try await fileOperationClient.removeItem(workingDirectory)
+      await buildCompilationAppendPlan(entry: entry, sourceFolder: inboxFolder)
+    } catch {
+      runLogErrorMessage = error.localizedDescription
+    }
+  }
+
   /// Load per-album staged counts and filenames from the Inbox store into observable state for
   /// the standing visibility surface.
   func refreshInboxSummary() {
