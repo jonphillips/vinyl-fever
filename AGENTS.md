@@ -6,36 +6,14 @@ This is the **app-specific** layer; the general house layer lives in
 
 ## Working mode — what a bare "go" means (read first)
 
-This repo is built by **two agents** under the architect/executor protocol.
-`/Users/jon/code/jon-platform/docs/agent-collaboration.md` is canonical; the
-summary below is so you can act on `go` without a second hop. Jon is **never the
-courier** — orient from the repo (`gh`), not from a link or status he pastes.
+Two agents under the architect/executor protocol: Claude = architect, Codex = executor. The
+bare-"go" routing is in jon-platform `AGENTS.md` (which you read first anyway) and the full
+protocol in `/Users/jon/code/jon-platform/docs/agent-collaboration.md` — read it before acting if
+you haven't this session. Jon is never the courier: orient from `gh`, not pasted status.
 
-**Start here:** [`CURRENT_HANDOFF.md`](CURRENT_HANDOFF.md) names the active
-milestone, whose turn it is, and any pending decisions. It's a pointer at
-canonical state (open PRs + each milestone's slice ledger), never a substitute for
-it — if it disagrees with GitHub, GitHub wins.
-
-- **Claude Code = architect / editor-in-chief.** Owns product/architecture docs,
-  ADRs, and the milestone build orders; reviews the executor's slice PRs against
-  their done-criteria. Does **not** write feature code or commit to a slice branch
-  — input to a slice is a `gh pr review`, not a takeover.
-- **Codex = executor.** Implements slices in order, one branch + PR each, keeps
-  build and tests green, drives each PR to approval. Proposes plan changes, never
-  performs them unilaterally.
-
-On a bare **"go"**, before anything else, act as your role:
-
-- **Architect (Claude):** run `gh pr status`. Review every ready, unreviewed
-  executor slice PR against its milestone done-criteria (`gh pr review`); answer
-  any `question-for-architect`. Queue clear → advance the plan (author/refine the
-  next milestone, or unblock). Don't open slice branches or write feature code.
-- **Executor (Codex):** run `gh pr status`. If a PR has changes requested, address
-  it. Else open a **draft** PR for the next unchecked slice in the active milestone
-  doc, get build + tests green, mark it ready. Blocked → write the question in the
-  PR and label it `question-for-architect`.
-
-If you have not read `agent-collaboration.md` this session, read it before acting.
+**Start here:** [`CURRENT_HANDOFF.md`](CURRENT_HANDOFF.md) (repo root) names the active
+milestone, whose turn it is, and pending decisions. It points at canonical state (open PRs +
+each milestone's slice ledger); if it disagrees with GitHub, GitHub wins.
 
 ## Before proposing architecture or implementation
 
