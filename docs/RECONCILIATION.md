@@ -7,7 +7,7 @@ state of the LLM path in the running app, and splits the remaining work into
 self-contained sessions. This is diagnosis + plan only — no code changed in the pass
 that produced it.
 
-Not a source of truth for milestone/slice state — `CURRENT_HANDOFF.md` and the M-doc
+Not a source of truth for milestone/slice state — `docs/NEXT_UP.md` and the M-doc
 ledgers stay canonical. This file is a bridge document; delete or fold it once the
 three sessions below are dispatched.
 

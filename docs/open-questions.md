@@ -1,6 +1,18 @@
 # Open Questions
 
-These are intentionally unresolved. They are prompts for Jon's review.
+The architect's and Jon's scratch pad: candidates, parked work, and decisions for Jon's review.
+**The executor never reads this file** (jon-platform ADR-0005). Work becomes dispatchable only when a
+plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
+
+## Candidates & parked work (moved from `CURRENT_HANDOFF.md`, 2026-09-29)
+
+- **M4 Reconcile fast-follow** — re-point the registry entry when identity drift is found, and sharpen
+  same-title/different-owner duplicate detection
+  ([ledger](milestones/M4-compilation-album-append.md)). **Evidence-gated by design:** build it only when
+  a real append spawns a `Great Covers 2` drift. None observed in daily use yet.
+- **Pending Jon decision — M4 identity-drift (#2/#3).** Decide identity-match forgiveness and no-match
+  behavior *when* a real append mangles a title. Parked until the evidence appears.
+
 
 ## V1 Scope
 

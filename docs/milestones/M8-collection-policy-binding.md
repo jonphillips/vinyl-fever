@@ -253,7 +253,7 @@ work on the S1 branch; they were not slice blockers and do not create an S2.
 - Running an unbound folder's recipes from the Collections screen — that is what the
   Policies workbench (M7 S1) is for; the two surfaces stay distinct.
 - The one-true-import-folder fix (converted-FLAC vs passthrough mp3/m4a landing in
-  different folders) — a separate, ungated slice tracked in `CURRENT_HANDOFF.md`, not
+  different folders) — a separate, ungated slice tracked in `docs/efforts/one-true-import-folder.md`, not
   part of this milestone.
 
 ## Decisions (open — resolve before/at S0 review)

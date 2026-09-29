@@ -11,9 +11,11 @@ bare-"go" routing is in jon-platform `AGENTS.md` (which you read first anyway) a
 protocol in `/Users/jon/code/jon-platform/docs/agent-collaboration.md` — read it before acting if
 you haven't this session. Jon is never the courier: orient from `gh`, not pasted status.
 
-**Start here:** [`CURRENT_HANDOFF.md`](CURRENT_HANDOFF.md) (repo root) names the active
-milestone, whose turn it is, and pending decisions. It points at canonical state (open PRs +
-each milestone's slice ledger); if it disagrees with GitHub, GitHub wins.
+**Start here:** [`docs/NEXT_UP.md`](docs/NEXT_UP.md) is the one dispatch: the executor's only
+planning input (empty → stop and ask). The architect also reads `docs/open-questions.md`
+(candidates and parked decisions; the executor never reads it). GitHub PR state is the only
+status. Verification: [`docs/verification.md`](docs/verification.md). Document shape:
+jon-platform ADR-0005.
 
 ## Before proposing architecture or implementation
 
