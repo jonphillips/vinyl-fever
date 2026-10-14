@@ -83,6 +83,25 @@ struct FileSystemClientTests {
   }
 
   @Test
+  func scanAudioFolderExcludesDerivedFoldersWhenRootHasNoTrailingSlash() throws {
+    let root = try FixtureFolder {
+      File("source.mp3")
+      Directory("Working") {
+        File("source.mp3")
+      }
+      Directory("Output") {
+        File("source.mp3")
+      }
+    }
+    let unslashedRoot = URL(filePath: root.url.path(percentEncoded: false), directoryHint: .notDirectory)
+    #expect(!unslashedRoot.hasDirectoryPath)
+
+    let result = try FileSystemClient.liveValue.scanAudioFolder(root: unslashedRoot)
+
+    expectNoDifference(result.map { $0.url.relativePath(from: root.url) }, ["source.mp3"])
+  }
+
+  @Test
   func detectsSetlistAndCoverCandidatesAtRoot() throws {
     let root = try FixtureFolder {
       File("notes.txt")
