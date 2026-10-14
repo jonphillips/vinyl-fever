@@ -56,7 +56,7 @@ targets:
         NSAppleEventsUsageDescription: Vinyl Fever reads Music library tracks to verify live-show imports.
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.jonphillips.VinylFever
+        PRODUCT_BUNDLE_IDENTIFIER: com.jonphillips.vinylfever
         PRODUCT_NAME: VinylFever
         GENERATE_INFOPLIST_FILE: NO
         ENABLE_APP_SANDBOX: NO
