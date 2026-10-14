@@ -1,12 +1,7 @@
-# Next Up — M11 · Dispatch 1 (S0): playlist contract, decoder, and match scorer
+# Next Up — M11 · Dispatch 2 (S1 + S2): Apple Music playlist creation
 
-**Slices:** M11 · S0
-**Briefs:** `docs/milestones/M11-song-list-playlist.md` § The contract (v1), § The spine, § Slices S0, § Constants register
-**Done when:** per the S0 brief. `PlaylistContract` (marker, instructions, strict decode) and
-`CatalogMatchScorer` live in `VinylFeverCore` with the listed decoder and scorer tests;
-`docs/chatgpt/PLAYLIST-CONTRACT.md` is checked in and pinned byte-equal by a test. Verification per
-`docs/verification.md`. The completing PR ticks S0 in the M11 ledger.
-**Owed:** none
-**Notes:** Core only: no MusicKit, no UI, no schema. Adds `jon-platform/packages/LLMHandoffKit` as a
-path dependency of `VinylFeverCore` (sibling checkout, like `LLMClientKit`). Dispatch 2 (S1 + S2)
-has no remaining gates (decisions settled, App ID registered); the completing PR advances to it.
+**Slices:** M11 · S1, M11 · S2
+**Briefs:** `docs/milestones/M11-song-list-playlist.md` § The spine, § Slices S1, § Slices S2, § Constants register
+**Done when:** per the S1 + S2 briefs. Resolve and create playlists through the Apple Music catalog client, with the Playlists area, post-create repair flow, and Settings copy action. Model tests cover resolver and builder behavior; add `docs/chatgpt/SETUP.md`. Verification per `docs/verification.md`.
+**Owed:** Jon's Mac end-to-end playlist smoke test, including adding a previously unresolved track.
+**Notes:** Decisions are settled and the MusicKit App ID is registered. The device gate is performed after implementation on Jon's Mac.

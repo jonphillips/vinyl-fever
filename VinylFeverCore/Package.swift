@@ -18,6 +18,7 @@ let package = Package(
     // App-agnostic model boundary shared across jon-platform apps (Galavant, Yes
     // Chef). Sibling checkout: `jon-platform` lives next to `vinyl-fever`.
     .package(path: "../../jon-platform/packages/LLMClientKit"),
+    .package(path: "../../jon-platform/packages/LLMHandoffKit"),
   ],
   targets: [
     .target(
@@ -28,6 +29,7 @@ let package = Package(
         .product(name: "SQLiteData", package: "sqlite-data"),
         .product(name: "SwiftNavigation", package: "swift-navigation"),
         .product(name: "LLMClientKit", package: "LLMClientKit"),
+        .product(name: "LLMHandoffKit", package: "LLMHandoffKit"),
       ]
     ),
     .testTarget(
@@ -37,6 +39,7 @@ let package = Package(
         .product(name: "CustomDump", package: "swift-custom-dump"),
         .product(name: "DependenciesTestSupport", package: "swift-dependencies"),
         .product(name: "LLMClientKit", package: "LLMClientKit"),
+        .product(name: "LLMHandoffKit", package: "LLMHandoffKit"),
       ]
     ),
   ]

@@ -137,7 +137,7 @@ Core value types, as a sketch. Refine them in code and flag big changes.
 S1/S2. **Dispatch 2: S1 + S2.** They share the live client and the feature model.
 Dispatch 2's gate is owed on Jon's Mac.
 
-- [ ] **S0 — Contract + decoder + scorer (core, no MusicKit, no UI).**
+- [x] **S0 — Contract + decoder + scorer (core, no MusicKit, no UI).**
   - Add `jon-platform/packages/LLMHandoffKit` as a path dependency of
     `VinylFeverCore`, mirroring the existing `LLMClientKit` entry.
   - `PlaylistContract`: `marker = HandoffContractMarker(prefix: "VF-PLAYLIST",
