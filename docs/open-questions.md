@@ -14,8 +14,8 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   behavior *when* a real append mangles a title. Parked until the evidence appears.
 - **LLM song list → Apple Music playlist** — drafted as
   [M11](milestones/M11-song-list-playlist.md) (2026-09-30), Dispatch 1 set as `NEXT_UP.md`
-  (Jon, 2026-10-14). The remaining decisions (ChatGPT Project, sheet vs sidebar area, blocking on
-  unresolved rows) gate Dispatch 2 only and live in the milestone. Settled in the feasibility pass: hand-roll the Apple Music API create call
+  (Jon, 2026-10-14). All decisions are settled in the milestone; Dispatch 2 waits only on the
+  MusicKit App ID step. Settled in the feasibility pass: hand-roll the Apple Music API create call
   rather than depend on MusadoraKit; catalog-only for v1; input is a pinned
   ChatGPT Project contract (`VF-PLAYLIST: v1`, Yes Chef/Galavant pattern), not free-text parsing.
 - **Folder-picked compilation appends leave derived folders behind** (from the #65 review,

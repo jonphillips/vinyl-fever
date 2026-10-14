@@ -9,5 +9,5 @@
 **Owed:** none
 **Notes:** Core only: no MusicKit, no UI, no schema. Adds `jon-platform/packages/LLMHandoffKit` as a
 path dependency of `VinylFeverCore` (sibling checkout, like `LLMClientKit`). Dispatch 2 (S1 + S2)
-waits on Jon's MusicKit App ID step and the three open decisions; the completing PR sets
+waits only on Jon's MusicKit App ID step (decisions are settled); the completing PR sets
 `Nothing dispatched.`

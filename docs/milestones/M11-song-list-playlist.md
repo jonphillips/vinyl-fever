@@ -10,7 +10,7 @@ conflict, stop and flag it.*
 Summary: Paste a ChatGPT-emitted playlist (pinned `VF-PLAYLIST: v1` JSON contract from a Project),
 match each track against the Apple Music catalog with a tested scorer, preview, and create a library
 playlist via the Apple Music API. Three slices in two dispatches (S0 core decoder + scorer; S1 + S2
-live client and sheet). No schema. Dispatch 1 (S0) is set as `NEXT_UP.md`.
+live client and a Playlists sidebar area). No schema. Dispatch 1 (S0) is set as `NEXT_UP.md`.
 
 ## The milestone in one sentence
 
@@ -112,10 +112,13 @@ PlaylistContract.decode  (marker via HandoffContractMarker; strict JSON;  (core,
       [ResolvedRow: matched | ambiguous([candidates]) | notFound]
             │
             ▼
-      preview sheet — Jon picks/removes, edits name; Create enabled only when nothing is unresolved
+      preview (Playlists area) — Jon picks/re-searches/removes, edits name; Create needs ≥ 1 matched row
             │
             ▼
       createLibraryPlaylist(name, description, catalogSongIDs) ─▶ CreatedPlaylistRef
+            │
+            ▼
+      leftover rows stay fixable ── appendToLibraryPlaylist(id, catalogSongIDs) ─▶ same playlist
 ```
 
 Core value types, as a sketch. Refine them in code and flag big changes.
@@ -176,7 +179,9 @@ Dispatch 2's gate is owed on Jon's Mac.
     - `subscriptionStatus()`, which returns `canPlayCatalogContent` and
       `hasCloudLibraryEnabled` from `MusicSubscription`;
     - `searchSongs(term:limit:) -> [CatalogSongCandidate]`;
-    - `createLibraryPlaylist(name:description:songIDs:) -> CreatedPlaylistRef`.
+    - `createLibraryPlaylist(name:description:songIDs:) -> CreatedPlaylistRef`;
+    - `appendToLibraryPlaylist(id:songIDs:)`. The same `…/tracks` call the chunking
+      already uses, exposed so S2 can add rows that were fixed after Create.
   - Live impl in `VinylFever/Clients/AppleMusicCatalogClient+Live.swift`, the only
     file that imports MusicKit. Create posts the first chunk of IDs in
     `relationships.tracks`, then appends the remaining chunks via
@@ -195,39 +200,57 @@ Dispatch 2's gate is owed on Jon's Mac.
   - **First live call is a smoke test.** If a catalog search fails with a
     developer-token error, stop and flag it. That means the portal step below is
     missing, not a code bug.
-- [ ] **S2 — Paste → preview → create sheet + Settings copy (app).**
-  - Add a `PlaylistBuilderModel` (`@Observable`, **its own feature model**, not more
-    code in the 2.3k-line `AppModel`) and a `PlaylistBuilderSheet`.
-  - Open it from a Collections toolbar item, "New Playlist from ChatGPT…".
-  - The sheet has a paste box and a Resolve button. A decode error or marker warning
+- [ ] **S2 — Playlists sidebar area: paste → preview → create, plus Settings copy (app).**
+  - Add a fourth sidebar section, **Playlists**, next to Live Shows, Collections, and
+    Policies (`AppShellView`'s section enum → a new `PlaylistsView`).
+  - Back it with a `PlaylistBuilderModel` (`@Observable`, **its own feature model**,
+    not more code in the 2.3k-line `AppModel`). The app shell owns it, so an
+    in-progress build survives switching sections. It isn't persisted: quitting
+    discards it (no schema).
+  - The area has a paste box and a Resolve button. A decode error or marker warning
     shows inline, with a "re-copy the instructions from Settings" fix for a stale
     Project.
   - The preview shows the name and description (both editable) and a per-row
-    status table. Ambiguous rows show a picker of the top 3 with album and year.
-    Every row can be removed. Not-found rows can be re-searched with an edited term.
-    Tracks dropped by the decoder are listed.
-  - **Create is disabled while any row is unresolved.** "Remove all unresolved" is
-    the explicit way out.
+    status table:
+    - ambiguous rows show a picker of the top 3 with album and year;
+    - not-found rows can be re-searched with an edited term;
+    - every row can be removed;
+    - tracks dropped by the decoder are listed.
+  - **Unresolved rows don't block Create** (Jon, 2026-10-14). Create needs at least
+    one matched row. When rows are still unresolved, Create says so before it runs
+    ("Create with 18 of 20 tracks; 2 unresolved will be skipped"), and those rows
+    are excluded.
+  - **Unresolved rows stay fixable after Create.** The result state keeps the
+    leftover rows in the same table. Picking a candidate or re-searching a row and
+    choosing **Add to Playlist** appends it to the playlist just created through
+    `appendToLibraryPlaylist`. Appended tracks go at the end, not in their original
+    position; the UI says so, and reordering happens in Music.app. A new paste or
+    **Start Over** ends that session.
   - Before resolving, check authorization and subscription. Blocking banners cover
     not authorized, no subscription, and Sync Library off, each with the fix.
   - The result state shows the playlist name and track count, plus a note that it
     appears in Music.app after iCloud sync.
   - Settings gets a **"Copy ChatGPT Project Instructions"** button that copies
-    `PlaylistContract.projectInstructions`. Also add a short
-    `docs/chatgpt/SETUP.md`, the operator guide modeled on Yes Chef's
-    `CHATGPT-SETUP.md`: Project name, where to paste, and a smoke test.
+    `PlaylistContract.projectInstructions`. Also add a short `docs/chatgpt/SETUP.md`,
+    the operator guide modeled on Yes Chef's `CHATGPT-SETUP.md`: create the
+    **"Vinyl Fever Chat"** Project, where to paste the instructions, and a smoke test.
 
   **DoD:**
-  - Model-level tests with a stubbed client: a valid paste fills rows; a malformed
-    paste shows the typed error and makes no search calls; picking a candidate
-    resolves a row; Create is disabled until everything is resolved; Create passes
-    the edited name and the rows' catalog IDs in order; each gating state blocks
-    Resolve with its message.
+  - Model-level tests with a stubbed client:
+    - a valid paste fills rows; a malformed paste shows the typed error and makes no
+      search calls;
+    - picking a candidate resolves a row;
+    - Create is disabled with zero matched rows and enabled with one or more;
+    - Create passes the edited name and only the matched rows' catalog IDs, in order;
+    - a row fixed after Create calls `appendToLibraryPlaylist` with the created
+      playlist's ID, and leaves the table once added;
+    - each gating state blocks Resolve with its message.
   - The view code itself goes untested.
-  - **Owed device gate:** on Jon's Mac, install the contract in the Project, discuss
-    a list, emit it, paste, resolve, and create. Confirm the playlist appears in
-    Music.app with the right songs in the right order. Then delete it by hand (the
-    API can't).
+  - **Owed device gate:** on Jon's Mac, install the contract in "Vinyl Fever Chat",
+    discuss a list, emit it, paste, resolve, and create while leaving one row
+    unresolved. Fix that row and add it. Confirm the playlist appears in Music.app
+    with the right songs, the fixed one appended at the end. Then delete it by hand
+    (the API can't).
 
 ## Prerequisites (Jon, before Dispatch 2 — not the executor's)
 
@@ -235,8 +258,8 @@ Dispatch 2's gate is owed on Jon's Mac.
   (developer.apple.com → Identifiers). Without it, `MusicDataRequest` has no
   developer token to attach.
 - Apple Music subscription with **Sync Library** on (already true for daily use).
-- A ChatGPT Project for playlists (see decisions), with the S0 contract pasted in
-  once S2 lands.
+- A ChatGPT Project named **"Vinyl Fever Chat"**, with the contract pasted into its
+  Project Instructions once S2 lands (per `docs/chatgpt/SETUP.md`).
 
 ## Constants register (starting values; tune against real emitted lists)
 
@@ -266,7 +289,8 @@ Dispatch 2's gate is owed on Jon's Mac.
   the chat app, where it's unmetered and you can argue with it (ADR-0042 D2).
 - **Editing, reordering, or deleting existing playlists.** The API only creates and
   appends. Reordering happens in Music.app.
-- **Appending to an existing playlist.** The API supports it, but choosing a target
+- **Appending to an older playlist** (anything other than the one this session just
+  created). The API supports it, but choosing a target
   needs a library-playlist picker. → fast-follow if asked.
 - **Smart playlists / Collection Policy binding.** This is a manual, ordered list;
   per `metadata-policy-model.md`, "use manual playlists when order matters."
@@ -281,14 +305,13 @@ Resolved (Jon, 2026-10-14):
   Labeled lines were the alternative; they suit Yes Chef's case where the human edits
   the raw text, and here review happens in the preview table.
 
-Open, needed before **Dispatch 2** only (S0 doesn't depend on them):
+- **ChatGPT Project:** a dedicated Project named **"Vinyl Fever Chat"**. Its only
+  standing job is the playlist contract.
+- **Where it lives:** a fourth sidebar area, **Playlists**, not a sheet.
+- **Unresolved rows at Create:** they don't block Create, as long as Jon can still fix
+  them. Before Create, any row can be picked, re-searched, or removed. Create runs with
+  the matched rows and says how many it skipped. Afterwards, the leftover rows stay
+  fixable and **Add to Playlist** appends them (the API can append, though it can't
+  remove).
 
-- **ChatGPT Project.** A dedicated "Vinyl Fever" Project (proposed; it keeps the
-  instructions short and its only job is emitting playlists), or add the contract to
-  an existing music Project?
-- **Where it lives.** A sheet from the Collections toolbar (proposed; cheapest, and
-  closest to "playlist intent") or a fourth sidebar area?
-- **Unresolved rows at Create.** Proposed: block until each row is picked or
-  removed. The alternative is "create with what matched, list the rest". Blocking
-  matches the house "always preview" rule, and makes it harder to leave a
-  half-built playlist that the API can't clean up.
+Nothing is open. Dispatch 2 waits only on the MusicKit App ID prerequisite.
