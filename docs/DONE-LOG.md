@@ -3,6 +3,15 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-14 — M11 · S0 playlist contract and scorer (`m11/s0-playlist-contract`)
+
+Added the `VF-PLAYLIST: v1` instructions and strict decoder, including marker warnings, formatting
+recovery, and visible reporting for dropped tracks. Added the catalog match scorer with title-aware
+feature cleanup, same-song album matching, version penalties, and hint/date tie-breaks; pinned the
+Project instructions byte-for-byte in a test. Advanced `NEXT_UP.md` to M11 · Dispatch 2 (S1 + S2).
+Core tests and the app build pass; the app test target
+requires macOS 27 and could not run on this Mac's macOS 26.6.2. `check-handoff` passes.
+
 ## 2026-10-14 — One true import folder (`effort/one-true-import-folder`)
 
 Passthrough MP3/M4A tracks are copied from `Working/` into `Output/`, and all import and verification

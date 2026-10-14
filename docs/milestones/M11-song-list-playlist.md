@@ -137,7 +137,7 @@ Core value types, as a sketch. Refine them in code and flag big changes.
 S1/S2. **Dispatch 2: S1 + S2.** They share the live client and the feature model.
 Dispatch 2's gate is owed on Jon's Mac.
 
-- [ ] **S0 — Contract + decoder + scorer (core, no MusicKit, no UI).**
+- [x] **S0 — Contract + decoder + scorer (core, no MusicKit, no UI).**
   - Add `jon-platform/packages/LLMHandoffKit` as a path dependency of
     `VinylFeverCore`, mirroring the existing `LLMClientKit` entry.
   - `PlaylistContract`: `marker = HandoffContractMarker(prefix: "VF-PLAYLIST",
@@ -152,8 +152,10 @@ Dispatch 2's gate is owed on Jon's Mac.
       result; never pass them on silently.
   - Check in `docs/chatgpt/PLAYLIST-CONTRACT.md`.
   - `CatalogMatchScorer`: `TrackRequest` × `[CatalogSongCandidate]` → `MatchOutcome`.
-    - Normalize both sides: case-fold, strip diacritics, collapse `&`/`and`, drop
-      `feat./ft./with …`, and strip remaster parentheticals.
+    - Normalize both sides: case-fold, strip diacritics, collapse `&`/`and`.
+      For artists, drop trailing `feat./ft./with …`; for titles, drop featuring
+      credits only inside parentheses or brackets. Strip remaster suffixes in
+      parentheses, brackets, and ` - 2011 Remaster` / ` - Remastered 2009` forms.
     - Score title and artist similarity.
     - Apply the version penalty (constants) unless the request names that version.
     - Boost an `album`/`year` match. Break ties by earliest `releaseDate`.
@@ -269,7 +271,7 @@ Dispatch 2's gate is owed on Jon's Mac.
 | Contract marker | `VF-PLAYLIST: v1` | Same `PREFIX: vN` shape as `GV-CONTRACT`/`YC-CONTRACT`, so `HandoffContractMarker` handles it unchanged. |
 | Search result limit | 10 | Enough to get past karaoke and tribute clutter to the original. The API caps song search at 25. |
 | Search concurrency | 4 | The Apple Music API's rate limits aren't published. A 50-song list resolves in a few seconds without bursting. |
-| Auto-match threshold | score ≥ 0.90 **and** ≥ 0.10 ahead of #2 | Auto-accept only a clear, unique winner. Anything close goes to Jon. |
+| Auto-match threshold | score ≥ 0.90 **and** ≥ 0.10 ahead of the best different song | Candidates with the same normalized title and artist are the same song on different albums; hints and earliest release date choose among them. Anything close between different songs goes to Jon. |
 | Ambiguous floor | score ≥ 0.60 | Below this, top-3 suggestions are noise. Call it not found and let Jon edit the term. |
 | Version penalty | −0.30 each | Tokens: `live`, `karaoke`, `instrumental`, `tribute`, `originally performed`, `cover`, `remix`, `acoustic`, `demo`, `sped up`, `slowed`. Big enough to push a karaoke exact-title hit below the studio original. Waived if the request contains the token. |
 | Album/year hint boost | +0.05 each | A tie-breaker, not a driver. A wrong hint from the LLM must not override a strong artist/title match. |
