@@ -577,18 +577,18 @@ private struct PlanActionBar: View {
   }
 
   private func convertButtonTitle(_ plan: ConversionPlan) -> LocalizedStringResource {
-    plan.requiresConversion ? "Convert" : "Verify"
+    plan.requiresConversion ? "Convert" : "Prepare Output"
   }
 
   private func conversionSystemImage(_ plan: ConversionPlan) -> String {
-    plan.requiresConversion ? "arrow.triangle.2.circlepath" : "checkmark.shield"
+    plan.requiresConversion ? "arrow.triangle.2.circlepath" : "folder"
   }
 
   private func convertHelp(_ plan: ConversionPlan) -> String {
     if plan.requiresConversion {
       return "Convert FLAC Working files to ALAC and verify Output."
     }
-    return "Verify tagged Working files."
+    return "Copy passthrough tracks into Output, then verify them."
   }
 }
 
@@ -634,7 +634,7 @@ private struct ConversionRunStatus: View {
     case .idle:
       EmptyView()
     case let .running(plan):
-      Label("Converting \(plan.convertibleTracks.count) files", systemImage: "hourglass")
+      Label("Preparing Output for \(plan.tracks.count) tracks", systemImage: "hourglass")
         .font(.callout)
         .foregroundStyle(.secondary)
     case let .skipped(message):
@@ -648,7 +648,7 @@ private struct ConversionRunStatus: View {
           systemImage: result.didSucceed ? "checkmark.circle" : "exclamationmark.triangle"
         )
         .foregroundStyle(result.didSucceed ? .green : .orange)
-        if result.didSucceed && plan.requiresConversion {
+        if result.didSucceed {
           Button(action: revealOutputDirectory) {
             Label("Reveal Output", systemImage: "folder")
           }

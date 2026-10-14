@@ -448,7 +448,7 @@ final class AppModel {
     let conversionPlan = ConversionPlan(applyPlan: applyPlan)
     let toolPaths = AudioToolPaths(statuses: toolStatuses)
     guard conversionPlan.requiredTools.allSatisfy({ toolStatus(for: $0).resolvedPath != nil }) else {
-      conversionState = .failed("Required conversion and verification tools are missing.")
+      conversionState = .failed("Required output and verification tools are missing.")
       verificationState = .idle
       libraryImportState = .idle
       libraryReadState = .idle
@@ -458,33 +458,29 @@ final class AppModel {
     verificationState = .idle
     libraryImportState = .idle
     libraryReadState = .idle
-    if conversionPlan.requiresConversion {
-      conversionState = .running(conversionPlan)
-      do {
-        let result = try await ConversionExecutor().convert(conversionPlan, toolPaths: toolPaths)
-        conversionState = .completed(result)
-        runLogErrorMessage = nil
-        guard result.didSucceed else {
-          verificationState = .failed("Conversion did not finish cleanly.")
-          libraryImportState = .idle
-          libraryReadState = .idle
-          return
-        }
-      } catch is CancellationError {
-        conversionState = .idle
+    conversionState = .running(conversionPlan)
+    do {
+      let result = try await ConversionExecutor().convert(conversionPlan, toolPaths: toolPaths)
+      conversionState = .completed(result)
+      runLogErrorMessage = nil
+      guard result.didSucceed else {
+        verificationState = .failed("Output preparation did not finish cleanly.")
         libraryImportState = .idle
         libraryReadState = .idle
-        return
-      } catch {
-        conversionState = .failed(error.localizedDescription)
-        verificationState = .idle
-        libraryImportState = .idle
-        libraryReadState = .idle
-        runLogErrorMessage = error.localizedDescription
         return
       }
-    } else {
-      conversionState = .skipped("No FLAC tracks; verifying Working files.")
+    } catch is CancellationError {
+      conversionState = .idle
+      libraryImportState = .idle
+      libraryReadState = .idle
+      return
+    } catch {
+      conversionState = .failed(error.localizedDescription)
+      verificationState = .idle
+      libraryImportState = .idle
+      libraryReadState = .idle
+      runLogErrorMessage = error.localizedDescription
+      return
     }
 
     verificationState = .running(conversionPlan)
@@ -586,7 +582,7 @@ final class AppModel {
   /// resolved in Music. Gated on `isShowComplete` so the on-disk copies are only removed
   /// after Music holds the tracks — the source audio and setlist at the root are left
   /// untouched. `removeItem` is recursive and a no-op on a missing path, so an absent
-  /// `Output/` (no conversion) is fine.
+  /// derived folder is fine.
   func cleanUpProducedFolders() async {
     guard let scannedShowFolder, isShowComplete else {
       return
@@ -796,9 +792,9 @@ final class AppModel {
     }
   }
 
-  /// Reopen a non-empty app-owned Inbox queue as the current Append Preview. Working is derived
-  /// output from a prior interrupted append, not part of the queue, so discard it before the
-  /// rebuild; otherwise those files would block a clean retry as destination conflicts.
+  /// Reopen a non-empty app-owned Inbox queue as the current Append Preview. Working and Output
+  /// are derived from a prior interrupted append, not part of the queue, so discard both before
+  /// rebuilding the preview.
   /// The caller confirms this reset in the Inbox UI.
   func resumeInboxAppend(entry: CompilationAlbum) async {
     do {
@@ -808,8 +804,16 @@ final class AppModel {
         return
       }
       let inboxFolder = try collectionInboxClient.stagingDirectory(entry.id)
-      let workingDirectory = inboxFolder.appendingPathComponent(ApplyPlan.workingDirectoryName, isDirectory: true)
+      let workingDirectory = inboxFolder.appendingPathComponent(
+        ApplyPlan.workingDirectoryName,
+        isDirectory: true
+      )
       try await fileOperationClient.removeItem(workingDirectory)
+      let outputDirectory = inboxFolder.appendingPathComponent(
+        ConversionPlan.outputDirectoryName,
+        isDirectory: true
+      )
+      try await fileOperationClient.removeItem(outputDirectory)
       await buildCompilationAppendPlan(entry: entry, sourceFolder: inboxFolder)
     } catch {
       runLogErrorMessage = error.localizedDescription
@@ -1243,29 +1247,25 @@ final class AppModel {
     let conversionPlan = ConversionPlan(applyPlan: applyPlan)
     let toolPaths = AudioToolPaths(statuses: toolStatuses)
     guard conversionPlan.requiredTools.allSatisfy({ toolStatus(for: $0).resolvedPath != nil }) else {
-      compilationConversionState = .failed("Required conversion and verification tools are missing.")
+      compilationConversionState = .failed("Required output and verification tools are missing.")
       return
     }
 
-    if conversionPlan.requiresConversion {
-      compilationConversionState = .running(conversionPlan)
-      do {
-        let result = try await ConversionExecutor().convert(conversionPlan, toolPaths: toolPaths)
-        compilationConversionState = .completed(result)
-        guard result.didSucceed else {
-          return
-        }
-      } catch is CancellationError {
-        compilationConversionState = .idle
-        compilationImportState = .idle
-        return
-      } catch {
-        compilationConversionState = .failed(error.localizedDescription)
-        runLogErrorMessage = error.localizedDescription
+    compilationConversionState = .running(conversionPlan)
+    do {
+      let result = try await ConversionExecutor().convert(conversionPlan, toolPaths: toolPaths)
+      compilationConversionState = .completed(result)
+      guard result.didSucceed else {
         return
       }
-    } else {
-      compilationConversionState = .skipped("No FLAC tracks; importing Working files.")
+    } catch is CancellationError {
+      compilationConversionState = .idle
+      compilationImportState = .idle
+      return
+    } catch {
+      compilationConversionState = .failed(error.localizedDescription)
+      runLogErrorMessage = error.localizedDescription
+      return
     }
 
     compilationImportState = .requestingPermission

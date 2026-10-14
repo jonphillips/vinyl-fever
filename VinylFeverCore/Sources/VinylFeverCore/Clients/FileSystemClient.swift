@@ -64,7 +64,7 @@ private struct LiveShowFolderScanner {
   }
 
   private func audioFiles(in root: URL) throws -> [ScannedAudioFile] {
-    try recursiveFiles(at: root)
+    try recursiveFiles(at: root, excludingTopLevelDerivedFolders: true)
       .compactMap { url -> ScannedAudioFile? in
         guard let format = AudioFormat(pathExtension: url.pathExtension) else {
           return nil
@@ -90,7 +90,7 @@ private struct LiveShowFolderScanner {
     )
   }
 
-  private func recursiveFiles(at root: URL) throws -> [URL] {
+  private func recursiveFiles(at root: URL, excludingTopLevelDerivedFolders: Bool = false) throws -> [URL] {
     guard let enumerator = FileManager.default.enumerator(
       at: root,
       includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey],
@@ -103,6 +103,14 @@ private struct LiveShowFolderScanner {
     for case let url as URL in enumerator {
       let values = try url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
       if values.isDirectory == true {
+        // Depth, not URL equality: comparing against `root` silently misses when the root URL
+        // was built without a trailing slash, and the derived folders would re-enter the scan.
+        let isTopLevel = enumerator.level == 1
+        let isDerivedFolder = [ApplyPlan.workingDirectoryName, ConversionPlan.outputDirectoryName]
+          .contains(url.lastPathComponent)
+        if excludingTopLevelDerivedFolders && isTopLevel && isDerivedFolder {
+          enumerator.skipDescendants()
+        }
         continue
       }
       if values.isRegularFile == true {

@@ -1,9 +1,13 @@
 # Effort — one true import folder
 
-*Ungated, standalone, no milestone. Moved from `CURRENT_HANDOFF.md` on 2026-09-29.*
+**Status:** Done → done-log
+**Summary:** Put every import-ready track in `Output/`, including passthrough MP3 and M4A files.
+**Related:** [Efforts index](README.md); [M6 live-show import UI refactor](../milestones/M6-live-show-import-ui-refactor.md)
 
-**Problem.** Passthrough mp3/m4a still land `verifyWorkingOnly` in `Working/`, while transcoded FLAC
-goes to `Output/`, so a finished set is split across two folders
+Ungated, standalone, no milestone. Dispatched 2026-10-14.
+
+**Problem.** Passthrough mp3/m4a stay in `Working/`, while transcoded FLAC goes to `Output/`, so a
+finished set is split across two folders
 ([ConversionPlan.swift](../../VinylFeverCore/Sources/VinylFeverCore/Model/ConversionPlan.swift),
 [ConversionExecutor.swift](../../VinylFeverCore/Sources/VinylFeverCore/Apply/ConversionExecutor.swift)).
 

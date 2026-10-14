@@ -188,11 +188,11 @@ struct CollectionInboxAppendTests {
     )
   }
 
-  /// Resuming a staged queue removes stale derived Working copies before rebuilding the Inbox
-  /// preview. The source copies remain intact, so a fresh append does not trip destination
-  /// conflicts from a prior partial run.
+  /// Resuming a staged queue removes stale derived Working and Output copies before rebuilding
+  /// the Inbox preview. The source copies remain intact, so a fresh append does not trip
+  /// destination conflicts or mistake prior outputs for new source tracks.
   @Test
-  func resumingInboxRebuildsTheQueueAndClearsWorking() async throws {
+  func resumingInboxRebuildsFromStagedFilesAndClearsDerivedFolders() async throws {
     let temp = try Self.makeTempDirectory()
     defer { try? FileManager.default.removeItem(at: temp) }
     let inbox = CollectionInboxClient.live(root: temp.appendingPathComponent("Inbox", isDirectory: true))
@@ -203,24 +203,32 @@ struct CollectionInboxAppendTests {
     let working = staging.appendingPathComponent(ApplyPlan.workingDirectoryName, isDirectory: true)
     try FileManager.default.createDirectory(at: working, withIntermediateDirectories: true)
     try Data("derived".utf8).write(to: working.appendingPathComponent("queued.mp3"))
-    let model = AppModel()
+    let output = staging.appendingPathComponent(ConversionPlan.outputDirectoryName, isDirectory: true)
+    try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+    try Data("derived".utf8).write(to: output.appendingPathComponent("queued.mp3"))
 
-    await withDependencies {
+    let model = withDependencies {
       $0.collectionInboxClient = inbox
-      $0.fileSystemClient.scanAudioFolder = { _ in [] }
+      $0.fileSystemClient.scanAudioFolder = { root in
+        try FileSystemClient.liveValue.scanAudioFolder(root: root)
+      }
+      $0.audioMetadataClient.read = { _ in AudioTags(title: "Queued Song", hasAudioStream: true) }
       $0.fileOperationClient.removeItem = { url in
         guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else { return }
         try FileManager.default.removeItem(at: url)
       }
     } operation: {
-      await model.resumeInboxAppend(entry: album)
+      AppModel()
     }
+
+    await model.resumeInboxAppend(entry: album)
 
     #expect(model.compilationAppendFolder?.standardizedFileURL == staging.standardizedFileURL)
     #expect(model.compilationAppendAlbumID == album.id)
-    #expect(model.compilationApplyPlan != nil)
+    #expect(model.compilationApplyPlan?.tracks.map(\.sourceFile.url) == [stagedFile.standardizedFileURL])
     #expect(FileManager.default.fileExists(atPath: stagedFile.path(percentEncoded: false)))
     #expect(!FileManager.default.fileExists(atPath: working.path(percentEncoded: false)))
+    #expect(!FileManager.default.fileExists(atPath: output.path(percentEncoded: false)))
   }
 
   /// A manual Clear (drain without appending) zeroes that album out of the summary.

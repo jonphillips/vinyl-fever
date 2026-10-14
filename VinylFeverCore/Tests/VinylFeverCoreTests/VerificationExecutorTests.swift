@@ -101,15 +101,15 @@ struct VerificationExecutorTests {
   }
 
   @Test
-  func verifiesMP3WorkingFilesWithoutConversion() async throws {
+  func verifiesMP3OutputFilesWithoutEncoding() async throws {
     let plan = makeConversionPlan(format: .mp3)
 
     let result = try await withDependencies {
       $0.fileOperationClient.directoryFiles = { url in
-        url == plan.workingDirectory ? [plan.tracks[0].workingFile] : []
+        url == plan.outputDirectory ? [plan.tracks[0].outputFile] : []
       }
       $0.audioMetadataClient.read = { request in
-        expectNoDifference(request.url, plan.tracks[0].workingFile)
+        expectNoDifference(request.url, plan.tracks[0].outputFile)
         expectNoDifference(request.format, .mp3)
         return matchingTags(for: plan.tracks[0])
       }
@@ -122,6 +122,7 @@ struct VerificationExecutorTests {
     }
 
     expectNoDifference(plan.requiresConversion, false)
+    expectNoDifference(plan.tracks[0].verificationFile, plan.tracks[0].outputFile)
     expectNoDifference(result.didVerify, true)
   }
 }
