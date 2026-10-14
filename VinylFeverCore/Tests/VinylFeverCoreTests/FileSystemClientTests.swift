@@ -66,6 +66,23 @@ struct FileSystemClientTests {
   }
 
   @Test
+  func scanAudioFolderExcludesTopLevelWorkingAndOutputFolders() throws {
+    let root = try FixtureFolder {
+      File("source.mp3")
+      Directory("Working") {
+        File("source.mp3")
+      }
+      Directory("Output") {
+        File("source.mp3")
+      }
+    }
+
+    let result = try FileSystemClient.liveValue.scanAudioFolder(root: root.url)
+
+    expectNoDifference(result.map { $0.url.relativePath(from: root.url) }, ["source.mp3"])
+  }
+
+  @Test
   func detectsSetlistAndCoverCandidatesAtRoot() throws {
     let root = try FixtureFolder {
       File("notes.txt")

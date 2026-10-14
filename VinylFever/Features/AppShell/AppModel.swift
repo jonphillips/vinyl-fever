@@ -582,7 +582,7 @@ final class AppModel {
   /// resolved in Music. Gated on `isShowComplete` so the on-disk copies are only removed
   /// after Music holds the tracks — the source audio and setlist at the root are left
   /// untouched. `removeItem` is recursive and a no-op on a missing path, so an absent
-  /// `Output/` (no conversion) is fine.
+  /// derived folder is fine.
   func cleanUpProducedFolders() async {
     guard let scannedShowFolder, isShowComplete else {
       return
@@ -792,9 +792,9 @@ final class AppModel {
     }
   }
 
-  /// Reopen a non-empty app-owned Inbox queue as the current Append Preview. Working is derived
-  /// output from a prior interrupted append, not part of the queue, so discard it before the
-  /// rebuild; otherwise those files would block a clean retry as destination conflicts.
+  /// Reopen a non-empty app-owned Inbox queue as the current Append Preview. Working and Output
+  /// are derived from a prior interrupted append, not part of the queue, so discard both before
+  /// rebuilding the preview.
   /// The caller confirms this reset in the Inbox UI.
   func resumeInboxAppend(entry: CompilationAlbum) async {
     do {
@@ -804,8 +804,16 @@ final class AppModel {
         return
       }
       let inboxFolder = try collectionInboxClient.stagingDirectory(entry.id)
-      let workingDirectory = inboxFolder.appendingPathComponent(ApplyPlan.workingDirectoryName, isDirectory: true)
+      let workingDirectory = inboxFolder.appendingPathComponent(
+        ApplyPlan.workingDirectoryName,
+        isDirectory: true
+      )
       try await fileOperationClient.removeItem(workingDirectory)
+      let outputDirectory = inboxFolder.appendingPathComponent(
+        ConversionPlan.outputDirectoryName,
+        isDirectory: true
+      )
+      try await fileOperationClient.removeItem(outputDirectory)
       await buildCompilationAppendPlan(entry: entry, sourceFolder: inboxFolder)
     } catch {
       runLogErrorMessage = error.localizedDescription

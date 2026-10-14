@@ -7,7 +7,8 @@ History, newest first. The PR that completes a dispatch adds an entry naming its
 
 Passthrough MP3/M4A tracks are copied from `Working/` into `Output/`, and all import and verification
 paths now use `Output/`. Reconciled M6 · S2 tracking: its Plan action bar and terminal Output
-disclosure landed in #35; track-row condensation landed in #50. No next dispatch is queued.
+disclosure landed in #35; track-row condensation landed in #50. The next dispatch is M11 · Dispatch 1
+(S0), set by #63.
 
 History before 2026-09-29 lives in the milestone ledgers (`docs/milestones/`) and merged PRs:
 M5 setlist normalizer (#30/#31), M7 collection recipes (#40–#44), M8 policy binding (#46/#48),
