@@ -254,9 +254,10 @@ Dispatch 2's gate is owed on Jon's Mac.
 
 ## Prerequisites (Jon, before Dispatch 2 — not the executor's)
 
-- Enable the **MusicKit** App Service for `com.jonphillips.vinylfever` (lowercased in #64; register it as a new App ID)
-  (developer.apple.com → Identifiers). Without it, `MusicDataRequest` has no
-  developer token to attach.
+- [x] Register `com.jonphillips.vinylfever` as an App ID with the **MusicKit** App
+  Service enabled (developer.apple.com → Identifiers → App Services tab). Done (Jon,
+  2026-10-14). Without it, `MusicDataRequest` has no developer token to attach. S1's
+  first live call is the smoke test that proves it.
 - Apple Music subscription with **Sync Library** on (already true for daily use).
 - A ChatGPT Project named **"Vinyl Fever Chat"**, with the contract pasted into its
   Project Instructions once S2 lands (per `docs/chatgpt/SETUP.md`).
@@ -314,4 +315,4 @@ Resolved (Jon, 2026-10-14):
   fixable and **Add to Playlist** appends them (the API can append, though it can't
   remove).
 
-Nothing is open. Dispatch 2 waits only on the MusicKit App ID prerequisite.
+Nothing is open, and the MusicKit App ID prerequisite is done.
