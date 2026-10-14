@@ -1,11 +1,13 @@
-# Next Up — M6 · S2 remainder: live-show import content polish
+# Next Up — M11 · Dispatch 1 (S0): playlist contract, decoder, and match scorer
 
-**Slices:** M6 · S2 (remainder only; #50 already landed the `TrackPlanRow` / `LibraryTrackResolutionRow` condensing)
-**Briefs:** `docs/milestones/M6-live-show-import-ui-refactor.md` § Slices, S2
-**Done when:** `PlanActionBar` is extracted from `PlanReadinessSummary`; the run-status views live in
-the **Output** tab (S1 left it a placeholder), which collapses once the run is terminal; the Source
-picker sits in the header. UX only, with no pipeline logic change. Verification per `docs/verification.md`.
-The completing PR ticks S2 in the M6 ledger.
+**Slices:** M11 · S0
+**Briefs:** `docs/milestones/M11-song-list-playlist.md` § The contract (v1), § The spine, § Slices S0, § Constants register
+**Done when:** per the S0 brief. `PlaylistContract` (marker, instructions, strict decode) and
+`CatalogMatchScorer` live in `VinylFeverCore` with the listed decoder and scorer tests;
+`docs/chatgpt/PLAYLIST-CONTRACT.md` is checked in and pinned byte-equal by a test. Verification per
+`docs/verification.md`. The completing PR ticks S0 in the M11 ledger.
 **Owed:** none
-**Notes:** Ungated, no device check. M6 is then complete. Next in plan order: M11 · Dispatch 1
-(S0, `docs/milestones/M11-song-list-playlist.md`), then the one-true-import-folder effort.
+**Notes:** Core only: no MusicKit, no UI, no schema. Adds `jon-platform/packages/LLMHandoffKit` as a
+path dependency of `VinylFeverCore` (sibling checkout, like `LLMClientKit`). Dispatch 2 (S1 + S2)
+waits on Jon's MusicKit App ID step and the three open decisions; the completing PR sets
+`Nothing dispatched.`

@@ -13,11 +13,17 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
 - **Pending Jon decision — M4 identity-drift (#2/#3).** Decide identity-match forgiveness and no-match
   behavior *when* a real append mangles a title. Parked until the evidence appears.
 - **LLM song list → Apple Music playlist** — drafted as
-  [M11](milestones/M11-song-list-playlist.md) (2026-09-30), queued after M6 · S2 (Jon,
-  2026-10-14). The remaining decisions (ChatGPT Project, sheet vs sidebar area, blocking on
+  [M11](milestones/M11-song-list-playlist.md) (2026-09-30), Dispatch 1 set as `NEXT_UP.md`
+  (Jon, 2026-10-14). The remaining decisions (ChatGPT Project, sheet vs sidebar area, blocking on
   unresolved rows) gate Dispatch 2 only and live in the milestone. Settled in the feasibility pass: hand-roll the Apple Music API create call
   rather than depend on MusadoraKit; catalog-only for v1; input is a pinned
   ChatGPT Project contract (`VF-PLAYLIST: v1`, Yes Chef/Galavant pattern), not free-text parsing.
+- **Folder-picked compilation appends leave derived folders behind** (from the #65 review,
+  2026-10-14). A compilation append builds `Working/` and `Output/` *inside* the user's picked
+  folder, and after #65 `Output/` holds a copy of every track. Nothing cleans either one up after
+  certify (Inbox appends are drained; live shows have `cleanUpProducedFolders`). Candidate effort:
+  offer the same certify-gated cleanup for folder-picked appends, or build them under an
+  app-owned scratch root instead of the user's folder.
 
 
 ## V1 Scope

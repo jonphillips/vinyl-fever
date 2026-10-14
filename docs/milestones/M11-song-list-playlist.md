@@ -2,7 +2,7 @@
 
 *Build a playlist with ChatGPT, paste its output into Vinyl Fever, review every
 catalog match, and create an Apple Music library playlist from the confirmed songs.
-Queued in plan order after M6 · S2. Rules in
+Dispatch 1 is the current `NEXT_UP.md`. Rules in
 [../technical-architecture.md](../technical-architecture.md) and
 `/Users/jon/code/jon-platform/AGENTS.md` apply. Where this doc and those
 conflict, stop and flag it.*
@@ -10,7 +10,7 @@ conflict, stop and flag it.*
 Summary: Paste a ChatGPT-emitted playlist (pinned `VF-PLAYLIST: v1` JSON contract from a Project),
 match each track against the Apple Music catalog with a tested scorer, preview, and create a library
 playlist via the Apple Music API. Three slices in two dispatches (S0 core decoder + scorer; S1 + S2
-live client and sheet). No schema. Queued after M6 · S2.
+live client and sheet). No schema. Dispatch 1 (S0) is set as `NEXT_UP.md`.
 
 ## The milestone in one sentence
 
@@ -231,7 +231,7 @@ Dispatch 2's gate is owed on Jon's Mac.
 
 ## Prerequisites (Jon, before Dispatch 2 — not the executor's)
 
-- Enable the **MusicKit** App Service for `com.jonphillips.VinylFever`
+- Enable the **MusicKit** App Service for `com.jonphillips.vinylfever` (lowercased in #64; register it as a new App ID)
   (developer.apple.com → Identifiers). Without it, `MusicDataRequest` has no
   developer token to attach.
 - Apple Music subscription with **Sync Library** on (already true for daily use).
@@ -275,7 +275,8 @@ Dispatch 2's gate is owed on Jon's Mac.
 
 Resolved (Jon, 2026-10-14):
 
-- **Sequencing:** after M6 · S2, ahead of the one-true-import-folder effort.
+- **Sequencing:** after M6 · S2. M6 · S2 turned out to be already done (#35/#50), and the
+  one-true-import-folder effort is in review as #65, so Dispatch 1 is next.
 - **Wire format:** JSON (marker line + one object), as specified in *The contract*.
   Labeled lines were the alternative; they suit Yes Chef's case where the human edits
   the raw text, and here review happens in the preview table.
