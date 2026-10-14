@@ -42,6 +42,15 @@ struct PlaylistContractTests {
     #expect(result.request.tracks.first?.title == "Jóga")
   }
 
+  @Test("preserves curly quotes inside otherwise valid JSON values")
+  func curlyQuotesInValue() throws {
+    let result = try PlaylistContract.decode(#"""
+      VF-PLAYLIST: v1
+      {"name":"List","description":"the “B-side” set","tracks":[{"artist":"Artist","title":"Song"}]}
+      """#)
+    #expect(result.request.description == "the “B-side” set")
+  }
+
   @Test("prose and malformed JSON produce typed errors")
   func invalidJSON() {
     #expect(throws: PlaylistContractError.invalidJSON) {

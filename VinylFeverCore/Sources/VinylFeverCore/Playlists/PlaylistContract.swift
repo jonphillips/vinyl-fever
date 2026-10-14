@@ -102,12 +102,8 @@ public enum PlaylistContract {
       throw PlaylistContractError.invalidShape(error.localizedDescription)
     }
 
-    let body = normalizeQuotes(stripWrappingFence(handoff.text))
-    guard let data = body.data(using: .utf8) else { throw PlaylistContractError.invalidJSON }
-    let root: Any
-    do {
-      root = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
-    } catch {
+    let body = stripWrappingFence(handoff.text)
+    guard let root = parseJSON(body) ?? parseJSON(normalizeQuotes(body)) else {
       throw PlaylistContractError.invalidJSON
     }
     guard let object = root as? [String: Any] else {
@@ -175,6 +171,11 @@ public enum PlaylistContract {
     guard unexpected.isEmpty else {
       throw PlaylistContractError.invalidShape("\(path) contains unsupported field(s): \(unexpected.joined(separator: ", "))")
     }
+  }
+
+  private static func parseJSON(_ text: String) -> Any? {
+    guard let data = text.data(using: .utf8) else { return nil }
+    return try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
   }
 
   private static func optionalString(_ value: Any?, field: String) throws -> String? {

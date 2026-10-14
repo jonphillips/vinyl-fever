@@ -62,7 +62,13 @@ public enum CatalogMatchScorer {
       .map { candidate in ScoredCandidate(candidate: candidate, score: score(request, candidate)) }
       .sorted(by: orderedBefore)
     guard let first = ranked.first, first.score >= ambiguousFloor else { return .notFound }
-    let lead = first.score - (ranked.dropFirst().first?.score ?? 0)
+    let firstTitle = normalizeTitle(first.candidate.title)
+    let firstArtist = normalizeArtist(first.candidate.artistName)
+    let bestDifferentSong = ranked.dropFirst().first {
+      normalizeTitle($0.candidate.title) != firstTitle
+        || normalizeArtist($0.candidate.artistName) != firstArtist
+    }
+    let lead = first.score - (bestDifferentSong?.score ?? 0)
     if first.score >= autoMatchThreshold && lead + 1e-9 >= autoMatchLead {
       return .matched(first.candidate, score: first.score)
     }
@@ -70,23 +76,23 @@ public enum CatalogMatchScorer {
   }
 
   public static func score(_ request: TrackRequest, _ candidate: CatalogSongCandidate) -> Double {
-    let titleScore = similarity(normalize(request.title), normalize(candidate.title))
-    let artistScore = similarity(normalize(request.artist), normalize(candidate.artistName))
+    let titleScore = similarity(normalizeTitle(request.title), normalizeTitle(candidate.title))
+    let artistScore = similarity(normalizeArtist(request.artist), normalizeArtist(candidate.artistName))
     // The base match tops out at 0.90 so the two hint boosts remain useful when
     // otherwise-identical catalog entries need to be separated.
     var score = (titleScore * 0.55) + (artistScore * 0.35)
 
-    let requestedVersionText = " \(normalize(request.title)) "
-    let candidateVersionText = " \(normalize(candidate.title)) "
+    let requestedVersionText = " \(normalizeTitle(request.title)) "
+    let candidateVersionText = " \(normalizeTitle(candidate.title)) "
     for term in versionTerms {
-      let normalizedTerm = " \(normalize(term)) "
+      let normalizedTerm = " \(normalizeText(term)) "
       if candidateVersionText.contains(normalizedTerm) && !requestedVersionText.contains(normalizedTerm) {
         score -= versionPenalty
       }
     }
 
     if let requestedAlbum = request.album, let candidateAlbum = candidate.albumTitle,
-      normalize(requestedAlbum) == normalize(candidateAlbum) {
+      normalizeAlbum(requestedAlbum) == normalizeAlbum(candidateAlbum) {
       score += hintBoost
     }
     if let requestedYear = request.year, let releaseDate = candidate.releaseDate,
@@ -96,19 +102,41 @@ public enum CatalogMatchScorer {
     return min(1, max(0, score))
   }
 
-  private static func normalize(_ raw: String) -> String {
-    var value = raw.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
-    value = value.replacingOccurrences(of: "&", with: " and ")
-    value = value.replacingOccurrences(
-      of: #"\s*\((?:\d{4}\s+)?remaster(?:ed)?[^)]*\)"#,
-      with: "",
-      options: .regularExpression
-    )
-    value = value.replacingOccurrences(
+  private static func normalizeArtist(_ raw: String) -> String {
+    normalizeText(raw.replacingOccurrences(
       of: #"\b(feat\.?|ft\.?|with)\b.*$"#,
       with: "",
       options: [.regularExpression, .caseInsensitive]
+    ))
+  }
+
+  private static func normalizeTitle(_ raw: String) -> String {
+    var value = raw
+    value = value.replacingOccurrences(
+      of: #"\s*[\(\[][^)\]]*\b(feat\.?|ft\.?|with)\b[^)\]]*[)\]]"#,
+      with: "",
+      options: [.regularExpression, .caseInsensitive]
     )
+    value = value.replacingOccurrences(
+      of: #"\s*[\(\[](?:(?:19|20)\d{2}\s+)?remaster(?:ed)?[^)\]]*[)\]]"#,
+      with: "",
+      options: [.regularExpression, .caseInsensitive]
+    )
+    value = value.replacingOccurrences(
+      of: #"\s+[-–—]\s+(?:(?:19|20)\d{2}\s+)?remaster(?:ed)?(?:\s+(?:19|20)\d{2})?\s*$"#,
+      with: "",
+      options: [.regularExpression, .caseInsensitive]
+    )
+    return normalizeText(value)
+  }
+
+  private static func normalizeAlbum(_ raw: String) -> String {
+    normalizeText(raw)
+  }
+
+  private static func normalizeText(_ raw: String) -> String {
+    var value = raw.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+    value = value.replacingOccurrences(of: "&", with: " and ")
     value = value.replacingOccurrences(of: #"[^a-z0-9]+"#, with: " ", options: .regularExpression)
     return value.split(whereSeparator: \.isWhitespace).joined(separator: " ")
   }
