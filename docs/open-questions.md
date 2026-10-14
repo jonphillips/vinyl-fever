@@ -12,6 +12,12 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   a real append spawns a `Great Covers 2` drift. None observed in daily use yet.
 - **Pending Jon decision — M4 identity-drift (#2/#3).** Decide identity-match forgiveness and no-match
   behavior *when* a real append mangles a title. Parked until the evidence appears.
+- **LLM song list → Apple Music playlist** — drafted as
+  [M11](milestones/M11-song-list-playlist.md) (2026-09-30), queued after M6 · S2 (Jon,
+  2026-10-14). The remaining decisions (ChatGPT Project, sheet vs sidebar area, blocking on
+  unresolved rows) gate Dispatch 2 only and live in the milestone. Settled in the feasibility pass: hand-roll the Apple Music API create call
+  rather than depend on MusadoraKit; catalog-only for v1; input is a pinned
+  ChatGPT Project contract (`VF-PLAYLIST: v1`, Yes Chef/Galavant pattern), not free-text parsing.
 
 
 ## V1 Scope

@@ -7,5 +7,5 @@ the **Output** tab (S1 left it a placeholder), which collapses once the run is t
 picker sits in the header. UX only, with no pipeline logic change. Verification per `docs/verification.md`.
 The completing PR ticks S2 in the M6 ledger.
 **Owed:** none
-**Notes:** Ungated, no device check. Next after this in plan order: the one-true-import-folder
-effort (`docs/efforts/one-true-import-folder.md`).
+**Notes:** Ungated, no device check. M6 is then complete. Next in plan order: M11 · Dispatch 1
+(S0, `docs/milestones/M11-song-list-playlist.md`), then the one-true-import-folder effort.
