@@ -98,6 +98,30 @@ struct CatalogMatchScorerTests {
     #expect(CatalogMatchScorer.score(request, candidate) == 0.9)
   }
 
+  @Test("a bracketed with-credit is ignored")
+  func bracketedWithCredit() {
+    #expect(CatalogMatchScorer.score(request("Artist", "Song [with Guest]"), song("Artist", "Song")) == 0.9)
+  }
+
+  @Test("a studio request does not match a live version whose parenthetical contains with")
+  func studioRequestSkipsLiveWith() {
+    let studio = song("Eagles", "Hotel California", year: 1976)
+    let live = song("Eagles", "Hotel California (Live with the Orchestra)", year: 1975)
+    let outcome = CatalogMatchScorer.score(request("Eagles", "Hotel California"), candidates: [studio, live])
+    #expect(outcome == .matched(studio, score: 0.9))
+  }
+
+  @Test("a requested live-with version beats the studio original")
+  func liveWithRequestWins() {
+    let studio = song("Eagles", "Hotel California", year: 1974)
+    let live = song("Eagles", "Hotel California (Live with the Orchestra)", year: 1994)
+    let outcome = CatalogMatchScorer.score(
+      request("Eagles", "Hotel California (Live with the Orchestra)"),
+      candidates: [studio, live]
+    )
+    #expect(outcome == .matched(live, score: 0.9))
+  }
+
   @Test("parenthetical, bracketed, and dash remaster suffixes are ignored")
   func remasterSuffixes() {
     let request = request("Artist", "Song")

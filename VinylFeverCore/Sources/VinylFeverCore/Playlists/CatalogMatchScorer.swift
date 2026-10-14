@@ -113,7 +113,9 @@ public enum CatalogMatchScorer {
   private static func normalizeTitle(_ raw: String) -> String {
     var value = raw
     value = value.replacingOccurrences(
-      of: #"\s*[\(\[][^)\]]*\b(feat\.?|ft\.?|with)\b[^)\]]*[)\]]"#,
+      // Only a bracket that *starts* with the credit: `(Live with the Orchestra)` must survive
+      // so the version penalty and same-song grouping still see "live".
+      of: #"\s*[\(\[]\s*(feat\.?|ft\.?|with)\b[^)\]]*[)\]]"#,
       with: "",
       options: [.regularExpression, .caseInsensitive]
     )
