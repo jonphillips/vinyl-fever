@@ -111,6 +111,8 @@ view-local `@State`; strip cards set it.
   (`:336-551` — split the button `HStack`/`can*` props from the `*RunStatus`
   calls); condense `TrackPlanRow` (`:941`) to hoist album-level fields into one
   header and show only per-track variance; collapse the Output tab once terminal.
+  **Complete:** the Plan action bar and terminal Output disclosure landed in #35;
+  track-row condensation landed in #50.
 
 ## Out of scope
 

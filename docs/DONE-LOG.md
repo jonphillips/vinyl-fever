@@ -3,6 +3,12 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-14 — One true import folder (`effort/one-true-import-folder`)
+
+Passthrough MP3/M4A tracks are copied from `Working/` into `Output/`, and all import and verification
+paths now use `Output/`. Reconciled M6 · S2 tracking: its Plan action bar and terminal Output
+disclosure landed in #35; track-row condensation landed in #50. No next dispatch is queued.
+
 History before 2026-09-29 lives in the milestone ledgers (`docs/milestones/`) and merged PRs:
 M5 setlist normalizer (#30/#31), M7 collection recipes (#40–#44), M8 policy binding (#46/#48),
 M9 manual append metadata (#51–#53), M10 collection inbox (#55/#56 and follow-ups #58–#60).

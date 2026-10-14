@@ -110,7 +110,7 @@ public struct ConversionTrackPlan: Equatable, Identifiable, Sendable {
       case .flac:
         .convertToALAC
       case .mp3, .m4a:
-        .verifyWorkingOnly
+        .copyToOutput
       }
     let outputFile =
       switch action {
@@ -118,8 +118,8 @@ public struct ConversionTrackPlan: Equatable, Identifiable, Sendable {
         outputDirectory.appendingPathComponent(
           applyTrack.workingFile.deletingPathExtension().lastPathComponent + ".m4a"
         )
-      case .verifyWorkingOnly:
-        applyTrack.workingFile
+      case .copyToOutput:
+        outputDirectory.appendingPathComponent(applyTrack.workingFile.lastPathComponent)
       }
     self.init(
       id: applyTrack.id,
@@ -134,19 +134,14 @@ public struct ConversionTrackPlan: Equatable, Identifiable, Sendable {
   }
 
   public var verificationFile: URL {
-    switch action {
-    case .convertToALAC:
-      outputFile
-    case .verifyWorkingOnly:
-      workingFile
-    }
+    outputFile
   }
 
   public var verificationFormat: AudioFormat {
     switch action {
     case .convertToALAC:
       .m4a
-    case .verifyWorkingOnly:
+    case .copyToOutput:
       sourceFile.format
     }
   }
@@ -154,7 +149,7 @@ public struct ConversionTrackPlan: Equatable, Identifiable, Sendable {
 
 public enum ConversionAction: String, Equatable, Sendable {
   case convertToALAC
-  case verifyWorkingOnly
+  case copyToOutput
 }
 
 public struct VerificationDirectoryRequirement: Equatable, Sendable {

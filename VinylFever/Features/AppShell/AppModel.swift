@@ -448,7 +448,7 @@ final class AppModel {
     let conversionPlan = ConversionPlan(applyPlan: applyPlan)
     let toolPaths = AudioToolPaths(statuses: toolStatuses)
     guard conversionPlan.requiredTools.allSatisfy({ toolStatus(for: $0).resolvedPath != nil }) else {
-      conversionState = .failed("Required conversion and verification tools are missing.")
+      conversionState = .failed("Required output and verification tools are missing.")
       verificationState = .idle
       libraryImportState = .idle
       libraryReadState = .idle
@@ -458,33 +458,29 @@ final class AppModel {
     verificationState = .idle
     libraryImportState = .idle
     libraryReadState = .idle
-    if conversionPlan.requiresConversion {
-      conversionState = .running(conversionPlan)
-      do {
-        let result = try await ConversionExecutor().convert(conversionPlan, toolPaths: toolPaths)
-        conversionState = .completed(result)
-        runLogErrorMessage = nil
-        guard result.didSucceed else {
-          verificationState = .failed("Conversion did not finish cleanly.")
-          libraryImportState = .idle
-          libraryReadState = .idle
-          return
-        }
-      } catch is CancellationError {
-        conversionState = .idle
+    conversionState = .running(conversionPlan)
+    do {
+      let result = try await ConversionExecutor().convert(conversionPlan, toolPaths: toolPaths)
+      conversionState = .completed(result)
+      runLogErrorMessage = nil
+      guard result.didSucceed else {
+        verificationState = .failed("Output preparation did not finish cleanly.")
         libraryImportState = .idle
         libraryReadState = .idle
-        return
-      } catch {
-        conversionState = .failed(error.localizedDescription)
-        verificationState = .idle
-        libraryImportState = .idle
-        libraryReadState = .idle
-        runLogErrorMessage = error.localizedDescription
         return
       }
-    } else {
-      conversionState = .skipped("No FLAC tracks; verifying Working files.")
+    } catch is CancellationError {
+      conversionState = .idle
+      libraryImportState = .idle
+      libraryReadState = .idle
+      return
+    } catch {
+      conversionState = .failed(error.localizedDescription)
+      verificationState = .idle
+      libraryImportState = .idle
+      libraryReadState = .idle
+      runLogErrorMessage = error.localizedDescription
+      return
     }
 
     verificationState = .running(conversionPlan)
@@ -1243,29 +1239,25 @@ final class AppModel {
     let conversionPlan = ConversionPlan(applyPlan: applyPlan)
     let toolPaths = AudioToolPaths(statuses: toolStatuses)
     guard conversionPlan.requiredTools.allSatisfy({ toolStatus(for: $0).resolvedPath != nil }) else {
-      compilationConversionState = .failed("Required conversion and verification tools are missing.")
+      compilationConversionState = .failed("Required output and verification tools are missing.")
       return
     }
 
-    if conversionPlan.requiresConversion {
-      compilationConversionState = .running(conversionPlan)
-      do {
-        let result = try await ConversionExecutor().convert(conversionPlan, toolPaths: toolPaths)
-        compilationConversionState = .completed(result)
-        guard result.didSucceed else {
-          return
-        }
-      } catch is CancellationError {
-        compilationConversionState = .idle
-        compilationImportState = .idle
-        return
-      } catch {
-        compilationConversionState = .failed(error.localizedDescription)
-        runLogErrorMessage = error.localizedDescription
+    compilationConversionState = .running(conversionPlan)
+    do {
+      let result = try await ConversionExecutor().convert(conversionPlan, toolPaths: toolPaths)
+      compilationConversionState = .completed(result)
+      guard result.didSucceed else {
         return
       }
-    } else {
-      compilationConversionState = .skipped("No FLAC tracks; importing Working files.")
+    } catch is CancellationError {
+      compilationConversionState = .idle
+      compilationImportState = .idle
+      return
+    } catch {
+      compilationConversionState = .failed(error.localizedDescription)
+      runLogErrorMessage = error.localizedDescription
+      return
     }
 
     compilationImportState = .requestingPermission

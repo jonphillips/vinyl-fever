@@ -55,7 +55,7 @@ struct LibraryImportExecutorTests {
   }
 
   @Test
-  func dropsWorkingFilesWhenNoConversionIsRequired() async throws {
+  func dropsOutputFilesWhenNoEncodingIsRequired() async throws {
     let plan = makeConversionPlan(format: .mp3)
     let music = MusicAppRecorder(
       albumReads: [
@@ -74,7 +74,7 @@ struct LibraryImportExecutorTests {
     }
 
     let dropped = await music.droppedFiles()
-    expectNoDifference(dropped.map(\.urls), [[plan.tracks[0].workingFile]])
+    expectNoDifference(dropped.map(\.urls), [[plan.tracks[0].outputFile]])
   }
 
   @Test

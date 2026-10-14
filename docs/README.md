@@ -15,6 +15,7 @@ Read in this order:
 
 Related source material:
 
+- [Efforts](efforts/README.md)
 - [reference/MusicWorkbench_Codex_Handoff.md](reference/MusicWorkbench_Codex_Handoff.md)
 - [reference/apple_music_library_strategy.md](reference/apple_music_library_strategy.md)
 - [reference/duplicate-detection-strategy.md](reference/duplicate-detection-strategy.md)

@@ -1264,7 +1264,7 @@ private struct CompilationConversionStatus: View {
     case .idle:
       EmptyView()
     case .running:
-      Label("Converting FLAC outputs", systemImage: "hourglass")
+      Label("Preparing import files", systemImage: "hourglass")
         .foregroundStyle(.secondary)
     case let .skipped(message):
       Label(message, systemImage: "checkmark.circle")

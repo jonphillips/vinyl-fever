@@ -10,13 +10,14 @@ public struct ConversionExecutor: Sendable {
   }
 
   public func convert(_ plan: ConversionPlan, toolPaths: AudioToolPaths) async throws -> ConversionResult {
+    let tracks = plan.tracks
     let conversionTracks = plan.convertibleTracks
     let commands = try commandPlans(for: conversionTracks, toolPaths: toolPaths)
     let run = try await runLogClient.open(
       RunLogOpenRequest(
         showRootPath: plan.showRoot.path(percentEncoded: false),
         kind: .convert,
-        command: commandText(for: conversionTracks, commands: commands)
+        command: commandText(for: tracks, commands: commands)
       )
     )
 
@@ -24,21 +25,27 @@ public struct ConversionExecutor: Sendable {
       try Task.checkCancellation()
       try validateOutputDestinations(in: plan)
 
-      guard !conversionTracks.isEmpty else {
+      guard !tracks.isEmpty else {
         let closedRun = try await close(run: run, exitSummary: "no conversion needed")
         return ConversionResult(run: closedRun, convertedTracks: [], exitSummary: "no conversion needed")
       }
 
-      let conflicts = try await existingOutputDestinations(in: conversionTracks)
+      let conflicts = try await existingOutputDestinations(in: tracks)
       if !conflicts.isEmpty {
-        return try await recordConflictResult(run: run, tracks: conversionTracks, conflicts: conflicts)
+        return try await recordConflictResult(run: run, tracks: tracks, conflicts: conflicts)
       }
 
       try await fileOperationClient.createDirectory(plan.outputDirectory)
       var convertedTracks: [ConvertedTrack] = []
-      for track in conversionTracks {
+      for track in tracks {
         try Task.checkCancellation()
-        let outcome = await convert(track: track, command: commands[track.id])
+        let outcome: ConvertedTrack
+        switch track.action {
+        case .convertToALAC:
+          outcome = await convert(track: track, command: commands[track.id])
+        case .copyToOutput:
+          outcome = await copy(track: track)
+        }
         convertedTracks.append(outcome)
         try await append(outcome: outcome, run: run)
       }
@@ -73,7 +80,7 @@ public struct ConversionExecutor: Sendable {
     if outputPath.hasSuffix("/") {
       outputPath.removeLast()
     }
-    for track in plan.convertibleTracks {
+    for track in plan.tracks {
       let destinationPath = track.outputFile.standardizedFileURL.path(percentEncoded: false)
       guard destinationPath.hasPrefix(outputPath + "/") else {
         throw ConversionExecutionError.destinationOutsideOutput(
@@ -166,6 +173,35 @@ public struct ConversionExecutor: Sendable {
     }
   }
 
+  private func copy(track: ConversionTrackPlan) async -> ConvertedTrack {
+    do {
+      try await fileOperationClient.copyFile(track.workingFile, track.outputFile)
+      return ConvertedTrack(
+        id: track.id,
+        sourceURL: track.workingFile,
+        outputURL: track.outputFile,
+        status: .created,
+        note: "Copied to Output."
+      )
+    } catch is CancellationError {
+      return ConvertedTrack(
+        id: track.id,
+        sourceURL: track.workingFile,
+        outputURL: track.outputFile,
+        status: .failed,
+        note: "Copy to Output was cancelled."
+      )
+    } catch {
+      return ConvertedTrack(
+        id: track.id,
+        sourceURL: track.workingFile,
+        outputURL: track.outputFile,
+        status: .failed,
+        note: error.localizedDescription
+      )
+    }
+  }
+
   private func append(outcome: ConvertedTrack, run: RunRecord) async throws {
     _ = try await runLogClient.appendFileOutcome(
       RunLogFileOutcomeRequest(
@@ -204,11 +240,16 @@ public struct ConversionExecutor: Sendable {
     for tracks: [ConversionTrackPlan],
     commands: [ConversionTrackPlan.ID: ScriptCommand]
   ) -> String {
-    let lines = tracks.compactMap { track in
-      commands[track.id]?.commandLine
+    let lines = tracks.compactMap { track -> String? in
+      switch track.action {
+      case .convertToALAC:
+        commands[track.id]?.commandLine
+      case .copyToOutput:
+        "copy \(track.workingFile.path(percentEncoded: false)) -> \(track.outputFile.path(percentEncoded: false))"
+      }
     }
     guard !lines.isEmpty else {
-      return "No FLAC files require ALAC conversion."
+      return "No tracks require Output preparation."
     }
     return lines.joined(separator: "\n")
   }
