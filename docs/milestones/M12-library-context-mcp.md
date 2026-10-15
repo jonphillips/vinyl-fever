@@ -12,8 +12,10 @@ from Music.app. A small **stdio MCP server** shipped inside the app reads it and
 read-only questions from ChatGPT (via OpenAI's Secure MCP Tunnel), Claude Code, and Codex. One
 write tool, `stage_playlist`, drops a `VF-PLAYLIST: v1` playlist into an inbox that the Playlists
 area shows for review, so the human Create in Vinyl Fever stays the only write to Apple Music. The
-preview also annotates every matched row with library stats. Four slices in three dispatches.
-No schema.
+preview also annotates every matched row with library stats. The protocol plumbing, the
+staging inbox, and the tunnel ops script are domain-free, so they're built once in jon-platform by
+the [mcp-server-kit](../efforts/mcp-server-kit.md) effort; Vinyl Fever owns only its snapshot and
+tools. Four slices plus that effort, in four dispatches. No schema.
 
 ## The milestone in one sentence
 
@@ -52,6 +54,11 @@ the Mac.
   playlist rules, so no assistant needs Project instructions to use the tools. The M11
   paste-the-block flow stays the fallback for chats without the tools (mobile without the
   tunnel, a different assistant).
+- **Shared plumbing lives in jon-platform from day one** (ADR-0007 D1, D3, D4, D7). Yes Chef
+  is a likely second consumer, so building the JSON-RPC loop, the inbox, and the tunnel recipe
+  inside Vinyl Fever and lifting them later would mean writing them twice. Vinyl Fever's
+  server is `MCPServerKit` plus Vinyl Fever's tools. Its inbox is `LLMHandoffKit.HandoffInbox`.
+  Its setup doc covers only what is specific to Vinyl Fever.
 - **Annotations go in the preview.** The model can be wrong about what Jon owns; the preview is
   where Vinyl Fever has the final say. M11's preview already holds every matched row, and a
   play-count badge plus a "remove heavily played" action cost little there.
@@ -63,11 +70,11 @@ Music.app ──ScriptingBridge bulk read (app, has Automation grant)──▶ L
                                                                           │
               ┌───────────────────────────────────────────────────────────┤
               ▼                                                           ▼
-   vf-mcp (stdio, in app bundle)                             PlaylistBuilderModel preview
+   vf-mcp (stdio, in app bundle, on MCPServerKit)            PlaylistBuilderModel preview
    LibraryIndex queries (core, pure)                         LibraryIndex.annotate(row) → badge
      read tools: overview / top / search /                    "Remove N played ≥ 20×"
        artist_profile / check_tracks
-     write tool: stage_playlist ──PlaylistContract.decode──▶ PlaylistInbox/*.vfplaylist
+     write tool: stage_playlist ──PlaylistContract.decode──▶ HandoffInbox: PlaylistInbox/*.vfplaylist
               ▲                                                           │
    tunnel-client (ChatGPT, any device)                                    ▼
    Claude Code / Codex (Mac, or driven remotely)            Playlists area: "From chat (1)"
@@ -135,8 +142,14 @@ the two can't drift.
 ## Slices
 
 **Dispatch 1: S0 + S1.** They share the snapshot types and are valuable on their own: the
-preview annotations work with no MCP at all. **Dispatch 2: S2.** **Dispatch 3: S3**, only if Jon
-approves Last.fm (see *Decisions*). Dispatches 1 and 2 each owe a device gate on Jon's Mac.
+preview annotations work with no MCP at all. **Dispatch 2: effort
+[mcp-server-kit](../efforts/mcp-server-kit.md)**, a single PR in **jon-platform**.
+**Dispatch 3: S2**, which builds on that effort. **Dispatch 4: S3**, only if Jon approves
+Last.fm (see *Decisions*). Dispatches 1, 2, and 3 each owe a device gate on Jon's Mac.
+
+- [ ] **Effort — mcp-server-kit (jon-platform).** See the [brief](../efforts/mcp-server-kit.md).
+  It builds `MCPServerKit`, `LLMHandoffKit.HandoffInbox`, and `scripts/mcp-tunnel`. Device gate
+  owed (the `mcp-hello` smoke test from the iPad).
 
 - [ ] **S0 — Snapshot model + library index (core, pure, no ScriptingBridge, no UI).**
   - `LibrarySnapshot` and `LibraryTrack` value types, plus a versioned codec for format v1 (see
@@ -199,23 +212,22 @@ approves Last.fm (see *Decisions*). Dispatches 1 and 2 each owe a device gate on
     - resolve an M11 paste and check the badges.
     - **If the refresh exceeds the budget, stop and flag it** rather than optimizing blind.
 
-- [ ] **S2 — `vf-mcp` stdio server + playlist inbox (core executable + app).** Device gate owed.
-  - New executable target `VinylFeverMCP` (product `vf-mcp`) in the `VinylFeverCore` package,
-    depending only on `VinylFeverCore`. `project.yml` copies the built binary into the app
-    bundle at `Contents/Helpers/vf-mcp`, so it installs and updates with the app.
-  - **Protocol: hand-rolled** (pending Decision 2). It reads newline-delimited JSON-RPC 2.0 on
-    stdin and writes responses on stdout. **Only protocol messages go to stdout; logs go to
-    stderr.** It implements `initialize`, `notifications/initialized`, `ping`, `tools/list`, and
-    `tools/call`. In `initialize`, it answers with the client's `protocolVersion` if that is in
-    the supported set, else the latest supported. Unknown methods return JSON-RPC
-    `-32601`. Tool failures are results with `isError: true`, not protocol errors.
+- [ ] **S2 — `vf-mcp` stdio server + playlist inbox (core executable + app).** Device gate
+  owed. Requires the mcp-server-kit effort to have merged.
+  - Add the new executable target `VinylFeverMCP` (product `vf-mcp`) to the `VinylFeverCore`
+    package. It depends on `VinylFeverCore` and `MCPServerKit`, a path dependency mirroring the
+    `LLMClientKit` entry. `project.yml` copies the built binary into the app bundle at
+    `Contents/Helpers/vf-mcp`, so it installs and updates with the app.
+  - **Protocol comes from `MCPServerKit`** (ADR-0007 D7). `vf-mcp` is an `MCPServer` built from
+    the tool table above and the `instructions` text, with no JSON-RPC code of its own. Each
+    tool's handler decodes its input, calls the matching `LibraryIndex` function, and encodes
+    the result.
   - It loads the snapshot lazily, reloads when the file's `modifiedAt` changes, and builds the
     `LibraryIndex` once per load. With no snapshot, every read tool returns `isError: true`:
     "Open Vinyl Fever to build the library snapshot."
-  - **Inbox:** `stage_playlist` writes
-    `~/Library/Application Support/VinylFever/PlaylistInbox/<ISO8601>-<slug>.vfplaylist` (the
-    contract wire text) atomically. `PlaylistInboxClient` (read, list, move to `Processed/`)
-    is shared by the server and the app.
+  - **Inbox:** `LLMHandoffKit.HandoffInbox(root: …/VinylFever/PlaylistInbox, fileExtension:
+    "vfplaylist")`. The server stages there, and the app reads it through a thin
+    `PlaylistInboxClient` dependency wrapper so model tests can stub it.
   - **App:** the Playlists area shows **From chat (N)**, listing staged playlists by name,
     track count, and age. Opening one loads its text into the existing paste → resolve path
     unchanged. After Create, or after **Discard**, the file moves to `PlaylistInbox/Processed/`
@@ -226,29 +238,23 @@ approves Last.fm (see *Decisions*). Dispatches 1 and 2 each owe a device gate on
     - copy buttons for a Claude Code `.mcp.json` entry, a Codex `config.toml` `[mcp_servers]`
       entry, and the `tunnel-client init … --mcp-command` line, each with the real path filled
       in.
-  - **Docs:** `docs/chatgpt/MCP-SETUP.md` is the operator guide.
-    - **ChatGPT via tunnel:**
-      - create a Platform tunnel, linked to Jon's ChatGPT account;
-      - create a **Restricted** API key with Tunnels Read + Use;
-      - store it with `security add-generic-password -U … -w "$(pbpaste)"`, **not** the
-        interactive `-w` prompt, which silently truncates at 128 characters;
-      - run `tunnel-client` with a `vinyl-fever` profile, kept alive via
-        `tunnel-client runtimes` or a LaunchAgent;
-      - in ChatGPT: Add custom MCP server → Tunnel → No authentication → Create as a plugin →
-        Install.
-    - **Claude Code and Codex:** a `~/music-chat` folder holding an `AGENTS.md` (music tone,
-      with the contract), a one-line `CLAUDE.md`, and MCP config, with permissions limited to
-      the MCP tools.
-    - **From a phone:** Remote Control or Codex Remote.
+  - **Docs:** `docs/chatgpt/MCP-SETUP.md` covers only what's specific to Vinyl Fever and
+    links jon-platform `docs/ios/mcp-access.md` for everything shared (tunnel, key, clients,
+    pitfalls):
+    - the helper path;
+    - `mcp-tunnel init vinyl-fever <tunnel_id> "<helper path>"` and
+      `mcp-tunnel install-agent vinyl-fever`;
+    - the plugin name **Vinyl Fever**;
+    - the `~/music-chat` folder contents (an `AGENTS.md` in a music tone that carries the
+      contract, plus the `.mcp.json` / Codex entries);
+    - the tool list.
 
   **DoD:**
-  - Protocol tests drive the server's request loop with in-memory streams:
-    - `initialize` version negotiation (supported, unsupported, missing);
-    - `tools/list` includes every tool with its input schema and annotations;
+  - Tool tests through `MCPServer.handle(line:)` (the kit owns the protocol tests):
+    - `tools/list` includes every tool with its input schema, with `readOnlyHint` on every
+      read tool and absent on `stage_playlist`;
     - each read tool against the S0 fixture snapshot;
-    - an unknown method gives `-32601`;
-    - with no snapshot, read tools return `isError`;
-    - a stdout capture contains only JSON-RPC.
+    - with no snapshot, read tools return `isError`.
   - `stage_playlist` tests:
     - a valid payload writes one file that `PlaylistContract.decode` reads back to the same
       `PlaylistRequest`;
@@ -291,6 +297,7 @@ approves Last.fm (see *Decisions*). Dispatches 1 and 2 each owe a device gate on
 
 - [x] Secure MCP Tunnel and a restricted runtime key exist and are proven with a hello-world
   server (2026-10-15). The `vinyl-fever` profile replaces the `hello` profile in S2's gate.
+- [ ] ADR-0007 (jon-platform) merged before Dispatch 2. The effort's PR lands before S2.
 - [ ] M11's owed device gate. Dispatch 1 builds on the M11 preview, so it should land on a
   verified M11.
 - [ ] For S3 only: a Last.fm API account (free) and confirmation that Marvis scrobbles are
@@ -306,7 +313,7 @@ approves Last.fm (see *Decisions*). Dispatches 1 and 2 each owe a device gate on
 | Tool row cap | 50 default, 200 max | Keeps every tool result small: tunnel envelopes cap at 10 MiB, and the conversation pays for every byte. |
 | `check_tracks` max | 200 tracks | Twice a typical M11 list. |
 | Heavily played | ≥ 20 plays | Threshold for "Remove N played ≥ 20 times". Tune after the gate. |
-| MCP protocol versions | `2025-06-18`, `2025-11-25` | Both support tool annotations. Echo the client's version when supported. |
+| MCP protocol versions | per `MCPServerKit` (`2025-06-18`, `2025-11-25`) | Owned by the kit (ADR-0007 D7), not this milestone. |
 | Instructions head | 512 characters, standalone | OpenAI guidance for MCP server `instructions`. |
 | Inbox | `Application Support/VinylFever/PlaylistInbox/` | Items move to `Processed/`, never deleted (preserve originals). |
 
@@ -327,7 +334,7 @@ approves Last.fm (see *Decisions*). Dispatches 1 and 2 each owe a device gate on
   only if Jon misses it.
 - **Last.fm's similarity graph** (`artist.getSimilar`). → After S3, if suggestions lack novelty.
 - **Vinyl Fever managing `tunnel-client`** (installing a LaunchAgent, holding the key). → Ops
-  stays in `MCP-SETUP.md`.
+  stays shared in jon-platform: `docs/ios/mcp-access.md` and `scripts/mcp-tunnel`.
 - **Other writes** (ratings, favorites, play counts). → No.
 
 ## Decisions
@@ -339,17 +346,21 @@ Resolved (Jon, 2026-10-15):
 - `stage_playlist` is the **one confirmed write**, and it only stages.
 - Library annotations in the preview.
 - The cross-app pattern goes to jon-platform as **ADR-0007** (proposed alongside this plan).
+- **Shared versus Vinyl Fever-only split:**
+  - `MCPServerKit`, `HandoffInbox`, and the tunnel ops doc and script are built once in
+    jon-platform (the effort);
+  - Vinyl Fever owns only its snapshot, tools, inbox UI, and setup specifics;
+  - ADR-0007 D2 allows a live read-only database (Yes Chef) or an app-written export (Vinyl
+    Fever).
 
 Open — the architect's recommendation is listed first:
 
 1. **Last.fm (S3):** build it last, or not at all? It reflects only Marvis listening and adds a
    second credential. *Recommendation:* keep S3 parked until the S2 gate shows whether library
-   stats alone feel thin. Merging this plan does **not** dispatch S3.
-2. **MCP protocol:** hand-roll it, or depend on the official `modelcontextprotocol/swift-sdk`?
-   *Recommendation:* hand-roll. The server needs five methods over stdio. The SDK is pre-1.0
-   (0.12.1, last pushed 2026-05-07) and pulls in `swift-nio` plus `swift-docc-plugin` pinned
-   to `branch: main`, which can't be pinned reproducibly. This matches M11's call on
-   MusadoraKit.
+   stats alone feel thin. Merging this plan does **not** dispatch S3 (Dispatch 4).
+2. **MCP protocol:** *moved to jon-platform ADR-0007 D7* (hand-roll it in `MCPServerKit`
+   rather than depend on the pre-1.0 official SDK). It's a platform decision now, so it gets
+   decided there.
 3. **The snapshot as a derived JSON file outside SQLiteData** (stated here so Jon can object
    before Dispatch 1).
 4. **Ship the helper inside the app bundle** (`Contents/Helpers/vf-mcp`) rather than a `~/bin`

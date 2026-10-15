@@ -23,7 +23,11 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   [M12](milestones/M12-library-context-mcp.md) (2026-10-15): a library snapshot, a stdio MCP
   server reached through Secure MCP Tunnel (ChatGPT), Claude Code, and Codex, plus a
   `stage_playlist` inbox and preview annotations. The cross-app pattern is proposed as
-  jon-platform ADR-0007. **Pending Jon:** M12 Decisions 1–4. Last.fm (S3) stays parked until
+  jon-platform ADR-0007. The shared plumbing (`MCPServerKit`, `HandoffInbox`, `mcp-tunnel`) is
+  built once in jon-platform by [mcp-server-kit](efforts/mcp-server-kit.md), which is
+  M12 · Dispatch 2. **Pending Jon:** M12 Decisions 1, 3, 4 (Decision 2 moved to ADR-0007 D7). A
+  Yes Chef MCP server, reading its synced database read-only, is the likely second consumer
+  and starts by spiking app-group container access (ADR-0007 *Open*). Galavant waits. Last.fm (S3) stays parked until
   the S2 device gate shows whether library stats alone feel thin. The tunnel was proven with a
   hello-world server from desktop and iPad chat on 2026-10-15.
 - **M11: Create can lose the playlist it just made when a later batch fails** (from the #67
