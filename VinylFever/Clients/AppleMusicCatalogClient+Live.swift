@@ -21,7 +21,17 @@ extension AppleMusicCatalogClient {
       searchSongs: { term, limit in
         var request = MusicCatalogSearchRequest(term: term, types: [Song.self])
         request.limit = min(25, max(1, limit))
-        let response = try await request.response()
+        let response: MusicCatalogSearchResponse
+        do {
+          response = try await request.response()
+        } catch let error as MusicDataRequest.Error {
+          if error.status == 429 { throw AppleMusicCatalogBusyError() }
+          throw AppleMusicAPIError(statusCode: error.status, detail: error.detailText)
+        } catch where Self.isUnreadableResponse(error) {
+          // A 429 arrives with a plain-text "API capacity exceeded" body. MusicKit fails to
+          // decode it and throws a decoding error that never mentions the status code.
+          throw AppleMusicCatalogBusyError()
+        }
         return response.songs.map { song in
           CatalogSongCandidate(
             id: song.id.rawValue,
@@ -112,6 +122,13 @@ extension AppleMusicCatalogClient {
       )
     }
     return response
+  }
+
+  private static func isUnreadableResponse(_ error: any Error) -> Bool {
+    if error is DecodingError { return true }
+    let nsError = error as NSError
+    return nsError.domain == NSCocoaErrorDomain
+      && [CocoaError.coderReadCorrupt.rawValue, CocoaError.propertyListReadCorrupt.rawValue].contains(nsError.code)
   }
 
   private static func apiErrorDetail(from data: Data) -> String {

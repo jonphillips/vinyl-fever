@@ -270,7 +270,8 @@ Dispatch 2's gate is owed on Jon's Mac.
 | --- | --- | --- |
 | Contract marker | `VF-PLAYLIST: v1` | Same `PREFIX: vN` shape as `GV-CONTRACT`/`YC-CONTRACT`, so `HandoffContractMarker` handles it unchanged. |
 | Search result limit | 10 | Enough to get past karaoke and tribute clutter to the original. The API caps song search at 25. |
-| Search concurrency | 4 | The Apple Music API's rate limits aren't published. A 50-song list resolves in a few seconds without bursting. |
+| Search concurrency | 2 | The Apple Music API's rate limits aren't published. Was 4; Jon's first 30-track device run (2026-10-15) hit HTTP 429 "API capacity exceeded" at 4. |
+| Search attempts | 3, waiting 1 s then 2 s (+ up to 250 ms jitter) | Retries only rate-limited (429, or a body MusicKit can't decode) and 5xx searches. Searches are safe to repeat; create and append are not, so they never retry. |
 | Auto-match threshold | score ≥ 0.90 **and** ≥ 0.10 ahead of the best different song | Candidates with the same normalized title and artist are the same song on different albums; hints and earliest release date choose among them. Anything close between different songs goes to Jon. |
 | Ambiguous floor | score ≥ 0.60 | Below this, top-3 suggestions are noise. Call it not found and let Jon edit the term. |
 | Version penalty | −0.30 each | Tokens: `live`, `karaoke`, `instrumental`, `tribute`, `originally performed`, `cover`, `remix`, `acoustic`, `demo`, `sped up`, `slowed`. Big enough to push a karaoke exact-title hit below the studio original. Waived if the request contains the token. |

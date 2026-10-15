@@ -3,6 +3,15 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-15 — M11 catalog search retry (`fix/catalog-search-retry`)
+
+Jon's first device run of M11 surfaced two failures. "Failed to request developer token" came from
+the wildcard signing profile and is fixed in #69. HTTP 429 "API capacity exceeded" came during a
+30-track resolve. Catalog searches now retry rate-limited and 5xx responses (3 attempts, 1 s then
+2 s plus jitter, on the injected clock), search concurrency drops from 4 to 2, and the unreadable
+429 body maps to a readable "try again" error. The Playlists area gains **Retry Failed Searches**.
+Create and append never retry. The device gate is still owed.
+
 ## 2026-10-15 — M11 · Dispatch 2 playlist creation (`m11/s1-apple-music-playlists`)
 
 Added the MusicKit catalog resolver and playlist create/append flow, the Playlists area, and

@@ -302,6 +302,62 @@ struct PlaylistBuilderModelTests {
     }
   }
 
+  @Test("a re-search that is rate-limited retries and then matches")
+  func reSearchRetriesBusySearch() async {
+    let attempts = SearchCallCounter()
+    let song = Self.candidate(id: "X", title: "Song")
+    let model = withDependencies {
+      $0.continuousClock = ImmediateClock()
+      $0.appleMusicCatalogClient = authorizedClient(search: { _, _ in
+        await attempts.record()
+        if await attempts.count < 3 { throw AppleMusicCatalogBusyError() }
+        return [song]
+      })
+      $0.catalogMatchResolver.resolve = { _ in [] }
+    } operation: { PlaylistBuilderModel() }
+    let track = TrackRequest(index: 1, artist: "The Records", title: "Song")
+    model.rows = [ResolvedPlaylistRow(request: track, status: .notFound(error: "busy"))]
+    model.searchTerms = [1: "The Records Song"]
+
+    await model.reSearch(trackIndex: 1)
+
+    #expect(await attempts.count == 3)
+    #expect(model.rows[0].status == .matched(song, score: 0.9))
+  }
+
+  @Test("retrying failed searches re-runs only rows whose search errored")
+  func retryFailedSearchesOnlyErroredRows() async {
+    let searchedTerms = SearchTermLog()
+    let song = Self.candidate(id: "X", title: "Song")
+    let model = withDependencies {
+      $0.continuousClock = ImmediateClock()
+      $0.appleMusicCatalogClient = authorizedClient(search: { term, _ in
+        await searchedTerms.record(term)
+        return [song]
+      })
+      $0.catalogMatchResolver.resolve = { _ in [] }
+    } operation: { PlaylistBuilderModel() }
+    let failed = TrackRequest(index: 1, artist: "The Records", title: "Song")
+    let unmatched = TrackRequest(index: 2, artist: "Other", title: "Missing")
+    let removed = TrackRequest(index: 3, artist: "Gone", title: "Removed")
+    model.rows = [
+      ResolvedPlaylistRow(request: failed, status: .notFound(error: "busy")),
+      ResolvedPlaylistRow(request: unmatched, status: .notFound(error: nil)),
+      ResolvedPlaylistRow(request: removed, status: .notFound(error: "busy")),
+    ]
+    model.searchTerms = [1: "The Records Song", 2: "Other Missing", 3: "Gone Removed"]
+    model.remove(trackIndex: 3)
+    #expect(model.failedSearchCount == 1)
+
+    await model.retryFailedSearches()
+
+    #expect(await searchedTerms.terms == ["The Records Song"])
+    #expect(model.rows[0].status == .matched(song, score: 0.9))
+    #expect(model.rows[1].status == .notFound(error: nil))
+    #expect(model.failedSearchCount == 0)
+    #expect(!model.isRetryingSearches)
+  }
+
   private var validPaste: String {
     "VF-PLAYLIST: v1\n{\"name\":\"Test Mix\",\"tracks\":[{\"artist\":\"The Records\",\"title\":\"Starry Eyes\"}]}"
   }
@@ -369,4 +425,9 @@ private actor PlaylistAppendBarrier {
     releaseContinuation?.resume()
     releaseContinuation = nil
   }
+}
+
+private actor SearchTermLog {
+  private(set) var terms: [String] = []
+  func record(_ term: String) { terms.append(term) }
 }
