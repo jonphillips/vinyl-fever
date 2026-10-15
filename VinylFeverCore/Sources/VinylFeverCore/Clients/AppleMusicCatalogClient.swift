@@ -60,6 +60,16 @@ public struct AppleMusicAPIError: LocalizedError, Equatable, Sendable {
   }
 }
 
+/// Apple Music answered a catalog request with rate limiting (HTTP 429) or a body MusicKit
+/// couldn't read. Catalog searches are safe to retry after a pause.
+public struct AppleMusicCatalogBusyError: LocalizedError, Equatable, Sendable {
+  public init() {}
+
+  public var errorDescription: String? {
+    "Apple Music is limiting searches right now. Try Search again in a moment."
+  }
+}
+
 extension AppleMusicCatalogClient: TestDependencyKey {
   public static var testValue: Self { Self() }
 }

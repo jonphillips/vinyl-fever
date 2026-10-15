@@ -8,6 +8,7 @@ import VinylFeverCore
 final class PlaylistBuilderModel {
   @ObservationIgnored @Dependency(\.appleMusicCatalogClient) private var appleMusic
   @ObservationIgnored @Dependency(\.catalogMatchResolver) private var resolver
+  @ObservationIgnored @Dependency(\.continuousClock) private var clock
 
   var pastedText = ""
   var playlistName = ""
@@ -20,6 +21,7 @@ final class PlaylistBuilderModel {
   var operationError: String?
   var isResolving = false
   var isCreating = false
+  var isRetryingSearches = false
   var createdPlaylist: CreatedPlaylistRef?
   var hasResolvedPaste = false
   var searchTerms: [Int: String] = [:]
@@ -49,8 +51,15 @@ final class PlaylistBuilderModel {
     }.count
   }
   var consideredTrackCount: Int { matchedCount + unresolvedCount }
-  var canCreate: Bool { createdPlaylist == nil && matchedCount > 0 && !isCreating }
+  var canCreate: Bool { createdPlaylist == nil && matchedCount > 0 && !isCreating && !isRetryingSearches }
   var isAppending: Bool { !addingTrackIndexes.isEmpty }
+  var failedSearchCount: Int { failedSearchTrackIndexes.count }
+
+  private var failedSearchTrackIndexes: [Int] {
+    visibleRows.compactMap { row in
+      if case .notFound(error: .some) = row.status { row.request.index } else { nil }
+    }
+  }
 
   func resolve() async {
     decodeError = nil
@@ -86,21 +95,22 @@ final class PlaylistBuilderModel {
     guard !isCreating else { return }
     guard await passGates() else { return }
     guard !isCreating else { return }
-    guard let rowIndex = rows.firstIndex(where: { $0.request.index == trackIndex }) else { return }
-    let term = (searchTerms[trackIndex] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !term.isEmpty else { return }
     operationError = nil
-    do {
-      let candidates = try await appleMusic.searchSongs(term, CatalogMatchResolver.searchResultLimit)
-      switch CatalogMatchScorer.score(rows[rowIndex].request, candidates: candidates) {
-      case let .matched(candidate, score): rows[rowIndex].status = .matched(candidate, score: score)
-      case let .ambiguous(candidates): rows[rowIndex].status = .ambiguous(candidates)
-      case .notFound: rows[rowIndex].status = .notFound(error: nil)
-      }
-    } catch {
-      rows[rowIndex].status = .notFound(error: error.localizedDescription)
+    await search(trackIndex: trackIndex)
+  }
+
+  /// Searches again, one row at a time, for every row whose search failed (for example, because
+  /// Apple Music rate-limited the bulk resolve).
+  func retryFailedSearches() async {
+    guard !isCreating, !isRetryingSearches else { return }
+    isRetryingSearches = true
+    defer { isRetryingSearches = false }
+    guard await passGates() else { return }
+    operationError = nil
+    for trackIndex in failedSearchTrackIndexes {
+      guard !isCreating else { return }
+      await search(trackIndex: trackIndex)
     }
-    reconcileDuplicates()
   }
 
   func selectCandidate(_ candidate: CatalogSongCandidate, for trackIndex: Int) {
@@ -214,6 +224,30 @@ final class PlaylistBuilderModel {
     appendedTrackIndexes = []
     createdTrackIndexes = []
     addingTrackIndexes = []
+  }
+
+  private func search(trackIndex: Int) async {
+    guard let request = rows.first(where: { $0.request.index == trackIndex })?.request else { return }
+    let term = (searchTerms[trackIndex] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !term.isEmpty else { return }
+    let client = appleMusic
+    let status: ResolvedPlaylistRow.Status
+    do {
+      let candidates = try await CatalogMatchResolver.search(term, clock: clock) {
+        try await client.searchSongs($0, CatalogMatchResolver.searchResultLimit)
+      }
+      status = switch CatalogMatchScorer.score(request, candidates: candidates) {
+      case let .matched(candidate, score): .matched(candidate, score: score)
+      case let .ambiguous(candidates): .ambiguous(candidates)
+      case .notFound: .notFound(error: nil)
+      }
+    } catch {
+      status = .notFound(error: error.localizedDescription)
+    }
+    // Look the row up again: the table can change while the search is in flight.
+    guard let rowIndex = rows.firstIndex(where: { $0.request.index == trackIndex }) else { return }
+    rows[rowIndex].status = status
+    reconcileDuplicates()
   }
 
   private func passGates() async -> Bool {

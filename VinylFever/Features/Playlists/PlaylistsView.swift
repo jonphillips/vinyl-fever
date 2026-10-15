@@ -153,6 +153,18 @@ struct PlaylistsView: View {
           .font(.callout)
           .foregroundStyle(.secondary)
         Spacer()
+        if model.failedSearchCount > 0 || model.isRetryingSearches {
+          Button {
+            Task { await model.retryFailedSearches() }
+          } label: {
+            if model.isRetryingSearches {
+              ProgressView().controlSize(.small)
+            } else {
+              Label("Retry Failed Searches (\(model.failedSearchCount))", systemImage: "arrow.clockwise")
+            }
+          }
+          .disabled(model.isRetryingSearches || model.isCreating)
+        }
         if model.createdPlaylist == nil {
           Button {
             if model.unresolvedCount > 0 {
