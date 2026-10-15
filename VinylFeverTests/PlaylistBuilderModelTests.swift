@@ -166,6 +166,32 @@ struct PlaylistBuilderModelTests {
     #expect(!model.canAddToCreatedPlaylist(trackIndex: 2))
   }
 
+  @Test("a leftover before a created match cannot append that song again")
+  func earlierLeftoverCannotDuplicateCreatedSong() async {
+    let song = Self.candidate(id: "X", title: "Song")
+    let model = withDependencies {
+      $0.appleMusicCatalogClient = authorizedClient()
+      $0.catalogMatchResolver.resolve = { _ in [] }
+    } operation: { PlaylistBuilderModel() }
+    model.rows = [
+      ResolvedPlaylistRow(
+        request: TrackRequest(index: 1, artist: "The Records", title: "Song"),
+        status: .ambiguous([ScoredCandidate(candidate: song, score: 0.9)])
+      ),
+      ResolvedPlaylistRow(
+        request: TrackRequest(index: 2, artist: "The Records", title: "Song"),
+        status: .matched(song, score: 0.9)
+      ),
+    ]
+    await model.createPlaylist()
+
+    model.selectCandidate(song, for: 1)
+
+    #expect(model.rows[0].status == .duplicate(song, ofTrackIndex: 2))
+    #expect(model.rows[1].status == .matched(song, score: 0.9))
+    #expect(!model.canAddToCreatedPlaylist(trackIndex: 1))
+  }
+
   @Test("only matched leftover rows can be added to a created playlist")
   func canAddOnlyMatchedLeftover() async {
     let song = Self.candidate(id: "X", title: "Song")

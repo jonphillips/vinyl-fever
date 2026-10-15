@@ -243,9 +243,32 @@ final class PlaylistBuilderModel {
 
   private func reconcileDuplicates() {
     var firstRowByCatalogID: [String: Int] = [:]
+    let persistedTrackIndexes = createdTrackIndexes.union(appendedTrackIndexes)
+
     for rowIndex in rows.indices {
       let row = rows[rowIndex]
-      guard !removedTrackIndexes.contains(row.request.index) else { continue }
+      guard persistedTrackIndexes.contains(row.request.index) else { continue }
+      let candidate: CatalogSongCandidate
+      switch row.status {
+      case let .matched(value, _), let .duplicate(value, _):
+        candidate = value
+      case .ambiguous, .notFound:
+        continue
+      }
+      if firstRowByCatalogID[candidate.id] == nil {
+        firstRowByCatalogID[candidate.id] = row.request.index
+      }
+      rows[rowIndex].status = .matched(
+        candidate,
+        score: CatalogMatchScorer.score(row.request, candidate)
+      )
+    }
+
+    for rowIndex in rows.indices {
+      let row = rows[rowIndex]
+      guard !removedTrackIndexes.contains(row.request.index),
+        !persistedTrackIndexes.contains(row.request.index)
+      else { continue }
       let candidate: CatalogSongCandidate
       switch row.status {
       case let .matched(value, _), let .duplicate(value, _):
