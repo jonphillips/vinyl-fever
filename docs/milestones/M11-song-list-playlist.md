@@ -175,7 +175,7 @@ Dispatch 2's gate is owed on Jon's Mac.
     - the album/year hint breaks a same-title tie;
     - two close candidates → `.ambiguous`;
     - nothing close → `.notFound`.
-- [ ] **S1 — `AppleMusicCatalogClient` + resolver (core interface, app live impl).**
+- [x] **S1 — `AppleMusicCatalogClient` + resolver (core interface, app live impl).** Device gate owed.
   - Core `@DependencyClient` (shaped like `MusicAppClient`):
     - `authorizationStatus()` and `requestAuthorization()`;
     - `subscriptionStatus()`, which returns `canPlayCatalogContent` and
@@ -202,7 +202,7 @@ Dispatch 2's gate is owed on Jon's Mac.
   - **First live call is a smoke test.** If a catalog search fails with a
     developer-token error, stop and flag it. That means the portal step below is
     missing, not a code bug.
-- [ ] **S2 — Playlists sidebar area: paste → preview → create, plus Settings copy (app).**
+- [x] **S2 — Playlists sidebar area: paste → preview → create, plus Settings copy (app).** Device gate owed.
   - Add a fourth sidebar section, **Playlists**, next to Live Shows, Collections, and
     Policies (`AppShellView`'s section enum → a new `PlaylistsView`).
   - Back it with a `PlaylistBuilderModel` (`@Observable`, **its own feature model**,

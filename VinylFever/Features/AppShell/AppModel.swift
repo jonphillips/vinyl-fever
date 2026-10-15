@@ -2251,6 +2251,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
   case liveShows
   case collections
   case policies
+  case playlists
 
   var id: Self { self }
 
@@ -2262,6 +2263,8 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
       "Collections"
     case .policies:
       "Policies"
+    case .playlists:
+      "Playlists"
     }
   }
 
@@ -2273,6 +2276,8 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
       "rectangle.stack"
     case .policies:
       "slider.horizontal.3"
+    case .playlists:
+      "music.note.list"
     }
   }
 }

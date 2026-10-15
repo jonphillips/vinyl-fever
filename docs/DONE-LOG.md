@@ -3,6 +3,14 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-15 — M11 · Dispatch 2 playlist creation (`m11/s1-apple-music-playlists`)
+
+Added the MusicKit catalog resolver and playlist create/append flow, the Playlists area, and
+ChatGPT Project setup instructions. The S1 and S2 device gate remains owed on Jon's Mac. Core
+tests pass and the app test bundle compiles. The architect's macOS 27 review run identified
+model-test and duplicate-handling fixes, addressed in PR #67; a separate pre-existing
+`CollectionInboxAppendTests` failure remains outside this dispatch. `check-handoff` passes.
+
 ## 2026-10-14 — M11 · S0 playlist contract and scorer (`m11/s0-playlist-contract`)
 
 Added the `VF-PLAYLIST: v1` instructions and strict decoder, including marker warnings, formatting

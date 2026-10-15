@@ -11,6 +11,7 @@ struct SettingsView: View {
   private var persistedSettings: [AppSetting]
   @FetchAll(SourceLabel.order(by: \.token))
   private var persistedSourceLabels: [SourceLabel]
+  @State private var didCopyPlaylistInstructions = false
 
   private var settings: AppSetting {
     AppSetting.current(from: persistedSettings)
@@ -69,6 +70,24 @@ struct SettingsView: View {
             Label(errorMessage, systemImage: "exclamationmark.triangle")
               .foregroundStyle(.red)
           }
+        }
+
+        Section {
+          Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(PlaylistContract.projectInstructions, forType: .string)
+            didCopyPlaylistInstructions = true
+          } label: {
+            Label(
+              didCopyPlaylistInstructions ? "Instructions Copied" : "Copy ChatGPT Project Instructions",
+              systemImage: didCopyPlaylistInstructions ? "checkmark" : "doc.on.doc"
+            )
+          }
+          Text("Paste these instructions into the Vinyl Fever Chat Project so playlist replies use the format Vinyl Fever can review.")
+            .font(.callout)
+            .foregroundStyle(.secondary)
+        } header: {
+          Text("Playlist Builder")
         }
 
         Section("Source Labels") {
