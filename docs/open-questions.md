@@ -12,12 +12,28 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   a real append spawns a `Great Covers 2` drift. None observed in daily use yet.
 - **Pending Jon decision — M4 identity-drift (#2/#3).** Decide identity-match forgiveness and no-match
   behavior *when* a real append mangles a title. Parked until the evidence appears.
-- **LLM song list → Apple Music playlist** — drafted as
-  [M11](milestones/M11-song-list-playlist.md) (2026-09-30), Dispatch 1 set as `NEXT_UP.md`
-  (Jon, 2026-10-14). All decisions are settled in the milestone and the MusicKit App ID is
-  registered. Settled in the feasibility pass: hand-roll the Apple Music API create call
-  rather than depend on MusadoraKit; catalog-only for v1; input is a pinned
-  ChatGPT Project contract (`VF-PLAYLIST: v1`, Yes Chef/Galavant pattern), not free-text parsing.
+- **LLM song list → Apple Music playlist** — [M11](milestones/M11-song-list-playlist.md) shipped
+  in #66 (S0) and #67 (S1 + S2, merged 2026-10-15). **Owed:** Jon's on-device test on merged
+  `main`: paste, resolve, create with one row unresolved, fix it and add it, check the playlist
+  in Music.app, then delete it by hand. Settled in the feasibility pass: hand-roll the Apple
+  Music API create call rather than depend on MusadoraKit; catalog-only for v1; input is a
+  pinned ChatGPT Project contract (`VF-PLAYLIST: v1`, Yes Chef/Galavant pattern), not free-text
+  parsing.
+- **M11: Create can lose the playlist it just made when a later batch fails** (from the #67
+  review, 2026-10-15). `createLibraryPlaylist` sends the first 100 IDs with the create call,
+  then appends the rest in batches of 100. If a later batch throws, the error drops the
+  `CreatedPlaylistRef`. The model then shows no playlist, and Create again makes a second one.
+  This only affects playlists over 100 songs. Candidate fix: throw a typed partial-create error
+  that carries the ref and the unsent IDs, so the model enters the post-Create state with those
+  rows left over. Low priority until Jon builds a playlist that long.
+- **App-target test failing on `main`: `CollectionInboxAppendTests`** (found in the #67 review,
+  2026-10-15). `resumingInboxRebuildsFromStagedFilesAndClearsDerivedFolders` hits an
+  unimplemented `@Dependency(\.uuid)` (reached through `FileSystemClient`) and fails. It most
+  likely dates from #60/#65. It went unnoticed because the executor's host runs macOS 26.6,
+  which only compiles the app test bundle; the architect's macOS 27 host is the only place it
+  runs. Candidate fix: a one-line `$0.uuid = .incrementing` override in that test. It's small
+  enough to fold into the next dispatch that touches the Inbox, or to send as its own small
+  effort.
 - **Folder-picked compilation appends leave derived folders behind** (from the #65 review,
   2026-10-14). A compilation append builds `Working/` and `Output/` *inside* the user's picked
   folder, and after #65 `Output/` holds a copy of every track. Nothing cleans either one up after
