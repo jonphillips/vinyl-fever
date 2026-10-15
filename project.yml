@@ -63,9 +63,14 @@ targets:
         ENABLE_APP_SANDBOX: NO
         ENABLE_HARDENED_RUNTIME: YES
         CODE_SIGN_ENTITLEMENTS: VinylFever/VinylFever.entitlements
-        CODE_SIGN_STYLE: Automatic
+        # MusicKit's automatic developer token needs a profile for the explicit App ID that has
+        # the MusicKit App Service enabled. Automatic signing picks the wildcard
+        # "Mac Team Provisioning Profile: *", and every catalog call then fails with
+        # "Failed to request developer token". The profile is created in the developer portal.
+        CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: "Apple Development"
         DEVELOPMENT_TEAM: 7MQEE539G9
+        PROVISIONING_PROFILE_SPECIFIER: Vinyl Fever Dev Profile
   VinylFeverTests:
     type: bundle.unit-test
     platform: macOS

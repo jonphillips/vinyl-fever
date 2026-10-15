@@ -278,7 +278,7 @@
 					};
 					FDD826AD9DE28A7B0EDD2334 = {
 						DevelopmentTeam = 7MQEE539G9;
-						ProvisioningStyle = Automatic;
+						ProvisioningStyle = Manual;
 					};
 				};
 			};
@@ -511,7 +511,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = VinylFever/VinylFever.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = 7MQEE539G9;
 				ENABLE_APP_SANDBOX = NO;
@@ -525,6 +525,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 27.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonphillips.vinylfever;
 				PRODUCT_NAME = VinylFever;
+				PROVISIONING_PROFILE_SPECIFIER = "Vinyl Fever Dev Profile";
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -556,7 +557,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = VinylFever/VinylFever.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = 7MQEE539G9;
 				ENABLE_APP_SANDBOX = NO;
@@ -570,6 +571,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 27.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonphillips.vinylfever;
 				PRODUCT_NAME = VinylFever;
+				PROVISIONING_PROFILE_SPECIFIER = "Vinyl Fever Dev Profile";
 				SDKROOT = macosx;
 			};
 			name = Release;
