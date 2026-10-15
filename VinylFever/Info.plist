@@ -24,5 +24,7 @@
 	<string>public.app-category.music</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Vinyl Fever reads Music library tracks to verify live-show imports.</string>
+	<key>NSAppleMusicUsageDescription</key>
+	<string>Vinyl Fever searches Apple Music and creates playlists in your library.</string>
 </dict>
 </plist>

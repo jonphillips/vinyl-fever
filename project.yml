@@ -54,6 +54,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.music
         NSAppleEventsUsageDescription: Vinyl Fever reads Music library tracks to verify live-show imports.
+        NSAppleMusicUsageDescription: Vinyl Fever searches Apple Music and creates playlists in your library.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jonphillips.vinylfever

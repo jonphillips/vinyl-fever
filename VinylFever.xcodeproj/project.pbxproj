@@ -17,13 +17,17 @@
 		497E2DE4FB2B485815B4066A /* VinylFeverCore in Frameworks */ = {isa = PBXBuildFile; productRef = 7C6E06FBA965ABDAC7489C80 /* VinylFeverCore */; };
 		4DF6C451B1388905B8A78C4F /* MusicAppClient+Live.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFE8FAAEE05BF9BF9A136EDE /* MusicAppClient+Live.swift */; };
 		62EBE6D7B9DC65E79B5F1542 /* Dependencies in Frameworks */ = {isa = PBXBuildFile; productRef = 99211BDD035C702EFB2123E3 /* Dependencies */; };
+		66F97E82D724D3BC1277A4F2 /* PlaylistBuilderModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69C21F1532ECDDF576AB20D2 /* PlaylistBuilderModel.swift */; };
 		67F35C8B29D2FB10EAECF9DC /* SQLiteData in Frameworks */ = {isa = PBXBuildFile; productRef = B0CEEDF3C9060FC734814A66 /* SQLiteData */; };
 		6AAC484EE4FCEE3EF361E526 /* AppShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59513EA8B3113F9F15330147 /* AppShellView.swift */; };
 		742071989BB20655102865DD /* PoliciesModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2394A4F11A73AE071EDAA272 /* PoliciesModelTests.swift */; };
 		922A693A808062926F4158D9 /* SwiftUINavigation in Frameworks */ = {isa = PBXBuildFile; productRef = A25F349E47368726A30A4DF2 /* SwiftUINavigation */; };
+		9A75C2E42BF19DF4AA92D51D /* PlaylistsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD2798F08C3813916195B870 /* PlaylistsView.swift */; };
+		9B8A6B6ED8853D47DDD8A734 /* AppleMusicCatalogClient+Live.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2CA6FF4479042ED80E7FFA1 /* AppleMusicCatalogClient+Live.swift */; };
 		A0449BF27BAF51439049A186 /* CollectionInboxAppendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D4CD6D94E922DC5DDBA0BD1 /* CollectionInboxAppendTests.swift */; };
 		B7760BDB855168DC4B52C4C9 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B9501DC755058CF461B454F /* AppModel.swift */; };
 		CCA54B8CA7EF47661C400FFD /* LiveShowsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6AB6D74511FA4977973A9A7 /* LiveShowsView.swift */; };
+		D7981B8C7162C6B40C7F323E /* PlaylistBuilderModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5FF662CC6F9DD3413947EB1 /* PlaylistBuilderModelTests.swift */; };
 		D9300F0E5225EB93AE024E5B /* VinylFeverApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AD3A453FDC0D3B42EB1247C /* VinylFeverApp.swift */; };
 		EAFC74430016C0F3EA8F602C /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6AB4DB3E04DFCEFC5B041DC /* SettingsView.swift */; };
 /* End PBXBuildFile section */
@@ -47,6 +51,7 @@
 		5D4CD6D94E922DC5DDBA0BD1 /* CollectionInboxAppendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionInboxAppendTests.swift; sourceTree = "<group>"; };
 		5FCF80A0CE45B6E77A178A11 /* ToolPathClient+Live.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ToolPathClient+Live.swift"; sourceTree = "<group>"; };
 		68E3D973791AA21665A4AEC0 /* SetlistNormalizerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetlistNormalizerSheet.swift; sourceTree = "<group>"; };
+		69C21F1532ECDDF576AB20D2 /* PlaylistBuilderModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistBuilderModel.swift; sourceTree = "<group>"; };
 		8635979346BE2956055A7DC8 /* VinylFever.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VinylFever.entitlements; sourceTree = "<group>"; };
 		8AD3A453FDC0D3B42EB1247C /* VinylFeverApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VinylFeverApp.swift; sourceTree = "<group>"; };
 		A1E74BD06E9B4E42D2157A7A /* VinylFeverTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VinylFeverTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -55,8 +60,11 @@
 		C5BA3EE762A82EB875DF3A8E /* VinylFever.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VinylFever.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C6AB4DB3E04DFCEFC5B041DC /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		CC336537557BE54F0DB166E6 /* VinylFeverCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VinylFeverCore; path = VinylFeverCore; sourceTree = SOURCE_ROOT; };
+		CD2798F08C3813916195B870 /* PlaylistsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistsView.swift; sourceTree = "<group>"; };
 		CE24892ADA40E7507D033765 /* AppModelCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelCleanupTests.swift; sourceTree = "<group>"; };
+		E5FF662CC6F9DD3413947EB1 /* PlaylistBuilderModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistBuilderModelTests.swift; sourceTree = "<group>"; };
 		EFE8FAAEE05BF9BF9A136EDE /* MusicAppClient+Live.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MusicAppClient+Live.swift"; sourceTree = "<group>"; };
+		F2CA6FF4479042ED80E7FFA1 /* AppleMusicCatalogClient+Live.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppleMusicCatalogClient+Live.swift"; sourceTree = "<group>"; };
 		F6AB6D74511FA4977973A9A7 /* LiveShowsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveShowsView.swift; sourceTree = "<group>"; };
 		FE5CD532AC4970417B1B4142 /* LiveProcessRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveProcessRunnerTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -95,6 +103,7 @@
 				CE24892ADA40E7507D033765 /* AppModelCleanupTests.swift */,
 				5D4CD6D94E922DC5DDBA0BD1 /* CollectionInboxAppendTests.swift */,
 				FE5CD532AC4970417B1B4142 /* LiveProcessRunnerTests.swift */,
+				E5FF662CC6F9DD3413947EB1 /* PlaylistBuilderModelTests.swift */,
 				2394A4F11A73AE071EDAA272 /* PoliciesModelTests.swift */,
 			);
 			path = VinylFeverTests;
@@ -111,6 +120,7 @@
 		1E66372E13677FB01FA5539F /* Clients */ = {
 			isa = PBXGroup;
 			children = (
+				F2CA6FF4479042ED80E7FFA1 /* AppleMusicCatalogClient+Live.swift */,
 				EFE8FAAEE05BF9BF9A136EDE /* MusicAppClient+Live.swift */,
 				5FCF80A0CE45B6E77A178A11 /* ToolPathClient+Live.swift */,
 			);
@@ -124,10 +134,20 @@
 				99CF77C8AB4DB5A18E4C2711 /* Collections */,
 				16EB0E43731EBB68198E3CF9 /* LiveShows */,
 				C8B309A345C5DEE35D698D66 /* Normalizer */,
+				47CC6C3B0E7CD9EBBBEE38A4 /* Playlists */,
 				CB4A034B9ADDE567C13D2537 /* Policies */,
 				C466F85AB93E0F59EBC7B948 /* Settings */,
 			);
 			path = Features;
+			sourceTree = "<group>";
+		};
+		47CC6C3B0E7CD9EBBBEE38A4 /* Playlists */ = {
+			isa = PBXGroup;
+			children = (
+				69C21F1532ECDDF576AB20D2 /* PlaylistBuilderModel.swift */,
+				CD2798F08C3813916195B870 /* PlaylistsView.swift */,
+			);
+			path = Playlists;
 			sourceTree = "<group>";
 		};
 		7591ADA858208560FCBEF6CA /* Packages */ = {
@@ -297,6 +317,7 @@
 				24FD7A2E67BA925A1E8ADC15 /* AppModelCleanupTests.swift in Sources */,
 				A0449BF27BAF51439049A186 /* CollectionInboxAppendTests.swift in Sources */,
 				194C11E283B2D45619EBDFAE /* LiveProcessRunnerTests.swift in Sources */,
+				D7981B8C7162C6B40C7F323E /* PlaylistBuilderModelTests.swift in Sources */,
 				742071989BB20655102865DD /* PoliciesModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -307,9 +328,12 @@
 			files = (
 				B7760BDB855168DC4B52C4C9 /* AppModel.swift in Sources */,
 				6AAC484EE4FCEE3EF361E526 /* AppShellView.swift in Sources */,
+				9B8A6B6ED8853D47DDD8A734 /* AppleMusicCatalogClient+Live.swift in Sources */,
 				22775209C461BD758C5019E2 /* CollectionsView.swift in Sources */,
 				CCA54B8CA7EF47661C400FFD /* LiveShowsView.swift in Sources */,
 				4DF6C451B1388905B8A78C4F /* MusicAppClient+Live.swift in Sources */,
+				66F97E82D724D3BC1277A4F2 /* PlaylistBuilderModel.swift in Sources */,
+				9A75C2E42BF19DF4AA92D51D /* PlaylistsView.swift in Sources */,
 				2BEF6A89647B4F292BD9F65D /* PoliciesView.swift in Sources */,
 				315F7D9FE8B6468D86AE2735 /* SetlistNormalizerSheet.swift in Sources */,
 				EAFC74430016C0F3EA8F602C /* SettingsView.swift in Sources */,

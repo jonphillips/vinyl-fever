@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AppShellView: View {
   @Bindable var model: AppModel
+  @State private var playlistBuilderModel = PlaylistBuilderModel()
 
   var body: some View {
     NavigationSplitView {
@@ -27,6 +28,8 @@ struct AppShellView: View {
         CollectionsView(model: model)
       case .policies:
         PoliciesView(model: model)
+      case .playlists:
+        PlaylistsView(model: playlistBuilderModel)
       }
     }
   }
