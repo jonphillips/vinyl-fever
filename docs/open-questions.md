@@ -19,6 +19,13 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   Music API create call rather than depend on MusadoraKit; catalog-only for v1; input is a
   pinned ChatGPT Project contract (`VF-PLAYLIST: v1`, Yes Chef/Galavant pattern), not free-text
   parsing.
+- **Library context for the playlist chat** — planned as
+  [M12](milestones/M12-library-context-mcp.md) (2026-10-15): a library snapshot, a stdio MCP
+  server reached through Secure MCP Tunnel (ChatGPT), Claude Code, and Codex, plus a
+  `stage_playlist` inbox and preview annotations. The cross-app pattern is proposed as
+  jon-platform ADR-0007. **Pending Jon:** M12 Decisions 1–4. Last.fm (S3) stays parked until
+  the S2 device gate shows whether library stats alone feel thin. The tunnel was proven with a
+  hello-world server from desktop and iPad chat on 2026-10-15.
 - **M11: Create can lose the playlist it just made when a later batch fails** (from the #67
   review, 2026-10-15). `createLibraryPlaylist` sends the first 100 IDs with the create call,
   then appends the rest in batches of 100. If a later batch throws, the error drops the
