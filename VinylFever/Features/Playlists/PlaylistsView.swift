@@ -17,6 +17,7 @@ struct PlaylistsView: View {
         Spacer()
         if model.hasResolvedPaste || !model.rows.isEmpty {
           Button("Start Over", systemImage: "arrow.counterclockwise") { model.startOver() }
+            .disabled(model.isCreating || model.isAppending)
         }
       }
 
@@ -34,10 +35,6 @@ struct PlaylistsView: View {
       if let decodeError = model.decodeError {
         Label(decodeError, systemImage: "xmark.octagon.fill")
           .foregroundStyle(.red)
-      }
-      if let warning = model.markerWarning {
-        Label(warning, systemImage: "info.circle")
-          .foregroundStyle(.orange)
       }
       if let error = model.operationError {
         Label(error, systemImage: "exclamationmark.triangle")
@@ -137,11 +134,13 @@ struct PlaylistsView: View {
                 get: { model.searchTerms[row.request.index] ?? "" },
                 set: { model.searchTerms[row.request.index] = $0 }
               ),
-              canAddToCreatedPlaylist: model.createdPlaylist != nil
-                && !model.createdTrackIndexes.contains(row.request.index),
+              canAddToCreatedPlaylist: model.canAddToCreatedPlaylist(trackIndex: row.request.index),
+              canChangeMatch: model.canReopenMatch(trackIndex: row.request.index),
+              isPostCreate: model.createdPlaylist != nil,
               addToPlaylist: { Task { await model.addToCreatedPlaylist(trackIndex: row.request.index) } },
               reSearch: { Task { await model.reSearch(trackIndex: row.request.index) } },
               selectCandidate: { model.selectCandidate($0, for: row.request.index) },
+              changeMatch: { model.reopen(trackIndex: row.request.index) },
               remove: { model.remove(trackIndex: row.request.index) }
             )
           }
@@ -182,9 +181,12 @@ private struct PlaylistRowView: View {
   let row: ResolvedPlaylistRow
   @Binding var searchTerm: String
   let canAddToCreatedPlaylist: Bool
+  let canChangeMatch: Bool
+  let isPostCreate: Bool
   let addToPlaylist: () -> Void
   let reSearch: () -> Void
   let selectCandidate: (CatalogSongCandidate) -> Void
+  let changeMatch: () -> Void
   let remove: () -> Void
 
   var body: some View {
@@ -201,11 +203,15 @@ private struct PlaylistRowView: View {
         Spacer()
         Button("Remove", systemImage: "xmark.circle") { remove() }
           .labelStyle(.iconOnly)
-          .help("Remove this song from the playlist")
+          .help(isPostCreate ? "Dismiss this leftover song" : "Remove this song from the playlist draft")
       }
       HStack(alignment: .center) {
         statusContent
         Spacer()
+        if canChangeMatch {
+          Button("Change") { changeMatch() }
+            .buttonStyle(.borderless)
+        }
         if canAddToCreatedPlaylist {
           Button("Add to Playlist", systemImage: "plus") { addToPlaylist() }
             .buttonStyle(.bordered)
@@ -250,7 +256,7 @@ private struct PlaylistRowView: View {
             .foregroundStyle(.secondary)
         }
       }
-    case let .duplicate(index):
+    case let .duplicate(_, index):
       Label("Same catalog song as track #\(index); this row is skipped.", systemImage: "doc.on.doc")
         .foregroundStyle(.secondary)
     }

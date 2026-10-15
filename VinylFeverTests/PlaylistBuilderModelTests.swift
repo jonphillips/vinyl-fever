@@ -42,7 +42,7 @@ struct PlaylistBuilderModelTests {
   func candidateSelection() {
     let first = Self.candidate(id: "one", title: "Song")
     let second = Self.candidate(id: "two", title: "Song")
-    let track = TrackRequest(index: 1, artist: "Artist", title: "Song")
+    let track = TrackRequest(index: 1, artist: "The Records", title: "Song")
     let model = PlaylistBuilderModel()
     model.rows = [ResolvedPlaylistRow(request: track, status: .ambiguous([
       ScoredCandidate(candidate: first, score: 0.8), ScoredCandidate(candidate: second, score: 0.7),
@@ -77,6 +77,166 @@ struct PlaylistBuilderModelTests {
     #expect(received?.1 == nil)
     #expect(received?.2 == ["first"])
     #expect(model.createdTrackIndexes == [1])
+    #expect(model.visibleRows.map(\.request.index) == [2])
+    #expect(model.matchedCount == 0)
+    #expect(model.unresolvedCount == 1)
+  }
+
+  @Test("choosing an earlier match reconciles a later matched row and creates one ID")
+  func earlierPickDeduplicatesCreateIDs() async {
+    let capture = PlaylistCreateCapture()
+    let song = Self.candidate(id: "X", title: "Song")
+    let model = withDependencies {
+      $0.appleMusicCatalogClient = authorizedClient(create: { name, _, ids in
+        await capture.record(name: name, description: nil, ids: ids)
+        return CreatedPlaylistRef(id: "p", name: name, trackCount: ids.count)
+      })
+      $0.catalogMatchResolver.resolve = { _ in [] }
+    } operation: { PlaylistBuilderModel() }
+    let first = TrackRequest(index: 1, artist: "The Records", title: "Song")
+    let second = TrackRequest(index: 2, artist: "The Records", title: "Song")
+    model.rows = [
+      ResolvedPlaylistRow(request: first, status: .notFound(error: nil)),
+      ResolvedPlaylistRow(request: second, status: .matched(song, score: 0.9)),
+    ]
+
+    model.selectCandidate(song, for: 1)
+
+    #expect(model.rows[1].status == .duplicate(song, ofTrackIndex: 1))
+    await model.createPlaylist()
+    #expect(await capture.value?.2 == ["X"])
+  }
+
+  @Test("removing a duplicate's original promotes the duplicate back to matched")
+  func removingOriginalPromotesDuplicate() {
+    let song = Self.candidate(id: "X", title: "Song")
+    let model = PlaylistBuilderModel()
+    model.rows = [
+      ResolvedPlaylistRow(request: TrackRequest(index: 1, artist: "The Records", title: "Song"), status: .matched(song, score: 0.9)),
+      ResolvedPlaylistRow(request: TrackRequest(index: 2, artist: "The Records", title: "Song"), status: .duplicate(song, ofTrackIndex: 1)),
+    ]
+
+    model.remove(trackIndex: 1)
+
+    #expect(model.rows[1].status == .matched(song, score: 0.9))
+    #expect(model.visibleRows.map(\.request.index) == [2])
+  }
+
+  @Test("a picked match stays eligible when the previous matching row was removed")
+  func pickMatchingRemovedRow() async {
+    let capture = PlaylistCreateCapture()
+    let song = Self.candidate(id: "X", title: "Song")
+    let model = withDependencies {
+      $0.appleMusicCatalogClient = authorizedClient(create: { name, _, ids in
+        await capture.record(name: name, description: nil, ids: ids)
+        return CreatedPlaylistRef(id: "p", name: name, trackCount: ids.count)
+      })
+      $0.catalogMatchResolver.resolve = { _ in [] }
+    } operation: { PlaylistBuilderModel() }
+    model.rows = [
+      ResolvedPlaylistRow(request: TrackRequest(index: 1, artist: "The Records", title: "Song"), status: .matched(song, score: 0.9)),
+      ResolvedPlaylistRow(request: TrackRequest(index: 3, artist: "The Records", title: "Song"), status: .notFound(error: nil)),
+    ]
+
+    model.remove(trackIndex: 1)
+    model.selectCandidate(song, for: 3)
+    await model.createPlaylist()
+
+    #expect(model.rows[1].status == .matched(song, score: 0.9))
+    #expect(await capture.value?.2 == ["X"])
+  }
+
+  @Test("a leftover pick matching a created song becomes a duplicate")
+  func leftoverCannotDuplicateCreatedSong() async {
+    let song = Self.candidate(id: "X", title: "Song")
+    let model = withDependencies {
+      $0.appleMusicCatalogClient = authorizedClient()
+      $0.catalogMatchResolver.resolve = { _ in [] }
+    } operation: { PlaylistBuilderModel() }
+    model.rows = [
+      ResolvedPlaylistRow(request: TrackRequest(index: 1, artist: "The Records", title: "Song"), status: .matched(song, score: 0.9)),
+      ResolvedPlaylistRow(request: TrackRequest(index: 2, artist: "The Records", title: "Song"), status: .notFound(error: nil)),
+    ]
+    await model.createPlaylist()
+
+    model.selectCandidate(song, for: 2)
+
+    #expect(model.rows[1].status == .duplicate(song, ofTrackIndex: 1))
+    #expect(model.visibleRows.map(\.request.index) == [2])
+    #expect(!model.canAddToCreatedPlaylist(trackIndex: 2))
+  }
+
+  @Test("only matched leftover rows can be added to a created playlist")
+  func canAddOnlyMatchedLeftover() async {
+    let song = Self.candidate(id: "X", title: "Song")
+    let first = TrackRequest(index: 1, artist: "The Records", title: "Song")
+    let second = TrackRequest(index: 2, artist: "The Records", title: "Other")
+    let third = TrackRequest(index: 3, artist: "The Records", title: "Missing")
+    let fourth = TrackRequest(index: 4, artist: "The Records", title: "Duplicate")
+    let model = withDependencies {
+      $0.appleMusicCatalogClient = authorizedClient()
+      $0.catalogMatchResolver.resolve = { _ in [] }
+    } operation: { PlaylistBuilderModel() }
+    model.rows = [
+      ResolvedPlaylistRow(request: first, status: .matched(song, score: 0.9)),
+      ResolvedPlaylistRow(request: second, status: .ambiguous([])),
+      ResolvedPlaylistRow(request: third, status: .notFound(error: nil)),
+      ResolvedPlaylistRow(request: fourth, status: .duplicate(song, ofTrackIndex: 1)),
+    ]
+    await model.createPlaylist()
+    #expect(!model.canAddToCreatedPlaylist(trackIndex: 2))
+    #expect(!model.canAddToCreatedPlaylist(trackIndex: 3))
+    #expect(!model.canAddToCreatedPlaylist(trackIndex: 4))
+
+    model.selectCandidate(Self.candidate(id: "Y", title: "Other"), for: 2)
+
+    #expect(model.canAddToCreatedPlaylist(trackIndex: 2))
+  }
+
+  @Test("two concurrent add requests append a row only once")
+  func duplicateAddRequestsAreSingleFlight() async {
+    let barrier = PlaylistAppendBarrier()
+    let song = Self.candidate(id: "X", title: "Song")
+    let model = withDependencies {
+      $0.appleMusicCatalogClient = authorizedClient(append: { _, _ in await barrier.append() })
+      $0.catalogMatchResolver.resolve = { _ in [] }
+    } operation: { PlaylistBuilderModel() }
+    model.createdPlaylist = CreatedPlaylistRef(id: "p", name: "Mix", trackCount: 0)
+    model.rows = [ResolvedPlaylistRow(
+      request: TrackRequest(index: 1, artist: "The Records", title: "Song"),
+      status: .matched(song, score: 0.9)
+    )]
+
+    async let firstAdd: Void = model.addToCreatedPlaylist(trackIndex: 1)
+    await barrier.waitUntilStarted()
+    await model.addToCreatedPlaylist(trackIndex: 1)
+    await barrier.release()
+    await firstAdd
+
+    #expect(await barrier.callCount == 1)
+    #expect(model.createdPlaylist?.trackCount == 1)
+  }
+
+  @Test("reopening a match removes it from Create until a new search resolves it")
+  func reopensAndResolvesMatch() async {
+    let song = Self.candidate(id: "X", title: "Song")
+    let model = withDependencies {
+      $0.appleMusicCatalogClient = authorizedClient(search: { _, _ in [song] })
+      $0.catalogMatchResolver.resolve = { _ in [] }
+    } operation: { PlaylistBuilderModel() }
+    model.rows = [ResolvedPlaylistRow(
+      request: TrackRequest(index: 1, artist: "The Records", title: "Song"),
+      status: .matched(song, score: 0.9)
+    )]
+    model.searchTerms[1] = "The Records Song"
+
+    model.reopen(trackIndex: 1)
+    #expect(model.matchedCount == 0)
+    #expect(!model.canCreate)
+    await model.reSearch(trackIndex: 1)
+
+    #expect(model.rows[0].status == .matched(song, score: 0.9))
+    #expect(model.canCreate)
   }
 
   @Test("a row fixed after creation appends to the new playlist and leaves the table")
@@ -159,4 +319,28 @@ private actor PlaylistCreateCapture {
 private actor PlaylistAppendCapture {
   private(set) var value: (String, [String])?
   func record(id: String, ids: [String]) { value = (id, ids) }
+}
+
+private actor PlaylistAppendBarrier {
+  private(set) var callCount = 0
+  private var startedContinuation: CheckedContinuation<Void, Never>?
+  private var releaseContinuation: CheckedContinuation<Void, Never>?
+
+  func append() async {
+    callCount += 1
+    if callCount == 1 {
+      startedContinuation?.resume()
+      await withCheckedContinuation { releaseContinuation = $0 }
+    }
+  }
+
+  func waitUntilStarted() async {
+    guard callCount == 0 else { return }
+    await withCheckedContinuation { startedContinuation = $0 }
+  }
+
+  func release() {
+    releaseContinuation?.resume()
+    releaseContinuation = nil
+  }
 }

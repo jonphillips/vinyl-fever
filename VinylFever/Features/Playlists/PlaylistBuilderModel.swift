@@ -26,9 +26,14 @@ final class PlaylistBuilderModel {
   private(set) var removedTrackIndexes: Set<Int> = []
   private(set) var appendedTrackIndexes: Set<Int> = []
   private(set) var createdTrackIndexes: Set<Int> = []
+  private(set) var addingTrackIndexes: Set<Int> = []
 
   var visibleRows: [ResolvedPlaylistRow] {
-    rows.filter { !removedTrackIndexes.contains($0.request.index) && !appendedTrackIndexes.contains($0.request.index) }
+    rows.filter {
+      !removedTrackIndexes.contains($0.request.index)
+        && !appendedTrackIndexes.contains($0.request.index)
+        && (createdPlaylist == nil || !createdTrackIndexes.contains($0.request.index))
+    }
   }
 
   var matchedCount: Int {
@@ -45,6 +50,7 @@ final class PlaylistBuilderModel {
   }
   var consideredTrackCount: Int { matchedCount + unresolvedCount }
   var canCreate: Bool { createdPlaylist == nil && matchedCount > 0 && !isCreating }
+  var isAppending: Bool { !addingTrackIndexes.isEmpty }
 
   func resolve() async {
     decodeError = nil
@@ -72,11 +78,14 @@ final class PlaylistBuilderModel {
       ($0.index, "\($0.artist) \($0.title)")
     })
     rows = await resolver.resolve(decoded.request)
+    reconcileDuplicates()
     hasResolvedPaste = true
   }
 
   func reSearch(trackIndex: Int) async {
+    guard !isCreating else { return }
     guard await passGates() else { return }
+    guard !isCreating else { return }
     guard let rowIndex = rows.firstIndex(where: { $0.request.index == trackIndex }) else { return }
     let term = (searchTerms[trackIndex] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     guard !term.isEmpty else { return }
@@ -88,22 +97,42 @@ final class PlaylistBuilderModel {
       case let .ambiguous(candidates): rows[rowIndex].status = .ambiguous(candidates)
       case .notFound: rows[rowIndex].status = .notFound(error: nil)
       }
-      removeDuplicateIfNeeded(at: rowIndex)
     } catch {
       rows[rowIndex].status = .notFound(error: error.localizedDescription)
-      releaseDuplicateRows(of: trackIndex)
     }
+    reconcileDuplicates()
   }
 
   func selectCandidate(_ candidate: CatalogSongCandidate, for trackIndex: Int) {
+    guard !isCreating else { return }
     guard let rowIndex = rows.firstIndex(where: { $0.request.index == trackIndex }) else { return }
     rows[rowIndex].status = .matched(candidate, score: CatalogMatchScorer.score(rows[rowIndex].request, candidate))
-    removeDuplicateIfNeeded(at: rowIndex)
+    reconcileDuplicates()
+  }
+
+  func reopen(trackIndex: Int) {
+    guard !isCreating, !createdTrackIndexes.contains(trackIndex), !appendedTrackIndexes.contains(trackIndex),
+      let rowIndex = rows.firstIndex(where: { $0.request.index == trackIndex }),
+      case .matched = rows[rowIndex].status
+    else { return }
+    rows[rowIndex].status = .notFound(error: nil)
+    reconcileDuplicates()
+  }
+
+  func canReopenMatch(trackIndex: Int) -> Bool {
+    guard !createdTrackIndexes.contains(trackIndex),
+      !appendedTrackIndexes.contains(trackIndex),
+      !removedTrackIndexes.contains(trackIndex),
+      let row = rows.first(where: { $0.request.index == trackIndex })
+    else { return false }
+    if case .matched = row.status { return true }
+    return false
   }
 
   func remove(trackIndex: Int) {
+    guard !isCreating else { return }
     removedTrackIndexes.insert(trackIndex)
-    releaseDuplicateRows(of: trackIndex)
+    reconcileDuplicates()
   }
 
   func createPlaylist() async {
@@ -115,40 +144,60 @@ final class PlaylistBuilderModel {
       if case let .matched(candidate, _) = row.status { candidate } else { nil }
     }
     do {
-      createdTrackIndexes = Set(visibleRows.compactMap { row in
+      let trackIndexes = Set(visibleRows.compactMap { row in
         if case .matched = row.status { row.request.index } else { nil }
       })
-      createdPlaylist = try await appleMusic.createLibraryPlaylist(
+      let playlist = try await appleMusic.createLibraryPlaylist(
         playlistName.trimmingCharacters(in: .whitespacesAndNewlines),
         playlistDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
           ? nil : playlistDescription.trimmingCharacters(in: .whitespacesAndNewlines),
         matched.map(\.id)
       )
+      createdTrackIndexes = trackIndexes
+      createdPlaylist = playlist
     } catch {
       operationError = error.localizedDescription
     }
   }
 
   func addToCreatedPlaylist(trackIndex: Int) async {
-    guard let createdPlaylist,
-      let row = visibleRows.first(where: { $0.request.index == trackIndex }),
+    guard canAddToCreatedPlaylist(trackIndex: trackIndex),
+      let createdPlaylist,
+      let row = rows.first(where: { $0.request.index == trackIndex }),
       case let .matched(candidate, _) = row.status
     else { return }
+    addingTrackIndexes.insert(trackIndex)
+    defer { addingTrackIndexes.remove(trackIndex) }
     operationError = nil
     do {
       try await appleMusic.appendToLibraryPlaylist(createdPlaylist.id, [candidate.id])
+      guard let currentPlaylist = self.createdPlaylist, currentPlaylist.id == createdPlaylist.id else { return }
       appendedTrackIndexes.insert(trackIndex)
       self.createdPlaylist = CreatedPlaylistRef(
-        id: createdPlaylist.id,
-        name: createdPlaylist.name,
-        trackCount: createdPlaylist.trackCount + 1
+        id: currentPlaylist.id,
+        name: currentPlaylist.name,
+        trackCount: currentPlaylist.trackCount + 1
       )
     } catch {
       operationError = error.localizedDescription
     }
+    reconcileDuplicates()
+  }
+
+  func canAddToCreatedPlaylist(trackIndex: Int) -> Bool {
+    guard createdPlaylist != nil,
+      !createdTrackIndexes.contains(trackIndex),
+      !appendedTrackIndexes.contains(trackIndex),
+      !removedTrackIndexes.contains(trackIndex),
+      !addingTrackIndexes.contains(trackIndex),
+      let row = rows.first(where: { $0.request.index == trackIndex })
+    else { return false }
+    if case .matched = row.status { return true }
+    return false
   }
 
   func startOver() {
+    guard !isCreating, !isAppending else { return }
     pastedText = ""
     playlistName = ""
     playlistDescription = ""
@@ -164,6 +213,7 @@ final class PlaylistBuilderModel {
     removedTrackIndexes = []
     appendedTrackIndexes = []
     createdTrackIndexes = []
+    addingTrackIndexes = []
   }
 
   private func passGates() async -> Bool {
@@ -191,22 +241,26 @@ final class PlaylistBuilderModel {
     }
   }
 
-  private func removeDuplicateIfNeeded(at rowIndex: Int) {
-    guard case let .matched(candidate, _) = rows[rowIndex].status else { return }
-    if let first = rows[..<rowIndex].first(where: {
-      if case let .matched(existing, _) = $0.status { existing.id == candidate.id } else { false }
-    }) {
-      rows[rowIndex].status = .duplicate(ofTrackIndex: first.request.index)
-    } else {
-      releaseDuplicateRows(of: rows[rowIndex].request.index)
-    }
-  }
-
-  private func releaseDuplicateRows(of trackIndex: Int) {
+  private func reconcileDuplicates() {
+    var firstRowByCatalogID: [String: Int] = [:]
     for rowIndex in rows.indices {
-      if case let .duplicate(ofTrackIndex: duplicateOf) = rows[rowIndex].status,
-        duplicateOf == trackIndex {
-        rows[rowIndex].status = .notFound(error: "Previously identified as a duplicate. Search again to add this song instead.")
+      let row = rows[rowIndex]
+      guard !removedTrackIndexes.contains(row.request.index) else { continue }
+      let candidate: CatalogSongCandidate
+      switch row.status {
+      case let .matched(value, _), let .duplicate(value, _):
+        candidate = value
+      case .ambiguous, .notFound:
+        continue
+      }
+      if let firstTrackIndex = firstRowByCatalogID[candidate.id] {
+        rows[rowIndex].status = .duplicate(candidate, ofTrackIndex: firstTrackIndex)
+      } else {
+        firstRowByCatalogID[candidate.id] = row.request.index
+        rows[rowIndex].status = .matched(
+          candidate,
+          score: CatalogMatchScorer.score(row.request, candidate)
+        )
       }
     }
   }

@@ -7,7 +7,7 @@ public struct ResolvedPlaylistRow: Equatable, Sendable, Identifiable {
     case matched(CatalogSongCandidate, score: Double)
     case ambiguous([ScoredCandidate])
     case notFound(error: String?)
-    case duplicate(ofTrackIndex: Int)
+    case duplicate(CatalogSongCandidate, ofTrackIndex: Int)
   }
 
   public var request: TrackRequest
@@ -74,7 +74,7 @@ extension CatalogMatchResolver {
       guard var row = optionalRow else { return nil }
       if case let .matched(candidate, _) = row.status {
         if let firstIndex = firstTrackIndexByCatalogID[candidate.id] {
-          row.status = .duplicate(ofTrackIndex: firstIndex)
+          row.status = .duplicate(candidate, ofTrackIndex: firstIndex)
         } else {
           firstTrackIndexByCatalogID[candidate.id] = row.request.index
         }

@@ -29,7 +29,7 @@ struct CatalogMatchResolverTests {
     ])) { _ in [same] }
     #expect(rows.count == 2)
     #expect(rows[0].status == .matched(same, score: 0.9))
-    #expect(rows[1].status == .duplicate(ofTrackIndex: 4))
+    #expect(rows[1].status == .duplicate(same, ofTrackIndex: 4))
   }
 
   @Test("a row search failure becomes a not-found row and leaves the batch intact")
