@@ -32,6 +32,7 @@ struct AppShellView: View {
         PlaylistsView(model: playlistBuilderModel)
       }
     }
+    .task { await playlistBuilderModel.loadSnapshotAndRefreshIfStale() }
   }
 }
 

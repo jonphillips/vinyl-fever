@@ -15,6 +15,7 @@ struct VinylFeverApp: App {
       $0.runLogClient = .liveValue
       $0.fileOperationClient = .liveValue
       $0.musicAppClient = .liveValue
+      $0.librarySnapshotStore = .liveValue
       $0.appleMusicCatalogClient = .liveValue
       $0.catalogMatchResolver = .liveValue
       // The Setlist Normalizer's live sandwich. `modelClient` and `apiKeyStore` need no

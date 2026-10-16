@@ -22,6 +22,9 @@ extension MusicAppClient {
       },
       readAlbumTracks: { request in
         try await bridge.readAlbumTracks(request)
+      },
+      readLibrarySnapshot: {
+        try await bridge.readLibrarySnapshot()
       }
     )
   }
@@ -57,22 +60,29 @@ private struct LiveMusicAppBridge: Sendable {
         let tracks = try Self.scopedFileTracks(on: libraryPlaylist, request: request)
         let requestedAlbum = AudioTagVerifier.normalizedMetadataString(request.albumTitle)
         let requestedAlbumArtist = AudioTagVerifier.normalizedMetadataString(request.albumArtist)
-        return tracks
+        return
+          tracks
           .compactMap { track -> ImportedTrackRef? in
             let ref = Self.importedTrackRef(from: track)
             let album = AudioTagVerifier.normalizedMetadataString(ref.album)
             let albumArtist = AudioTagVerifier.normalizedMetadataString(ref.albumArtist)
-            guard album == requestedAlbum || (request.includesTitleSiblings && Self.isTitleSibling(album, of: requestedAlbum)) else {
+            guard
+              album == requestedAlbum
+                || (request.includesTitleSiblings && Self.isTitleSibling(album, of: requestedAlbum))
+            else {
               return nil
             }
-            guard requestedAlbumArtist == nil || albumArtist == requestedAlbumArtist || request.includesTitleSiblings else {
+            guard
+              requestedAlbumArtist == nil || albumArtist == requestedAlbumArtist
+                || request.includesTitleSiblings
+            else {
               return nil
             }
             return ref
           }
           .sorted { lhs, rhs in
             switch (lhs.trackNumber, rhs.trackNumber) {
-            case let (lhs?, rhs?) where lhs != rhs:
+            case (let lhs?, let rhs?) where lhs != rhs:
               lhs < rhs
             case (nil, _?):
               false
@@ -84,6 +94,82 @@ private struct LiveMusicAppBridge: Sendable {
           }
       }
       .value
+    }
+  }
+
+  func readLibrarySnapshot() async throws -> LibrarySnapshot {
+    try await ensureMusicIsRunning()
+    let permission = await Self.determineAutomationPermission(askUserIfNeeded: false)
+    guard permission == .authorized else {
+      throw MusicAppLiveError.automationPermission(permission)
+    }
+    return try await Self.withTimeout(Self.readTimeout) {
+      try await Task.detached(priority: .userInitiated) {
+        let application = try Self.musicApplication()
+        let playlist = try Self.libraryPlaylist(in: application)
+        guard let tracks = playlist.value(forKey: "tracks") as? SBElementArray else {
+          throw MusicAppLiveError.scriptingBridgeReadFailed("tracks")
+        }
+        // ScriptingBridge performs one Apple Event for each bulk property request.
+        let properties = [
+          "persistentID", "name", "artist", "albumArtist", "album", "genre", "year", "duration",
+          "playedCount", "skippedCount", "loved", "rating", "dateAdded", "playedDate",
+          "cloudStatus",
+        ]
+        let columns = try Dictionary(
+          uniqueKeysWithValues: properties.map { key in
+            guard let values = tracks.value(forKey: key) as? [Any] else {
+              throw MusicAppLiveError.scriptingBridgeReadFailed(key)
+            }
+            return (key, values)
+          })
+        let count = columns["persistentID"]?.count ?? 0
+        guard properties.allSatisfy({ columns[$0]?.count == count }) else {
+          throw MusicAppLiveError.scriptingBridgeReadFailed("inconsistent bulk track columns")
+        }
+        func value(_ key: String, _ index: Int) -> Any? {
+          guard let value = columns[key]?[index], !(value is NSNull) else { return nil }
+          return value
+        }
+        func string(_ key: String, _ index: Int) -> String? { value(key, index) as? String }
+        func integer(_ key: String, _ index: Int) -> Int? {
+          (value(key, index) as? NSNumber)?.intValue ?? value(key, index) as? Int
+        }
+        func decimal(_ key: String, _ index: Int) -> Double? {
+          (value(key, index) as? NSNumber)?.doubleValue ?? value(key, index) as? Double
+        }
+        func date(_ key: String, _ index: Int) -> Date? { value(key, index) as? Date }
+        let result = try (0..<count).map { index -> LibraryTrack in
+          guard let id = string("persistentID", index), let name = string("name", index),
+            let artist = string("artist", index)
+          else {
+            throw MusicAppLiveError.scriptingBridgeReadFailed(
+              "required track fields at index \(index)")
+          }
+          return LibraryTrack(
+            persistentID: id, name: name, artist: artist,
+            albumArtist: string("albumArtist", index) ?? "", album: string("album", index) ?? "",
+            genre: string("genre", index), year: integer("year", index),
+            durationSeconds: decimal("duration", index),
+            playCount: integer("playedCount", index) ?? 0,
+            skipCount: integer("skippedCount", index) ?? 0,
+            favorited: (value("loved", index) as? NSNumber)?.boolValue ?? false,
+            rating: integer("rating", index),
+            dateAdded: date("dateAdded", index), lastPlayed: date("playedDate", index),
+            availability: Self.libraryAvailability(string("cloudStatus", index)))
+        }
+        return LibrarySnapshot(generatedAt: Date(), tracks: result)
+      }.value
+    }
+  }
+
+  private static func libraryAvailability(_ value: String?) -> LibraryAvailability {
+    switch value?.lowercased() {
+    case "subscription": .subscription
+    case "purchased": .purchased
+    case "matched": .matched
+    case "uploaded": .uploaded
+    default: .other
     }
   }
 
@@ -116,7 +202,8 @@ private struct LiveMusicAppBridge: Sendable {
       let fileManager = FileManager.default
       var isDirectory: ObjCBool = false
       guard
-        fileManager.fileExists(atPath: watchFolder.path(percentEncoded: false), isDirectory: &isDirectory),
+        fileManager.fileExists(
+          atPath: watchFolder.path(percentEncoded: false), isDirectory: &isDirectory),
         isDirectory.boolValue
       else {
         throw MusicAppLiveError.watchFolderUnavailable(watchFolder)
@@ -163,15 +250,18 @@ private struct LiveMusicAppBridge: Sendable {
   }
 
   private func ensureMusicIsRunning() async throws {
-    guard NSRunningApplication
-      .runningApplications(withBundleIdentifier: Self.musicBundleIdentifier)
-      .isEmpty
+    guard
+      NSRunningApplication
+        .runningApplications(withBundleIdentifier: Self.musicBundleIdentifier)
+        .isEmpty
     else {
       return
     }
-    guard let url = NSWorkspace.shared.urlForApplication(
-      withBundleIdentifier: Self.musicBundleIdentifier
-    ) else {
+    guard
+      let url = NSWorkspace.shared.urlForApplication(
+        withBundleIdentifier: Self.musicBundleIdentifier
+      )
+    else {
       throw MusicAppLiveError.musicAppUnavailable
     }
 
@@ -433,21 +523,21 @@ private enum MusicAppLiveError: LocalizedError {
 
   var errorDescription: String? {
     switch self {
-    case let .appleEventDescriptorFailed(status):
+    case .appleEventDescriptorFailed(let status):
       "Could not prepare the Music automation target descriptor: OSStatus \(status)."
-    case let .automationPermission(permission):
+    case .automationPermission(let permission):
       permission.displayMessage
     case .libraryPlaylistUnavailable:
       "Music's library playlist could not be read."
     case .musicAppUnavailable:
       "Music.app could not be found."
-    case let .scriptingBridgeReadFailed(key):
+    case .scriptingBridgeReadFailed(let key):
       "Music scripting bridge value '\(key)' could not be read."
     case .timedOut:
       "Music did not respond in time. It may be busy or blocked on a dialog; try again."
-    case let .watchFolderUnavailable(url):
+    case .watchFolderUnavailable(let url):
       "The Automatically Add folder isn't there: \(url.path(percentEncoded: false)). Check it in Settings — is the drive mounted?"
-    case let .watchFolderNotWritable(url):
+    case .watchFolderNotWritable(let url):
       "The Automatically Add folder isn't writable: \(url.path(percentEncoded: false))."
     }
   }

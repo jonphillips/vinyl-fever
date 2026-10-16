@@ -57,16 +57,19 @@ public enum CatalogMatchScorer {
     "remix", "acoustic", "demo", "sped up", "slowed",
   ]
 
-  public static func score(_ request: TrackRequest, candidates: [CatalogSongCandidate]) -> MatchOutcome {
-    let ranked = candidates
+  public static func score(_ request: TrackRequest, candidates: [CatalogSongCandidate])
+    -> MatchOutcome
+  {
+    let ranked =
+      candidates
       .map { candidate in ScoredCandidate(candidate: candidate, score: score(request, candidate)) }
       .sorted(by: orderedBefore)
     guard let first = ranked.first, first.score >= ambiguousFloor else { return .notFound }
-    let firstTitle = normalizeTitle(first.candidate.title)
-    let firstArtist = normalizeArtist(first.candidate.artistName)
+    let firstTitle = SongTextNormalizer.title(first.candidate.title)
+    let firstArtist = SongTextNormalizer.artist(first.candidate.artistName)
     let bestDifferentSong = ranked.dropFirst().first {
-      normalizeTitle($0.candidate.title) != firstTitle
-        || normalizeArtist($0.candidate.artistName) != firstArtist
+      SongTextNormalizer.title($0.candidate.title) != firstTitle
+        || SongTextNormalizer.artist($0.candidate.artistName) != firstArtist
     }
     let lead = first.score - (bestDifferentSong?.score ?? 0)
     if first.score >= autoMatchThreshold && lead + 1e-9 >= autoMatchLead {
@@ -76,71 +79,36 @@ public enum CatalogMatchScorer {
   }
 
   public static func score(_ request: TrackRequest, _ candidate: CatalogSongCandidate) -> Double {
-    let titleScore = similarity(normalizeTitle(request.title), normalizeTitle(candidate.title))
-    let artistScore = similarity(normalizeArtist(request.artist), normalizeArtist(candidate.artistName))
+    let titleScore = similarity(
+      SongTextNormalizer.title(request.title), SongTextNormalizer.title(candidate.title))
+    let artistScore = similarity(
+      SongTextNormalizer.artist(request.artist), SongTextNormalizer.artist(candidate.artistName))
     // The base match tops out at 0.90 so the two hint boosts remain useful when
     // otherwise-identical catalog entries need to be separated.
     var score = (titleScore * 0.55) + (artistScore * 0.35)
 
-    let requestedVersionText = " \(normalizeTitle(request.title)) "
-    let candidateVersionText = " \(normalizeTitle(candidate.title)) "
+    let requestedVersionText = " \(SongTextNormalizer.title(request.title)) "
+    let candidateVersionText = " \(SongTextNormalizer.title(candidate.title)) "
     for term in versionTerms {
-      let normalizedTerm = " \(normalizeText(term)) "
-      if candidateVersionText.contains(normalizedTerm) && !requestedVersionText.contains(normalizedTerm) {
+      let normalizedTerm = " \(SongTextNormalizer.text(term)) "
+      if candidateVersionText.contains(normalizedTerm)
+        && !requestedVersionText.contains(normalizedTerm)
+      {
         score -= versionPenalty
       }
     }
 
     if let requestedAlbum = request.album, let candidateAlbum = candidate.albumTitle,
-      normalizeAlbum(requestedAlbum) == normalizeAlbum(candidateAlbum) {
+      SongTextNormalizer.album(requestedAlbum) == SongTextNormalizer.album(candidateAlbum)
+    {
       score += hintBoost
     }
     if let requestedYear = request.year, let releaseDate = candidate.releaseDate,
-      releaseYear(releaseDate) == requestedYear {
+      releaseYear(releaseDate) == requestedYear
+    {
       score += hintBoost
     }
     return min(1, max(0, score))
-  }
-
-  private static func normalizeArtist(_ raw: String) -> String {
-    normalizeText(raw.replacingOccurrences(
-      of: #"\b(feat\.?|ft\.?|with)\b.*$"#,
-      with: "",
-      options: [.regularExpression, .caseInsensitive]
-    ))
-  }
-
-  private static func normalizeTitle(_ raw: String) -> String {
-    var value = raw
-    value = value.replacingOccurrences(
-      // Only a bracket that *starts* with the credit: `(Live with the Orchestra)` must survive
-      // so the version penalty and same-song grouping still see "live".
-      of: #"\s*[\(\[]\s*(feat\.?|ft\.?|with)\b[^)\]]*[)\]]"#,
-      with: "",
-      options: [.regularExpression, .caseInsensitive]
-    )
-    value = value.replacingOccurrences(
-      of: #"\s*[\(\[](?:(?:19|20)\d{2}\s+)?remaster(?:ed)?[^)\]]*[)\]]"#,
-      with: "",
-      options: [.regularExpression, .caseInsensitive]
-    )
-    value = value.replacingOccurrences(
-      of: #"\s+[-–—]\s+(?:(?:19|20)\d{2}\s+)?remaster(?:ed)?(?:\s+(?:19|20)\d{2})?\s*$"#,
-      with: "",
-      options: [.regularExpression, .caseInsensitive]
-    )
-    return normalizeText(value)
-  }
-
-  private static func normalizeAlbum(_ raw: String) -> String {
-    normalizeText(raw)
-  }
-
-  private static func normalizeText(_ raw: String) -> String {
-    var value = raw.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
-    value = value.replacingOccurrences(of: "&", with: " and ")
-    value = value.replacingOccurrences(of: #"[^a-z0-9]+"#, with: " ", options: .regularExpression)
-    return value.split(whereSeparator: \.isWhitespace).joined(separator: " ")
   }
 
   private static func similarity(_ lhs: String, _ rhs: String) -> Double {
@@ -153,7 +121,8 @@ public enum CatalogMatchScorer {
       var current = [leftIndex + 1] + Array(repeating: 0, count: right.count)
       for (rightIndex, rightCharacter) in right.enumerated() {
         let substitution = previous[rightIndex] + (leftCharacter == rightCharacter ? 0 : 1)
-        current[rightIndex + 1] = min(previous[rightIndex + 1] + 1, min(current[rightIndex] + 1, substitution))
+        current[rightIndex + 1] = min(
+          previous[rightIndex + 1] + 1, min(current[rightIndex] + 1, substitution))
       }
       previous = current
     }
@@ -170,7 +139,7 @@ public enum CatalogMatchScorer {
   private static func orderedBefore(_ lhs: ScoredCandidate, _ rhs: ScoredCandidate) -> Bool {
     if lhs.score != rhs.score { return lhs.score > rhs.score }
     switch (lhs.candidate.releaseDate, rhs.candidate.releaseDate) {
-    case let (left?, right?): return left < right
+    case (let left?, let right?): return left < right
     case (_?, nil): return true
     case (nil, _?): return false
     case (nil, nil): return lhs.candidate.id < rhs.candidate.id

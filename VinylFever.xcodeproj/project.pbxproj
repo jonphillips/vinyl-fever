@@ -25,6 +25,7 @@
 		9A75C2E42BF19DF4AA92D51D /* PlaylistsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD2798F08C3813916195B870 /* PlaylistsView.swift */; };
 		9B8A6B6ED8853D47DDD8A734 /* AppleMusicCatalogClient+Live.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2CA6FF4479042ED80E7FFA1 /* AppleMusicCatalogClient+Live.swift */; };
 		A0449BF27BAF51439049A186 /* CollectionInboxAppendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D4CD6D94E922DC5DDBA0BD1 /* CollectionInboxAppendTests.swift */; };
+		B5C7C81A0EC9C6BA6A423B73 /* LibrarySnapshotStore+Live.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F46A0812CB739DA1B1389BA /* LibrarySnapshotStore+Live.swift */; };
 		B7760BDB855168DC4B52C4C9 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B9501DC755058CF461B454F /* AppModel.swift */; };
 		CCA54B8CA7EF47661C400FFD /* LiveShowsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6AB6D74511FA4977973A9A7 /* LiveShowsView.swift */; };
 		D7981B8C7162C6B40C7F323E /* PlaylistBuilderModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5FF662CC6F9DD3413947EB1 /* PlaylistBuilderModelTests.swift */; };
@@ -43,6 +44,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0F46A0812CB739DA1B1389BA /* LibrarySnapshotStore+Live.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LibrarySnapshotStore+Live.swift"; sourceTree = "<group>"; };
 		2394A4F11A73AE071EDAA272 /* PoliciesModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PoliciesModelTests.swift; sourceTree = "<group>"; };
 		37594C5E09F565DC70AF0A3C /* LLMClientKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = LLMClientKit; path = "../jon-platform/packages/LLMClientKit"; sourceTree = SOURCE_ROOT; };
 		4B9501DC755058CF461B454F /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
@@ -121,6 +123,7 @@
 			isa = PBXGroup;
 			children = (
 				F2CA6FF4479042ED80E7FFA1 /* AppleMusicCatalogClient+Live.swift */,
+				0F46A0812CB739DA1B1389BA /* LibrarySnapshotStore+Live.swift */,
 				EFE8FAAEE05BF9BF9A136EDE /* MusicAppClient+Live.swift */,
 				5FCF80A0CE45B6E77A178A11 /* ToolPathClient+Live.swift */,
 			);
@@ -330,6 +333,7 @@
 				6AAC484EE4FCEE3EF361E526 /* AppShellView.swift in Sources */,
 				9B8A6B6ED8853D47DDD8A734 /* AppleMusicCatalogClient+Live.swift in Sources */,
 				22775209C461BD758C5019E2 /* CollectionsView.swift in Sources */,
+				B5C7C81A0EC9C6BA6A423B73 /* LibrarySnapshotStore+Live.swift in Sources */,
 				CCA54B8CA7EF47661C400FFD /* LiveShowsView.swift in Sources */,
 				4DF6C451B1388905B8A78C4F /* MusicAppClient+Live.swift in Sources */,
 				66F97E82D724D3BC1277A4F2 /* PlaylistBuilderModel.swift in Sources */,

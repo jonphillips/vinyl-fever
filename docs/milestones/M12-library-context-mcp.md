@@ -151,7 +151,7 @@ Last.fm (see *Decisions*). Dispatches 1, 2, and 3 each owe a device gate on Jon'
   It builds `MCPServerKit`, `LLMHandoffKit.HandoffInbox`, and `scripts/mcp-tunnel`. Device gate
   owed (the `mcp-hello` smoke test from the iPad).
 
-- [ ] **S0 — Snapshot model + library index (core, pure, no ScriptingBridge, no UI).**
+- [x] **S0 — Snapshot model + library index (core, pure, no ScriptingBridge, no UI).**
   - `LibrarySnapshot` and `LibraryTrack` value types, plus a versioned codec for format v1 (see
     above). A newer version is a typed error; dates are ISO 8601.
   - Pull the scorer's private normalizers (`normalizeArtist/Title/Album/Text`) into an internal
@@ -179,7 +179,7 @@ Last.fm (see *Decisions*). Dispatches 1, 2, and 3 each owe a device gate on Jon'
     - annotations for owned, not owned, and no snapshot.
   - The existing scorer tests pass unchanged after the normalizer extraction.
 
-- [ ] **S1 — Snapshot writer + preview annotations (app).** Device gate owed.
+- [x] **S1 — Snapshot writer + preview annotations (app).** Device gate owed.
   - `MusicAppClient.readLibrarySnapshot()` is the new endpoint; the live implementation stays
     in `MusicAppClient+Live.swift`. It does a **bulk property read**: one KVC
     `value(forKey:)` per property on the library playlist's `tracks` `SBElementArray`, so each

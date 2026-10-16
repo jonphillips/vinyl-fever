@@ -11,8 +11,10 @@ struct PlaylistsView: View {
         VStack(alignment: .leading, spacing: 4) {
           Text("Playlists")
             .font(.largeTitle.bold())
-          Text("Paste a playlist from Vinyl Fever Chat, review the catalog matches, then create it in Music.")
-            .foregroundStyle(.secondary)
+          Text(
+            "Paste a playlist from Vinyl Fever Chat, review the catalog matches, then create it in Music."
+          )
+          .foregroundStyle(.secondary)
         }
         Spacer()
         if model.hasResolvedPaste || !model.rows.isEmpty {
@@ -24,6 +26,8 @@ struct PlaylistsView: View {
       if !model.hasResolvedPaste && model.createdPlaylist == nil {
         pastePanel
       }
+
+      snapshotStatus
 
       if let gate = model.gate {
         Label(gate.message, systemImage: "exclamationmark.triangle.fill")
@@ -58,7 +62,9 @@ struct PlaylistsView: View {
       }
       Button("Cancel", role: .cancel) {}
     } message: {
-      Text("\(model.unresolvedCount) unresolved song\(model.unresolvedCount == 1 ? " will" : "s will") be skipped. You can fix and add them after creation.")
+      Text(
+        "\(model.unresolvedCount) unresolved song\(model.unresolvedCount == 1 ? " will" : "s will") be skipped. You can fix and add them after creation."
+      )
     }
   }
 
@@ -91,7 +97,9 @@ struct PlaylistsView: View {
           }
         }
         .buttonStyle(.borderedProminent)
-        .disabled(model.isResolving || model.pastedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .disabled(
+          model.isResolving
+            || model.pastedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
       }
     }
     .padding(16)
@@ -101,8 +109,11 @@ struct PlaylistsView: View {
   private var reviewPanel: some View {
     VStack(alignment: .leading, spacing: 12) {
       if let created = model.createdPlaylist {
-        Label("Created “\(created.name)” with \(created.trackCount) songs. It will appear in Music after iCloud sync.", systemImage: "checkmark.circle.fill")
-          .foregroundStyle(.green)
+        Label(
+          "Created “\(created.name)” with \(created.trackCount) songs. It will appear in Music after iCloud sync.",
+          systemImage: "checkmark.circle.fill"
+        )
+        .foregroundStyle(.green)
       } else {
         TextField("Playlist name", text: $model.playlistName)
           .font(.title2.weight(.semibold))
@@ -110,9 +121,11 @@ struct PlaylistsView: View {
       }
 
       if model.markerWarning != nil {
-        Text("This playlist used an older contract. For the latest instructions, open Settings and copy them again.")
-          .font(.callout)
-          .foregroundStyle(.orange)
+        Text(
+          "This playlist used an older contract. For the latest instructions, open Settings and copy them again."
+        )
+        .font(.callout)
+        .foregroundStyle(.orange)
       }
 
       if !model.droppedTracks.isEmpty {
@@ -130,6 +143,7 @@ struct PlaylistsView: View {
           ForEach(model.visibleRows) { row in
             PlaylistRowView(
               row: row,
+              annotation: model.annotation(for: row.request, candidate: matchedCandidate(in: row)),
               searchTerm: Binding(
                 get: { model.searchTerms[row.request.index] ?? "" },
                 set: { model.searchTerms[row.request.index] = $0 }
@@ -137,7 +151,9 @@ struct PlaylistsView: View {
               canAddToCreatedPlaylist: model.canAddToCreatedPlaylist(trackIndex: row.request.index),
               canChangeMatch: model.canReopenMatch(trackIndex: row.request.index),
               isPostCreate: model.createdPlaylist != nil,
-              addToPlaylist: { Task { await model.addToCreatedPlaylist(trackIndex: row.request.index) } },
+              addToPlaylist: {
+                Task { await model.addToCreatedPlaylist(trackIndex: row.request.index) }
+              },
               reSearch: { Task { await model.reSearch(trackIndex: row.request.index) } },
               selectCandidate: { model.selectCandidate($0, for: row.request.index) },
               changeMatch: { model.reopen(trackIndex: row.request.index) },
@@ -153,6 +169,15 @@ struct PlaylistsView: View {
           .font(.callout)
           .foregroundStyle(.secondary)
         Spacer()
+        if model.heavilyPlayedCount > 0 {
+          Button(
+            "Remove \(model.heavilyPlayedCount) tracks played ≥ 20 times",
+            systemImage: "minus.circle"
+          ) {
+            model.removeHeavilyPlayedRows()
+          }
+          .disabled(model.isCreating)
+        }
         if model.failedSearchCount > 0 || model.isRetryingSearches {
           Button {
             Task { await model.retryFailedSearches() }
@@ -160,7 +185,9 @@ struct PlaylistsView: View {
             if model.isRetryingSearches {
               ProgressView().controlSize(.small)
             } else {
-              Label("Retry Failed Searches (\(model.failedSearchCount))", systemImage: "arrow.clockwise")
+              Label(
+                "Retry Failed Searches (\(model.failedSearchCount))", systemImage: "arrow.clockwise"
+              )
             }
           }
           .disabled(model.isRetryingSearches || model.isCreating)
@@ -187,10 +214,42 @@ struct PlaylistsView: View {
     .padding(16)
     .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 12))
   }
+
+  private var snapshotStatus: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      HStack {
+        if let snapshot = model.librarySnapshot {
+          Text(
+            "Library snapshot: \(snapshot.trackCount.formatted()) tracks · \(snapshot.generatedAt.formatted(.relative(presentation: .numeric)))"
+          )
+          .font(.callout).foregroundStyle(.secondary)
+        } else if model.isRefreshingSnapshot {
+          ProgressView("Building library snapshot…").controlSize(.small)
+        } else {
+          Text("Library snapshot unavailable").font(.callout).foregroundStyle(.secondary)
+        }
+        Spacer()
+        Button("Refresh Library Snapshot", systemImage: "arrow.clockwise") {
+          Task { await model.refreshLibrarySnapshot() }
+        }
+        .disabled(model.isRefreshingSnapshot)
+      }
+      if let error = model.librarySnapshotError {
+        Label(error, systemImage: "exclamationmark.triangle").font(.callout).foregroundStyle(
+          .orange)
+      }
+    }
+  }
+
+  private func matchedCandidate(in row: ResolvedPlaylistRow) -> CatalogSongCandidate? {
+    if case .matched(let candidate, _) = row.status { return candidate }
+    return nil
+  }
 }
 
 private struct PlaylistRowView: View {
   let row: ResolvedPlaylistRow
+  let annotation: LibraryAnnotation
   @Binding var searchTerm: String
   let canAddToCreatedPlaylist: Bool
   let canChangeMatch: Bool
@@ -215,7 +274,9 @@ private struct PlaylistRowView: View {
         Spacer()
         Button("Remove", systemImage: "xmark.circle") { remove() }
           .labelStyle(.iconOnly)
-          .help(isPostCreate ? "Dismiss this leftover song" : "Remove this song from the playlist draft")
+          .help(
+            isPostCreate ? "Dismiss this leftover song" : "Remove this song from the playlist draft"
+          )
       }
       HStack(alignment: .center) {
         statusContent
@@ -230,6 +291,7 @@ private struct PlaylistRowView: View {
         }
       }
       .padding(.leading, 40)
+      annotationContent.padding(.leading, 40)
     }
     .padding(12)
     .background(.background, in: RoundedRectangle(cornerRadius: 9))
@@ -237,13 +299,32 @@ private struct PlaylistRowView: View {
   }
 
   @ViewBuilder
+  private var annotationContent: some View {
+    switch annotation {
+    case .inLibrary(let plays, let lastPlayed, let favorited, _):
+      HStack(spacing: 6) {
+        Text("In library · \(plays) plays")
+        if let lastPlayed {
+          Text("· last \(lastPlayed.formatted(.dateTime.month(.abbreviated).year()))")
+        }
+        if favorited { Text("· ♥") }
+      }
+      .font(.caption).foregroundStyle(.secondary)
+    case .notInLibrary:
+      Label("New to you", systemImage: "sparkle").font(.caption).foregroundStyle(.secondary)
+    case .snapshotUnavailable:
+      EmptyView()
+    }
+  }
+
+  @ViewBuilder
   private var statusContent: some View {
     switch row.status {
-    case let .matched(candidate, _):
+    case .matched(let candidate, _):
       Label("\(candidate.title) — \(candidate.artistName)", systemImage: "checkmark.circle.fill")
         .foregroundStyle(.green)
         .lineLimit(1)
-    case let .ambiguous(candidates):
+    case .ambiguous(let candidates):
       HStack {
         Label("Choose a match", systemImage: "questionmark.circle")
           .foregroundStyle(.orange)
@@ -255,7 +336,7 @@ private struct PlaylistRowView: View {
         }
         .frame(maxWidth: 390)
       }
-    case let .notFound(error):
+    case .notFound(let error):
       HStack {
         TextField("Search term", text: $searchTerm)
           .textFieldStyle(.roundedBorder)
@@ -268,7 +349,7 @@ private struct PlaylistRowView: View {
             .foregroundStyle(.secondary)
         }
       }
-    case let .duplicate(_, index):
+    case .duplicate(_, let index):
       Label("Same catalog song as track #\(index); this row is skipped.", systemImage: "doc.on.doc")
         .foregroundStyle(.secondary)
     }
@@ -277,7 +358,7 @@ private struct PlaylistRowView: View {
   private func candidateSelection(_ candidates: [ScoredCandidate]) -> Binding<String> {
     Binding(
       get: {
-        if case let .matched(candidate, _) = row.status { candidate.id } else { "" }
+        if case .matched(let candidate, _) = row.status { candidate.id } else { "" }
       },
       set: { id in
         if let selected = candidates.first(where: { $0.candidate.id == id }) {
@@ -288,9 +369,13 @@ private struct PlaylistRowView: View {
   }
 
   private func candidateLabel(_ candidate: CatalogSongCandidate) -> String {
-    let albumYear = [candidate.albumTitle, candidate.releaseDate.map { String(Calendar.current.component(.year, from: $0)) }]
-      .compactMap { $0 }
-      .joined(separator: " · ")
-    return [candidate.title, candidate.artistName, albumYear].filter { !$0.isEmpty }.joined(separator: " — ")
+    let albumYear = [
+      candidate.albumTitle,
+      candidate.releaseDate.map { String(Calendar.current.component(.year, from: $0)) },
+    ]
+    .compactMap { $0 }
+    .joined(separator: " · ")
+    return [candidate.title, candidate.artistName, albumYear].filter { !$0.isEmpty }.joined(
+      separator: " — ")
   }
 }

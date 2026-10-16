@@ -41,7 +41,8 @@ struct CollectionInboxAppendTests {
     #expect(FileManager.default.fileExists(atPath: source.path(percentEncoded: false)))
     #expect(
       FileManager.default.fileExists(
-        atPath: expectedInbox.appendingPathComponent("one-hit-wonder.m4a").path(percentEncoded: false)
+        atPath: expectedInbox.appendingPathComponent("one-hit-wonder.m4a").path(
+          percentEncoded: false)
       )
     )
   }
@@ -183,7 +184,7 @@ struct CollectionInboxAppendTests {
       model.inboxFilesByAlbumID[album.id] == [
         inboxRoot.appendingPathComponent(album.id.uuidString, isDirectory: true)
           .appendingPathComponent("one-hit-wonder.m4a")
-          .standardizedFileURL,
+          .standardizedFileURL
       ]
     )
   }
@@ -195,7 +196,8 @@ struct CollectionInboxAppendTests {
   func resumingInboxRebuildsFromStagedFilesAndClearsDerivedFolders() async throws {
     let temp = try Self.makeTempDirectory()
     defer { try? FileManager.default.removeItem(at: temp) }
-    let inbox = CollectionInboxClient.live(root: temp.appendingPathComponent("Inbox", isDirectory: true))
+    let inbox = CollectionInboxClient.live(
+      root: temp.appendingPathComponent("Inbox", isDirectory: true))
     let album = Self.album()
     let staging = try inbox.stagingDirectory(album.id)
     let stagedFile = staging.appendingPathComponent("queued.mp3")
@@ -203,29 +205,34 @@ struct CollectionInboxAppendTests {
     let working = staging.appendingPathComponent(ApplyPlan.workingDirectoryName, isDirectory: true)
     try FileManager.default.createDirectory(at: working, withIntermediateDirectories: true)
     try Data("derived".utf8).write(to: working.appendingPathComponent("queued.mp3"))
-    let output = staging.appendingPathComponent(ConversionPlan.outputDirectoryName, isDirectory: true)
+    let output = staging.appendingPathComponent(
+      ConversionPlan.outputDirectoryName, isDirectory: true)
     try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
     try Data("derived".utf8).write(to: output.appendingPathComponent("queued.mp3"))
 
-    let model = withDependencies {
+    let model = await withDependencies {
       $0.collectionInboxClient = inbox
       $0.fileSystemClient.scanAudioFolder = { root in
         try FileSystemClient.liveValue.scanAudioFolder(root: root)
       }
       $0.audioMetadataClient.read = { _ in AudioTags(title: "Queued Song", hasAudioStream: true) }
       $0.fileOperationClient.removeItem = { url in
-        guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else { return }
+        guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
+          return
+        }
         try FileManager.default.removeItem(at: url)
       }
+      $0.uuid = .incrementing
     } operation: {
-      AppModel()
+      let model = AppModel()
+      await model.resumeInboxAppend(entry: album)
+      return model
     }
-
-    await model.resumeInboxAppend(entry: album)
 
     #expect(model.compilationAppendFolder?.standardizedFileURL == staging.standardizedFileURL)
     #expect(model.compilationAppendAlbumID == album.id)
-    #expect(model.compilationApplyPlan?.tracks.map(\.sourceFile.url) == [stagedFile.standardizedFileURL])
+    #expect(
+      model.compilationApplyPlan?.tracks.map(\.sourceFile.url) == [stagedFile.standardizedFileURL])
     #expect(FileManager.default.fileExists(atPath: stagedFile.path(percentEncoded: false)))
     #expect(!FileManager.default.fileExists(atPath: working.path(percentEncoded: false)))
     #expect(!FileManager.default.fileExists(atPath: output.path(percentEncoded: false)))
@@ -287,7 +294,7 @@ struct CollectionInboxAppendTests {
       model.inboxFilesByAlbumID[orphanedAlbumID] == [
         inboxRoot.appendingPathComponent(orphanedAlbumID.uuidString, isDirectory: true)
           .appendingPathComponent("orphan-song.m4a")
-          .standardizedFileURL,
+          .standardizedFileURL
       ]
     )
   }
@@ -299,7 +306,8 @@ struct CollectionInboxAppendTests {
   func strippingArtworkRepairsTheStagedCopyAndClearsWorking() async throws {
     let temp = try Self.makeTempDirectory()
     defer { try? FileManager.default.removeItem(at: temp) }
-    let inbox = CollectionInboxClient.live(root: temp.appendingPathComponent("Inbox", isDirectory: true))
+    let inbox = CollectionInboxClient.live(
+      root: temp.appendingPathComponent("Inbox", isDirectory: true))
     let album = Self.album()
     let staging = try inbox.stagingDirectory(album.id)
     let stagedFile = staging.appendingPathComponent("broken-cover.mp3")
@@ -327,12 +335,12 @@ struct CollectionInboxAppendTests {
           artwork: .keepExisting,
           fallbackArtworkURL: nil,
           diffs: []
-        ),
+        )
       ]
     )
     let model = AppModel()
     model.toolStatuses = [
-      ToolStatus(tool: .ffmpeg, resolvedPath: "/tools/ffmpeg", version: nil, source: .userOverride),
+      ToolStatus(tool: .ffmpeg, resolvedPath: "/tools/ffmpeg", version: nil, source: .userOverride)
     ]
     model.compilationAppendFolder = staging
     model.compilationAppendAlbumID = album.id
@@ -344,13 +352,16 @@ struct CollectionInboxAppendTests {
       $0.scriptClient.run = { command in
         let replacement = URL(filePath: try #require(command.arguments.last))
         try Data("after".utf8).write(to: replacement)
-        return ScriptResult(command: command, exitCode: 0, standardOutput: Data(), standardError: Data())
+        return ScriptResult(
+          command: command, exitCode: 0, standardOutput: Data(), standardError: Data())
       }
       $0.fileOperationClient.replaceFile = { source, destination in
         _ = try FileManager.default.replaceItemAt(destination, withItemAt: source)
       }
       $0.fileOperationClient.removeItem = { url in
-        guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else { return }
+        guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
+          return
+        }
         try FileManager.default.removeItem(at: url)
       }
       $0.uuid = .incrementing
