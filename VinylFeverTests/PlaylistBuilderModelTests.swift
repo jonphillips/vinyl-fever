@@ -79,6 +79,91 @@ struct PlaylistBuilderModelTests {
     #expect(model.librarySnapshotError == "Music unavailable")
   }
 
+  @Test(
+    "annotations resolve owned and unowned matches and hide badges for failed or duplicate rows")
+  func annotationVisibilityByRowState() async throws {
+    let now = Date(timeIntervalSince1970: 2_000_000_000)
+    let snapshot = LibrarySnapshot(
+      generatedAt: now,
+      tracks: [
+        LibraryTrack(persistentID: "owned", name: "Owned Song", artist: "The Records", playCount: 4)
+      ])
+    let store = LibrarySnapshotStore(
+      read: { snapshot }, write: { _ in }, modifiedAt: { now })
+    let ownedCandidate = Self.candidate(id: "owned", title: "Owned Song")
+    let unownedCandidate = Self.candidate(id: "unowned", title: "New Song")
+    let model = withDependencies {
+      $0.librarySnapshotStore = store
+    } operation: {
+      PlaylistBuilderModel()
+    }
+    model.librarySnapshot = try await store.read()
+
+    let owned = TrackRequest(index: 1, artist: "The Records", title: "Owned Song")
+    let unowned = TrackRequest(index: 2, artist: "Other Artist", title: "New Song")
+    let failed = TrackRequest(index: 3, artist: "Other Artist", title: "Missing")
+    let duplicate = TrackRequest(index: 4, artist: "The Records", title: "Owned Song")
+    #expect(
+      model.annotation(for: owned, candidate: ownedCandidate)
+        == .inLibrary(plays: 4, lastPlayed: nil, favorited: false, versionCount: 1))
+    #expect(model.annotation(for: unowned, candidate: unownedCandidate) == .notInLibrary)
+    #expect(
+      model.visibleAnnotation(
+        for: ResolvedPlaylistRow(request: owned, status: .matched(ownedCandidate, score: 1)))
+        == .inLibrary(plays: 4, lastPlayed: nil, favorited: false, versionCount: 1))
+    #expect(
+      model.visibleAnnotation(
+        for: ResolvedPlaylistRow(request: unowned, status: .matched(unownedCandidate, score: 1)))
+        == .notInLibrary)
+    #expect(
+      model.visibleAnnotation(
+        for: ResolvedPlaylistRow(request: failed, status: .notFound(error: "Search failed"))) == nil
+    )
+    #expect(
+      model.visibleAnnotation(
+        for: ResolvedPlaylistRow(
+          request: duplicate, status: .duplicate(ownedCandidate, ofTrackIndex: 1))) == nil)
+  }
+
+  @Test("no snapshot keeps rows unannotated and bulk removal changes nothing")
+  func noSnapshotHasNoBadgesOrRemoval() async throws {
+    let store = LibrarySnapshotStore(read: { nil }, write: { _ in }, modifiedAt: { nil })
+    let model = withDependencies {
+      $0.librarySnapshotStore = store
+    } operation: {
+      PlaylistBuilderModel()
+    }
+    model.librarySnapshot = try await store.read()
+    let candidate = Self.candidate(id: "owned", title: "Owned Song")
+    let rows = [
+      ResolvedPlaylistRow(
+        request: TrackRequest(index: 1, artist: "The Records", title: "Owned Song"),
+        status: .matched(candidate, score: 1)),
+      ResolvedPlaylistRow(
+        request: TrackRequest(index: 2, artist: "The Records", title: "Maybe"),
+        status: .ambiguous([])),
+      ResolvedPlaylistRow(
+        request: TrackRequest(index: 3, artist: "The Records", title: "Missing"),
+        status: .notFound(error: nil)),
+      ResolvedPlaylistRow(
+        request: TrackRequest(index: 4, artist: "The Records", title: "Duplicate"),
+        status: .duplicate(candidate, ofTrackIndex: 1)),
+    ]
+    model.rows = rows
+
+    for row in rows {
+      let matchedCandidate: CatalogSongCandidate? =
+        if case .matched(let value, _) = row.status { value } else { nil }
+      #expect(
+        model.annotation(for: row.request, candidate: matchedCandidate) == .snapshotUnavailable)
+    }
+    #expect(model.heavilyPlayedCount == 0)
+    let before = model.visibleRows.map(\.request.index)
+    model.removeHeavilyPlayedRows()
+    #expect(model.visibleRows.map(\.request.index) == before)
+    #expect(model.removedTrackIndexes.isEmpty)
+  }
+
   @Test("launch refresh runs only when the saved snapshot is stale")
   func launchRefreshThreshold() async {
     let now = Date(timeIntervalSince1970: 2_000_000_000)

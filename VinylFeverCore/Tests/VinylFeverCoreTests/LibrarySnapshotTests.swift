@@ -93,4 +93,82 @@ struct LibrarySnapshotTests {
       index.annotation(artist: "Missing", title: "Song", snapshotAvailable: false)
         == .snapshotUnavailable)
   }
+
+  @Test("library matching strips remasters and feature credits without stripping with")
+  func libraryTitleMatching() {
+    let tracks = [
+      LibraryTrack(
+        persistentID: "1", name: "Starry Eyes (2005 Remaster)", artist: "The Records", playCount: 3),
+      LibraryTrack(
+        persistentID: "2", name: "Smooth (feat. Rob Thomas)", artist: "Santana", playCount: 5),
+      LibraryTrack(
+        persistentID: "3", name: "Uptown Funk (feat. Bruno Mars)", artist: "Mark Ronson",
+        playCount: 7),
+      LibraryTrack(
+        persistentID: "4", name: "Stuck with You", artist: "Huey Lewis and the News", playCount: 11),
+      LibraryTrack(
+        persistentID: "5", name: "Dancing with Myself", artist: "Billy Idol", playCount: 13),
+      LibraryTrack(
+        persistentID: "6", name: "Live with Me", artist: "The Rolling Stones", playCount: 17),
+    ]
+    let index = LibraryIndex(snapshot: LibrarySnapshot(generatedAt: date, tracks: tracks))
+    let results = index.checkTracks([
+      (artist: "The Records", title: "Starry Eyes"),
+      (artist: "Santana", title: "Smooth"),
+      (artist: "Mark Ronson", title: "Uptown Funk"),
+      (artist: "Huey Lewis and the News", title: "Stuck with You"),
+      (artist: "Billy Idol", title: "Dancing"),
+      (artist: "The Rolling Stones", title: "Live"),
+    ])
+    #expect(results.map(\.owned) == [true, true, true, true, false, false])
+    #expect(results[3].versionCount == 1)
+    #expect(results[3].plays == 11)
+    #expect(
+      index.annotation(
+        artist: "Other Artist", title: "Smooth", candidateArtist: "Santana",
+        candidateTitle: "Smooth (feat. Rob Thomas)")
+        == .inLibrary(plays: 5, lastPlayed: nil, favorited: false, versionCount: 1))
+  }
+
+  @Test("bulk-column projection maps Music enums and tolerates optional values")
+  func bulkColumnProjection() throws {
+    let mapping: [(String, LibraryAvailability)] = [
+      ("kSub", .subscription), ("kPur", .purchased), ("kMat", .matched),
+      ("kUpl", .uploaded), ("kUpP", .uploaded), ("kRej", .uploaded), ("zzzz", .other),
+    ]
+    for (code, expected) in mapping {
+      var columns = requiredColumns
+      columns["cloudStatus"] = [NSNumber(value: fourCC(code))]
+      let track = try LibraryTrack(bulkColumns: columns, index: 0)
+      #expect(track.availability == expected)
+    }
+
+    var columns = requiredColumns
+    columns["cloudStatus"] = ["uploaded"]
+    columns["year"] = [NSNumber(value: 0)]
+    columns["genre"] = [NSNull()]
+    columns["favorited"] = [NSNumber(value: true)]
+    let track = try LibraryTrack(bulkColumns: columns, index: 0)
+    #expect(track.availability == .uploaded)
+    #expect(track.year == nil)
+    #expect(track.genre == nil)
+    #expect(track.favorited)
+    #expect(track.rating == nil)
+
+    columns.removeValue(forKey: "name")
+    do {
+      _ = try LibraryTrack(bulkColumns: columns, index: 0)
+      Issue.record("Expected missing required field error")
+    } catch let error as LibraryTrack.BulkColumnsError {
+      #expect(error == .missingRequiredField("name", index: 0))
+    }
+  }
+
+  private var requiredColumns: [String: [Any]] {
+    ["persistentID": ["id"], "name": ["Song"], "artist": ["Artist"]]
+  }
+
+  private func fourCC(_ value: String) -> UInt32 {
+    value.utf8.reduce(UInt32.zero) { ($0 << 8) | UInt32($1) }
+  }
 }

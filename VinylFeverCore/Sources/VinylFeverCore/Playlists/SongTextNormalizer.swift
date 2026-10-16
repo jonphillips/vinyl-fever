@@ -34,12 +34,17 @@ enum SongTextNormalizer {
   /// Library metadata often stores a guest credit directly in the title. Keep this
   /// additional cleanup out of catalog scoring so its established score stays stable.
   static func libraryTitle(_ raw: String) -> String {
-    text(
-      raw.replacingOccurrences(
-        of: #"\s+(?:feat\.?|ft\.?|featuring|with)\s+.*$"#,
-        with: "",
-        options: [.regularExpression, .caseInsensitive]
-      ))
+    var value = raw.replacingOccurrences(
+      of: #"\s*[\(\[]\s*(?:feat\.?|ft\.?|featuring)\s+[^)\]]*[)\]]"#,
+      with: "",
+      options: [.regularExpression, .caseInsensitive]
+    )
+    value = value.replacingOccurrences(
+      of: #"\s+(?:feat\.?|ft\.?|featuring)\s+.*$"#,
+      with: "",
+      options: [.regularExpression, .caseInsensitive]
+    )
+    return title(value)
   }
 
   static func album(_ raw: String) -> String { text(raw) }

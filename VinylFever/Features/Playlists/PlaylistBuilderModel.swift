@@ -6,6 +6,7 @@ import VinylFeverCore
 @MainActor
 @Observable
 final class PlaylistBuilderModel {
+  private static let snapshotStaleInterval: TimeInterval = 6 * 60 * 60
   @ObservationIgnored @Dependency(\.appleMusicCatalogClient) private var appleMusic
   @ObservationIgnored @Dependency(\.catalogMatchResolver) private var resolver
   @ObservationIgnored @Dependency(\.continuousClock) private var clock
@@ -70,7 +71,7 @@ final class PlaylistBuilderModel {
       guard case .matched(let candidate, _) = row.status,
         case .inLibrary(let plays, _, _, _) = annotation(for: row.request, candidate: candidate)
       else { return false }
-      return plays >= 20
+      return plays >= LibrarySnapshot.heavilyPlayedThreshold
     }.count
   }
 
@@ -83,11 +84,22 @@ final class PlaylistBuilderModel {
       candidateArtist: candidate?.artistName, candidateTitle: candidate?.title)
   }
 
+  func visibleAnnotation(for row: ResolvedPlaylistRow) -> LibraryAnnotation? {
+    switch row.status {
+    case .matched(let candidate, _):
+      annotation(for: row.request, candidate: candidate)
+    case .ambiguous:
+      annotation(for: row.request)
+    case .notFound, .duplicate:
+      nil
+    }
+  }
+
   func loadSnapshotAndRefreshIfStale() async {
     do {
       librarySnapshot = try await snapshotStore.read()
       let modifiedAt = try await snapshotStore.modifiedAt()
-      if modifiedAt == nil || now.timeIntervalSince(modifiedAt!) >= 6 * 60 * 60 {
+      if modifiedAt == nil || now.timeIntervalSince(modifiedAt!) >= Self.snapshotStaleInterval {
         await refreshLibrarySnapshot()
       }
     } catch { librarySnapshotError = error.localizedDescription }
@@ -109,7 +121,7 @@ final class PlaylistBuilderModel {
     let indexes = visibleRows.compactMap { row -> Int? in
       guard case .matched(let candidate, _) = row.status,
         case .inLibrary(let plays, _, _, _) = annotation(for: row.request, candidate: candidate),
-        plays >= 20
+        plays >= LibrarySnapshot.heavilyPlayedThreshold
       else { return nil }
       return row.request.index
     }

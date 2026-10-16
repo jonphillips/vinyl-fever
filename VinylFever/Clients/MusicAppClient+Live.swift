@@ -113,7 +113,7 @@ private struct LiveMusicAppBridge: Sendable {
         // ScriptingBridge performs one Apple Event for each bulk property request.
         let properties = [
           "persistentID", "name", "artist", "albumArtist", "album", "genre", "year", "duration",
-          "playedCount", "skippedCount", "loved", "rating", "dateAdded", "playedDate",
+          "playedCount", "skippedCount", "favorited", "rating", "dateAdded", "playedDate",
           "cloudStatus",
         ]
         let columns = try Dictionary(
@@ -127,49 +127,11 @@ private struct LiveMusicAppBridge: Sendable {
         guard properties.allSatisfy({ columns[$0]?.count == count }) else {
           throw MusicAppLiveError.scriptingBridgeReadFailed("inconsistent bulk track columns")
         }
-        func value(_ key: String, _ index: Int) -> Any? {
-          guard let value = columns[key]?[index], !(value is NSNull) else { return nil }
-          return value
-        }
-        func string(_ key: String, _ index: Int) -> String? { value(key, index) as? String }
-        func integer(_ key: String, _ index: Int) -> Int? {
-          (value(key, index) as? NSNumber)?.intValue ?? value(key, index) as? Int
-        }
-        func decimal(_ key: String, _ index: Int) -> Double? {
-          (value(key, index) as? NSNumber)?.doubleValue ?? value(key, index) as? Double
-        }
-        func date(_ key: String, _ index: Int) -> Date? { value(key, index) as? Date }
-        let result = try (0..<count).map { index -> LibraryTrack in
-          guard let id = string("persistentID", index), let name = string("name", index),
-            let artist = string("artist", index)
-          else {
-            throw MusicAppLiveError.scriptingBridgeReadFailed(
-              "required track fields at index \(index)")
-          }
-          return LibraryTrack(
-            persistentID: id, name: name, artist: artist,
-            albumArtist: string("albumArtist", index) ?? "", album: string("album", index) ?? "",
-            genre: string("genre", index), year: integer("year", index),
-            durationSeconds: decimal("duration", index),
-            playCount: integer("playedCount", index) ?? 0,
-            skipCount: integer("skippedCount", index) ?? 0,
-            favorited: (value("loved", index) as? NSNumber)?.boolValue ?? false,
-            rating: integer("rating", index),
-            dateAdded: date("dateAdded", index), lastPlayed: date("playedDate", index),
-            availability: Self.libraryAvailability(string("cloudStatus", index)))
+        let result = try (0..<count).map {
+          try LibraryTrack(bulkColumns: columns, index: $0)
         }
         return LibrarySnapshot(generatedAt: Date(), tracks: result)
       }.value
-    }
-  }
-
-  private static func libraryAvailability(_ value: String?) -> LibraryAvailability {
-    switch value?.lowercased() {
-    case "subscription": .subscription
-    case "purchased": .purchased
-    case "matched": .matched
-    case "uploaded": .uploaded
-    default: .other
     }
   }
 

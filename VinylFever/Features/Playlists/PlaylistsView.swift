@@ -143,7 +143,7 @@ struct PlaylistsView: View {
           ForEach(model.visibleRows) { row in
             PlaylistRowView(
               row: row,
-              annotation: model.annotation(for: row.request, candidate: matchedCandidate(in: row)),
+              annotation: model.visibleAnnotation(for: row),
               searchTerm: Binding(
                 get: { model.searchTerms[row.request.index] ?? "" },
                 set: { model.searchTerms[row.request.index] = $0 }
@@ -241,15 +241,11 @@ struct PlaylistsView: View {
     }
   }
 
-  private func matchedCandidate(in row: ResolvedPlaylistRow) -> CatalogSongCandidate? {
-    if case .matched(let candidate, _) = row.status { return candidate }
-    return nil
-  }
 }
 
 private struct PlaylistRowView: View {
   let row: ResolvedPlaylistRow
-  let annotation: LibraryAnnotation
+  let annotation: LibraryAnnotation?
   @Binding var searchTerm: String
   let canAddToCreatedPlaylist: Bool
   let canChangeMatch: Bool
@@ -301,7 +297,7 @@ private struct PlaylistRowView: View {
   @ViewBuilder
   private var annotationContent: some View {
     switch annotation {
-    case .inLibrary(let plays, let lastPlayed, let favorited, _):
+    case .some(.inLibrary(let plays, let lastPlayed, let favorited, _)):
       HStack(spacing: 6) {
         Text("In library · \(plays) plays")
         if let lastPlayed {
@@ -310,9 +306,9 @@ private struct PlaylistRowView: View {
         if favorited { Text("· ♥") }
       }
       .font(.caption).foregroundStyle(.secondary)
-    case .notInLibrary:
+    case .some(.notInLibrary):
       Label("New to you", systemImage: "sparkle").font(.caption).foregroundStyle(.secondary)
-    case .snapshotUnavailable:
+    case .none, .some(.snapshotUnavailable):
       EmptyView()
     }
   }

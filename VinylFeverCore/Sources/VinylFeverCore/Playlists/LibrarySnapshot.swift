@@ -9,6 +9,17 @@ public enum LibraryAvailability: String, Codable, Equatable, Sendable, CaseItera
 }
 
 public struct LibraryTrack: Codable, Equatable, Sendable, Identifiable {
+  public enum BulkColumnsError: Error, Equatable, LocalizedError, Sendable {
+    case missingRequiredField(String, index: Int)
+
+    public var errorDescription: String? {
+      switch self {
+      case .missingRequiredField(let field, let index):
+        "Music library data is missing required field '\(field)' at track \(index)."
+      }
+    }
+  }
+
   public var persistentID: String
   public var name: String
   public var artist: String
@@ -48,6 +59,76 @@ public struct LibraryTrack: Codable, Equatable, Sendable, Identifiable {
     self.lastPlayed = lastPlayed
     self.availability = availability
   }
+
+  /// Projects one row from ScriptingBridge's bulk KVC columns.
+  /// Kept in Core so the property mapping is pure and directly testable.
+  public init(bulkColumns: [String: [Any]], index: Int) throws {
+    func value(_ key: String) -> Any? {
+      guard let column = bulkColumns[key], column.indices.contains(index),
+        !(column[index] is NSNull)
+      else { return nil }
+      return column[index]
+    }
+    func string(_ key: String) -> String? { value(key) as? String }
+    func integer(_ key: String) -> Int? {
+      (value(key) as? NSNumber)?.intValue ?? (value(key) as? Int)
+    }
+    func decimal(_ key: String) -> Double? {
+      (value(key) as? NSNumber)?.doubleValue ?? (value(key) as? Double)
+    }
+
+    guard let persistentID = string("persistentID") else {
+      throw BulkColumnsError.missingRequiredField("persistentID", index: index)
+    }
+    guard let name = string("name") else {
+      throw BulkColumnsError.missingRequiredField("name", index: index)
+    }
+    guard let artist = string("artist") else {
+      throw BulkColumnsError.missingRequiredField("artist", index: index)
+    }
+    let rawYear = integer("year")
+    self.init(
+      persistentID: persistentID,
+      name: name,
+      artist: artist,
+      albumArtist: string("albumArtist") ?? "",
+      album: string("album") ?? "",
+      genre: string("genre"),
+      year: rawYear == 0 ? nil : rawYear,
+      durationSeconds: decimal("duration"),
+      playCount: integer("playedCount") ?? 0,
+      skipCount: integer("skippedCount") ?? 0,
+      favorited: (value("favorited") as? NSNumber)?.boolValue
+        ?? (value("favorited") as? Bool ?? false),
+      rating: integer("rating"),
+      dateAdded: value("dateAdded") as? Date,
+      lastPlayed: value("playedDate") as? Date,
+      availability: Self.availability(from: value("cloudStatus")))
+  }
+
+  private static func availability(from value: Any?) -> LibraryAvailability {
+    if let string = value as? String {
+      switch string.lowercased() {
+      case "subscription", "ksub": return .subscription
+      case "purchased", "kpur": return .purchased
+      case "matched", "kmat": return .matched
+      case "uploaded", "kupl", "kupp", "krej": return .uploaded
+      default: return .other
+      }
+    }
+    guard let code = (value as? NSNumber)?.uint32Value else { return .other }
+    return switch code {
+    case Self.fourCC("kSub"): .subscription
+    case Self.fourCC("kPur"): .purchased
+    case Self.fourCC("kMat"): .matched
+    case Self.fourCC("kUpl"), Self.fourCC("kUpP"), Self.fourCC("kRej"): .uploaded
+    default: .other
+    }
+  }
+
+  private static func fourCC(_ value: String) -> UInt32 {
+    value.utf8.reduce(UInt32.zero) { ($0 << 8) | UInt32($1) }
+  }
 }
 
 public struct LibrarySnapshot: Codable, Equatable, Sendable {
@@ -56,6 +137,7 @@ public struct LibrarySnapshot: Codable, Equatable, Sendable {
   }
   public static let formatName = "vf-library-snapshot"
   public static let currentVersion = 1
+  public static let heavilyPlayedThreshold = 20
   public var format: String
   public var version: Int
   public var generatedAt: Date
