@@ -24,11 +24,48 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   `stage_playlist` inbox and preview annotations. Dispatches 1 (#72) and 2 (jon-platform#74, the
   shared `MCPServerKit`, `HandoffInbox`, and `mcp-tunnel`) are merged with their device gates
   passed, and S2 (`vf-mcp`) is the current `NEXT_UP.md`. Merging that plan PR approves M12
-  Decisions 3 and 4. **Pending Jon:** Decision 1 (Last.fm), and marking jon-platform ADR-0007
-  **Accepted** now that its kit has shipped (it's still Proposed). A Yes Chef MCP server, reading
-  its synced database read-only, is the likely second consumer and starts by spiking app-group
-  container access (ADR-0007 *Open*). Galavant waits. Last.fm (S3) stays parked until the S2
-  device gate shows whether library stats alone feel thin.
+  Decisions 3 and 4, and jon-platform ADR-0007 is **Accepted** (jon-platform#75, 2026-10-17).
+  **Pending Jon:** Decision 1 (Last.fm); see the listening-history entry below. A Yes Chef
+  MCP server, reading its synced database read-only, is the likely second consumer and starts by
+  spiking app-group container access (ADR-0007 *Open*). Galavant waits. Last.fm (S3) stays parked
+  until the S2 device gate shows whether library stats alone feel thin.
+- **M12 listening history: poll Apple's recently-played feed instead of Last.fm?** (probed
+  2026-10-17). **Recommendation: yes, and drop Last.fm (Decision 1 → no, S3 not built).** Jon
+  doesn't need older history, and Last.fm sees only Marvis plays. Build this after the S2 gate,
+  as its own slice.
+  - **What the probe found** (a throwaway build of the app, using `MusicDataRequest`):
+    - **Mac play counts miss device listening.** "Love It When You Call" showed 0 plays on both
+      library copies after days of plays on Jon's iPhone and iPad, and only 2 tracks had a
+      played date in the last 3 days. Snapshot play-count deltas can't measure his listening.
+    - **`GET /v1/me/recent/played/tracks?types=songs,library-songs` sees everything:** phone,
+      iPad, and car plays, catalog songs that aren't in the library, and library songs,
+      including uploaded ones. The default (`songs` only) hides library plays, which were most
+      of Jon's recent listening.
+    - **Limits:** at most 30 per request, paged with `next`. The songs-only list ran out at 74
+      items; the merged list's depth wasn't measured. There are no timestamps, and the list is
+      de-duplicated: a song appears once, at its most recent play. Heavy rotation returned 2
+      items.
+  - **Why polling still works:** each fetch is "songs played since the last fetch, newest
+    first", followed by the previous list minus those songs. Comparing two fetches gives the
+    songs played in between, dated to that window. A fetch with no overlap with the previous
+    one records an explicit gap instead of missing plays silently.
+  - **Shape:**
+    - An hourly login agent registered with `SMAppService` runs the app binary with a
+      `--capture-listening` flag: fetch, compare, append, exit, with no window. The probe proved
+      the signed app is authorized when run this way. launchd runs a missed interval on wake,
+      so plays are lost only if more than about 70 different songs play while the Mac sleeps.
+    - Append-only listening log beside the library snapshot: a derived file outside SQLiteData,
+      like the snapshot (Decision 3). Snapshot format v1 is unchanged.
+    - `top_artists` / `top_tracks` gain a `period` (7 days, 30 days), plus a `recent_listening`
+      tool.
+  - **Precision:** a song played several times within one hour counts once, but plays across
+    hours and days each count, which is enough for "what have I been into lately".
+  - **Open before a brief:**
+    - whether Marvis plays appear (it uses the system player, so probably);
+    - whether skipped or partial plays count;
+    - the merged list's depth;
+    - the feed's behavior is undocumented and could change, so the log keeps each fetch's
+      ordered list (type, ID, artist, title, album) and the comparison can be re-run later.
 - **M11: Create can lose the playlist it just made when a later batch fails** (from the #67
   review, 2026-10-15). `createLibraryPlaylist` sends the first 100 IDs with the create call,
   then appends the rest in batches of 100. If a later batch throws, the error drops the
