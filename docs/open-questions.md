@@ -24,11 +24,29 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   `stage_playlist` inbox and preview annotations. Dispatches 1 (#72) and 2 (jon-platform#74, the
   shared `MCPServerKit`, `HandoffInbox`, and `mcp-tunnel`) are merged with their device gates
   passed, and S2 (`vf-mcp`) is the current `NEXT_UP.md`. Merging that plan PR approves M12
-  Decisions 3 and 4. **Pending Jon:** Decision 1 (Last.fm), and marking jon-platform ADR-0007
-  **Accepted** now that its kit has shipped (it's still Proposed). A Yes Chef MCP server, reading
-  its synced database read-only, is the likely second consumer and starts by spiking app-group
-  container access (ADR-0007 *Open*). Galavant waits. Last.fm (S3) stays parked until the S2
-  device gate shows whether library stats alone feel thin.
+  Decisions 3 and 4, and jon-platform ADR-0007 is **Accepted** (jon-platform#75, 2026-10-17).
+  **Pending Jon:** Decision 1 (Last.fm); see the snapshot-history alternative below. A Yes Chef
+  MCP server, reading its synced database read-only, is the likely second consumer and starts by
+  spiking app-group container access (ADR-0007 *Open*). Galavant waits. Last.fm (S3) stays parked
+  until the S2 device gate shows whether library stats alone feel thin.
+- **M12 Decision 1 alternative: build listening history from snapshots instead of Last.fm?**
+  (2026-10-17). **Recommendation: if the S2 gate shows the chat needs "what have I played
+  lately", build this before Last.fm.** Today's snapshot only has an all-time `playCount` and
+  one `lastPlayed` date, so it can't answer "this month". Each refresh already reads every
+  track's play count. Keep a per-day history of play-count increases (`persistentID` → plays
+  gained) next to the snapshot, and give `top_artists` / `top_tracks` a `period` (7 days,
+  30 days, 12 months).
+  - **Over Last.fm:** it counts Mac Music.app plays, which never scrobble, and iPhone plays too
+    if the library syncs play counts (check at the S2 gate). It needs no second credential and
+    no network. The Apple Music API's recently-played endpoints are no substitute: they give
+    only a short recent window with no counts.
+  - **Under Last.fm:** history starts the day it ships, where Last.fm has years. A play dates
+    only to the refresh that saw it. Catalog songs that aren't in the library are invisible. A
+    replaced or re-imported file resets its count (treat a drop as zero gained). Last.fm also
+    has community tags, which are finer than Music's one genre.
+  - **Shape:** small, since a day touches only the tracks played that day, usually tens of rows.
+    It's a derived file beside the snapshot, outside SQLiteData like the snapshot (Decision 3),
+    and snapshot format v1 is unchanged.
 - **M11: Create can lose the playlist it just made when a later batch fails** (from the #67
   review, 2026-10-15). `createLibraryPlaylist` sends the first 100 IDs with the create call,
   then appends the rest in batches of 100. If a later batch throws, the error drops the
