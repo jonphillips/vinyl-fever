@@ -100,7 +100,8 @@ sandboxed, so the helper reads the same path.
 - `availability` maps Music's `cloud status` to `subscription | purchased | matched | uploaded |
   other`. `uploaded` means library-only, such as live shows from the drives: the catalog
   matcher can't find those, so the tools flag them and the model knows not to put them in a
-  playlist.
+  playlist. `uploaded` also covers Music's `not uploaded` and `ineligible` cloud statuses: all
+  three are library-only files with no catalog counterpart.
 - **Never in the file:** file locations, comments, lyrics, and anything else not listed above.
 - **Version handling:** the reader rejects a newer `version` with a typed error (fail loudly
   rather than lose data silently). An older version is rebuilt on the next refresh.
@@ -179,7 +180,7 @@ Last.fm (see *Decisions*). Dispatches 1, 2, and 3 each owe a device gate on Jon'
     - annotations for owned, not owned, and no snapshot.
   - The existing scorer tests pass unchanged after the normalizer extraction.
 
-- [x] **S1 — Snapshot writer + preview annotations (app).** Device gate owed.
+- [x] **S1 — Snapshot writer + preview annotations (app).** Device gate passed 2026-10-17.
   - `MusicAppClient.readLibrarySnapshot()` is the new endpoint; the live implementation stays
     in `MusicAppClient+Live.swift`. It does a **bulk property read**: one KVC
     `value(forKey:)` per property on the library playlist's `tracks` `SBElementArray`, so each
@@ -205,11 +206,11 @@ Last.fm (see *Decisions*). Dispatches 1, 2, and 3 each owe a device gate on Jon'
     - refresh-on-launch runs only past the stale threshold;
     - a failed refresh keeps the old snapshot and shows the error.
   - The live ScriptingBridge read is **unverified** in the PR.
-  - **Owed device gate:** on Jon's Mac:
-    - time a full refresh, against the read-budget constant;
-    - spot-check three tracks' play counts and favorites against Music.app;
-    - confirm a live show from the drives shows `availability: uploaded`;
-    - resolve an M11 paste and check the badges.
+  - **Device gate (passed 2026-10-17, no longer owed):** on Jon's Mac:
+    - time a full refresh, against the read-budget constant (21 s or less at 87,100 tracks);
+    - spot-check three tracks' play counts and favorites against Music.app (3 of 3);
+    - confirm a live show from the drives shows `availability: uploaded` (it does);
+    - resolve an M11 paste and check the badges (correct).
     - **If the refresh exceeds the budget, stop and flag it** rather than optimizing blind.
 
 - [ ] **S2 — `vf-mcp` stdio server + playlist inbox (core executable + app).** Device gate
@@ -298,8 +299,8 @@ Last.fm (see *Decisions*). Dispatches 1, 2, and 3 each owe a device gate on Jon'
 - [x] Secure MCP Tunnel and a restricted runtime key exist and are proven with a hello-world
   server (2026-10-15). The `vinyl-fever` profile replaces the `hello` profile in S2's gate.
 - [ ] ADR-0007 (jon-platform) merged before Dispatch 2. The effort's PR lands before S2.
-- [ ] M11's owed device gate. Dispatch 1 builds on the M11 preview, so it should land on a
-  verified M11.
+- [x] M11's owed device gate (Jon passed it 2026-10-17). Dispatch 1 builds on the M11 preview,
+  so it should land on a verified M11.
 - [ ] For S3 only: a Last.fm API account (free) and confirmation that Marvis scrobbles are
   arriving.
 
@@ -309,7 +310,7 @@ Last.fm (see *Decisions*). Dispatches 1, 2, and 3 each owe a device gate on Jon'
 | --- | --- | --- |
 | Snapshot format | `vf-library-snapshot` v1 | Versioned, so the reader can reject a newer file loudly. |
 | Stale threshold | 6 h | Refresh on launch past this. Play counts move slowly; `generatedAt` is visible in `library_overview`. |
-| Read budget | ≤ 30 s full refresh | Bulk KVC should be seconds for ~30k tracks. Past 30 s, the S1 gate stops and flags. |
+| Read budget | ≤ 30 s full refresh | Bulk KVC should be seconds for ~30k tracks. Past 30 s, the S1 gate stops and flags. Measured at the S1 gate: 21–25 s for Jon's 87,100-track library (see `open-questions.md`). |
 | Tool row cap | 50 default, 200 max | Keeps every tool result small: tunnel envelopes cap at 10 MiB, and the conversation pays for every byte. |
 | `check_tracks` max | 200 tracks | Twice a typical M11 list. |
 | Heavily played | ≥ 20 plays | Threshold for "Remove N played ≥ 20 times". Tune after the gate. |
