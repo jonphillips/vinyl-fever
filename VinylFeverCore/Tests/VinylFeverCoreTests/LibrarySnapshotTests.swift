@@ -5,24 +5,7 @@ import VinylFeverCore
 @Suite("Library snapshot and index")
 struct LibrarySnapshotTests {
   private var date: Date { ISO8601DateFormatter().date(from: "2026-10-15T21:40:00Z")! }
-  private var fixture: [LibraryTrack] {
-    var tracks: [LibraryTrack] = []
-    for index in 0..<30 {
-      let artist = index == 0 ? "Beyoncé" : "Artist \(index % 3)"
-      let title = index == 0 ? "Café Song feat. Guest" : "Song \(index)"
-      let genre = index.isMultiple(of: 2) ? "Rock" : "Jazz"
-      let lastPlayed = index.isMultiple(of: 2) ? date : nil
-      let availability: LibraryAvailability = index == 0 ? .uploaded : .subscription
-      tracks.append(
-        LibraryTrack(
-          persistentID: "id-\(index)", name: title, artist: artist, albumArtist: artist,
-          album: "Album \(index % 4)", genre: genre, year: 1980 + index, playCount: index,
-          favorited: index.isMultiple(of: 5),
-          dateAdded: date.addingTimeInterval(Double(index) * 60),
-          lastPlayed: lastPlayed, availability: availability))
-    }
-    return tracks
-  }
+  private var fixture: [LibraryTrack] { LibraryTestFixtures.tracks(date: date) }
 
   @Test("codec writes fractional-second dates and reads whole-second ones")
   func codecDateForms() throws {
@@ -104,6 +87,24 @@ struct LibrarySnapshotTests {
     #expect(
       index.annotation(artist: "Missing", title: "Song", snapshotAvailable: false)
         == .snapshotUnavailable)
+  }
+
+  @Test("overview trims and caps genre counts and ignores implausible decades")
+  func overviewBounds() {
+    var tracks = (0..<30).map { index in
+      LibraryTrack(
+        persistentID: "genre-\(index)", name: "Song \(index)", artist: "Artist \(index)",
+        genre: index == 0 ? "  " : "Genre \(index)", year: index == 1 ? 199 : 1980 + index)
+    }
+    tracks[2].genre = "  Trimmed Genre  "
+    tracks.append(LibraryTrack(persistentID: "genre-duplicate", name: "Duplicate", artist: "Artist", genre: "Trimmed Genre"))
+    let overview = LibraryIndex(snapshot: LibrarySnapshot(generatedAt: date, tracks: tracks))
+      .overview(generatedAt: date)
+    #expect(overview.genreCounts.count == 25)
+    #expect(overview.genreCounts["Trimmed Genre"] == 2)
+    #expect(!overview.genreCounts.keys.contains(""))
+    #expect(!overview.decadeCounts.keys.contains(190))
+    #expect(overview.decadeCounts.values.reduce(0, +) == 29)
   }
 
   @Test("library matching strips remasters and feature credits without stripping with")

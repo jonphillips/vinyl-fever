@@ -46,7 +46,7 @@ final class PlaylistBuilderModel {
       }
     }
   }
-  @ObservationIgnored private var libraryIndex: LibraryIndex?
+  private var libraryIndex: LibraryIndex?
   @ObservationIgnored private var snapshotIndexBuildID = UUID()
   @ObservationIgnored private var libraryIndexTask: Task<Void, Never>?
   var librarySnapshotError: String?
@@ -302,9 +302,19 @@ final class PlaylistBuilderModel {
       createdTrackIndexes = trackIndexes
       createdPlaylist = playlist
       if let openedStagedPlaylist {
-        _ = try playlistInbox.markProcessed(openedStagedPlaylist)
+        do {
+          _ = try playlistInbox.markProcessed(openedStagedPlaylist)
+        } catch {
+          self.openedStagedPlaylist = nil
+          operationError = "Playlist created, but the inbox item couldn't be moved to Processed: \(error.localizedDescription)"
+          return
+        }
         self.openedStagedPlaylist = nil
-        stagedPlaylists = try playlistInbox.list()
+        do {
+          stagedPlaylists = try playlistInbox.list()
+        } catch {
+          operationError = "Playlist created and the inbox item moved to Processed, but the inbox list couldn't be refreshed: \(error.localizedDescription)"
+        }
       }
     } catch {
       operationError = error.localizedDescription
@@ -351,6 +361,7 @@ final class PlaylistBuilderModel {
   func startOver() {
     guard !isCreating, !isAppending else { return }
     pastedText = ""
+    openedStagedPlaylist = nil
     playlistName = ""
     playlistDescription = ""
     rows = []

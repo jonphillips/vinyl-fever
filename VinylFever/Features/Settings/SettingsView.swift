@@ -104,7 +104,7 @@ struct SettingsView: View {
           copyButton("tunnel-client init command", key: "tunnel", value: tunnelCommand)
           Text("Use the plugin name Vinyl Fever. The tunnel command needs the tunnel ID from the Platform Tunnels page.")
             .font(.callout).foregroundStyle(.secondary)
-          Text("Tools: library_overview, top_artists, top_tracks, search_tracks, artist_profile, check_tracks, stage_playlist")
+          Text("Tools: library_overview, top_artists, top_tracks, search_library, artist_profile, check_tracks, stage_playlist")
             .font(.callout).foregroundStyle(.secondary)
         } header: {
           Text("Chat Access (MCP)")

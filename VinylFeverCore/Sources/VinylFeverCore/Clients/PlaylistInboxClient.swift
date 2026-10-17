@@ -8,6 +8,12 @@ public struct StagedPlaylistSummary: Identifiable, Sendable {
   public let name: String
   public let trackCount: Int
   public var id: URL { handoff.url }
+
+  public init(handoff: StagedHandoff, name: String, trackCount: Int) {
+    self.handoff = handoff
+    self.name = name
+    self.trackCount = trackCount
+  }
 }
 
 @DependencyClient

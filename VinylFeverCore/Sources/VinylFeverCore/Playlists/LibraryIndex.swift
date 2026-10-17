@@ -76,11 +76,16 @@ public struct LibraryIndex: Sendable {
 
   public func overview(generatedAt: Date) -> LibraryOverview {
     let groups = artistGroups()
-    let genres = Dictionary(grouping: tracks.compactMap { nonempty($0.genre) }, by: { $0 })
+    let genres = Dictionary(grouping: tracks.compactMap { nonempty($0.genre)?.trimmingCharacters(in: .whitespacesAndNewlines) }, by: { $0 })
       .mapValues(\.count)
+      .filter { !$0.key.isEmpty }
+      .sorted { lhs, rhs in lhs.value == rhs.value ? lhs.key.localizedStandardCompare(rhs.key) == .orderedAscending : lhs.value > rhs.value }
+      .prefix(25)
+      .reduce(into: [String: Int]()) { $0[$1.key] = $1.value }
+    let latestYear = Calendar.current.component(.year, from: Date()) + 1
     let decades = Dictionary(
       grouping: tracks.compactMap { track -> Int? in
-        guard let year = track.year else { return nil }
+        guard let year = track.year, (1900...latestYear).contains(year) else { return nil }
         return year / 10 * 10
       }, by: { $0 }
     ).mapValues(\.count)

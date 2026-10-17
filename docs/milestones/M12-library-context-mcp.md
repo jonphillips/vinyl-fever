@@ -214,8 +214,7 @@ Last.fm (see *Decisions*). Dispatches 1, 2, and 3 each owe a device gate on Jon'
     - **If the refresh exceeds the budget, stop and flag it** rather than optimizing blind.
 
 - [x] **S2 — `vf-mcp` stdio server + playlist inbox (core executable + app).** Implementation
-  complete; device gate remains owed.
-  owed. Requires the mcp-server-kit effort to have merged.
+  complete; device gate remains owed. Requires the mcp-server-kit effort to have merged.
   - Add the new executable target `VinylFeverMCP` (product `vf-mcp`) to the `VinylFeverCore`
     package. It depends on `VinylFeverCore` and `MCPServerKit`, a path dependency mirroring the
     `LLMClientKit` entry. `project.yml` copies the built binary into the app bundle at

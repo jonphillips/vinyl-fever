@@ -1,5 +1,7 @@
 import Dependencies
 import Foundation
+import LLMHandoffKit
+import Observation
 import Testing
 import VinylFeverCore
 
@@ -8,6 +10,106 @@ import VinylFeverCore
 @MainActor
 @Suite("Playlist builder model")
 struct PlaylistBuilderModelTests {
+  @Test("inbox order, open equivalence, create, and discard use the inbox client")
+  func inboxFlow() async throws {
+    let older = handoff("older")
+    let newer = handoff("newer")
+    let summaries = [
+      StagedPlaylistSummary(handoff: newer, name: "Newer", trackCount: 1),
+      StagedPlaylistSummary(handoff: older, name: "Older", trackCount: 1),
+    ]
+    let stub = InboxStub(summaries: summaries, contents: [newer.url: validPaste, older.url: validPaste])
+    let resolver: @Sendable (PlaylistRequest) async -> [ResolvedPlaylistRow] = { request in
+      request.tracks.map { track in
+        let candidate = CatalogSongCandidate(id: "\(track.artist)-\(track.title)", title: track.title, artistName: track.artist)
+        return ResolvedPlaylistRow(request: track, status: .matched(candidate, score: 1))
+      }
+    }
+    let opened = withDependencies {
+      $0.date.now = Date(timeIntervalSince1970: 10)
+      $0.playlistInboxClient = stub.client
+      $0.catalogMatchResolver.resolve = resolver
+      $0.appleMusicCatalogClient = authorizedClient()
+    } operation: { PlaylistBuilderModel() }
+    opened.refreshInbox()
+    #expect(opened.stagedPlaylists.map(\.name) == ["Newer", "Older"])
+    await opened.openStagedPlaylist(summaries[0])
+
+    let pasted = withDependencies {
+      $0.date.now = Date(timeIntervalSince1970: 10)
+      $0.playlistInboxClient = stub.client
+      $0.catalogMatchResolver.resolve = resolver
+      $0.appleMusicCatalogClient = authorizedClient()
+    } operation: { PlaylistBuilderModel() }
+    pasted.pastedText = validPaste
+    await pasted.resolve()
+    #expect(opened.rows == pasted.rows)
+    #expect(opened.playlistName == pasted.playlistName)
+    #expect(opened.droppedTracks == pasted.droppedTracks)
+
+    await opened.createPlaylist()
+    #expect(stub.processed.map(\.url) == [newer.url])
+    #expect(opened.stagedPlaylists.map(\.name) == ["Older"])
+    #expect(stub.listCallCount >= 2)
+
+    let discardStub = InboxStub(summaries: summaries, contents: [newer.url: validPaste])
+    let discard = withDependencies {
+      $0.playlistInboxClient = discardStub.client
+    } operation: { PlaylistBuilderModel() }
+    discard.refreshInbox()
+    discard.discardStagedPlaylist(summaries[0])
+    #expect(discardStub.processed.map(\.url) == [newer.url])
+    #expect(discard.stagedPlaylists.map(\.name) == ["Older"])
+  }
+
+  @Test("start over detaches the opened handoff before creating a pasted playlist")
+  func startOverDoesNotProcessOpenedItem() async {
+    let handoff = handoff("item-a")
+    let summary = StagedPlaylistSummary(handoff: handoff, name: "Playlist A", trackCount: 1)
+    let stub = InboxStub(summaries: [summary], contents: [handoff.url: validPaste])
+    let model = withDependencies {
+      $0.date.now = Date(timeIntervalSince1970: 10)
+      $0.playlistInboxClient = stub.client
+      $0.catalogMatchResolver.resolve = { request in
+        request.tracks.map { track in
+          let candidate = CatalogSongCandidate(id: "B", title: track.title, artistName: track.artist)
+          return ResolvedPlaylistRow(request: track, status: .matched(candidate, score: 1))
+        }
+      }
+      $0.appleMusicCatalogClient = authorizedClient()
+    } operation: { PlaylistBuilderModel() }
+    model.refreshInbox()
+    await model.openStagedPlaylist(summary)
+    model.startOver()
+    model.pastedText = "VF-PLAYLIST: v1\n{\"name\":\"Playlist B\",\"tracks\":[{\"artist\":\"Other\",\"title\":\"Song B\"}]}"
+    await model.resolve()
+    await model.createPlaylist()
+    #expect(stub.processed.isEmpty)
+    #expect(model.stagedPlaylists.map(\.id) == [handoff.url])
+    #expect(model.createdPlaylist?.name == "Playlist B")
+  }
+
+  @Test("library index arrival invalidates observed annotations")
+  func libraryIndexArrivalIsObservable() async {
+    let model = PlaylistBuilderModel()
+    let candidate = Self.candidate(id: "owned", title: "Owned Song")
+    let row = ResolvedPlaylistRow(
+      request: TrackRequest(index: 1, artist: "The Records", title: "Owned Song"),
+      status: .matched(candidate, score: 1))
+    let changed = ObservationFlag()
+    withObservationTracking {
+      _ = model.visibleAnnotation(for: row)
+    } onChange: {
+      changed.set()
+    }
+    model.librarySnapshot = LibrarySnapshot(
+      generatedAt: Date(timeIntervalSince1970: 1),
+      tracks: [LibraryTrack(persistentID: "owned", name: "Owned Song", artist: "The Records")])
+    await model.waitForLibraryIndex()
+    await Task.yield()
+    #expect(changed.value)
+  }
+
   @Test("snapshot annotations bulk removal preserve remaining create order")
   func libraryAnnotationsAndBulkRemove() async {
     let played = Self.candidate(id: "played", title: "Frequently Played")
@@ -719,6 +821,61 @@ struct PlaylistBuilderModelTests {
   nonisolated private static func candidate(id: String, title: String) -> CatalogSongCandidate {
     CatalogSongCandidate(id: id, title: title, artistName: "The Records")
   }
+
+  private func handoff(_ name: String) -> StagedHandoff {
+    StagedHandoff(
+      url: FileManager.default.temporaryDirectory.appending(path: "\(name).vfplaylist"),
+      stagedAt: Date(timeIntervalSince1970: name == "newer" ? 2 : 1), slug: name)
+  }
+}
+
+private final class InboxStub: @unchecked Sendable {
+  private let lock = NSLock()
+  private var summaries: [StagedPlaylistSummary]
+  private let contents: [URL: String]
+  private var processedHandoffs: [StagedHandoff] = []
+  private var listCalls = 0
+
+  init(summaries: [StagedPlaylistSummary], contents: [URL: String]) {
+    self.summaries = summaries
+    self.contents = contents
+  }
+
+  var processed: [StagedHandoff] { lock.withLock { processedHandoffs } }
+  var listCallCount: Int { lock.withLock { listCalls } }
+
+  var client: PlaylistInboxClient {
+    PlaylistInboxClient(
+      list: { self.list() },
+      read: { try self.read($0) },
+      markProcessed: { self.markProcessed($0) })
+  }
+
+  private func list() -> [StagedPlaylistSummary] {
+    lock.withLock {
+      listCalls += 1
+      return summaries.filter { summary in !processedHandoffs.contains(where: { $0.url == summary.handoff.url }) }
+    }
+  }
+
+  private func read(_ handoff: StagedHandoff) throws -> String {
+    try lock.withLock {
+      guard let text = contents[handoff.url] else { throw CocoaError(.fileReadNoSuchFile) }
+      return text
+    }
+  }
+
+  private func markProcessed(_ handoff: StagedHandoff) -> StagedHandoff {
+    lock.withLock { processedHandoffs.append(handoff) }
+    return handoff
+  }
+}
+
+private final class ObservationFlag: @unchecked Sendable {
+  private let lock = NSLock()
+  private var storage = false
+  var value: Bool { lock.withLock { storage } }
+  func set() { lock.withLock { storage = true } }
 }
 
 private actor SearchCallCounter {
