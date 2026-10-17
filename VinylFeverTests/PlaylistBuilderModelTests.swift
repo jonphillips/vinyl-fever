@@ -64,6 +64,7 @@ struct PlaylistBuilderModelTests {
   func failedSnapshotRefreshKeepsPrevious() async {
     let previous = LibrarySnapshot(generatedAt: Date(timeIntervalSince1970: 1), tracks: [])
     let model = withDependencies {
+      $0.musicAppClient.requestAutomationPermission = { .authorized }
       $0.musicAppClient.readLibrarySnapshot = {
         throw NSError(
           domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Music unavailable"])
@@ -173,6 +174,7 @@ struct PlaylistBuilderModelTests {
     let staleCounter = SearchCallCounter()
     let staleModel = await withDependencies {
       $0.date.now = now
+      $0.musicAppClient.automationPermission = { .authorized }
       $0.musicAppClient.readLibrarySnapshot = {
         await staleCounter.record()
         return refreshed
@@ -190,6 +192,7 @@ struct PlaylistBuilderModelTests {
     let freshCounter = SearchCallCounter()
     let freshModel = await withDependencies {
       $0.date.now = now
+      $0.musicAppClient.automationPermission = { .authorized }
       $0.musicAppClient.readLibrarySnapshot = {
         await freshCounter.record()
         return refreshed
@@ -203,6 +206,65 @@ struct PlaylistBuilderModelTests {
     }
     #expect(await freshCounter.count == 0)
     #expect(freshModel.librarySnapshot == previous)
+  }
+
+  @Test("launch refresh only checks automation permission; manual refresh asks for it")
+  func refreshPermissionPrompting() async {
+    let now = Date(timeIntervalSince1970: 2_000_000_000)
+    let refreshed = LibrarySnapshot(
+      generatedAt: now, tracks: [LibraryTrack(persistentID: "new", name: "Song", artist: "Artist")])
+    let requests = SearchCallCounter()
+    let reads = SearchCallCounter()
+    let model = withDependencies {
+      $0.date.now = now
+      $0.musicAppClient.automationPermission = { .notDetermined }
+      $0.musicAppClient.requestAutomationPermission = {
+        await requests.record()
+        return .authorized
+      }
+      $0.musicAppClient.readLibrarySnapshot = {
+        await reads.record()
+        return refreshed
+      }
+      $0.librarySnapshotStore = LibrarySnapshotStore(
+        read: { nil }, write: { _ in }, modifiedAt: { nil })
+    } operation: {
+      PlaylistBuilderModel()
+    }
+
+    await model.loadSnapshotAndRefreshIfStale()
+    #expect(await requests.count == 0)
+    #expect(await reads.count == 0)
+    #expect(model.librarySnapshot == nil)
+    #expect(
+      model.librarySnapshotError
+        == "Click Refresh Library Snapshot to allow Vinyl Fever to read your Music library.")
+
+    await model.refreshLibrarySnapshot()
+    #expect(await requests.count == 1)
+    #expect(await reads.count == 1)
+    #expect(model.librarySnapshot == refreshed)
+    #expect(model.librarySnapshotError == nil)
+  }
+
+  @Test("a denied manual refresh reads nothing and keeps the previous snapshot")
+  func deniedManualRefreshKeepsPrevious() async {
+    let previous = LibrarySnapshot(generatedAt: Date(timeIntervalSince1970: 1), tracks: [])
+    let reads = SearchCallCounter()
+    let model = withDependencies {
+      $0.musicAppClient.requestAutomationPermission = { .denied }
+      $0.musicAppClient.readLibrarySnapshot = {
+        await reads.record()
+        return previous
+      }
+    } operation: {
+      PlaylistBuilderModel()
+    }
+    model.librarySnapshot = previous
+    await model.refreshLibrarySnapshot()
+    #expect(await reads.count == 0)
+    #expect(model.librarySnapshot == previous)
+    #expect(model.librarySnapshotError == MusicAutomationPermission.denied.displayMessage)
   }
 
   @Test("a valid paste resolves rows; malformed paste makes no catalog searches")

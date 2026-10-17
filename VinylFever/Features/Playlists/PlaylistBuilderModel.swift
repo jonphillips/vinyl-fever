@@ -100,16 +100,32 @@ final class PlaylistBuilderModel {
       librarySnapshot = try await snapshotStore.read()
       let modifiedAt = try await snapshotStore.modifiedAt()
       if modifiedAt == nil || now.timeIntervalSince(modifiedAt!) >= Self.snapshotStaleInterval {
-        await refreshLibrarySnapshot()
+        await refreshSnapshot(requestingPermission: false)
       }
     } catch { librarySnapshotError = error.localizedDescription }
   }
 
+  /// The manual refresh. Unlike the launch refresh, it may show the Automation prompt.
   func refreshLibrarySnapshot() async {
+    await refreshSnapshot(requestingPermission: true)
+  }
+
+  private func refreshSnapshot(requestingPermission: Bool) async {
     guard !isRefreshingSnapshot else { return }
     isRefreshingSnapshot = true
     librarySnapshotError = nil
     defer { isRefreshingSnapshot = false }
+    // Launch only checks, so opening the app never raises a permission dialog.
+    let permission =
+      requestingPermission
+      ? await musicApp.requestAutomationPermission() : await musicApp.automationPermission()
+    guard permission == .authorized else {
+      librarySnapshotError =
+        permission == .notDetermined && !requestingPermission
+        ? "Click Refresh Library Snapshot to allow Vinyl Fever to read your Music library."
+        : permission.displayMessage
+      return
+    }
     do {
       let snapshot = try await musicApp.readLibrarySnapshot()
       try await snapshotStore.write(snapshot)
