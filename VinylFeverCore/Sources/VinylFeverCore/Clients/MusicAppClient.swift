@@ -15,8 +15,11 @@ public struct MusicAppClient: Sendable {
   /// watcher imports them on its own schedule. Unlike `add`, this sends no Apple Event
   /// and cannot time out on a busy Music; the caller confirms the import by polling
   /// `readAlbumTracks`.
-  public var importViaWatchFolder: @Sendable (_ urls: [URL], _ watchFolder: URL) async throws -> Void
-  public var readAlbumTracks: @Sendable (_ request: MusicAlbumReadRequest) async throws -> [ImportedTrackRef]
+  public var importViaWatchFolder:
+    @Sendable (_ urls: [URL], _ watchFolder: URL) async throws -> Void
+  public var readAlbumTracks:
+    @Sendable (_ request: MusicAlbumReadRequest) async throws -> [ImportedTrackRef]
+  public var readLibrarySnapshot: @Sendable () async throws -> LibrarySnapshot
 }
 
 public struct MusicAlbumReadRequest: Equatable, Sendable {
@@ -57,7 +60,7 @@ public enum MusicAutomationPermission: Equatable, Sendable {
       "Music automation permission has not been granted yet."
     case .denied:
       "Music automation is denied. Allow Vinyl Fever in System Settings > Privacy & Security > Automation > Music."
-    case let .unavailable(message):
+    case .unavailable(let message):
       message
     }
   }

@@ -22,6 +22,9 @@ extension MusicAppClient {
       },
       readAlbumTracks: { request in
         try await bridge.readAlbumTracks(request)
+      },
+      readLibrarySnapshot: {
+        try await bridge.readLibrarySnapshot()
       }
     )
   }
@@ -31,6 +34,9 @@ private struct LiveMusicAppBridge: Sendable {
   private static let musicBundleIdentifier = "com.apple.Music"
   /// Ceiling for a scoped album read; a healthy read returns in well under this.
   private static let readTimeout: Duration = .seconds(30)
+  /// Ceiling for a full library snapshot read. Not the gate's read budget (30 s), which is
+  /// measured, not enforced: ~25 s for 87k tracks on Jon's Mac, so 30 s would fail a busy Music.
+  private static let snapshotReadTimeout: Duration = .seconds(120)
   /// Ceiling for importing files; copying into the Media folder can be slower.
   private static let addTimeout: Duration = .seconds(120)
 
@@ -57,22 +63,29 @@ private struct LiveMusicAppBridge: Sendable {
         let tracks = try Self.scopedFileTracks(on: libraryPlaylist, request: request)
         let requestedAlbum = AudioTagVerifier.normalizedMetadataString(request.albumTitle)
         let requestedAlbumArtist = AudioTagVerifier.normalizedMetadataString(request.albumArtist)
-        return tracks
+        return
+          tracks
           .compactMap { track -> ImportedTrackRef? in
             let ref = Self.importedTrackRef(from: track)
             let album = AudioTagVerifier.normalizedMetadataString(ref.album)
             let albumArtist = AudioTagVerifier.normalizedMetadataString(ref.albumArtist)
-            guard album == requestedAlbum || (request.includesTitleSiblings && Self.isTitleSibling(album, of: requestedAlbum)) else {
+            guard
+              album == requestedAlbum
+                || (request.includesTitleSiblings && Self.isTitleSibling(album, of: requestedAlbum))
+            else {
               return nil
             }
-            guard requestedAlbumArtist == nil || albumArtist == requestedAlbumArtist || request.includesTitleSiblings else {
+            guard
+              requestedAlbumArtist == nil || albumArtist == requestedAlbumArtist
+                || request.includesTitleSiblings
+            else {
               return nil
             }
             return ref
           }
           .sorted { lhs, rhs in
             switch (lhs.trackNumber, rhs.trackNumber) {
-            case let (lhs?, rhs?) where lhs != rhs:
+            case (let lhs?, let rhs?) where lhs != rhs:
               lhs < rhs
             case (nil, _?):
               false
@@ -85,6 +98,97 @@ private struct LiveMusicAppBridge: Sendable {
       }
       .value
     }
+  }
+
+  func readLibrarySnapshot() async throws -> LibrarySnapshot {
+    try await ensureMusicIsRunning()
+    let permission = await Self.determineAutomationPermission(askUserIfNeeded: false)
+    guard permission == .authorized else {
+      throw MusicAppLiveError.automationPermission(permission)
+    }
+    return try await Self.withTimeout(Self.snapshotReadTimeout) {
+      try await Task.detached(priority: .userInitiated) {
+        var columns: [String: [Any]] = [:]
+        for property in LibraryBulkProperty.all {
+          columns[property.key] = try Self.readEveryTrackProperty(property)
+        }
+        let count = columns["persistentID"]?.count ?? 0
+        let mismatched = LibraryBulkProperty.all.filter { columns[$0.key]?.count != count }
+        guard mismatched.isEmpty else {
+          // The library changed between events (an iCloud sync, say); a retry usually succeeds.
+          let detail = mismatched.map { "\($0.key)=\(columns[$0.key]?.count ?? 0)" }
+          throw MusicAppLiveError.scriptingBridgeReadFailed(
+            "track columns (persistentID=\(count), \(detail.joined(separator: ", "))); try again")
+        }
+        let result = try (0..<count).map {
+          try LibraryTrack(bulkColumns: columns, index: $0)
+        }
+        return LibrarySnapshot(generatedAt: Date(), tracks: result)
+      }.value
+    }
+  }
+
+  /// Sends one `get <property> of every track of library playlist 1` event. ScriptingBridge's
+  /// bulk `value(forKey:)` drops `missing value` entries (a never-played track has no played
+  /// date), which shifts the column; the raw reply keeps one item per track, so columns zip.
+  private static func readEveryTrackProperty(_ property: LibraryBulkProperty) throws -> [Any] {
+    let libraryPlaylist = try objectSpecifier(
+      "cLiP", form: "indx", data: NSAppleEventDescriptor(int32: 1), from: .null())
+    var all = fourCharCode("all ")
+    let everyTrack = try objectSpecifier(
+      "cTrk", form: "indx",
+      data: NSAppleEventDescriptor(descriptorType: fourCharCode("abso"), bytes: &all, length: 4)!,
+      from: libraryPlaylist)
+    let specifier = try objectSpecifier(
+      "prop", form: "prop", data: NSAppleEventDescriptor(typeCode: fourCharCode(property.code)),
+      from: everyTrack)
+    let event = NSAppleEventDescriptor(
+      eventClass: AEEventClass(kAECoreSuite), eventID: AEEventID(kAEGetData),
+      targetDescriptor: NSAppleEventDescriptor(bundleIdentifier: musicBundleIdentifier),
+      returnID: AEReturnID(kAutoGenerateReturnID), transactionID: AETransactionID(kAnyTransactionID))
+    event.setParam(specifier, forKeyword: keyDirectObject)
+    let reply = try event.sendEvent(
+      options: [.waitForReply], timeout: TimeInterval(snapshotReadTimeout.components.seconds))
+    guard let list = reply.paramDescriptor(forKeyword: keyDirectObject),
+      list.descriptorType == typeAEList
+    else {
+      let status = reply.paramDescriptor(forKeyword: keyErrorNumber)?.int32Value ?? 0
+      throw MusicAppLiveError.scriptingBridgeReadFailed("\(property.key) (OSStatus \(status))")
+    }
+    guard list.numberOfItems > 0 else { return [] }
+    return (1...list.numberOfItems).map { index -> Any in
+      guard let item = list.atIndex(index),
+        !(item.descriptorType == typeType && item.typeCodeValue == fourCharCode("msng"))
+      else { return NSNull() }
+      return switch property.kind {
+      case .text: item.stringValue ?? NSNull()
+      case .integer: NSNumber(value: item.int32Value)
+      case .real: NSNumber(value: item.doubleValue)
+      case .date: item.dateValue ?? NSNull()
+      case .boolean: NSNumber(value: item.booleanValue)
+      case .enumeration: NSNumber(value: item.enumCodeValue)
+      }
+    }
+  }
+
+  private static func objectSpecifier(
+    _ desiredClass: String, form: String, data: NSAppleEventDescriptor,
+    from container: NSAppleEventDescriptor
+  ) throws -> NSAppleEventDescriptor {
+    guard var containerDesc = container.aeDesc?.pointee, var keyDesc = data.aeDesc?.pointee else {
+      throw MusicAppLiveError.scriptingBridgeReadFailed("object specifier")
+    }
+    var result = AEDesc()
+    let status = CreateObjSpecifier(
+      fourCharCode(desiredClass), &containerDesc, fourCharCode(form), &keyDesc, false, &result)
+    guard status == noErr else {
+      throw MusicAppLiveError.appleEventDescriptorFailed(OSStatus(status))
+    }
+    return NSAppleEventDescriptor(aeDescNoCopy: &result)
+  }
+
+  private static func fourCharCode(_ value: String) -> FourCharCode {
+    value.utf8.reduce(0) { $0 << 8 | FourCharCode($1) }
   }
 
   func add(_ urls: [URL]) async throws -> [ImportedTrackRef] {
@@ -116,7 +220,8 @@ private struct LiveMusicAppBridge: Sendable {
       let fileManager = FileManager.default
       var isDirectory: ObjCBool = false
       guard
-        fileManager.fileExists(atPath: watchFolder.path(percentEncoded: false), isDirectory: &isDirectory),
+        fileManager.fileExists(
+          atPath: watchFolder.path(percentEncoded: false), isDirectory: &isDirectory),
         isDirectory.boolValue
       else {
         throw MusicAppLiveError.watchFolderUnavailable(watchFolder)
@@ -163,15 +268,18 @@ private struct LiveMusicAppBridge: Sendable {
   }
 
   private func ensureMusicIsRunning() async throws {
-    guard NSRunningApplication
-      .runningApplications(withBundleIdentifier: Self.musicBundleIdentifier)
-      .isEmpty
+    guard
+      NSRunningApplication
+        .runningApplications(withBundleIdentifier: Self.musicBundleIdentifier)
+        .isEmpty
     else {
       return
     }
-    guard let url = NSWorkspace.shared.urlForApplication(
-      withBundleIdentifier: Self.musicBundleIdentifier
-    ) else {
+    guard
+      let url = NSWorkspace.shared.urlForApplication(
+        withBundleIdentifier: Self.musicBundleIdentifier
+      )
+    else {
       throw MusicAppLiveError.musicAppUnavailable
     }
 
@@ -433,22 +541,49 @@ private enum MusicAppLiveError: LocalizedError {
 
   var errorDescription: String? {
     switch self {
-    case let .appleEventDescriptorFailed(status):
+    case .appleEventDescriptorFailed(let status):
       "Could not prepare the Music automation target descriptor: OSStatus \(status)."
-    case let .automationPermission(permission):
+    case .automationPermission(let permission):
       permission.displayMessage
     case .libraryPlaylistUnavailable:
       "Music's library playlist could not be read."
     case .musicAppUnavailable:
       "Music.app could not be found."
-    case let .scriptingBridgeReadFailed(key):
+    case .scriptingBridgeReadFailed(let key):
       "Music scripting bridge value '\(key)' could not be read."
     case .timedOut:
       "Music did not respond in time. It may be busy or blocked on a dialog; try again."
-    case let .watchFolderUnavailable(url):
+    case .watchFolderUnavailable(let url):
       "The Automatically Add folder isn't there: \(url.path(percentEncoded: false)). Check it in Settings — is the drive mounted?"
-    case let .watchFolderNotWritable(url):
+    case .watchFolderNotWritable(let url):
       "The Automatically Add folder isn't writable: \(url.path(percentEncoded: false))."
     }
   }
+}
+
+/// One Music track property read in bulk for the library snapshot. Keys match
+/// `LibraryTrack(bulkColumns:index:)`; codes are from Music's scripting dictionary.
+private struct LibraryBulkProperty {
+  enum Kind { case text, integer, real, date, boolean, enumeration }
+  let key: String
+  let code: String
+  let kind: Kind
+
+  static let all: [LibraryBulkProperty] = [
+    .init(key: "persistentID", code: "pPIS", kind: .text),
+    .init(key: "name", code: "pnam", kind: .text),
+    .init(key: "artist", code: "pArt", kind: .text),
+    .init(key: "albumArtist", code: "pAlA", kind: .text),
+    .init(key: "album", code: "pAlb", kind: .text),
+    .init(key: "genre", code: "pGen", kind: .text),
+    .init(key: "year", code: "pYr ", kind: .integer),
+    .init(key: "duration", code: "pDur", kind: .real),
+    .init(key: "playedCount", code: "pPlC", kind: .integer),
+    .init(key: "skippedCount", code: "pSkC", kind: .integer),
+    .init(key: "favorited", code: "pLov", kind: .boolean),
+    .init(key: "rating", code: "pRte", kind: .integer),
+    .init(key: "dateAdded", code: "pAdd", kind: .date),
+    .init(key: "playedDate", code: "pPlD", kind: .date),
+    .init(key: "cloudStatus", code: "pClS", kind: .enumeration),
+  ]
 }

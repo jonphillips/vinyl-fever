@@ -45,3 +45,8 @@ M9 manual append metadata (#51–#53), M10 collection inbox (#55/#56 and follow-
 Retired `CURRENT_HANDOFF.md` (last touched 2026-07-10; its M10 front had since shipped). Split it into
 `docs/NEXT_UP.md` (M6 · S2 remainder), `docs/efforts/one-true-import-folder.md`, and the
 parked/pending items in `docs/open-questions.md`; added `docs/verification.md`.
+# 2026-10-16 — M12 · Dispatch 1 (S0 + S1)
+
+Branch: `m12/s0-library-snapshot`
+
+Added the versioned library snapshot codec and pure index, wired Music.app bulk reads and atomic snapshot storage, and added library annotations and heavily played removal to playlist review. Core and macOS test suites passed. The live ScriptingBridge read and the Mac device checks remain unverified.
