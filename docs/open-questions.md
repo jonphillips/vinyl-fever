@@ -50,12 +50,17 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
     songs played in between, dated to that window. A fetch with no overlap with the previous
     one records an explicit gap instead of missing plays silently.
   - **Shape:**
-    - An hourly login agent registered with `SMAppService` runs the app binary with a
-      `--capture-listening` flag: fetch, compare, append, exit, with no window. The probe proved
-      the signed app is authorized when run this way. launchd runs a missed interval on wake,
-      so plays are lost only if more than about 70 different songs play while the Mac sleeps.
-    - Append-only listening log beside the library snapshot: a derived file outside SQLiteData,
-      like the snapshot (Decision 3). Snapshot format v1 is unchanged.
+    - **The poller runs on Jon's always-on Mac mini** (circa 2021; Jon, 2026-10-17), not the
+      laptop, which travels and sleeps. It reads Apple's servers, not a local library, so any
+      Mac signed in to Jon's Apple ID works. If the mini is Intel, the full app (macOS 27)
+      can't run there, so it's a small separate poller app with its own MusicKit App ID and
+      profile (the #69 chore). If it's Apple silicon on macOS 27, the app binary with a flag
+      works too. An hourly login agent runs it: fetch, compare, append, exit, with no window.
+      The probe proved a signed app is authorized when run this way.
+    - **The log lives in an iCloud Drive folder.** The mini is the only writer, so there are no
+      sync conflicts; `vf-mcp` on the laptop only reads it.
+    - The log is append-only and derived, outside SQLiteData like the snapshot (Decision 3).
+      Snapshot format v1 is unchanged.
     - `top_artists` / `top_tracks` gain a `period` (7 days, 30 days), plus a `recent_listening`
       tool.
   - **Precision:** a song played several times within one hour counts once, but plays across
