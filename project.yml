@@ -8,7 +8,9 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    # The helper build phase runs SwiftPM against the sibling shared package checkout;
+    # Xcode's script sandbox blocks access to those local package sources.
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
     MARKETING_VERSION: 0.1.0
     CURRENT_PROJECT_VERSION: 1
     CODE_SIGN_STYLE: Automatic
@@ -46,6 +48,20 @@ targets:
         product: SwiftUINavigation
       - package: LLMClientKit
         product: LLMClientKit
+    postBuildScripts:
+      - name: Build and embed vf-mcp helper
+        outputFiles:
+          - $(DERIVED_FILE_DIR)/vf-mcp-build
+          - $(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers/vf-mcp
+        script: |
+          set -euo pipefail
+          if [ "$CONFIGURATION" = "Release" ]; then swift_configuration=release; else swift_configuration=debug; fi
+          scratch_path="$DERIVED_FILE_DIR/vf-mcp-build"
+          swift build --package-path "$SRCROOT/VinylFeverCore" --product vf-mcp --configuration "$swift_configuration" --scratch-path "$scratch_path"
+          helper_dir="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
+          mkdir -p "$helper_dir"
+          cp "$scratch_path/$swift_configuration/vf-mcp" "$helper_dir/vf-mcp"
+          chmod 755 "$helper_dir/vf-mcp"
     info:
       path: VinylFever/Info.plist
       properties:

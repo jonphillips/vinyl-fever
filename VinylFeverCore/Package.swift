@@ -9,6 +9,7 @@ let package = Package(
   ],
   products: [
     .library(name: "VinylFeverCore", targets: ["VinylFeverCore"]),
+    .executable(name: "vf-mcp", targets: ["VinylFeverMCP"]),
   ],
   dependencies: [
     .package(url: "https://github.com/pointfreeco/sqlite-data", from: "1.0.0"),
@@ -19,6 +20,7 @@ let package = Package(
     // Chef). Sibling checkout: `jon-platform` lives next to `vinyl-fever`.
     .package(path: "../../jon-platform/packages/LLMClientKit"),
     .package(path: "../../jon-platform/packages/LLMHandoffKit"),
+    .package(path: "../../jon-platform/packages/MCPServerKit"),
   ],
   targets: [
     .target(
@@ -30,6 +32,7 @@ let package = Package(
         .product(name: "SwiftNavigation", package: "swift-navigation"),
         .product(name: "LLMClientKit", package: "LLMClientKit"),
         .product(name: "LLMHandoffKit", package: "LLMHandoffKit"),
+        .product(name: "MCPServerKit", package: "MCPServerKit"),
       ]
     ),
     .testTarget(
@@ -40,7 +43,12 @@ let package = Package(
         .product(name: "DependenciesTestSupport", package: "swift-dependencies"),
         .product(name: "LLMClientKit", package: "LLMClientKit"),
         .product(name: "LLMHandoffKit", package: "LLMHandoffKit"),
+        .product(name: "MCPServerKit", package: "MCPServerKit"),
       ]
+    ),
+    .executableTarget(
+      name: "VinylFeverMCP",
+      dependencies: ["VinylFeverCore", .product(name: "MCPServerKit", package: "MCPServerKit")]
     ),
   ]
 )

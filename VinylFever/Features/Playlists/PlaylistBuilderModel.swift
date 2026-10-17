@@ -1,5 +1,6 @@
 import Dependencies
 import Foundation
+import LLMHandoffKit
 import Observation
 import VinylFeverCore
 
@@ -12,12 +13,15 @@ final class PlaylistBuilderModel {
   @ObservationIgnored @Dependency(\.continuousClock) private var clock
   @ObservationIgnored @Dependency(\.musicAppClient) private var musicApp
   @ObservationIgnored @Dependency(\.librarySnapshotStore) private var snapshotStore
+  @ObservationIgnored @Dependency(\.playlistInboxClient) private var playlistInbox
   @ObservationIgnored @Dependency(\.date.now) private var now
 
   var pastedText = ""
   var playlistName = ""
   var playlistDescription = ""
   var rows: [ResolvedPlaylistRow] = []
+  var stagedPlaylists: [StagedPlaylistSummary] = []
+  private var openedStagedPlaylist: StagedHandoff?
   var droppedTracks: [DroppedPlaylistTrack] = []
   var markerWarning: String?
   var decodeError: String?
@@ -28,9 +32,23 @@ final class PlaylistBuilderModel {
   var isRetryingSearches = false
   var isRefreshingSnapshot = false
   var librarySnapshot: LibrarySnapshot? {
-    didSet { libraryIndex = librarySnapshot.map(LibraryIndex.init(snapshot:)) }
+    didSet {
+      let buildID = UUID()
+      snapshotIndexBuildID = buildID
+      libraryIndex = nil
+      guard let librarySnapshot else { return }
+      libraryIndexTask = Task.detached(priority: .userInitiated) { [weak self] in
+        let index = LibraryIndex(snapshot: librarySnapshot)
+        await MainActor.run {
+          guard let self, self.snapshotIndexBuildID == buildID else { return }
+          self.libraryIndex = index
+        }
+      }
+    }
   }
   @ObservationIgnored private var libraryIndex: LibraryIndex?
+  @ObservationIgnored private var snapshotIndexBuildID = UUID()
+  @ObservationIgnored private var libraryIndexTask: Task<Void, Never>?
   var librarySnapshotError: String?
   var createdPlaylist: CreatedPlaylistRef?
   var hasResolvedPaste = false
@@ -84,6 +102,10 @@ final class PlaylistBuilderModel {
       candidateArtist: candidate?.artistName, candidateTitle: candidate?.title)
   }
 
+  func waitForLibraryIndex() async {
+    await libraryIndexTask?.value
+  }
+
   func visibleAnnotation(for row: ResolvedPlaylistRow) -> LibraryAnnotation? {
     switch row.status {
     case .matched(let candidate, _):
@@ -103,6 +125,26 @@ final class PlaylistBuilderModel {
         await refreshSnapshot(requestingPermission: false)
       }
     } catch { librarySnapshotError = error.localizedDescription }
+  }
+
+  func refreshInbox() {
+    do { stagedPlaylists = try playlistInbox.list() }
+    catch { operationError = error.localizedDescription }
+  }
+
+  func openStagedPlaylist(_ summary: StagedPlaylistSummary) async {
+    do {
+      pastedText = try playlistInbox.read(summary.handoff)
+      openedStagedPlaylist = summary.handoff
+      await resolve()
+    } catch { operationError = error.localizedDescription }
+  }
+
+  func discardStagedPlaylist(_ summary: StagedPlaylistSummary) {
+    do {
+      _ = try playlistInbox.markProcessed(summary.handoff)
+      stagedPlaylists = try playlistInbox.list()
+    } catch { operationError = error.localizedDescription }
   }
 
   /// The manual refresh. Unlike the launch refresh, it may show the Automation prompt.
@@ -259,6 +301,11 @@ final class PlaylistBuilderModel {
       )
       createdTrackIndexes = trackIndexes
       createdPlaylist = playlist
+      if let openedStagedPlaylist {
+        _ = try playlistInbox.markProcessed(openedStagedPlaylist)
+        self.openedStagedPlaylist = nil
+        stagedPlaylists = try playlistInbox.list()
+      }
     } catch {
       operationError = error.localizedDescription
     }

@@ -1,5 +1,6 @@
 import SwiftUI
 import VinylFeverCore
+import AppKit
 
 struct PlaylistsView: View {
   @Bindable var model: PlaylistBuilderModel
@@ -24,6 +25,7 @@ struct PlaylistsView: View {
       }
 
       if !model.hasResolvedPaste && model.createdPlaylist == nil {
+        inboxPanel
         pastePanel
       }
 
@@ -52,6 +54,10 @@ struct PlaylistsView: View {
     }
     .padding(24)
     .frame(minWidth: 760, minHeight: 560)
+    .onAppear { model.refreshInbox() }
+    .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+      model.refreshInbox()
+    }
     .confirmationDialog(
       "Create playlist with unresolved songs?",
       isPresented: $confirmsPartialCreate,
@@ -65,6 +71,37 @@ struct PlaylistsView: View {
       Text(
         "\(model.unresolvedCount) unresolved song\(model.unresolvedCount == 1 ? " will" : "s will") be skipped. You can fix and add them after creation."
       )
+    }
+  }
+
+  private var inboxPanel: some View {
+    Group {
+      if !model.stagedPlaylists.isEmpty {
+        VStack(alignment: .leading, spacing: 8) {
+          Text("From chat (\(model.stagedPlaylists.count))").font(.headline)
+          ForEach(model.stagedPlaylists) { item in
+            HStack {
+              Button {
+                Task { await model.openStagedPlaylist(item) }
+              } label: {
+                VStack(alignment: .leading, spacing: 3) {
+                  Text(item.name)
+                  Text("\(item.trackCount) tracks · \(item.handoff.stagedAt.formatted(.relative(presentation: .numeric)))")
+                    .font(.caption).foregroundStyle(.secondary)
+                }
+              }
+              .buttonStyle(.plain)
+              Spacer()
+              Button("Discard", systemImage: "archivebox") { model.discardStagedPlaylist(item) }
+                .labelStyle(.iconOnly).help("Move this staged playlist to Processed")
+            }
+            .padding(10)
+            .background(.background, in: RoundedRectangle(cornerRadius: 8))
+          }
+        }
+        .padding(14)
+        .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 12))
+      }
     }
   }
 

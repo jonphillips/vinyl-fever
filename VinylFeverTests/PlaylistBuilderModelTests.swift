@@ -29,6 +29,10 @@ struct PlaylistBuilderModelTests {
     let older = Date(timeIntervalSince1970: 1_700_000_000)
     model.librarySnapshot = LibrarySnapshot(
       generatedAt: older,
+      tracks: [LibraryTrack(persistentID: "superseded", name: "Superseded", artist: "Artist")]
+    )
+    model.librarySnapshot = LibrarySnapshot(
+      generatedAt: older,
       tracks: [
         LibraryTrack(
           persistentID: "owned", name: "Frequently Played", artist: "Artist", playCount: 25,
@@ -38,6 +42,8 @@ struct PlaylistBuilderModelTests {
           persistentID: "owned-later", name: "Also Played", artist: "Artist", playCount: 20),
         LibraryTrack(persistentID: "last", name: "Last", artist: "Artist", playCount: 4),
       ])
+    await model.waitForLibraryIndex()
+    #expect(model.annotation(for: TrackRequest(index: 99, artist: "Artist", title: "Superseded")) == .notInLibrary)
     model.rows = [
       ResolvedPlaylistRow(
         request: TrackRequest(index: 1, artist: "Artist", title: "Frequently Played"),
@@ -99,6 +105,7 @@ struct PlaylistBuilderModelTests {
       PlaylistBuilderModel()
     }
     model.librarySnapshot = try await store.read()
+    await model.waitForLibraryIndex()
 
     let owned = TrackRequest(index: 1, artist: "The Records", title: "Owned Song")
     let unowned = TrackRequest(index: 2, artist: "Other Artist", title: "New Song")
@@ -135,6 +142,7 @@ struct PlaylistBuilderModelTests {
       PlaylistBuilderModel()
     }
     model.librarySnapshot = try await store.read()
+    await model.waitForLibraryIndex()
     let candidate = Self.candidate(id: "owned", title: "Owned Song")
     let rows = [
       ResolvedPlaylistRow(
