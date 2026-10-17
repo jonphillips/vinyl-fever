@@ -1,7 +1,8 @@
 # Effort — Shared MCP server kit, staging inbox, and tunnel script (jon-platform)
 
-**Status:** Planned 2026-10-15. Runs as **M12 · Dispatch 2**: after Dispatch 1 (snapshot and preview
-badges), before S2 (`vf-mcp`).
+**Status:** Done 2026-10-17: jon-platform#74 (squash `b6f48d6`), after Jon passed the `mcp-hello`
+iPad gate. Ran as **M12 · Dispatch 2**: after Dispatch 1 (snapshot and preview badges), before S2
+(`vf-mcp`).
 **Summary:** Build the domain-free pieces every app's MCP server needs, once, in jon-platform:
 `MCPServerKit` (the stdio JSON-RPC loop and tool registry), `LLMHandoffKit.HandoffInbox` (stage
 handoff contracts for review in the app), and `scripts/mcp-tunnel` (the Secure MCP Tunnel ops

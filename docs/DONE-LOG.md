@@ -3,6 +3,18 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-17 — M12 · Dispatch 2 effort mcp-server-kit (jon-platform `effort/mcp-server-kit`)
+
+jon-platform#74 merged (squash `b6f48d6`): `MCPServerKit` (the stdio JSON-RPC loop and tool registry, plus the `mcp-hello` sample), `LLMHandoffKit.HandoffInbox`, and `scripts/mcp-tunnel`. The architect's review fixed three gate blockers in the script (the real `tunnel-client` flag is `--health-listen-addr`, `init --force` replaces an existing profile, and the LaunchAgent gets a PATH that finds `tunnel-client`), plus line splitting on LF only, a non-trapping instructions check, and ISO 8601 dates in `.json(_:)`. Jon passed the `mcp-hello` iPad gate the same day.
+
+## 2026-10-16 — M12 · Dispatch 1 (S0 + S1)
+
+Branch: `m12/s0-library-snapshot`
+
+Added the versioned library snapshot codec and pure index, wired Music.app bulk reads and atomic snapshot storage, and added library annotations and heavily played removal to playlist review. Core and macOS test suites passed. The live ScriptingBridge read and the Mac device checks remain unverified.
+
+#72 merged 2026-10-17 (squash `6b96ae5`) with the architect's gate fixes: manual refresh requests Automation permission; bulk reads use raw Apple Events, because ScriptingBridge drops `missing value` items; dates use a `Date.ISO8601FormatStyle` codec. Jon passed the device gate the same day.
+
 ## 2026-10-15 — M11 catalog search retry (`fix/catalog-search-retry`)
 
 Jon's first device run of M11 surfaced two failures. "Failed to request developer token" came from
@@ -45,10 +57,3 @@ M9 manual append metadata (#51–#53), M10 collection inbox (#55/#56 and follow-
 Retired `CURRENT_HANDOFF.md` (last touched 2026-07-10; its M10 front had since shipped). Split it into
 `docs/NEXT_UP.md` (M6 · S2 remainder), `docs/efforts/one-true-import-folder.md`, and the
 parked/pending items in `docs/open-questions.md`; added `docs/verification.md`.
-# 2026-10-16 — M12 · Dispatch 1 (S0 + S1)
-
-Branch: `m12/s0-library-snapshot`
-
-Added the versioned library snapshot codec and pure index, wired Music.app bulk reads and atomic snapshot storage, and added library annotations and heavily played removal to playlist review. Core and macOS test suites passed. The live ScriptingBridge read and the Mac device checks remain unverified.
-
-#72 merged 2026-10-17 (squash `6b96ae5`) with the architect's gate fixes: manual refresh requests Automation permission; bulk reads use raw Apple Events, because ScriptingBridge drops `missing value` items; dates use a `Date.ISO8601FormatStyle` codec. Jon passed the device gate the same day.

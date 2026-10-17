@@ -1,8 +1,8 @@
 # Milestone 12 — Library Context for Chat (MCP)
 
 *Give the chat that builds playlists real knowledge of Jon's library and listening, through a
-local MCP server, and show the same knowledge in the playlist preview. Dispatch 1 is the current
-`NEXT_UP.md`. Rules in [../technical-architecture.md](../technical-architecture.md),
+local MCP server, and show the same knowledge in the playlist preview. Dispatch 3 (S2) is the
+current `NEXT_UP.md`. Rules in [../technical-architecture.md](../technical-architecture.md),
 `/Users/jon/code/jon-platform/AGENTS.md`, and jon-platform
 [ADR-0007](/Users/jon/code/jon-platform/docs/adr/0007-app-data-over-local-mcp.md) apply. Where this
 doc and those conflict, stop and flag it.*
@@ -148,9 +148,9 @@ preview annotations work with no MCP at all. **Dispatch 2: effort
 **Dispatch 3: S2**, which builds on that effort. **Dispatch 4: S3**, only if Jon approves
 Last.fm (see *Decisions*). Dispatches 1, 2, and 3 each owe a device gate on Jon's Mac.
 
-- [ ] **Effort — mcp-server-kit (jon-platform).** See the [brief](../efforts/mcp-server-kit.md).
-  It builds `MCPServerKit`, `LLMHandoffKit.HandoffInbox`, and `scripts/mcp-tunnel`. Device gate
-  owed (the `mcp-hello` smoke test from the iPad).
+- [x] **Effort — mcp-server-kit (jon-platform).** See the [brief](../efforts/mcp-server-kit.md).
+  It builds `MCPServerKit`, `LLMHandoffKit.HandoffInbox`, and `scripts/mcp-tunnel`. Merged as
+  jon-platform#74 (squash `b6f48d6`) on 2026-10-17, after Jon passed the `mcp-hello` iPad gate.
 
 - [x] **S0 — Snapshot model + library index (core, pure, no ScriptingBridge, no UI).**
   - `LibrarySnapshot` and `LibraryTrack` value types, plus a versioned codec for format v1 (see
@@ -223,6 +223,16 @@ Last.fm (see *Decisions*). Dispatches 1, 2, and 3 each owe a device gate on Jon'
     the tool table above and the `instructions` text, with no JSON-RPC code of its own. Each
     tool's handler decodes its input, calls the matching `LibraryIndex` function, and encodes
     the result.
+  - **The kit as shipped** (jon-platform#74): handlers are `async throws`, and a thrown error
+    becomes an `isError` result. `MCPToolResult.json(_:)` already encodes dates as ISO 8601 with
+    sorted keys, so `vf-mcp` needs no encoder of its own. The `MCPServerKit` package also
+    declares `LLMHandoffKit` (for its `mcp-hello` sample), which `VinylFeverCore` already
+    depends on at the same path.
+  - **Build the app's `LibraryIndex` off the main actor** (from the #72 review). Today
+    `PlaylistBuilderModel.librarySnapshot`'s `didSet` builds it on the main actor, about 1.8 s
+    at 87k tracks in a release build. Build it in a detached task and assign the result on the
+    main actor; a newer snapshot that lands mid-build wins. Rows show no badges until the index
+    is ready, as with no snapshot.
   - It loads the snapshot lazily, reloads when the file's `modifiedAt` changes, and builds the
     `LibraryIndex` once per load. With no snapshot, every read tool returns `isError: true`:
     "Open Vinyl Fever to build the library snapshot."
@@ -265,13 +275,18 @@ Last.fm (see *Decisions*). Dispatches 1, 2, and 3 each owe a device gate on Jon'
   - Inbox model tests: the list order; opening a staged item resolves exactly as pasting its
     text does; Create and Discard move the file to `Processed/`.
   - A test pins the server `instructions` text: the first 512 characters are the standalone
-    paragraph above, and the rest is generated from the Core contract text.
+    paragraph above, `MCPServer.instructionsHeadStandsAlone` returns `true`, and the rest is
+    generated from the Core contract text.
+  - A model test: setting a snapshot doesn't build the index on the main actor, and the newest
+    snapshot's index wins when two land back to back.
   - **Owed device gate:**
     - **ChatGPT:** from the **iPad**, through the tunnel, ask for a playlist. The model calls
       `check_tracks` and then `stage_playlist`; Jon confirms. At the Mac, the staged playlist
       appears under From chat; resolve, create, and confirm it in Music.app.
     - **Claude Code:** one session in `~/music-chat` calls `library_overview` through the same
       binary.
+    - Time the first `library_overview` call after the helper starts, against Jon's 87,100-track
+      snapshot (it loads the file and builds the index). Flag it if it takes over 10 s.
 
 - [ ] **S3 — Last.fm listening history (app + core). Only if Decision 1 is yes.**
   - Settings gets a Last.fm username and API key; the key is stored in the Keychain
@@ -298,7 +313,11 @@ Last.fm (see *Decisions*). Dispatches 1, 2, and 3 each owe a device gate on Jon'
 
 - [x] Secure MCP Tunnel and a restricted runtime key exist and are proven with a hello-world
   server (2026-10-15). The `vinyl-fever` profile replaces the `hello` profile in S2's gate.
-- [ ] ADR-0007 (jon-platform) merged before Dispatch 2. The effort's PR lands before S2.
+- [x] ADR-0007 (jon-platform) merged before Dispatch 2 (jon-platform#73, still **Proposed**).
+  The effort's PR landed before S2 (jon-platform#74).
+- [ ] Before S2's gate: a `Vinyl Fever` tunnel on the Platform Tunnels page, linked to the
+  ChatGPT account (jon-platform `docs/ios/mcp-access.md` step 1; ADR-0007 starts with one tunnel
+  per app). The runtime key is already in the Keychain.
 - [x] M11's owed device gate (Jon passed it 2026-10-17). Dispatch 1 builds on the M11 preview,
   so it should land on a verified M11.
 - [ ] For S3 only: a Last.fm API account (free) and confirmation that Marvis scrobbles are
@@ -363,6 +382,8 @@ Open — the architect's recommendation is listed first:
    rather than depend on the pre-1.0 official SDK). It's a platform decision now, so it gets
    decided there.
 3. **The snapshot as a derived JSON file outside SQLiteData** (stated here so Jon can object
-   before Dispatch 1).
+   before Dispatch 1). Dispatch 1 shipped it this way; merging the S2 dispatch plan PR confirms
+   it.
 4. **Ship the helper inside the app bundle** (`Contents/Helpers/vf-mcp`) rather than a `~/bin`
-   install, so the binary can't drift from the app's Core version.
+   install, so the binary can't drift from the app's Core version. S2 builds it this way, so
+   merging the S2 dispatch plan PR approves it.
