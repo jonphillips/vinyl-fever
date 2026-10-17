@@ -13,9 +13,8 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
 - **Pending Jon decision — M4 identity-drift (#2/#3).** Decide identity-match forgiveness and no-match
   behavior *when* a real append mangles a title. Parked until the evidence appears.
 - **LLM song list → Apple Music playlist** — [M11](milestones/M11-song-list-playlist.md) shipped
-  in #66 (S0) and #67 (S1 + S2, merged 2026-10-15). **Owed:** Jon's on-device test on merged
-  `main`: paste, resolve, create with one row unresolved, fix it and add it, check the playlist
-  in Music.app, then delete it by hand. Settled in the feasibility pass: hand-roll the Apple
+  in #66 (S0) and #67 (S1 + S2, merged 2026-10-15). Jon passed the on-device gate on
+  2026-10-17. Settled in the feasibility pass: hand-roll the Apple
   Music API create call rather than depend on MusadoraKit; catalog-only for v1; input is a
   pinned ChatGPT Project contract (`VF-PLAYLIST: v1`, Yes Chef/Galavant pattern), not free-text
   parsing.
@@ -51,6 +50,22 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   certify (Inbox appends are drained; live shows have `cleanUpProducedFolders`). Candidate effort:
   offer the same certify-gated cleanup for folder-picked appends, or build them under an
   app-owned scratch root instead of the user's folder.
+- **M12: is the 30 s read budget still right for an 87k-track library?** (from the #72 review,
+  2026-10-17). **Recommendation: keep the budget and watch it;** revisit if a refresh fails or the
+  library grows. M12 assumed about 30k tracks; Jon's library is 87,100, and a full snapshot
+  refresh measured 21–25 s at the S1 gate. That leaves about 5 s of headroom.
+- **M12: should `LibraryIndex` be built off the main actor?** (from the #72 review, 2026-10-17).
+  **Recommendation: yes, before S2 reuses the index,** or sooner if a hitch shows up. It's built in
+  `PlaylistBuilderModel.librarySnapshot`'s `didSet` on the main actor, about 1.8 s at 87k tracks
+  in a release build. Jon saw no hitch at the gate.
+- **M12: should the launch refresh skip when Music.app isn't running?** (from the #72 review,
+  2026-10-17). **Recommendation: yes;** launch refreshes only when Music is already running, and
+  the manual **Refresh Library Snapshot** button stays the way to launch it. Today a snapshot
+  older than 6 h makes Vinyl Fever launch Music.app at its own launch. Pending Jon.
+- **M12: what JSON type should `LibrarySnapshot.lastfm` have?** (from the #72 review,
+  2026-10-17). **Recommendation: S3's brief gives it a real JSON type** and decides whether that
+  needs a snapshot version bump. It's typed `Data?` today, which encodes as base64. It's always
+  `null` until S3, so nothing depends on the current encoding.
 
 
 ## V1 Scope
