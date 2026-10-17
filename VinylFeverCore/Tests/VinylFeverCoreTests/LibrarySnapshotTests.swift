@@ -24,6 +24,18 @@ struct LibrarySnapshotTests {
     return tracks
   }
 
+  @Test("codec writes fractional-second dates and reads whole-second ones")
+  func codecDateForms() throws {
+    let fractional = Date(timeIntervalSince1970: 1_700_000_000.25)
+    let data = try LibrarySnapshotCodec.encode(LibrarySnapshot(generatedAt: fractional, tracks: []))
+    #expect(String(decoding: data, as: UTF8.self).contains(#""2023-11-14T22:13:20.250Z""#))
+    #expect(try LibrarySnapshotCodec.decode(data).generatedAt == fractional)
+    let whole = Data(
+      #"{"format":"vf-library-snapshot","version":1,"generatedAt":"2026-10-15T21:40:00Z","trackCount":0,"tracks":[],"lastfm":null}"#
+        .utf8)
+    #expect(try LibrarySnapshotCodec.decode(whole).generatedAt == date)
+  }
+
   @Test("codec preserves fields and reports newer versions with a typed error")
   func codec() throws {
     let snapshot = LibrarySnapshot(generatedAt: date, tracks: fixture)

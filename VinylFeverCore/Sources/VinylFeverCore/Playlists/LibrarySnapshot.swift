@@ -215,21 +215,17 @@ public enum LibrarySnapshotCodec {
     return try decoder.decode(LibrarySnapshot.self, from: data)
   }
 
+  // Format styles are values, so they're built once. A new `ISO8601DateFormatter` per date
+  // made a real library (~87k tracks, two dates each) take over 20 s to encode or decode.
+  private static let fractionalStyle = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+  private static let wholeSecondStyle = Date.ISO8601FormatStyle()
+
   private static func iso8601(_ date: Date) -> String {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    return formatter.string(from: date)
+    fractionalStyle.format(date)
   }
 
   private static func parseISO8601(_ value: String) -> Date? {
-    for options: ISO8601DateFormatter.Options in [
-      [.withInternetDateTime, .withFractionalSeconds], [.withInternetDateTime],
-    ] {
-      let formatter = ISO8601DateFormatter()
-      formatter.formatOptions = options
-      if let date = formatter.date(from: value) { return date }
-    }
-    return nil
+    (try? fractionalStyle.parse(value)) ?? (try? wholeSecondStyle.parse(value))
   }
 }
 
