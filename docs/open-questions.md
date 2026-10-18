@@ -22,51 +22,17 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   **closed 2026-10-18.** The shared `MCPServerKit` effort (jon-platform#74), S0 + S1 (#72), and
   S2 (#76, `vf-mcp` and the playlist inbox) shipped with their device gates passed, and the
   close-out PR folded in the gate's fixes. Decision 1 is **no**: Last.fm (S3) is dropped in
-  favor of Apple's recently-played feed (next entry). A Yes Chef MCP server, reading its
-  synced database read-only, is the likely second `MCPServerKit` consumer and starts by spiking
-  app-group container access (ADR-0007 *Open*). Galavant waits.
-- **M12 listening history: poll Apple's recently-played feed instead of Last.fm?** (probed
-  2026-10-17). **Recommendation: yes, and drop Last.fm (Decision 1 → no, S3 not built).** Jon
-  doesn't need older history, and Last.fm sees only Marvis plays. The S2 gate has passed
-  (2026-10-18), so this is the next M12 candidate, as its own slice.
-  - **What the probe found** (a throwaway build of the app, using `MusicDataRequest`):
-    - **Mac play counts miss device listening.** "Love It When You Call" showed 0 plays on both
-      library copies after days of plays on Jon's iPhone and iPad, and only 2 tracks had a
-      played date in the last 3 days. Snapshot play-count deltas can't measure his listening.
-    - **`GET /v1/me/recent/played/tracks?types=songs,library-songs` sees everything:** phone,
-      iPad, and car plays, catalog songs that aren't in the library, and library songs,
-      including uploaded ones. The default (`songs` only) hides library plays, which were most
-      of Jon's recent listening.
-    - **Limits:** at most 30 per request, paged with `next`. The songs-only list ran out at 74
-      items; the merged list's depth wasn't measured. There are no timestamps, and the list is
-      de-duplicated: a song appears once, at its most recent play. Heavy rotation returned 2
-      items.
-  - **Why polling still works:** each fetch is "songs played since the last fetch, newest
-    first", followed by the previous list minus those songs. Comparing two fetches gives the
-    songs played in between, dated to that window. A fetch with no overlap with the previous
-    one records an explicit gap instead of missing plays silently.
-  - **Shape:**
-    - **The poller runs on Jon's always-on Mac mini** (circa 2021; Jon, 2026-10-17), not the
-      laptop, which travels and sleeps. It reads Apple's servers, not a local library, so any
-      Mac signed in to Jon's Apple ID works. If the mini is Intel, the full app (macOS 27)
-      can't run there, so it's a small separate poller app with its own MusicKit App ID and
-      profile (the #69 chore). If it's Apple silicon on macOS 27, the app binary with a flag
-      works too. An hourly login agent runs it: fetch, compare, append, exit, with no window.
-      The probe proved a signed app is authorized when run this way.
-    - **The log lives in an iCloud Drive folder.** The mini is the only writer, so there are no
-      sync conflicts; `vf-mcp` on the laptop only reads it.
-    - The log is append-only and derived, outside SQLiteData like the snapshot (Decision 3).
-      Snapshot format v1 is unchanged.
-    - `top_artists` / `top_tracks` gain a `period` (7 days, 30 days), plus a `recent_listening`
-      tool.
-  - **Precision:** a song played several times within one hour counts once, but plays across
-    hours and days each count, which is enough for "what have I been into lately".
-  - **Open before a brief:**
-    - whether Marvis plays appear (it uses the system player, so probably);
-    - whether skipped or partial plays count;
-    - the merged list's depth;
-    - the feed's behavior is undocumented and could change, so the log keeps each fetch's
-      ordered list (type, ID, artist, title, album) and the comparison can be re-run later.
+  favor of Apple's recently-played feed ([M13](milestones/M13-listening-history.md)). A Yes
+  Chef MCP server, reading its synced database read-only, is the likely second `MCPServerKit`
+  consumer and starts by spiking app-group container access (ADR-0007 *Open*). Galavant waits.
+- **Listening history** — planned as [M13](milestones/M13-listening-history.md) (2026-10-18):
+  an hourly poller of Apple's recently-played feed. It runs as a separate macOS 26 app on the
+  Intel Mac mini, with the same engine inside Vinyl Fever for the laptop now and an
+  Apple-silicon mini later. The log lives in iCloud Drive, and `vf-mcp` gains
+  `recent_listening` and periods. Merging that plan PR approves its Decisions 1–5 and
+  dispatches S0. **Pending Jon before Dispatch 2 (S1):** the mini's macOS 26 check and the
+  developer-portal App ID and profile (M13 *Prerequisites*). The probe evidence moved into the
+  milestone.
 - **M11: Create can lose the playlist it just made when a later batch fails** (from the #67
   review, 2026-10-15). `createLibraryPlaylist` sends the first 100 IDs with the create call,
   then appends the rest in batches of 100. If a later batch throws, the error drops the
