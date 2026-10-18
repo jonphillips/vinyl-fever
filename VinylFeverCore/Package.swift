@@ -9,6 +9,7 @@ let package = Package(
   ],
   products: [
     .library(name: "VinylFeverCore", targets: ["VinylFeverCore"]),
+    .library(name: "VinylFeverListening", targets: ["VinylFeverListening"]),
     .executable(name: "vf-mcp", targets: ["VinylFeverMCP"]),
   ],
   dependencies: [
@@ -24,8 +25,16 @@ let package = Package(
   ],
   targets: [
     .target(
+      name: "VinylFeverListening",
+      dependencies: [
+        .product(name: "Dependencies", package: "swift-dependencies"),
+        .product(name: "DependenciesMacros", package: "swift-dependencies"),
+      ]
+    ),
+    .target(
       name: "VinylFeverCore",
       dependencies: [
+        "VinylFeverListening",
         .product(name: "Dependencies", package: "swift-dependencies"),
         .product(name: "DependenciesMacros", package: "swift-dependencies"),
         .product(name: "SQLiteData", package: "sqlite-data"),
@@ -39,6 +48,7 @@ let package = Package(
       name: "VinylFeverCoreTests",
       dependencies: [
         "VinylFeverCore",
+        "VinylFeverListening",
         .product(name: "CustomDump", package: "swift-custom-dump"),
         .product(name: "DependenciesTestSupport", package: "swift-dependencies"),
         .product(name: "LLMClientKit", package: "LLMClientKit"),

@@ -157,7 +157,7 @@ starts filling at the S1 gate, so S2 has real data by the time it lands.
 [M14](M14-live-tracks-in-playlists.md) (live tracks in playlists) runs between S2 and S3 (M14
 Decision 3).
 
-- [ ] **S0 — Listening engine (Core, pure; no MusicKit calls, no UI).**
+- [x] **S0 — Listening engine (Core, pure; no MusicKit calls, no UI).**
   - A new library target, `VinylFeverListening`, in the `VinylFeverCore` package, so the poller
     app links it without SQLiteData or the MCP kit. `VinylFeverCore` depends on it.
   - It holds:
