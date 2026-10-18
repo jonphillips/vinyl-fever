@@ -213,8 +213,8 @@ Last.fm (see *Decisions*). Dispatches 1, 2, and 3 each owe a device gate on Jon'
     - resolve an M11 paste and check the badges (correct).
     - **If the refresh exceeds the budget, stop and flag it** rather than optimizing blind.
 
-- [x] **S2 — `vf-mcp` stdio server + playlist inbox (core executable + app).** Implementation
-  complete; device gate remains owed. Requires the mcp-server-kit effort to have merged.
+- [x] **S2 — `vf-mcp` stdio server + playlist inbox (core executable + app).** Device gate passed
+  2026-10-18. Merged as #76.
   - Add the new executable target `VinylFeverMCP` (product `vf-mcp`) to the `VinylFeverCore`
     package. It depends on `VinylFeverCore` and `MCPServerKit`, a path dependency mirroring the
     `LLMClientKit` entry. `project.yml` copies the built binary into the app bundle at
@@ -279,7 +279,7 @@ Last.fm (see *Decisions*). Dispatches 1, 2, and 3 each owe a device gate on Jon'
     generated from the Core contract text.
   - A model test: setting a snapshot doesn't build the index on the main actor, and the newest
     snapshot's index wins when two land back to back.
-  - **Owed device gate:**
+  - **Device gate (passed 2026-10-18, no longer owed):**
     - **ChatGPT:** from the **iPad**, through the tunnel, ask for a playlist. The model calls
       `check_tracks` and then `stage_playlist`; Jon confirms. At the Mac, the staged playlist
       appears under From chat; resolve, create, and confirm it in Music.app.
@@ -287,6 +287,13 @@ Last.fm (see *Decisions*). Dispatches 1, 2, and 3 each owe a device gate on Jon'
       binary.
     - Time the first `library_overview` call after the helper starts, against Jon's 87,100-track
       snapshot (it loads the file and builds the index). Flag it if it takes over 10 s.
+    - **Result:** all three passed.
+      - ChatGPT on the iPad called `check_tracks` then `stage_playlist`, and the list was
+        created in Music.app from From chat. A restage also worked.
+      - Claude Code in `~/music-chat` called `library_overview`.
+      - The first call took 8.9 s with the Debug helper from `/Applications`.
+      - Two fixes came out of it (Dismiss rename, description guidance); see
+        `open-questions.md`.
 
 - [ ] **S3 — Last.fm listening history (app + core). Only if Decision 1 is yes.**
   - Settings gets a Last.fm username and API key; the key is stored in the Keychain
@@ -315,7 +322,7 @@ Last.fm (see *Decisions*). Dispatches 1, 2, and 3 each owe a device gate on Jon'
   server (2026-10-15). The `vinyl-fever` profile replaces the `hello` profile in S2's gate.
 - [x] ADR-0007 (jon-platform) merged before Dispatch 2 (jon-platform#73, still **Proposed**).
   The effort's PR landed before S2 (jon-platform#74).
-- [ ] Before S2's gate: a `Vinyl Fever` tunnel on the Platform Tunnels page, linked to the
+- [x] Before S2's gate: a `Vinyl Fever` tunnel on the Platform Tunnels page, linked to the
   ChatGPT account (jon-platform `docs/ios/mcp-access.md` step 1; ADR-0007 starts with one tunnel
   per app). The runtime key is already in the Keychain.
 - [x] M11's owed device gate (Jon passed it 2026-10-17). Dispatch 1 builds on the M11 preview,
