@@ -33,54 +33,17 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   dispatches S0. **Pending Jon before Dispatch 2 (S1):** the mini's macOS 26 check and the
   developer-portal App ID and profile (M13 *Prerequisites*). The probe evidence moved into the
   milestone.
-- **Library-only tracks (live shows) in playlists: the API can do it** (probed 2026-10-18 with
-  a throwaway build of the app; Jon asked for the results recorded). M11 left these out on the
-  assumption that they need Music.app scripting and would fight iCloud sync. They don't.
-  - **What the probe found:**
-    - **Jon's library's iCloud status** (Music.app, all 87,100 tracks):
-      - 54,166 `uploaded`, 26,977 `matched`, 4,756 `subscription`, 112 `purchased`;
-      - 368 `duplicate`, 589 `unknown`, 119 `error`, 12 `removed`, 5 `ineligible`, 3 `no longer
-        available`;
-      - none waiting to upload.
-      - So almost every live show is in iCloud and can play on other devices. The M12
-        snapshot's `uploaded` (54,171) is those 54,166 plus the 5 ineligible.
-      - Uploaded plus matched is about 81,000, against iCloud Music Library's 100,000-song
-        limit.
-    - **Finding the tracks:** `GET /v1/me/library/search?types=library-songs&term=…` finds
-      uploaded tracks. They come back as `i.…` library IDs with no `playParams.catalogId`,
-      which is how to tell them from catalog-backed copies. But the search is quirky:
-      - it matches song titles (and artists) but not album names ("Xfinity Mobile Arena" → 0);
-      - a full title can miss when a prefix hits ("Darkness on the Edge of Town" → 0, while
-        "Darkness on the Edge" → 25+);
-      - it returns 25 per page with `next`, and popular songs need paging: Jon has 22 live
-        "Two Faces".
-      - Picking the right show means filtering by album name client-side.
-    - **Creating a mixed playlist:** `POST /v1/me/library/playlists` took catalog `songs` and
-      `library-songs` interleaved in one call (201). Reading it back gave all five in the order
-      sent. Appending a `library-songs` item to the playlist worked too (204).
-    - **A catalog song Jon already owns lands as his library copy.** Catalog "Starry Eyes"
-      (*Power Pop Heroes*) showed up as his matched copy from *CMJ 10*, with the same
-      `catalogId`.
-    - **Sync to the Mac:** Music.app on the laptop showed the five created tracks within about
-      2 minutes, all with the right cloud status. The appended track arrived about 1.5 minutes
-      later. That's ordinary iCloud lag, and it's no problem when everything goes in one
-      create call.
-    - **iPhone playback:** _pending Jon's check of "VF Probe — mixed playlist (delete me)"._
-  - **What it would take:**
-    - The resolver gains a library path for songs that the snapshot says Jon owns only as
-      `uploaded`: library search on the title (shortening it if the full title misses),
-      paging, then filtering by artist + album through `SongTextNormalizer`.
-    - The album hint picks the show, and the existing ambiguous-row picker handles several
-      matching shows.
-    - Create sends mixed `songs` / `library-songs` IDs in its one call.
-    - M12's instructions stop telling the model to leave `uploaded` tracks out.
-    - No Music.app scripting is needed.
-  - **Limits that stay:**
-    - These tracks are private to Jon: a shared playlist won't play them for anyone else.
-    - Every device needs Sync Library on.
-    - The 5 `ineligible` tracks stay Mac-only.
-  - **Recommendation:** a small milestone after M13 S2, if Jon wants live tracks in chat
-    playlists. **Pending Jon.**
+- **Live tracks in playlists** — planned as [M14](milestones/M14-live-tracks-in-playlists.md)
+  (2026-10-18). It runs after M13 S2 (Jon: "after the poller"). Probes on 2026-10-18 showed:
+  - One API create call mixes catalog songs with Jon's uploaded live tracks, in order, and they
+    play on his iPhone (Jon checked).
+  - Library song search stops at 100 results per term, but searching his library's albums by
+    the show's name and then reading the album's tracks reaches every upload. The two routes
+    together found 40 of 40 sampled uploads.
+  - Jon's library: 54,166 uploaded, 26,977 matched, 5 ineligible, and none waiting to upload.
+    Uploaded plus matched is about 81,000, against iCloud Music Library's 100,000-song limit.
+  - The full evidence is in the milestone. Merging that plan PR approves its Decisions 1–4.
+    Nothing is dispatched until M13 S2 lands.
 - **M11: Create can lose the playlist it just made when a later batch fails** (from the #67
   review, 2026-10-15). `createLibraryPlaylist` sends the first 100 IDs with the create call,
   then appends the rest in batches of 100. If a later batch throws, the error drops the

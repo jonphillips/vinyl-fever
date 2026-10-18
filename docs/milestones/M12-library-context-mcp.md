@@ -360,8 +360,8 @@ Last.fm (see *Decisions*). Dispatches 1, 2, and 3 each owe a device gate on Jon'
   the listening-history milestone (2026-10-18). Heavy rotation stays out.
 - **Reading the hard drives.** The library already covers what was imported. → Not planned.
 - **Library-only tracks in playlists.** M11's out-of-scope item stands; the tools flag them so
-  the model leaves them out. → A 2026-10-18 probe showed the API can mix them into one
-  playlist; see `open-questions.md` for the candidate.
+  the model leaves them out. → [M14](M14-live-tracks-in-playlists.md) (planned 2026-10-18)
+  adds them.
 - **A taste-profile export for Project files.** It's the fallback if MCP is unavailable. → Build
   only if Jon misses it.
 - **Last.fm's similarity graph** (`artist.getSimilar`). → Not planned; S3 was dropped.

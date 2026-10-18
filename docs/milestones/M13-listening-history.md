@@ -154,6 +154,8 @@ tools.
 **Dispatch 1: S0** (pure Core, no prerequisites). **Dispatch 2: S1**, after Jon's
 prerequisites. It owes a gate on the mini. **Dispatch 3: S2.** **Dispatch 4: S3.** The log
 starts filling at the S1 gate, so S2 has real data by the time it lands.
+[M14](M14-live-tracks-in-playlists.md) (live tracks in playlists) runs between S2 and S3 (M14
+Decision 3).
 
 - [ ] **S0 — Listening engine (Core, pure; no MusicKit calls, no UI).**
   - A new library target, `VinylFeverListening`, in the `VinylFeverCore` package, so the poller
