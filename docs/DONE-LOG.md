@@ -3,6 +3,16 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-18 — M12 close-out (`m12/close-out`, architect)
+
+Jon passed the S2 device gate (ChatGPT on the iPad through the `vinyl-fever` tunnel, Claude Code
+in `~/music-chat`, an 8.9 s first call), and M12 is closed. The architect folded in the gate's
+fixes: the inbox's icon-only Discard is now a labelled **Dismiss** (it files the item under
+`Processed/`, never deletes it), `stage_playlist`'s `description` carries schema guidance so
+process notes stay out of Apple Music, the index-arrival observation test now tests arrival, and
+the app shell skips its launch snapshot refresh in the test host. Decision 1 is no: Last.fm (S3)
+is dropped.
+
 ## 2026-10-17 — M12 · Dispatch 3 S2 (`m12/s2-vf-mcp`)
 
 Added the `vf-mcp` executable on jon-platform's `MCPServerKit`, the library read tools and

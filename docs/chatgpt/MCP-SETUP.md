@@ -47,6 +47,9 @@ point, such as "Song (Live at the Fillmore)". Do not include IDs, ISRCs, URLs, o
 
 When Jon asks for a playlist, stage it with `stage_playlist`; don't print the playlist. Jon reviews
 and creates it in Vinyl Fever. Staging does not change Apple Music.
+
+The description appears in Apple Music: one sentence about the music, with no library stats,
+availability notes, or snapshot dates.
 ```
 
 Add a `.mcp.json` for Claude Code and the corresponding `[mcp_servers.vinyl-fever]` entry in Codex

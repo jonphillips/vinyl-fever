@@ -1,8 +1,10 @@
+import Dependencies
 import SwiftUI
 
 struct AppShellView: View {
   @Bindable var model: AppModel
   @State private var playlistBuilderModel = PlaylistBuilderModel()
+  @Dependency(\.context) private var context
 
   var body: some View {
     NavigationSplitView {
@@ -32,7 +34,12 @@ struct AppShellView: View {
         PlaylistsView(model: playlistBuilderModel)
       }
     }
-    .task { await playlistBuilderModel.loadSnapshotAndRefreshIfStale() }
+    .task {
+      // The test host launches this view too; its launch refresh would read live dependencies
+      // in the middle of unrelated tests.
+      guard context != .test else { return }
+      await playlistBuilderModel.loadSnapshotAndRefreshIfStale()
+    }
   }
 }
 

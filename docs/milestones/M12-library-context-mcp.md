@@ -1,8 +1,9 @@
 # Milestone 12 — Library Context for Chat (MCP)
 
 *Give the chat that builds playlists real knowledge of Jon's library and listening, through a
-local MCP server, and show the same knowledge in the playlist preview. Dispatch 3 (S2) is the
-current `NEXT_UP.md`. Rules in [../technical-architecture.md](../technical-architecture.md),
+local MCP server, and show the same knowledge in the playlist preview. **Closed 2026-10-18:**
+the effort, S0, S1, and S2 shipped with their device gates passed, S3 (Last.fm) was dropped
+(Decision 1), and listening history moves to its own milestone. Rules in [../technical-architecture.md](../technical-architecture.md),
 `/Users/jon/code/jon-platform/AGENTS.md`, and jon-platform
 [ADR-0007](/Users/jon/code/jon-platform/docs/adr/0007-app-data-over-local-mcp.md) apply. Where this
 doc and those conflict, stop and flag it.*
@@ -295,7 +296,9 @@ Last.fm (see *Decisions*). Dispatches 1, 2, and 3 each owe a device gate on Jon'
       - Two fixes came out of it (Dismiss rename, description guidance); see
         `open-questions.md`.
 
-- [ ] **S3 — Last.fm listening history (app + core). Only if Decision 1 is yes.**
+- **S3 — Last.fm listening history (app + core). Dropped 2026-10-18** (Decision 1 is no).
+  Listening history comes from Apple's recently-played feed instead, in its own milestone. The
+  original brief is kept below for reference.
   - Settings gets a Last.fm username and API key; the key is stored in the Keychain
     (`keychain-access-groups` is already entitled). The app fetches during snapshot refresh,
     never the server:
@@ -352,14 +355,14 @@ Last.fm (see *Decisions*). Dispatches 1, 2, and 3 each owe a device gate on Jon'
   → Never for personal library data (ADR-0007 D4).
 - **The server creating or editing Apple Music playlists directly.** → No. Staging plus the
   in-app Create is the design (propose, never write).
-- **Apple Music API listening data** (heavy rotation, recent plays). → Revisit if library play
-  counts plus Last.fm feel thin after the S2 gate.
+- **Apple Music API listening data** (heavy rotation, recent plays). → Recent plays become
+  the listening-history milestone (2026-10-18). Heavy rotation stays out.
 - **Reading the hard drives.** The library already covers what was imported. → Not planned.
 - **Library-only tracks in playlists.** M11's out-of-scope item stands; the tools flag them so
   the model leaves them out.
 - **A taste-profile export for Project files.** It's the fallback if MCP is unavailable. → Build
   only if Jon misses it.
-- **Last.fm's similarity graph** (`artist.getSimilar`). → After S3, if suggestions lack novelty.
+- **Last.fm's similarity graph** (`artist.getSimilar`). → Not planned; S3 was dropped.
 - **Vinyl Fever managing `tunnel-client`** (installing a LaunchAgent, holding the key). → Ops
   stays shared in jon-platform: `docs/ios/mcp-access.md` and `scripts/mcp-tunnel`.
 - **Other writes** (ratings, favorites, play counts). → No.
@@ -380,17 +383,18 @@ Resolved (Jon, 2026-10-15):
   - ADR-0007 D2 allows a live read-only database (Yes Chef) or an app-written export (Vinyl
     Fever).
 
-Open — the architect's recommendation is listed first:
+Resolved later — the original question is kept for the record:
 
 1. **Last.fm (S3):** build it last, or not at all? It reflects only Marvis listening and adds a
-   second credential. *Recommendation:* keep S3 parked until the S2 gate shows whether library
-   stats alone feel thin. Merging this plan does **not** dispatch S3 (Dispatch 4).
+   second credential. **Resolved (Jon, 2026-10-18): no.** S3 is dropped. Apple's
+   recently-played feed sees every device's plays, so listening history polls that instead, as
+   its own milestone (see `open-questions.md`).
 2. **MCP protocol:** *moved to jon-platform ADR-0007 D7* (hand-roll it in `MCPServerKit`
    rather than depend on the pre-1.0 official SDK). It's a platform decision now, so it gets
    decided there.
 3. **The snapshot as a derived JSON file outside SQLiteData** (stated here so Jon can object
-   before Dispatch 1). Dispatch 1 shipped it this way; merging the S2 dispatch plan PR confirms
-   it.
+   before Dispatch 1). Dispatch 1 shipped it this way. **Approved** when the S2 dispatch plan PR
+   (#74) merged.
 4. **Ship the helper inside the app bundle** (`Contents/Helpers/vf-mcp`) rather than a `~/bin`
-   install, so the binary can't drift from the app's Core version. S2 builds it this way, so
-   merging the S2 dispatch plan PR approves it.
+   install, so the binary can't drift from the app's Core version. **Approved** with #74; S2
+   (#76) shipped it this way.

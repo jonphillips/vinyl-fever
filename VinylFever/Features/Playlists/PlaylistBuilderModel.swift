@@ -140,7 +140,8 @@ final class PlaylistBuilderModel {
     } catch { operationError = error.localizedDescription }
   }
 
-  func discardStagedPlaylist(_ summary: StagedPlaylistSummary) {
+  /// Files the staged playlist under `Processed/` without creating it; nothing is deleted.
+  func dismissStagedPlaylist(_ summary: StagedPlaylistSummary) {
     do {
       _ = try playlistInbox.markProcessed(summary.handoff)
       stagedPlaylists = try playlistInbox.list()

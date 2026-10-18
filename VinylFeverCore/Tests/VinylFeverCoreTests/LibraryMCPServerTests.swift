@@ -34,6 +34,10 @@ struct LibraryMCPServerTests {
     }
     #expect(enumValues(in: tools, tool: "top_artists", property: "by") == ["plays", "favorites", "recently_added"])
     #expect(enumValues(in: tools, tool: "top_tracks", property: "by") == ["plays", "favorites", "recently_added", "recently_played"])
+    let stage = try #require(tools.first { $0["name"] as? String == "stage_playlist" })
+    let stageProperties = try #require((stage["inputSchema"] as? [String: Any])?["properties"] as? [String: Any])
+    #expect((stageProperties["description"] as? [String: Any])?["description"] as? String
+      == "One sentence about the music; it becomes the playlist's description in Apple Music. No library stats, availability notes, or dates.")
   }
 
   @Test("every read tool fails loudly without a snapshot")

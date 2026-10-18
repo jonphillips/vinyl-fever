@@ -92,8 +92,8 @@ struct PlaylistsView: View {
               }
               .buttonStyle(.plain)
               Spacer()
-              Button("Discard", systemImage: "archivebox") { model.discardStagedPlaylist(item) }
-                .labelStyle(.iconOnly).help("Move this staged playlist to Processed")
+              Button("Dismiss", systemImage: "archivebox") { model.dismissStagedPlaylist(item) }
+                .labelStyle(.titleAndIcon).help("Move to Processed. The file is kept.")
             }
             .padding(10)
             .background(.background, in: RoundedRectangle(cornerRadius: 8))
