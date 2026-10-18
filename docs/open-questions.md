@@ -30,9 +30,9 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   Intel Mac mini, with the same engine inside Vinyl Fever for the laptop now and an
   Apple-silicon mini later. The log lives in iCloud Drive, and `vf-mcp` gains
   `recent_listening` and periods. Merging that plan PR approves its Decisions 1–5 and
-  dispatches S0. S0 landed in #83 (2026-10-18). Dispatch 2 (S1) is written and waits on Jon's
-  M13 *Prerequisites*: the mini's macOS 26 check, Optimize Mac Storage off, and the
-  developer-portal App ID and profile. The probe evidence moved into the milestone.
+  dispatches S0. S0 landed in #83 (2026-10-18). Dispatch 2 (S1) needed only the developer-portal
+  App ID and profile, which are done. Owed by Jon before the S1 gate: the mini's macOS 26
+  check, Optimize Mac Storage off, and adding the mini to the profile (M13 *Prerequisites*). The probe evidence moved into the milestone.
 - **Live tracks in playlists** — planned as [M14](milestones/M14-live-tracks-in-playlists.md)
   (2026-10-18). It runs after M13 S2 (Jon: "after the poller"). Probes on 2026-10-18 showed:
   - One API create call mixes catalog songs with Jon's uploaded live tracks, in order, and they

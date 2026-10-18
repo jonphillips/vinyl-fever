@@ -201,13 +201,23 @@ Decision 3).
   - **A new app target, `VinylFeverListeningPoller`** (product **VF Listening Poller**, bundle
     `com.jonphillips.vinylfever.listeningpoller`), is added in `project.yml`.
     - Deployment target **macOS 26.0**.
-    - `ARCHS` is the standard architectures, and **`ONLY_ACTIVE_ARCH: NO` in every
-      configuration**: Debug otherwise builds arm64 only, and the mini needs x86_64.
+    - `ARCHS` stays the standard architectures (`arm64 x86_64` under Xcode 27). **The build
+      destination decides the slices, not the settings.** A build for a concrete Mac (Xcode's
+      "My Mac", or `-destination 'platform=macOS'`) is arm64 only, even with
+      `ONLY_ACTIVE_ARCH: NO`. Only `-destination 'generic/platform=macOS'` (Xcode's "Any Mac")
+      builds both slices. This was checked on 2026-10-18 with a throwaway app signed with the
+      poller profile.
     - It depends only on the `VinylFeverListening` product.
     - Hardened runtime on, no App Sandbox. The Info.plist has `NSAppleMusicUsageDescription`.
     - It signs manually with the **VF Listening Poller Dev Profile** (explicit App ID with the
       MusicKit App Service; see *Prerequisites*), the #69 pattern. Copy the `VinylFever`
       target's signing block and its comment.
+  - **`scripts/build-listening-poller`** builds the poller for the mini:
+    - It builds with `-destination 'generic/platform=macOS'` into a fixed derived-data folder.
+    - It checks `lipo -archs` on every Mach-O in `Contents/MacOS` (a Debug build's code is in
+      `VF Listening Poller.debug.dylib`) and fails unless each lists both slices.
+    - It checks `codesign --verify`, then prints the `.app` path.
+    POLLER-SETUP and the gate use it, never an Xcode Run.
   - **Entry point:** a custom `@main` checks `CommandLine.arguments` for `--poll` *before*
     starting the SwiftUI app. With `--poll` it runs `pollOnce()` and exits, so it never creates
     a window or a Dock icon. S3 reuses this pattern.
@@ -257,7 +267,8 @@ Decision 3).
       (the baseline).
     - The agent never opens a window and never prompts.
   - **Docs:** `docs/listening/POLLER-SETUP.md`:
-    - build on the laptop and copy the app to the mini's `/Applications`;
+    - build with `scripts/build-listening-poller` on the laptop and copy the app to the mini's
+      `/Applications`;
     - the first launch and the Authorize prompt;
     - turn on the toggle, and approve it in Login Items if asked;
     - confirm the first line appears on the laptop;
@@ -273,8 +284,8 @@ Decision 3).
       `last-list.json` unchanged;
     - the stream file is named for the UTC month (a fetch at 2026-10-31T23:30-05:00 lands in
       `2026-11.jsonl`).
-  - The built app has both slices, checked in the PR: `lipo -archs` on its executable prints
-    `x86_64 arm64`, from a Debug build.
+  - The built app has both slices, checked in the PR: paste `scripts/build-listening-poller`'s
+    output, where every Mach-O in `Contents/MacOS` lists `x86_64 arm64`.
   - The live MusicKit call and `SMAppService` registration are **unverified** in the PR.
   - **Owed device gate (on the mini, over about 24 h):**
     - Launch, Authorize, and turn the toggle on. The first line, `baseline`, appears in iCloud
@@ -333,6 +344,18 @@ Decision 3).
 
 ## Prerequisites (Jon, not the executor's)
 
+**Before Dispatch 2 (done 2026-10-18):**
+
+- [x] **Developer portal:** the App ID `com.jonphillips.vinylfever.listeningpoller` with the
+  **MusicKit** App Service, and the development profile **VF Listening Poller Dev Profile**
+  covering the laptop. It's installed on the laptop, which is also Codex's build host. A
+  throwaway app signed with it built and verified, which proves the profile, not MusicKit.
+- [x] Xcode 27 can build an x86_64 MusicKit binary targeting macOS 26 (checked 2026-10-18 with
+  `swiftc -target x86_64-apple-macos26.0`). Running it is the S1 gate, since this Mac has no
+  Rosetta.
+
+**Before the S1 gate (Jon; the dispatch doesn't wait for these):**
+
 - [ ] **The mini:**
   - Intel Mac mini (2018) on **macOS 26 Tahoe**, the last Intel release. Confirm the version.
   - Signed in to Jon's Apple ID with Apple Music and iCloud Drive on.
@@ -340,15 +363,13 @@ Decision 3).
     "always-on" role covers this.
   - **Optimize Mac Storage off** (System Settings → Apple Account → iCloud → Drive), so iCloud
     never offloads the stream files the poller appends to.
-- [ ] **Developer portal, before Dispatch 2:**
+- [ ] **Add the mini to the profile:**
   - Register the mini as a device (System Information → Hardware → Provisioning UDID).
-  - Create the App ID `com.jonphillips.vinylfever.listeningpoller` with the **MusicKit** App
-    Service.
-  - Create the development profile **VF Listening Poller Dev Profile** for that App ID,
-    covering the laptop and the mini, and install it on the laptop (and on Codex's build host).
-- [x] Xcode 27 can build an x86_64 MusicKit binary targeting macOS 26 (checked 2026-10-18 with
-  `swiftc -target x86_64-apple-macos26.0`). Running it is the S1 gate, since this Mac has no
-  Rosetta.
+  - Edit **VF Listening Poller Dev Profile** to include it, download it again, and install it
+    on the laptop by opening the file. A downloaded profile isn't installed until it's opened;
+    it then lands in `~/Library/Developer/Xcode/UserData/Provisioning Profiles/`.
+  - Rebuild with `scripts/build-listening-poller`. The app embeds the profile, so a build made
+    before the mini was added won't launch there.
 
 ## Constants register (starting values)
 
