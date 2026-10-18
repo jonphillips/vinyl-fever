@@ -132,6 +132,27 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   but not a later regression that assigns the built index without notifying observers.
   **Candidate fix:** set the snapshot first, then start tracking, then
   `await waitForLibraryIndex()` and expect the change. Fold it into the next M12 slice.
+- **M12: two small fixes from the S2 ChatGPT gate** (Jon, 2026-10-18). **Decided:** fold both
+  into the next M12 dispatch.
+  - **Rename the inbox's Discard to Dismiss.** The button is icon-only (`archivebox`), labelled
+    Discard, and moves the file to `Processed/` without deleting it. The icon and the name
+    disagree, and Jon read it as an archive button.
+    - Show the label as text with the icon (`.labelStyle(.titleAndIcon)`), and keep the
+      `archivebox` icon, since nothing is deleted.
+    - Use the help text "Move to Processed. The file is kept."
+    - Rename `discardStagedPlaylist` to `dismissStagedPlaylist`.
+    - Behavior is unchanged, and the inbox model tests are renamed to match.
+  - **Keep commentary out of the staged description.** ChatGPT staged a four-sentence
+    `description` of process notes: "10 already in Jon's Apple Music library (catalog-playable
+    matched/subscription copies) and 5 verified absent… Snapshot: 18 Oct 2026." Create writes
+    it into the Apple Music playlist's description. The contract asks for one sentence, but
+    the tool schema says nothing.
+    - Give `stage_playlist`'s `description` property a JSON Schema `description`: "One
+      sentence about the music; it becomes the playlist's description in Apple Music. No
+      library stats, availability notes, or dates."
+    - Add the same line to the `~/music-chat/AGENTS.md` template in `MCP-SETUP.md`. Jon's own
+      copy already has it.
+    - Test: `toolsList` pins that schema text.
 
 
 ## V1 Scope
