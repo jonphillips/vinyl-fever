@@ -192,54 +192,106 @@ Decision 3).
 
 - [ ] **S1 — VF Listening Poller app (macOS 26, universal; runs on the Intel mini).** Device
   gate owed.
-  - A new app target, `VinylFeverListeningPoller` (product **VF Listening Poller**, bundle
-    `com.jonphillips.vinylfever.listeningpoller`). Deployment target **macOS 26.0**, with
-    `ARCHS` set to the standard architectures (arm64 + x86_64). It depends only on
-    `VinylFeverListening`.
-  - It signs manually with the **VF Listening Poller Dev Profile** (explicit App ID with the
-    MusicKit App Service; see *Prerequisites*). This is the #69 pattern.
+  - **The run-once poll lives in `VinylFeverListening`**, as `ListeningPoller.pollOnce()`, so S3
+    calls the same code. It's a dependency-backed model over four clients:
+    - `recentlyPlayedClient` (S0);
+    - an authorization client reading `MusicAuthorization.currentStatus`, which never prompts;
+    - a `ListeningStore` client for the iCloud folder and local state (below);
+    - `date`.
+  - **A new app target, `VinylFeverListeningPoller`** (product **VF Listening Poller**, bundle
+    `com.jonphillips.vinylfever.listeningpoller`), is added in `project.yml`.
+    - Deployment target **macOS 26.0**.
+    - `ARCHS` is the standard architectures, and **`ONLY_ACTIVE_ARCH: NO` in every
+      configuration**: Debug otherwise builds arm64 only, and the mini needs x86_64.
+    - It depends only on the `VinylFeverListening` product.
+    - Hardened runtime on, no App Sandbox. The Info.plist has `NSAppleMusicUsageDescription`.
+    - It signs manually with the **VF Listening Poller Dev Profile** (explicit App ID with the
+      MusicKit App Service; see *Prerequisites*), the #69 pattern. Copy the `VinylFever`
+      target's signing block and its comment.
+  - **Entry point:** a custom `@main` checks `CommandLine.arguments` for `--poll` *before*
+    starting the SwiftUI app. With `--poll` it runs `pollOnce()` and exits, so it never creates
+    a window or a Dock icon. S3 reuses this pattern.
+  - **Local state (per Mac, never synced)** is in `~/Library/Application Support/VinylFever/Listening/`:
+    - `poller.json`: `{"poller":"<uuid>"}`, created on the first run. The identity belongs to
+      the Mac, not the app, so in S3 Vinyl Fever on the same Mac is the same poller.
+    - `last-list.json`: the previous full list. It's written atomically (temporary file, then
+      rename).
+  - **iCloud writes:**
+    - `ListeningStore` creates the `Listening/` and `fetches/<poller-uuid>/` folders as
+      needed.
+    - It appends one line to `<YYYY-MM>.jsonl`, where the month comes from `fetchedAt` in
+      **UTC**, through `NSFileCoordinator` (coordinated write, then append at the end of the
+      file).
+    - The lease is read and written with coordinated access too.
+    - `host` is the computer name from System Settings → General → Sharing
+      (`SCDynamicStoreCopyComputerName`).
+  - **`pollOnce()`**, in order:
+    1. Read the lease. Act on the S0 lease rule: `skip` writes nothing and returns.
+       `claimIfEmpty` writes the lease, then continues.
+    2. If authorization isn't `.authorized`, append a `failed` line ("Apple Music isn't
+       authorized on this Mac.") and return without making a request.
+    3. Run `ListeningDiff().fetch(previous:)` with `last-list.json`; a missing file means a
+       baseline.
+    4. Append exactly one line for the result. A thrown error becomes a `failed` line carrying
+       the error's description, and so does a `failed` diff result (S0's empty-feed rule),
+       which carries its `error`.
+    5. Write `last-list.json` from `currentList`, **except after any `failed` line**, which
+       leaves the saved list untouched (the S0 contract on `ListeningDiffResult`).
+    6. Return.
+    If the iCloud folder can't be written (iCloud Drive off), log through `os.Logger` and exit
+    non-zero. The window shows this state.
   - **Window** (opened by launching the app normally), one screen:
     - Apple Music authorization status, with an **Authorize** button
       (`MusicAuthorization.request()`);
-    - **Poll every hour on this Mac** (a toggle);
+    - **Poll every hour on this Mac** (a toggle). If `SMAppService` reports
+      `.requiresApproval`, the screen says so, with a button that opens Login Items
+      (`SMAppService.openSystemSettingsLoginItems()`);
     - the last fetch's time and outcome, and plays logged today;
     - the iCloud folder path, and whether this Mac holds the lease.
   - **Headless run:** the toggle registers a login agent through
-    `SMAppService.agent(plistName:)`. The plist ships in `Contents/Library/LaunchAgents/` with
-    `StartInterval` 3600 and runs the app's executable with `--poll`. The `--poll` path:
-    1. check the lease;
-    2. fetch pages until the diff resolves or the cap is reached;
-    3. append one line;
-    4. update `last-list.json`;
-    5. exit.
-    It never opens a window and never prompts. If authorization is missing, it logs `failed`
-    and exits.
+    `SMAppService.agent(plistName:)`.
+    - The plist ships in `Contents/Library/LaunchAgents/`, and its label is the bundle ID plus
+      `.agent`.
+    - Its `BundleProgram` is the app's executable, and `ProgramArguments` passes `--poll`.
+    - `StartInterval` is 3600, with `RunAtLoad` true, so turning the toggle on polls at once
+      (the baseline).
+    - The agent never opens a window and never prompts.
   - **Docs:** `docs/listening/POLLER-SETUP.md`:
-    - get the app onto the mini;
+    - build on the laptop and copy the app to the mini's `/Applications`;
     - the first launch and the Authorize prompt;
-    - turn on the toggle;
+    - turn on the toggle, and approve it in Login Items if asked;
     - confirm the first line appears on the laptop;
-    - keep the mini logged in and awake.
+    - keep the mini logged in and awake, with Optimize Mac Storage off.
 
   **DoD:**
-  - Model tests with a stubbed `RecentlyPlayedClient` and a temporary log folder: a poll writes
-    exactly one line; a non-leaseholder writes nothing; a missing authorization writes `failed`.
-  - The built app contains an x86_64 slice (`lipo -archs`), checked in the PR.
-  - The live MusicKit call is **unverified** in the PR.
+  - Model tests for `pollOnce()` with stubbed clients and a temporary folder:
+    - a first run claims the lease and writes one `baseline` line;
+    - a later run writes exactly one line and replaces `last-list.json`;
+    - a non-leaseholder writes nothing to iCloud;
+    - missing authorization writes `failed` and makes no request;
+    - a thrown fetch error and an empty-feed result each write `failed` and leave
+      `last-list.json` unchanged;
+    - the stream file is named for the UTC month (a fetch at 2026-10-31T23:30-05:00 lands in
+      `2026-11.jsonl`).
+  - The built app has both slices, checked in the PR: `lipo -archs` on its executable prints
+    `x86_64 arm64`, from a Debug build.
+  - The live MusicKit call and `SMAppService` registration are **unverified** in the PR.
   - **Owed device gate (on the mini, over about 24 h):**
     - Launch, Authorize, and turn the toggle on. The first line, `baseline`, appears in iCloud
-      Drive on the laptop.
+      Drive on the laptop. Its `pagesRead` is the merged list's depth: note it.
     - Play three songs on the iPhone, one in Marvis and one skipped after about 10 s. Within
       about an hour, a `plays` line lists them. Note whether the Marvis play and the skipped
       play count.
-    - After 24 h, the agent has written about 24 lines with no gaps. Note the deepest
-      `pagesRead`, which tells us the merged list's depth.
+    - After 24 h, the agent has written about 24 lines with no gaps. Note the largest
+      `pagesRead` on any later line; it's usually 1, since the diff stops once it finds the
+      overlap.
     - **If the agent doesn't run headless on the mini, or MusicKit refuses it there, stop and
       flag it** rather than working around it.
 
 - [ ] **S2 — Listening in `vf-mcp` and Settings (core + app).**
   - Implement the tool surface above in `LibraryMCPServer`. The log is read lazily and reloaded
-    when any stream file's `modifiedAt` changes, like the snapshot.
+    when any stream file's `modifiedAt` changes, like the snapshot. Reads are coordinated
+    (`NSFileCoordinator`), so a stream file iCloud has offloaded downloads first.
   - The log-backed calls join `LibraryIndex.checkTracks` for "in library".
   - **Settings → Listening History:** which Mac polls; the last fetch and its age; coverage
     since; gaps in the last 30 days; the iCloud folder; and a link to `POLLER-SETUP.md`. With
@@ -286,6 +338,8 @@ Decision 3).
   - Signed in to Jon's Apple ID with Apple Music and iCloud Drive on.
   - Set to stay awake and stay logged in. A login agent needs a user session; the mini's
     "always-on" role covers this.
+  - **Optimize Mac Storage off** (System Settings → Apple Account → iCloud → Drive), so iCloud
+    never offloads the stream files the poller appends to.
 - [ ] **Developer portal, before Dispatch 2:**
   - Register the mini as a device (System Information → Hardware → Provisioning UDID).
   - Create the App ID `com.jonphillips.vinylfever.listeningpoller` with the **MusicKit** App
