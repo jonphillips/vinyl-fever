@@ -23,8 +23,8 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   server reached through Secure MCP Tunnel (ChatGPT), Claude Code, and Codex, plus a
   `stage_playlist` inbox and preview annotations. Dispatches 1 (#72) and 2 (jon-platform#74, the
   shared `MCPServerKit`, `HandoffInbox`, and `mcp-tunnel`) are merged with their device gates
-  passed, and S2 (`vf-mcp`) is the current `NEXT_UP.md`. Merging that plan PR approves M12
-  Decisions 3 and 4, and jon-platform ADR-0007 is **Accepted** (jon-platform#75, 2026-10-17).
+  passed. Dispatch 3, S2 (`vf-mcp` and the playlist inbox), merged as #76 on 2026-10-17, and
+  its device gate is owed. M12 Decisions 3 and 4 are approved, and jon-platform ADR-0007 is **Accepted** (jon-platform#75, 2026-10-17).
   **Pending Jon:** Decision 1 (Last.fm); see the listening-history entry below. A Yes Chef
   MCP server, reading its synced database read-only, is the likely second consumer and starts by
   spiking app-group container access (ADR-0007 *Open*). Galavant waits. Last.fm (S3) stays parked
@@ -104,6 +104,34 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   2026-10-17). **Recommendation: S3's brief gives it a real JSON type** and decides whether that
   needs a snapshot version bump. It's typed `Data?` today, which encodes as base64. It's always
   `null` until S3, so nothing depends on the current encoding.
+- **M12: sign `vf-mcp` for a distributed build** (from the #76 review, 2026-10-17). The app
+  bundles the helper at `Contents/Helpers/vf-mcp` from a post-build `swift build`, and the
+  linker only ad-hoc signs it. That's fine for local builds: the app's
+  `codesign --verify --deep --strict` passes. An archived or notarized build would need the
+  helper signed with the team identity and the hardened runtime before the app is signed.
+  **Recommendation:** nothing until Vinyl Fever is archived for anyone but Jon. Then the build
+  phase runs `codesign --sign "$EXPANDED_CODE_SIGN_IDENTITY" --options runtime` on the helper.
+- **M12: a release build of `vf-mcp` takes about 5 minutes** (from the #76 review, 2026-10-17).
+  The Release post-build phase does a full `swift build -c release` of the helper and its
+  dependencies in its own scratch path. Debug builds take about 30 s. That only costs Release
+  builds and archives today. **Recommendation:** watch it. If archives get frequent, cache the
+  scratch path across builds, or build the helper as an Xcode target in the same build graph.
+- **App tests: launch tasks in the test host read live dependencies** (from the #76 review,
+  2026-10-17). One of three app-test runs recorded a `@Dependency(\.date)` "no test
+  implementation" issue against «unknown». It came from `AppShellView`'s
+  `.task { loadSnapshotAndRefreshIfStale() }` (S1), which runs when the host app launches. It
+  depends on timing, and `xcodebuild` still reported success. It's the same family as the
+  `CollectionInboxAppendTests` `\.uuid` entry above. **Candidate fix:** skip the app shell's launch
+  tasks when running under tests (`@Dependency(\.context) == .test`), or have the test host
+  launch an empty scene. It's small enough to fold into the next dispatch that touches the app
+  shell.
+- **M12: `libraryIndexArrivalIsObservable` doesn't test arrival** (from the #76 review,
+  2026-10-17). The test starts observation tracking before setting the snapshot, so its
+  `onChange` fires on the synchronous `libraryIndex = nil` reset in `didSet`, not when the
+  off-main index lands. It still catches the original bug (an `@ObservationIgnored` index),
+  but not a later regression that assigns the built index without notifying observers.
+  **Candidate fix:** set the snapshot first, then start tracking, then
+  `await waitForLibraryIndex()` and expect the change. Fold it into the next M12 slice.
 
 
 ## V1 Scope
