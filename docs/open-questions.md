@@ -33,6 +33,17 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   dispatches S0. **Pending Jon before Dispatch 2 (S1):** the mini's macOS 26 check and the
   developer-portal App ID and profile (M13 *Prerequisites*). The probe evidence moved into the
   milestone.
+- **Live tracks in playlists** — planned as [M14](milestones/M14-live-tracks-in-playlists.md)
+  (2026-10-18). It runs after M13 S2 (Jon: "after the poller"). Probes on 2026-10-18 showed:
+  - One API create call mixes catalog songs with Jon's uploaded live tracks, in order, and they
+    play on his iPhone (Jon checked).
+  - Library song search stops at 100 results per term, but searching his library's albums by
+    the show's name and then reading the album's tracks reaches every upload. The two routes
+    together found 40 of 40 sampled uploads.
+  - Jon's library: 54,166 uploaded, 26,977 matched, 5 ineligible, and none waiting to upload.
+    Uploaded plus matched is about 81,000, against iCloud Music Library's 100,000-song limit.
+  - The full evidence is in the milestone. Merging that plan PR approves its Decisions 1–4.
+    Nothing is dispatched until M13 S2 lands.
 - **M11: Create can lose the playlist it just made when a later batch fails** (from the #67
   review, 2026-10-15). `createLibraryPlaylist` sends the first 100 IDs with the create call,
   then appends the rest in batches of 100. If a later batch throws, the error drops the
