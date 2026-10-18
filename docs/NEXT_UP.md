@@ -2,4 +2,4 @@
 
 Nothing dispatched.
 
-**Owed:** S2's ChatGPT iPad-through-tunnel and Claude Code device checks remain; M12 · Dispatch 4 also requires Jon's Last.fm decision.
+**Owed:** nothing. The S2 device gate passed on 2026-10-18.

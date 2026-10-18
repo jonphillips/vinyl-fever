@@ -24,15 +24,15 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   `stage_playlist` inbox and preview annotations. Dispatches 1 (#72) and 2 (jon-platform#74, the
   shared `MCPServerKit`, `HandoffInbox`, and `mcp-tunnel`) are merged with their device gates
   passed. Dispatch 3, S2 (`vf-mcp` and the playlist inbox), merged as #76 on 2026-10-17, and
-  its device gate is owed. M12 Decisions 3 and 4 are approved, and jon-platform ADR-0007 is **Accepted** (jon-platform#75, 2026-10-17).
+  Jon passed its device gate on 2026-10-18. M12 Decisions 3 and 4 are approved, and jon-platform ADR-0007 is **Accepted** (jon-platform#75, 2026-10-17).
   **Pending Jon:** Decision 1 (Last.fm); see the listening-history entry below. A Yes Chef
   MCP server, reading its synced database read-only, is the likely second consumer and starts by
-  spiking app-group container access (ADR-0007 *Open*). Galavant waits. Last.fm (S3) stays parked
-  until the S2 device gate shows whether library stats alone feel thin.
+  spiking app-group container access (ADR-0007 *Open*). Galavant waits. Last.fm (S3) stays parked;
+  the listening-history entry below would replace it.
 - **M12 listening history: poll Apple's recently-played feed instead of Last.fm?** (probed
   2026-10-17). **Recommendation: yes, and drop Last.fm (Decision 1 → no, S3 not built).** Jon
-  doesn't need older history, and Last.fm sees only Marvis plays. Build this after the S2 gate,
-  as its own slice.
+  doesn't need older history, and Last.fm sees only Marvis plays. The S2 gate has passed
+  (2026-10-18), so this is the next M12 candidate, as its own slice.
   - **What the probe found** (a throwaway build of the app, using `MusicDataRequest`):
     - **Mac play counts miss device listening.** "Love It When You Call" showed 0 plays on both
       library copies after days of plays on Jon's iPhone and iPad, and only 2 tracks had a
