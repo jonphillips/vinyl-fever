@@ -3,6 +3,13 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-18 — M13 · Dispatch 1 S0 (`m13/s0-listening-engine`)
+
+Added the pure `VinylFeverListening` package target with the versioned JSONL codec, paged
+recently-played diff, log merge and period queries, coverage reporting, and lease rules. Core
+tests and the macOS app test suite pass. The live MusicKit request remains unverified; S1 stays
+gated on Jon's developer-portal profile and mini prerequisites.
+
 ## 2026-10-18 — M12 close-out (`m12/close-out`, architect)
 
 Jon passed the S2 device gate (ChatGPT on the iPad through the `vinyl-fever` tunnel, Claude Code
