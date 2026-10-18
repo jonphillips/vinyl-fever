@@ -12,6 +12,9 @@ struct SettingsView: View {
   @FetchAll(SourceLabel.order(by: \.token))
   private var persistedSourceLabels: [SourceLabel]
   @State private var didCopyPlaylistInstructions = false
+  @State private var copiedMCPConfig: String?
+  @State private var librarySnapshotStatus = "Checking…"
+  @Dependency(\.librarySnapshotStore) private var librarySnapshotStore
 
   private var settings: AppSetting {
     AppSetting.current(from: persistedSettings)
@@ -90,6 +93,25 @@ struct SettingsView: View {
           Text("Playlist Builder")
         }
 
+        Section {
+          LabeledContent("Helper path", value: helperPath)
+            .textSelection(.enabled)
+          LabeledContent("Library snapshot", value: snapshotPath)
+            .textSelection(.enabled)
+          LabeledContent("Snapshot status", value: librarySnapshotStatus)
+          copyButton("Claude Code .mcp.json", key: "claude", value: claudeConfig)
+          copyButton("Codex config.toml", key: "codex", value: codexConfig)
+          copyButton("tunnel-client init command", key: "tunnel", value: tunnelCommand)
+          Text("Use the plugin name Vinyl Fever. The tunnel command needs the tunnel ID from the Platform Tunnels page.")
+            .font(.callout).foregroundStyle(.secondary)
+          Text("Tools: library_overview, top_artists, top_tracks, search_library, artist_profile, check_tracks, stage_playlist")
+            .font(.callout).foregroundStyle(.secondary)
+        } header: {
+          Text("Chat Access (MCP)")
+        } footer: {
+          Text("The helper reads the last library snapshot Vinyl Fever built. Chat can stage a playlist for review, but only Create in Vinyl Fever changes Apple Music.")
+        }
+
         Section("Source Labels") {
           SourceLabelEditor(
             sourceLabels: SourceLabel.deduplicated(persistedSourceLabels),
@@ -104,6 +126,7 @@ struct SettingsView: View {
       .navigationTitle("Settings")
       .task {
         model.loadFrontierKeyPreview()
+        await refreshLibrarySnapshotStatus()
       }
       .toolbar {
         ToolbarItem {
@@ -123,6 +146,51 @@ struct SettingsView: View {
 
   private func refreshButtonTapped() async {
     await model.refreshToolStatuses(settings: settings)
+  }
+
+  private func refreshLibrarySnapshotStatus() async {
+    do {
+      guard let snapshot = try await librarySnapshotStore.read() else {
+        librarySnapshotStatus = "Not built yet"
+        return
+      }
+      let modifiedAt = try await librarySnapshotStore.modifiedAt() ?? snapshot.generatedAt
+      librarySnapshotStatus = "\(snapshot.trackCount.formatted()) tracks · \(modifiedAt.formatted(.relative(presentation: .numeric)))"
+    } catch {
+      librarySnapshotStatus = "Unavailable · \(error.localizedDescription)"
+    }
+  }
+
+  private var helperPath: String {
+    Bundle.main.bundleURL.appending(path: "Contents/Helpers/vf-mcp").path(percentEncoded: false)
+  }
+
+  private var snapshotPath: String {
+    FileManager.default.homeDirectoryForCurrentUser
+      .appending(path: "Library/Application Support/VinylFever/LibrarySnapshot/library-snapshot.json")
+      .path(percentEncoded: false)
+  }
+
+  private var claudeConfig: String {
+    "{\n  \"mcpServers\": {\n    \"vinyl-fever\": {\n      \"command\": \"\(helperPath)\"\n    }\n  }\n}"
+  }
+
+  private var codexConfig: String {
+    "[mcp_servers.vinyl-fever]\ncommand = \"\(helperPath)\"\nargs = []"
+  }
+
+  private var tunnelCommand: String {
+    "mcp-tunnel init vinyl-fever <tunnel_id> \"\(helperPath)\""
+  }
+
+  private func copyButton(_ title: String, key: String, value: String) -> some View {
+    Button {
+      NSPasteboard.general.clearContents()
+      NSPasteboard.general.setString(value, forType: .string)
+      copiedMCPConfig = key
+    } label: {
+      Label(copiedMCPConfig == key ? "Copied \(title)" : "Copy \(title)", systemImage: copiedMCPConfig == key ? "checkmark" : "doc.on.doc")
+    }
   }
 }
 

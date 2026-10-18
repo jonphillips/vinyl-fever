@@ -21,7 +21,7 @@ public struct LibrarySearchFilter: Equatable, Sendable {
   public init() {}
 }
 
-public struct LibraryArtistSummary: Equatable, Sendable {
+public struct LibraryArtistSummary: Codable, Equatable, Sendable {
   public var artist: String
   public var plays: Int
   public var favorites: Int
@@ -29,7 +29,7 @@ public struct LibraryArtistSummary: Equatable, Sendable {
   public var lastPlayed: Date?
   public var lastAdded: Date?
 }
-public struct LibraryOverview: Equatable, Sendable {
+public struct LibraryOverview: Codable, Equatable, Sendable {
   public var generatedAt: Date
   public var trackCount: Int
   public var artistCount: Int
@@ -38,7 +38,7 @@ public struct LibraryOverview: Equatable, Sendable {
   public var decadeCounts: [Int: Int]
   public var topArtists: [LibraryArtistSummary]
 }
-public struct LibraryArtistProfile: Equatable, Sendable {
+public struct LibraryArtistProfile: Codable, Equatable, Sendable {
   public var artist: String
   public var albums: [String]
   public var trackCount: Int
@@ -49,7 +49,7 @@ public struct LibraryArtistProfile: Equatable, Sendable {
   public var mostPlayedTracks: [LibraryTrack]
   public var uploadedTrackCount: Int
 }
-public struct LibraryTrackCheck: Equatable, Sendable {
+public struct LibraryTrackCheck: Codable, Equatable, Sendable {
   public var artist: String
   public var title: String
   public var owned: Bool
@@ -76,11 +76,16 @@ public struct LibraryIndex: Sendable {
 
   public func overview(generatedAt: Date) -> LibraryOverview {
     let groups = artistGroups()
-    let genres = Dictionary(grouping: tracks.compactMap { nonempty($0.genre) }, by: { $0 })
+    let genres = Dictionary(grouping: tracks.compactMap { nonempty($0.genre)?.trimmingCharacters(in: .whitespacesAndNewlines) }, by: { $0 })
       .mapValues(\.count)
+      .filter { !$0.key.isEmpty }
+      .sorted { lhs, rhs in lhs.value == rhs.value ? lhs.key.localizedStandardCompare(rhs.key) == .orderedAscending : lhs.value > rhs.value }
+      .prefix(25)
+      .reduce(into: [String: Int]()) { $0[$1.key] = $1.value }
+    let latestYear = Calendar.current.component(.year, from: Date()) + 1
     let decades = Dictionary(
       grouping: tracks.compactMap { track -> Int? in
-        guard let year = track.year else { return nil }
+        guard let year = track.year, (1900...latestYear).contains(year) else { return nil }
         return year / 10 * 10
       }, by: { $0 }
     ).mapValues(\.count)

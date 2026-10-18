@@ -3,6 +3,13 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-17 — M12 · Dispatch 3 S2 (`m12/s2-vf-mcp`)
+
+Added the `vf-mcp` executable on jon-platform's `MCPServerKit`, the library read tools and
+playlist staging tool, and the app's reviewable playlist inbox. Settings now shows the helper and
+snapshot paths and copyable Claude Code, Codex, and tunnel setup. Core and macOS app tests pass.
+The ChatGPT iPad-through-tunnel and Claude Code device checks remain owed.
+
 ## 2026-10-17 — M12 · Dispatch 2 effort mcp-server-kit (jon-platform `effort/mcp-server-kit`)
 
 jon-platform#74 merged (squash `b6f48d6`): `MCPServerKit` (the stdio JSON-RPC loop and tool registry, plus the `mcp-hello` sample), `LLMHandoffKit.HandoffInbox`, and `scripts/mcp-tunnel`. The architect's review fixed three gate blockers in the script (the real `tunnel-client` flag is `--health-listen-addr`, `init --force` replaces an existing profile, and the LaunchAgent gets a PATH that finds `tunnel-client`), plus line splitting on LF only, a non-trapping instructions check, and ISO 8601 dates in `.json(_:)`. Jon passed the `mcp-hello` iPad gate the same day.

@@ -78,16 +78,22 @@ public enum PlaylistContract {
     remediation: "re-copy the instructions from Settings."
   )
 
-  public static let projectInstructions = """
+  private static let formatInstructionsBeforeRules = """
   When Jon asks you to emit the playlist, reply with exactly this format: a marker line, then one JSON object. Do not include a code fence, preamble, or sign-off. Use straight ASCII quotes.
 
   VF-PLAYLIST: v1
   {"name":"Playlist name","description":"optional one sentence","tracks":[{"artist":"Artist name","title":"Song title","album":"optional album hint","year":1979}]}
 
-  The JSON object must have a non-empty name and at least one track. Each track needs artist and title; album and year are optional hints, and year means the original release year. Omit any track you are not confident exists as a released recording by that artist; do not substitute another song. Include a specific version in the title only when that version is the point, such as "Song (Live at the Fillmore)". Do not include IDs, ISRCs, URLs, or commentary fields.
-
-  This format applies only when Jon asks you to emit the playlist. Otherwise, continue the conversation normally.
   """ + "\n"
+
+  public static let trackRules = """
+  The JSON object must have a non-empty name and at least one track. Each track needs artist and title; album and year are optional hints, and year means the original release year. Omit any track you are not confident exists as a released recording by that artist; do not substitute another song. Include a specific version in the title only when that version is the point, such as "Song (Live at the Fillmore)". Do not include IDs, ISRCs, URLs, or commentary fields.
+  """
+
+  public static let formatInstructions = formatInstructionsBeforeRules
+    + "This format applies only when Jon asks you to emit the playlist. Otherwise, continue the conversation normally.\n"
+  public static let projectInstructions = formatInstructionsBeforeRules + trackRules + "\n\n"
+    + "This format applies only when Jon asks you to emit the playlist. Otherwise, continue the conversation normally.\n"
 
   /// Decodes the pinned marker plus one JSON object. Invalid tracks with blank artist or title
   /// are omitted and returned in `droppedTracks` so the caller can show them to the user.
