@@ -78,7 +78,22 @@ public enum ListeningTextNormalizer {
   }
 
   public static func trackKey(artist: String, title: String) -> String {
-    "\(self.artist(artist))|\(self.title(title))"
+    "\(self.artist(artist))|\(libraryTitle(title))"
+  }
+
+  /// Library metadata can store a guest credit directly in the title.
+  public static func libraryTitle(_ raw: String) -> String {
+    var value = raw.replacingOccurrences(
+      of: #"\s*[\(\[]\s*(?:feat\.?|ft\.?|featuring)\s+[^)\]]*[)\]]"#,
+      with: "", options: [.regularExpression, .caseInsensitive])
+    value = value.replacingOccurrences(
+      of: #"\s+(?:feat\.?|ft\.?|featuring)\s+.*$"#,
+      with: "", options: [.regularExpression, .caseInsensitive])
+    return title(value)
+  }
+
+  public static func album(_ raw: String) -> String {
+    text(raw)
   }
 
   public static func text(_ raw: String) -> String {
@@ -95,7 +110,9 @@ public struct ListeningLog: Sendable {
   public let coverage: ListeningCoverage
 
   public init(jsonlStreams: [Data], now: Date) throws {
-    try self.init(streams: jsonlStreams.map(ListeningLogCodec.decodeJSONL), now: now)
+    let files = try jsonlStreams.map(ListeningLogCodec.decodeJSONL)
+    let streams = Dictionary(grouping: files.flatMap { $0 }, by: \.poller).values.map { $0 }
+    self.init(streams: streams, now: now)
   }
 
   public init(streams: [[ListeningFetch]], now: Date) {
@@ -164,7 +181,7 @@ public struct ListeningLog: Sendable {
   public func topArtists(
     period: ListeningPeriod, now: Date, limit: Int = ListeningQueryLimit.default
   ) -> [ListeningArtistCount] {
-    let grouped = Dictionary(grouping: recentPlays(period: period, now: now)) {
+    let grouped = Dictionary(grouping: periodPlays(period: period, now: now)) {
       ListeningTextNormalizer.artist($0.item.artist)
     }
     return grouped.compactMap { key, plays in
@@ -180,7 +197,7 @@ public struct ListeningLog: Sendable {
   public func topTracks(
     period: ListeningPeriod, now: Date, limit: Int = ListeningQueryLimit.default
   ) -> [ListeningTrackCount] {
-    let grouped = Dictionary(grouping: recentPlays(period: period, now: now)) {
+    let grouped = Dictionary(grouping: periodPlays(period: period, now: now)) {
       ListeningTextNormalizer.trackKey(artist: $0.item.artist, title: $0.item.title)
     }
     return grouped.compactMap { key, plays in
@@ -194,24 +211,44 @@ public struct ListeningLog: Sendable {
     }.prefix(ListeningQueryLimit.cap(limit)).map { $0 }
   }
 
+  private func periodPlays(period: ListeningPeriod, now: Date) -> [ListeningPlay] {
+    let cutoff = now.addingTimeInterval(-period.duration)
+    return plays.filter { $0.windowEnd >= cutoff }
+  }
+
   private static func collapseOverlappingPlays(_ plays: [ListeningPlay])
     -> (plays: [ListeningPlay], collapsed: Int)
   {
-    let ordered = plays.sorted {
-      if $0.windowStart != $1.windowStart { return $0.windowStart < $1.windowStart }
-      return $0.windowEnd < $1.windowEnd
+    let keyedPlays = plays.map { play in
+      (key: ListeningTextNormalizer.trackKey(artist: play.item.artist, title: play.item.title), play: play)
     }
     var kept: [ListeningPlay] = []
     var collapsed = 0
-    for play in ordered {
-      let duplicate = kept.contains { existing in
-        ListeningTextNormalizer.trackKey(
-          artist: existing.item.artist, title: existing.item.title)
-          == ListeningTextNormalizer.trackKey(artist: play.item.artist, title: play.item.title)
-          && existing.poller != play.poller
-          && existing.windowStart <= play.windowEnd && play.windowStart <= existing.windowEnd
+    let groups = Dictionary(grouping: keyedPlays, by: { $0.key })
+    for group in groups.values {
+      let ordered = group.sorted {
+        if $0.play.windowStart != $1.play.windowStart {
+          return $0.play.windowStart < $1.play.windowStart
+        }
+        return $0.play.windowEnd < $1.play.windowEnd
       }
-      if duplicate { collapsed += 1 } else { kept.append(play) }
+      var latestEndByPoller: [UUID: Date] = [:]
+      for entry in ordered {
+        let play = entry.play
+        for (poller, end) in Array(latestEndByPoller) where end < play.windowStart {
+          latestEndByPoller.removeValue(forKey: poller)
+        }
+        let overlapsAnotherPoller = latestEndByPoller.contains { entry in
+          entry.key != play.poller && entry.value >= play.windowStart
+        }
+        if overlapsAnotherPoller {
+          collapsed += 1
+          continue
+        }
+        kept.append(play)
+        latestEndByPoller[play.poller] = max(
+          latestEndByPoller[play.poller] ?? play.windowEnd, play.windowEnd)
+      }
     }
     return (kept, collapsed)
   }

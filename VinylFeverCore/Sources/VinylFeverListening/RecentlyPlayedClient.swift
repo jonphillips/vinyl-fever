@@ -5,7 +5,17 @@ import MusicKit
 
 @DependencyClient
 public struct RecentlyPlayedClient: Sendable {
-  public var page: @Sendable (_ offset: Int) async throws -> [ListeningItem]
+  public var page: @Sendable (_ offset: Int) async throws -> RecentlyPlayedPage
+}
+
+public struct RecentlyPlayedPage: Equatable, Sendable {
+  public var items: [ListeningItem]
+  public var hasNext: Bool
+
+  public init(items: [ListeningItem], hasNext: Bool) {
+    self.items = items
+    self.hasNext = hasNext
+  }
 }
 
 extension RecentlyPlayedClient: TestDependencyKey {
@@ -15,26 +25,32 @@ extension RecentlyPlayedClient: TestDependencyKey {
 extension RecentlyPlayedClient: DependencyKey {
   public static var liveValue: Self {
     Self(page: { offset in
-      var components = URLComponents()
-      components.scheme = "https"
-      components.host = "api.music.apple.com"
-      components.path = "/v1/me/recent/played/tracks"
-      components.queryItems = [
-        URLQueryItem(name: "types", value: "songs,library-songs"),
-        URLQueryItem(name: "offset", value: String(offset)),
-      ]
-      guard let url = components.url else {
-        throw RecentlyPlayedError.invalidEndpoint
-      }
-      var request = URLRequest(url: url)
-      request.httpMethod = "GET"
+      let request = try Self.request(offset: offset)
       let response = try await MusicDataRequest(urlRequest: request).response()
       guard (200..<300).contains(response.urlResponse.statusCode) else {
         throw RecentlyPlayedError.httpStatus(response.urlResponse.statusCode)
       }
-      let page = try JSONDecoder().decode(RecentlyPlayedPage.self, from: response.data)
-      return try page.data.map { try $0.listeningItem }
+      let payload = try JSONDecoder().decode(RecentlyPlayedResponse.self, from: response.data)
+      return RecentlyPlayedPage(items: try payload.data.map { try $0.listeningItem }, hasNext: payload.next != nil)
     })
+  }
+
+  public static func request(offset: Int) throws -> URLRequest {
+    var components = URLComponents()
+    components.scheme = "https"
+    components.host = "api.music.apple.com"
+    components.path = "/v1/me/recent/played/tracks"
+    components.queryItems = [
+      URLQueryItem(name: "types", value: "songs,library-songs"),
+      URLQueryItem(name: "limit", value: String(ListeningDiff.pageSize)),
+      URLQueryItem(name: "offset", value: String(offset)),
+    ]
+    guard let url = components.url else {
+      throw RecentlyPlayedError.invalidEndpoint
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    return request
   }
 }
 
@@ -59,8 +75,9 @@ public enum RecentlyPlayedError: Error, LocalizedError, Equatable, Sendable {
   }
 }
 
-private struct RecentlyPlayedPage: Decodable {
+private struct RecentlyPlayedResponse: Decodable {
   var data: [Resource]
+  var next: String?
 
   struct Resource: Decodable {
     var id: String

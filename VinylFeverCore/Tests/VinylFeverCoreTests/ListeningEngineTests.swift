@@ -3,6 +3,7 @@ import DependenciesTestSupport
 import Foundation
 import Testing
 import VinylFeverListening
+@testable import VinylFeverCore
 
 @Suite("Listening engine")
 struct ListeningEngineTests {
@@ -54,29 +55,75 @@ struct ListeningEngineTests {
     let old = (0..<40).map { item("old-\($0)") }
     let new = (0..<65).map { item("new-\($0)") }
     let pages = CannedPages([
-      0: Array(new[0..<30]),
-      30: Array(new[30..<60]),
-      60: Array(new[60..<65] + old[0..<25]),
+      0: .init(items: Array(new[0..<30]), hasNext: true),
+      30: .init(items: Array(new[30..<60]), hasNext: true),
+      60: .init(items: Array(new[60..<65] + old[0..<25]), hasNext: false),
     ])
     let result = try await withDependencies {
-      $0.recentlyPlayedClient.page = { offset in await pages.page(offset) }
+      $0.recentlyPlayedClient.page = { offset in try await pages.page(offset) }
     } operation: {
       try await ListeningDiff().fetch(previous: old)
     }
     #expect(result.outcome == .plays)
     #expect(result.newCount == 65)
-    #expect(result.pagesRead == 4)
+    #expect(result.pagesRead == 3)
     #expect(result.items.count == 75)
     #expect(result.currentList.count == 90)
     #expect(result.items.suffix(10).map(\.id) == old.prefix(10).map(\.id))
-    #expect(await pages.offsets == [0, 30, 60, 90])
+    #expect(await pages.offsets == [0, 30, 60])
+  }
+
+  @Test("the diff stops fetching immediately after overlap resolves")
+  func stopsReadingOnceOverlapResolves() async throws {
+    let old = (0..<30).map { item("old-\($0)") }
+    let pages = CannedPages(
+      [0: .init(items: [item("new"), .init(kind: .song, id: old[0].id, title: old[0].title, artist: old[0].artist)] + old.dropFirst().prefix(9), hasNext: true)],
+      failingOffset: 30)
+    let result = try await withDependencies {
+      $0.recentlyPlayedClient.page = { offset in try await pages.page(offset) }
+    } operation: {
+      try await ListeningDiff().fetch(previous: old)
+    }
+    #expect(result.outcome == .plays)
+    #expect(result.newCount == 1)
+    #expect(result.pagesRead == 1)
+    #expect(await pages.offsets == [0])
+  }
+
+  @Test("a short page with a next link continues reading for overlap")
+  func shortPageWithNextKeepsReading() async throws {
+    let old = (0..<30).map { item("old-\($0)") }
+    let pages = CannedPages([
+      0: .init(items: (0..<28).map { item("new-\($0)") }, hasNext: true),
+      30: .init(items: Array(old.prefix(10)), hasNext: false),
+    ])
+    let result = try await withDependencies {
+      $0.recentlyPlayedClient.page = { offset in try await pages.page(offset) }
+    } operation: {
+      try await ListeningDiff().fetch(previous: old)
+    }
+    #expect(result.outcome == .plays)
+    #expect(result.newCount == 28)
+    #expect(result.pagesRead == 2)
+    #expect(await pages.offsets == [0, 30])
+  }
+
+  @Test("a live request specifies both resource types, the maximum limit, and offset")
+  func liveRequestAsksForTypesLimitAndOffset() throws {
+    let request = try RecentlyPlayedClient.request(offset: 60)
+    let url = try #require(request.url)
+    let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+    let queryItems = try #require(components.queryItems)
+    #expect(components.path == "/v1/me/recent/played/tracks")
+    #expect(queryItems.map(\.name) == ["types", "limit", "offset"])
+    #expect(queryItems.map(\.value) == ["songs,library-songs", String(ListeningDiff.pageSize), "60"])
   }
 
   @Test("baseline, empty feed, distinct catalog and library identities, and page-cap gap")
   func baselineEmptyKindsAndGap() async throws {
-    let baselinePages = CannedPages([0: [item("one")]])
+    let baselinePages = CannedPages([0: .init(items: [item("one")], hasNext: false)])
     let baseline = try await withDependencies {
-      $0.recentlyPlayedClient.page = { offset in await baselinePages.page(offset) }
+      $0.recentlyPlayedClient.page = { offset in try await baselinePages.page(offset) }
     } operation: {
       try await ListeningDiff().fetch(previous: nil)
     }
@@ -84,7 +131,7 @@ struct ListeningEngineTests {
     #expect(baseline.newCount == 0)
 
     let empty = try await withDependencies {
-      $0.recentlyPlayedClient.page = { _ in [] }
+      $0.recentlyPlayedClient.page = { _ in .init(items: [], hasNext: false) }
     } operation: {
       try await ListeningDiff().fetch(previous: nil)
     }
@@ -98,16 +145,41 @@ struct ListeningEngineTests {
     #expect(distinct == .match(newCount: 1, evidence: [catalog]))
 
     let pages = CannedPages(Dictionary(uniqueKeysWithValues: (0..<10).map { index in
-      (index * ListeningDiff.pageSize, (0..<ListeningDiff.pageSize).map { item("unrelated-\(index)-\($0)") })
+      (index * ListeningDiff.pageSize, .init(
+        items: (0..<ListeningDiff.pageSize).map { item("unrelated-\(index)-\($0)") },
+        hasNext: index < 9))
     }))
     let gap = try await withDependencies {
-      $0.recentlyPlayedClient.page = { offset in await pages.page(offset) }
+      $0.recentlyPlayedClient.page = { offset in try await pages.page(offset) }
     } operation: {
       try await ListeningDiff().fetch(previous: [item("missing")])
     }
     #expect(gap.outcome == .gap)
     #expect(gap.pagesRead == ListeningDiff.pageCap)
     #expect(gap.newCount == ListeningDiff.pageCap * ListeningDiff.pageSize)
+  }
+
+  @Test("empty feed after a baseline fails and preserves the previous list for recovery")
+  func emptyFeedAfterListIsFailedAndKeepsPreviousList() async throws {
+    let previous = (0..<30).map { item("old-\($0)") }
+    let emptyPages = CannedPages([0: .init(items: [], hasNext: false)])
+    let failed = try await withDependencies {
+      $0.recentlyPlayedClient.page = { offset in try await emptyPages.page(offset) }
+    } operation: {
+      try await ListeningDiff().fetch(previous: previous)
+    }
+    #expect(failed.outcome == .failed)
+    #expect(failed.currentList == previous)
+    #expect(failed.error == "Apple Music returned an empty recently-played list.")
+
+    let recoveryPages = CannedPages([0: .init(items: previous, hasNext: false)])
+    let recovered = try await withDependencies {
+      $0.recentlyPlayedClient.page = { offset in try await recoveryPages.page(offset) }
+    } operation: {
+      try await ListeningDiff().fetch(previous: failed.currentList)
+    }
+    #expect(recovered.outcome == .none)
+    #expect(recovered.newCount == 0)
   }
 
   @Test("log windows use the last successful fetch and surface failed and gap lines")
@@ -167,6 +239,64 @@ struct ListeningEngineTests {
     #expect(ListeningTextNormalizer.artist("Beyoncé") == ListeningTextNormalizer.artist("Beyonce"))
   }
 
+  @Test("top counts include every play even when recent plays are capped")
+  func topCountsUseEveryPlayInPeriod() {
+    let baseline = ListeningFetch(
+      poller: poller, host: "Mini", fetchedAt: t0, outcome: .baseline, pagesRead: 1)
+    let fetches = (0..<100).map { index in
+      let artist = index < 60 ? "Old Fave" : "New Thing"
+      let title = index < 60 ? "Old Fave Song" : "New Thing Song"
+      return ListeningFetch(
+        poller: poller, host: "Mini", fetchedAt: t0.addingTimeInterval(Double(index + 1) * 3_600),
+        outcome: .plays, newCount: 1, pagesRead: 1,
+        items: [item("track-\(index)", title: title, artist: artist)])
+    }
+    let now = t0.addingTimeInterval(101 * 3_600)
+    let log = ListeningLog(streams: [[baseline] + fetches], now: now)
+
+    #expect(log.recentPlays(period: .week, now: now).count == ListeningQueryLimit.default)
+    let topArtists = log.topArtists(period: .week, now: now)
+    #expect(topArtists.map(\.artist) == ["Old Fave", "New Thing"])
+    #expect(topArtists.map(\.plays) == [60, 40])
+    let topTracks = log.topTracks(period: .week, now: now)
+    #expect(topTracks.map(\.title) == ["Old Fave Song", "New Thing Song"])
+    #expect(topTracks.map(\.plays) == [60, 40])
+  }
+
+  @Test("listening track keys match the library index key")
+  func listeningTrackKeyMatchesLibraryIndexKey() {
+    let titles = [
+      "Song feat. Guest",
+      "Song (featuring Guest)",
+      "Song (feat. Guest)",
+      "Song (2005 Remaster)",
+    ]
+    for title in titles {
+      let indexKey = "\(SongTextNormalizer.artist("The Records"))|\(SongTextNormalizer.libraryTitle(title))"
+      #expect(ListeningTextNormalizer.trackKey(artist: "The Records", title: title) == indexKey)
+    }
+  }
+
+  @Test("a year of JSONL log files loads quickly with one or two pollers")
+  func yearOfLogLoadsQuickly() throws {
+    let now = date("2026-10-18T00:00:00Z")
+    let clock = ContinuousClock()
+
+    let singlePollerFiles = yearOfJSONLFiles(pollers: [poller])
+    let singleStart = clock.now
+    let singlePollerLog = try ListeningLog(jsonlStreams: singlePollerFiles, now: now)
+    let singleDuration = seconds(singleStart.duration(to: clock.now))
+    #expect(singlePollerLog.plays.count == 8_760 * 2)
+    #expect(singleDuration < 2)
+
+    let twoPollerFiles = yearOfJSONLFiles(pollers: [poller, secondPoller])
+    let twoStart = clock.now
+    let twoPollerLog = try ListeningLog(jsonlStreams: twoPollerFiles, now: now)
+    let twoDuration = seconds(twoStart.duration(to: clock.now))
+    #expect(twoPollerLog.coverage.collapsedOverlappingPlays > 0)
+    #expect(twoDuration < 2)
+  }
+
   @Test("a non-holder cannot write and only an absent lease may be claimed")
   func leaseRules() {
     let lease = ListeningLease(poller: poller, host: "Mini", takenAt: t0)
@@ -186,18 +316,48 @@ struct ListeningEngineTests {
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return formatter.date(from: value) ?? ISO8601DateFormatter().date(from: value)!
   }
+
+  private func yearOfJSONLFiles(pollers: [UUID]) -> [Data] {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime]
+    let start = date("2025-10-18T00:00:00Z")
+    var monthly = Array(repeating: Array(repeating: [String](), count: 12), count: pollers.count)
+    for hour in 0..<8_760 {
+      let month = hour / 730
+      let pollerIndex = pollers.count == 1 ? 0 : hour % pollers.count
+      let fetchedAt = formatter.string(from: start.addingTimeInterval(Double(hour + 1) * 3_600))
+      let poller = pollers[pollerIndex].uuidString
+      let line = #"{"format":"vf-listening-fetch","version":1,"poller":"\#(poller)","host":"Bench","fetchedAt":"\#(fetchedAt)","outcome":"plays","newCount":2,"pagesRead":1,"items":[{"kind":"song","id":"song-a","title":"Song A","artist":"Artist"},{"kind":"song","id":"song-b","title":"Song B","artist":"Artist"}]}"#
+      monthly[pollerIndex][month].append(line)
+    }
+    return monthly.flatMap { files in
+      files.map { Data(($0.joined(separator: "\n") + "\n").utf8) }
+    }
+  }
+
+  private func seconds(_ duration: Duration) -> Double {
+    let components = duration.components
+    return Double(components.seconds) + Double(components.attoseconds) / 1_000_000_000_000_000_000
+  }
 }
 
 private actor CannedPages {
-  private let pages: [Int: [ListeningItem]]
+  private let pages: [Int: RecentlyPlayedPage]
+  private let failingOffset: Int?
   private(set) var offsets: [Int] = []
 
-  init(_ pages: [Int: [ListeningItem]]) {
+  init(_ pages: [Int: RecentlyPlayedPage], failingOffset: Int? = nil) {
     self.pages = pages
+    self.failingOffset = failingOffset
   }
 
-  func page(_ offset: Int) -> [ListeningItem] {
+  func page(_ offset: Int) throws -> RecentlyPlayedPage {
     offsets.append(offset)
-    return pages[offset] ?? []
+    if offset == failingOffset { throw PageError.expectedFailure }
+    return pages[offset] ?? .init(items: [], hasNext: false)
   }
+}
+
+private enum PageError: Error {
+  case expectedFailure
 }

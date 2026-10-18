@@ -72,7 +72,7 @@ public enum ListeningLogCodec {
     encoder.outputFormatting = [.sortedKeys]
     encoder.dateEncodingStrategy = .custom { date, encoder in
       var container = encoder.singleValueContainer()
-      try container.encode(timestampFormatter().string(from: date))
+      try container.encode(TimestampFormatters.fractional.formatter.string(from: date))
     }
     return encoder
   }
@@ -82,8 +82,8 @@ public enum ListeningLogCodec {
     decoder.dateDecodingStrategy = .custom { decoder in
       let container = try decoder.singleValueContainer()
       let string = try container.decode(String.self)
-      guard let date = timestampFormatter().date(from: string)
-        ?? wholeSecondFormatter().date(from: string)
+      guard let date = TimestampFormatters.fractional.formatter.date(from: string)
+        ?? TimestampFormatters.wholeSecond.formatter.date(from: string)
       else {
         throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid ISO-8601 timestamp")
       }
@@ -92,15 +92,18 @@ public enum ListeningLogCodec {
     return decoder
   }
 
-  private static func timestampFormatter() -> ISO8601DateFormatter {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    return formatter
+  private enum TimestampFormatters {
+    static let fractional = ISO8601FormatterHolder(options: [.withInternetDateTime, .withFractionalSeconds])
+    static let wholeSecond = ISO8601FormatterHolder(options: [.withInternetDateTime])
   }
+}
 
-  private static func wholeSecondFormatter() -> ISO8601DateFormatter {
+private final class ISO8601FormatterHolder: @unchecked Sendable {
+  let formatter: ISO8601DateFormatter
+
+  init(options: ISO8601DateFormatter.Options) {
     let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime]
-    return formatter
+    formatter.formatOptions = options
+    self.formatter = formatter
   }
 }
