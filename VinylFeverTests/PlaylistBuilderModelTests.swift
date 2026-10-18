@@ -10,7 +10,7 @@ import VinylFeverCore
 @MainActor
 @Suite("Playlist builder model")
 struct PlaylistBuilderModelTests {
-  @Test("inbox order, open equivalence, create, and discard use the inbox client")
+  @Test("inbox order, open equivalence, create, and dismiss use the inbox client")
   func inboxFlow() async throws {
     let older = handoff("older")
     let newer = handoff("newer")
@@ -52,14 +52,14 @@ struct PlaylistBuilderModelTests {
     #expect(opened.stagedPlaylists.map(\.name) == ["Older"])
     #expect(stub.listCallCount >= 2)
 
-    let discardStub = InboxStub(summaries: summaries, contents: [newer.url: validPaste])
-    let discard = withDependencies {
-      $0.playlistInboxClient = discardStub.client
+    let dismissStub = InboxStub(summaries: summaries, contents: [newer.url: validPaste])
+    let dismiss = withDependencies {
+      $0.playlistInboxClient = dismissStub.client
     } operation: { PlaylistBuilderModel() }
-    discard.refreshInbox()
-    discard.discardStagedPlaylist(summaries[0])
-    #expect(discardStub.processed.map(\.url) == [newer.url])
-    #expect(discard.stagedPlaylists.map(\.name) == ["Older"])
+    dismiss.refreshInbox()
+    dismiss.dismissStagedPlaylist(summaries[0])
+    #expect(dismissStub.processed.map(\.url) == [newer.url])
+    #expect(dismiss.stagedPlaylists.map(\.name) == ["Older"])
   }
 
   @Test("start over detaches the opened handoff before creating a pasted playlist")
@@ -96,18 +96,25 @@ struct PlaylistBuilderModelTests {
     let row = ResolvedPlaylistRow(
       request: TrackRequest(index: 1, artist: "The Records", title: "Owned Song"),
       status: .matched(candidate, score: 1))
+    // Set the snapshot first so tracking starts after didSet's synchronous `libraryIndex = nil`;
+    // only the off-main build landing can then fire onChange.
+    model.librarySnapshot = LibrarySnapshot(
+      generatedAt: Date(timeIntervalSince1970: 1),
+      tracks: [LibraryTrack(persistentID: "owned", name: "Owned Song", artist: "The Records")])
     let changed = ObservationFlag()
     withObservationTracking {
       _ = model.visibleAnnotation(for: row)
     } onChange: {
       changed.set()
     }
-    model.librarySnapshot = LibrarySnapshot(
-      generatedAt: Date(timeIntervalSince1970: 1),
-      tracks: [LibraryTrack(persistentID: "owned", name: "Owned Song", artist: "The Records")])
+    #expect(!changed.value)
     await model.waitForLibraryIndex()
     await Task.yield()
     #expect(changed.value)
+    guard case .inLibrary = model.visibleAnnotation(for: row) else {
+      Issue.record("expected an in-library annotation once the index lands")
+      return
+    }
   }
 
   @Test("snapshot annotations bulk removal preserve remaining create order")

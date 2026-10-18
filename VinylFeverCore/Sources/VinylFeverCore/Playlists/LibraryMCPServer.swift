@@ -144,7 +144,7 @@ public enum LibraryMCPServer {
     let searchSchema = schema(["artist": stringField, "title": stringField, "album": stringField, "genre": stringField, "year_from": integerField, "year_to": integerField, "min_plays": integerField, "max_plays": integerField, "favorited": boolField, "availability": enumField(LibraryAvailability.allCases.map(\.rawValue)), "sort": enumField(["plays", "favorites", "recently_added", "recently_played", "title", "artist"]), "limit": integerField])
     let artistSchema = schema(["artist": stringField], required: ["artist"])
     let checksSchema = schema(["tracks": .object(["type": .string("array"), "maxItems": .integer(LibraryIndex.maximumCheckTracks), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField]), "required": .array([.string("artist"), .string("title")])])])], required: ["tracks"])
-    let stageSchema = schema(["name": stringField, "description": stringField, "tracks": .object(["type": .string("array"), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField, "album": stringField, "year": integerField]), "required": .array([.string("artist"), .string("title")])])])], required: ["name", "tracks"])
+    let stageSchema = schema(["name": stringField, "description": .object(["type": .string("string"), "description": .string(stageDescriptionGuidance)]), "tracks": .object(["type": .string("array"), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField, "album": stringField, "year": integerField]), "required": .array([.string("artist"), .string("title")])])])], required: ["name", "tracks"])
     return MCPServer(name: "Vinyl Fever", version: "1.0.0", instructions: instructions, tools: [
       MCPTool(name: "library_overview", description: "Summarize Jon's Apple Music library, including track, artist, album, genre and decade counts.", inputSchema: overviewSchema, annotations: readOnly) { _ in
         return .json(try await context.overview())
@@ -189,6 +189,9 @@ public enum LibraryMCPServer {
     ])
   }
 
+  /// Create writes the description into Apple Music, so keep chat's process notes out of it.
+  private static let stageDescriptionGuidance =
+    "One sentence about the music; it becomes the playlist's description in Apple Music. No library stats, availability notes, or dates."
   private static let stringField: MCPValue = .object(["type": .string("string")])
   private static let integerField: MCPValue = .object(["type": .string("integer")])
   private static let boolField: MCPValue = .object(["type": .string("boolean")])
