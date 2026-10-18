@@ -3,7 +3,8 @@
 *Give the chat that builds playlists real knowledge of Jon's library and listening, through a
 local MCP server, and show the same knowledge in the playlist preview. **Closed 2026-10-18:**
 the effort, S0, S1, and S2 shipped with their device gates passed, S3 (Last.fm) was dropped
-(Decision 1), and listening history moves to its own milestone. Rules in [../technical-architecture.md](../technical-architecture.md),
+(Decision 1), and listening history moves to [M13](M13-listening-history.md). Rules in
+[../technical-architecture.md](../technical-architecture.md),
 `/Users/jon/code/jon-platform/AGENTS.md`, and jon-platform
 [ADR-0007](/Users/jon/code/jon-platform/docs/adr/0007-app-data-over-local-mcp.md) apply. Where this
 doc and those conflict, stop and flag it.*
@@ -297,8 +298,8 @@ Last.fm (see *Decisions*). Dispatches 1, 2, and 3 each owe a device gate on Jon'
         `open-questions.md`.
 
 - **S3 — Last.fm listening history (app + core). Dropped 2026-10-18** (Decision 1 is no).
-  Listening history comes from Apple's recently-played feed instead, in its own milestone. The
-  original brief is kept below for reference.
+  Listening history comes from Apple's recently-played feed instead, in
+  [M13](M13-listening-history.md). The original brief is kept below for reference.
   - Settings gets a Last.fm username and API key; the key is stored in the Keychain
     (`keychain-access-groups` is already entitled). The app fetches during snapshot refresh,
     never the server:
