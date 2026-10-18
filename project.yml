@@ -50,6 +50,11 @@ targets:
           cp "$SRCROOT/VinylFeverListeningPoller/VFListeningPollerAgent.plist" "$destination/VFListeningPollerAgent.plist"
     info:
       path: VinylFeverListeningPoller/Info.plist
+      properties:
+        CFBundleDisplayName: VF Listening Poller
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSAppleMusicUsageDescription: VF Listening Poller reads the songs you've played recently from Apple Music.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jonphillips.vinylfever.listeningpoller

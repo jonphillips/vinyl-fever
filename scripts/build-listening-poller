@@ -34,4 +34,22 @@ done < <(find "$macos_dir" -type f -print0)
 
 codesign --verify --deep --strict "$app_path"
 echo "codesign: verified"
+
+info_plist="$app_path/Contents/Info.plist"
+usage_description="$(plutil -extract NSAppleMusicUsageDescription raw -o - "$info_plist")"
+echo "NSAppleMusicUsageDescription: $usage_description"
+
+agent_plist="$app_path/Contents/Library/LaunchAgents/VFListeningPollerAgent.plist"
+executable="$(plutil -extract CFBundleExecutable raw -o - "$info_plist")"
+argument_0="$(plutil -extract ProgramArguments.0 raw -o - "$agent_plist")"
+argument_1="$(plutil -extract ProgramArguments.1 raw -o - "$agent_plist")"
+if [[ "$argument_0" != "$executable" ]]; then
+  echo "error: ProgramArguments.0 ($argument_0) does not match CFBundleExecutable ($executable)" >&2
+  exit 1
+fi
+if [[ "$argument_1" != "--poll" ]]; then
+  echo "error: ProgramArguments.1 must be --poll (found $argument_1)" >&2
+  exit 1
+fi
+echo "launch agent arguments: verified"
 echo "app: $app_path"

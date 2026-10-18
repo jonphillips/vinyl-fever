@@ -277,6 +277,20 @@ struct ListeningEngineTests {
     }
   }
 
+  @Test("the normalizer fast path matches the regex rules")
+  func normalizerFastPathMatchesRegexRules() {
+    #expect(ListeningTextNormalizer.artist("Artist ft Guest") == "artist")
+    #expect(ListeningTextNormalizer.artist("Artist FT Guest") == "artist")
+    #expect(ListeningTextNormalizer.libraryTitle("Song ft Guest") == "song")
+    #expect(ListeningTextNormalizer.libraryTitle("Song FT Guest") == "song")
+    #expect(ListeningTextNormalizer.artist("Artist feat. Guest") == "artist")
+    #expect(ListeningTextNormalizer.libraryTitle("Song featuring Guest") == "song")
+    #expect(ListeningTextNormalizer.libraryTitle("Song (with Guest)") == "song")
+    #expect(ListeningTextNormalizer.title("Song (2005 Remaster)") == "song")
+    #expect(ListeningTextNormalizer.artist("Withered Hand") == "withered hand")
+    #expect(ListeningTextNormalizer.artist("Daft Punk") == "daft punk")
+  }
+
   @Test("a year of JSONL log files loads quickly with one or two pollers")
   func yearOfLogLoadsQuickly() throws {
     let now = date("2026-10-18T00:00:00Z")

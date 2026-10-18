@@ -8,6 +8,7 @@
 	<string>Contents/MacOS/VF Listening Poller</string>
 	<key>ProgramArguments</key>
 	<array>
+		<string>VF Listening Poller</string>
 		<string>--poll</string>
 	</array>
 	<key>RunAtLoad</key>

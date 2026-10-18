@@ -102,7 +102,7 @@ public enum ListeningTextNormalizer {
 
   private static func containsCreditMarker(_ raw: String) -> Bool {
     raw.range(of: "feat", options: .caseInsensitive) != nil
-      || raw.range(of: "ft.", options: .caseInsensitive) != nil
+      || raw.range(of: "ft", options: .caseInsensitive) != nil
       || raw.range(of: "with", options: .caseInsensitive) != nil
   }
 
