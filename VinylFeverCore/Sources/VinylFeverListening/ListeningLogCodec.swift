@@ -18,8 +18,7 @@ public enum ListeningLogCodec {
   }
 
   public static func decodeFetch(_ data: Data) throws -> ListeningFetch {
-    try checkHeader(data, format: ListeningFetch.formatName)
-    return try decoder().decode(ListeningFetch.self, from: data)
+    try decodeFetch(data, using: decoder())
   }
 
   public static func decodeLease(_ data: Data) throws -> ListeningLease {
@@ -38,9 +37,10 @@ public enum ListeningLogCodec {
 
     let text = String(decoding: bytes[..<completeBytes], as: UTF8.self)
     var records: [ListeningFetch] = []
+    let jsonDecoder = decoder()
     for (offset, line) in text.split(separator: "\n", omittingEmptySubsequences: true).enumerated() {
       do {
-        records.append(try decodeFetch(Data(line.utf8)))
+        records.append(try decodeFetch(Data(line.utf8), using: jsonDecoder))
       } catch let error as ListeningLogCodecError {
         throw error
       } catch {
@@ -48,6 +48,25 @@ public enum ListeningLogCodec {
       }
     }
     return records
+  }
+
+  private static func decodeFetch(_ data: Data, using decoder: JSONDecoder) throws -> ListeningFetch {
+    let fetch: ListeningFetch
+    do {
+      fetch = try decoder.decode(ListeningFetch.self, from: data)
+    } catch {
+      // Preserve typed format/version diagnostics even when a future record has fields this
+      // reader cannot decode yet. The common valid-record path only decodes once.
+      try checkHeader(data, format: ListeningFetch.formatName)
+      throw error
+    }
+    guard fetch.format == ListeningFetch.formatName else {
+      throw ListeningLogCodecError.unexpectedFormat(fetch.format)
+    }
+    guard fetch.version <= ListeningFetch.currentVersion else {
+      throw ListeningLogCodecError.newerVersion(fetch.version)
+    }
+    return fetch
   }
 
   private static func checkHeader(_ data: Data, format: String) throws {

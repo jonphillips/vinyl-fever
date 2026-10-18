@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		06B1A9F761F94FBEF51B4122 /* ToolPathClient+Live.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FCF80A0CE45B6E77A178A11 /* ToolPathClient+Live.swift */; };
+		1438AA335F69D641AE931C8D /* VinylFeverListening in Frameworks */ = {isa = PBXBuildFile; productRef = D953F9671581DFADF50CBB8D /* VinylFeverListening */; };
 		194C11E283B2D45619EBDFAE /* LiveProcessRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE5CD532AC4970417B1B4142 /* LiveProcessRunnerTests.swift */; };
 		22775209C461BD758C5019E2 /* CollectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AED24466777F0409DA88B3E3 /* CollectionsView.swift */; };
 		24FD7A2E67BA925A1E8ADC15 /* AppModelCleanupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE24892ADA40E7507D033765 /* AppModelCleanupTests.swift */; };
@@ -21,6 +22,8 @@
 		67F35C8B29D2FB10EAECF9DC /* SQLiteData in Frameworks */ = {isa = PBXBuildFile; productRef = B0CEEDF3C9060FC734814A66 /* SQLiteData */; };
 		6AAC484EE4FCEE3EF361E526 /* AppShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59513EA8B3113F9F15330147 /* AppShellView.swift */; };
 		742071989BB20655102865DD /* PoliciesModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2394A4F11A73AE071EDAA272 /* PoliciesModelTests.swift */; };
+		8246995CEFB6AB48667570DA /* VFListeningPollerAgent.plist in Resources */ = {isa = PBXBuildFile; fileRef = 4582E2B36F7C7C03FA95097B /* VFListeningPollerAgent.plist */; };
+		8CEF70CCA9A68624D683FA38 /* ListeningPollerSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 684446C1A4565D3485DA367F /* ListeningPollerSettingsView.swift */; };
 		922A693A808062926F4158D9 /* SwiftUINavigation in Frameworks */ = {isa = PBXBuildFile; productRef = A25F349E47368726A30A4DF2 /* SwiftUINavigation */; };
 		9A75C2E42BF19DF4AA92D51D /* PlaylistsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD2798F08C3813916195B870 /* PlaylistsView.swift */; };
 		9B8A6B6ED8853D47DDD8A734 /* AppleMusicCatalogClient+Live.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2CA6FF4479042ED80E7FFA1 /* AppleMusicCatalogClient+Live.swift */; };
@@ -28,6 +31,7 @@
 		B5C7C81A0EC9C6BA6A423B73 /* LibrarySnapshotStore+Live.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F46A0812CB739DA1B1389BA /* LibrarySnapshotStore+Live.swift */; };
 		B7760BDB855168DC4B52C4C9 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B9501DC755058CF461B454F /* AppModel.swift */; };
 		CCA54B8CA7EF47661C400FFD /* LiveShowsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6AB6D74511FA4977973A9A7 /* LiveShowsView.swift */; };
+		CECA95C63B87EA1EE4F1749F /* ListeningPollerMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C096A1E836F8CBB5AAFAD48 /* ListeningPollerMain.swift */; };
 		D7981B8C7162C6B40C7F323E /* PlaylistBuilderModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5FF662CC6F9DD3413947EB1 /* PlaylistBuilderModelTests.swift */; };
 		D9300F0E5225EB93AE024E5B /* VinylFeverApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AD3A453FDC0D3B42EB1247C /* VinylFeverApp.swift */; };
 		EAFC74430016C0F3EA8F602C /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6AB4DB3E04DFCEFC5B041DC /* SettingsView.swift */; };
@@ -44,14 +48,18 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0C096A1E836F8CBB5AAFAD48 /* ListeningPollerMain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListeningPollerMain.swift; sourceTree = "<group>"; };
 		0F46A0812CB739DA1B1389BA /* LibrarySnapshotStore+Live.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LibrarySnapshotStore+Live.swift"; sourceTree = "<group>"; };
 		2394A4F11A73AE071EDAA272 /* PoliciesModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PoliciesModelTests.swift; sourceTree = "<group>"; };
 		37594C5E09F565DC70AF0A3C /* LLMClientKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = LLMClientKit; path = "../jon-platform/packages/LLMClientKit"; sourceTree = SOURCE_ROOT; };
+		4582E2B36F7C7C03FA95097B /* VFListeningPollerAgent.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = VFListeningPollerAgent.plist; sourceTree = "<group>"; };
 		4B9501DC755058CF461B454F /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		5749E1A3637D488CA2EE906D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		59513EA8B3113F9F15330147 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
 		5D4CD6D94E922DC5DDBA0BD1 /* CollectionInboxAppendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionInboxAppendTests.swift; sourceTree = "<group>"; };
 		5FCF80A0CE45B6E77A178A11 /* ToolPathClient+Live.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ToolPathClient+Live.swift"; sourceTree = "<group>"; };
+		65015F25ACA06219DA6CC422 /* VinylFeverListeningPoller.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VinylFeverListeningPoller.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		684446C1A4565D3485DA367F /* ListeningPollerSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListeningPollerSettingsView.swift; sourceTree = "<group>"; };
 		68E3D973791AA21665A4AEC0 /* SetlistNormalizerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetlistNormalizerSheet.swift; sourceTree = "<group>"; };
 		69C21F1532ECDDF576AB20D2 /* PlaylistBuilderModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistBuilderModel.swift; sourceTree = "<group>"; };
 		8635979346BE2956055A7DC8 /* VinylFever.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VinylFever.entitlements; sourceTree = "<group>"; };
@@ -65,6 +73,7 @@
 		CD2798F08C3813916195B870 /* PlaylistsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistsView.swift; sourceTree = "<group>"; };
 		CE24892ADA40E7507D033765 /* AppModelCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelCleanupTests.swift; sourceTree = "<group>"; };
 		E5FF662CC6F9DD3413947EB1 /* PlaylistBuilderModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistBuilderModelTests.swift; sourceTree = "<group>"; };
+		EE18C43EC91F35A2305CD2A7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		EFE8FAAEE05BF9BF9A136EDE /* MusicAppClient+Live.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MusicAppClient+Live.swift"; sourceTree = "<group>"; };
 		F2CA6FF4479042ED80E7FFA1 /* AppleMusicCatalogClient+Live.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppleMusicCatalogClient+Live.swift"; sourceTree = "<group>"; };
 		F6AB6D74511FA4977973A9A7 /* LiveShowsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveShowsView.swift; sourceTree = "<group>"; };
@@ -72,6 +81,14 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		AA64E994456C33DA99830A79 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1438AA335F69D641AE931C8D /* VinylFeverListening in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		ECC8EE6E68EA4A6E16A09DA9 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -153,6 +170,17 @@
 			path = Playlists;
 			sourceTree = "<group>";
 		};
+		6D89A2DC6D270D737AA561BA /* VinylFeverListeningPoller */ = {
+			isa = PBXGroup;
+			children = (
+				EE18C43EC91F35A2305CD2A7 /* Info.plist */,
+				0C096A1E836F8CBB5AAFAD48 /* ListeningPollerMain.swift */,
+				684446C1A4565D3485DA367F /* ListeningPollerSettingsView.swift */,
+				4582E2B36F7C7C03FA95097B /* VFListeningPollerAgent.plist */,
+			);
+			path = VinylFeverListeningPoller;
+			sourceTree = "<group>";
+		};
 		7591ADA858208560FCBEF6CA /* Packages */ = {
 			isa = PBXGroup;
 			children = (
@@ -166,6 +194,7 @@
 			isa = PBXGroup;
 			children = (
 				C5BA3EE762A82EB875DF3A8E /* VinylFever.app */,
+				65015F25ACA06219DA6CC422 /* VinylFeverListeningPoller.app */,
 				A1E74BD06E9B4E42D2157A7A /* VinylFeverTests.xctest */,
 			);
 			name = Products;
@@ -184,6 +213,7 @@
 			children = (
 				7591ADA858208560FCBEF6CA /* Packages */,
 				049A125EB1F82AAA03079683 /* VinylFever */,
+				6D89A2DC6D270D737AA561BA /* VinylFeverListeningPoller */,
 				161969889E7740BBE3D728E9 /* VinylFeverTests */,
 				82F110051A55E3158FF9916B /* Products */,
 			);
@@ -225,6 +255,27 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		AF45468BFA922AE0119CCC1A /* VinylFeverListeningPoller */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CCD0F2B3B35D1CE62E649890 /* Build configuration list for PBXNativeTarget "VinylFeverListeningPoller" */;
+			buildPhases = (
+				92B6D152DDDBFBB541C631E1 /* Sources */,
+				6EE5328A50AA71DC494D3EB2 /* Resources */,
+				AA64E994456C33DA99830A79 /* Frameworks */,
+				C98E18561EFAFB9125B07D28 /* Install listening poller agent definition */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VinylFeverListeningPoller;
+			packageProductDependencies = (
+				D953F9671581DFADF50CBB8D /* VinylFeverListening */,
+			);
+			productName = VinylFeverListeningPoller;
+			productReference = 65015F25ACA06219DA6CC422 /* VinylFeverListeningPoller.app */;
+			productType = "com.apple.product-type.application";
+		};
 		D61F076DD1B7CD15209A3DED /* VinylFeverTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 6908ECF7FD9E387520DAFF47 /* Build configuration list for PBXNativeTarget "VinylFeverTests" */;
@@ -276,6 +327,10 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
+					AF45468BFA922AE0119CCC1A = {
+						DevelopmentTeam = 7MQEE539G9;
+						ProvisioningStyle = Manual;
+					};
 					D61F076DD1B7CD15209A3DED = {
 						DevelopmentTeam = 7MQEE539G9;
 						ProvisioningStyle = Automatic;
@@ -308,10 +363,22 @@
 			projectRoot = "";
 			targets = (
 				FDD826AD9DE28A7B0EDD2334 /* VinylFever */,
+				AF45468BFA922AE0119CCC1A /* VinylFeverListeningPoller */,
 				D61F076DD1B7CD15209A3DED /* VinylFeverTests */,
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		6EE5328A50AA71DC494D3EB2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8246995CEFB6AB48667570DA /* VFListeningPollerAgent.plist in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
 		C3B842E00EC4D2EE27A92CB7 /* Build and embed vf-mcp helper */ = {
@@ -333,6 +400,26 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "set -euo pipefail\nif [ \"$CONFIGURATION\" = \"Release\" ]; then swift_configuration=release; else swift_configuration=debug; fi\nscratch_path=\"$DERIVED_FILE_DIR/vf-mcp-build\"\nswift build --package-path \"$SRCROOT/VinylFeverCore\" --product vf-mcp --configuration \"$swift_configuration\" --scratch-path \"$scratch_path\"\nhelper_dir=\"$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers\"\nmkdir -p \"$helper_dir\"\ncp \"$scratch_path/$swift_configuration/vf-mcp\" \"$helper_dir/vf-mcp\"\nchmod 755 \"$helper_dir/vf-mcp\"\n";
+		};
+		C98E18561EFAFB9125B07D28 /* Install listening poller agent definition */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/VinylFeverListeningPoller/VFListeningPollerAgent.plist",
+			);
+			name = "Install listening poller agent definition";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Library/LaunchAgents/VFListeningPollerAgent.plist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\ndestination=\"$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Library/LaunchAgents\"\nmkdir -p \"$destination\"\ncp \"$SRCROOT/VinylFeverListeningPoller/VFListeningPollerAgent.plist\" \"$destination/VFListeningPollerAgent.plist\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -367,6 +454,15 @@
 				EAFC74430016C0F3EA8F602C /* SettingsView.swift in Sources */,
 				06B1A9F761F94FBEF51B4122 /* ToolPathClient+Live.swift in Sources */,
 				D9300F0E5225EB93AE024E5B /* VinylFeverApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		92B6D152DDDBFBB541C631E1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CECA95C63B87EA1EE4F1749F /* ListeningPollerMain.swift in Sources */,
+				8CEF70CCA9A68624D683FA38 /* ListeningPollerSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -510,6 +606,30 @@
 			};
 			name = Release;
 		};
+		4E5C5FFCDC041C1C7963429E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = 7MQEE539G9;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = VinylFeverListeningPoller/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jonphillips.vinylfever.listeningpoller;
+				PRODUCT_NAME = "VF Listening Poller";
+				PROVISIONING_PROFILE_SPECIFIER = "VF Listening Poller Dev Profile";
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
 		6491969C60FFEBED1CC4EFC9 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -556,6 +676,30 @@
 				SDKROOT = macosx;
 			};
 			name = Debug;
+		};
+		AC813FE85CEAB1B50DA5C1F9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = 7MQEE539G9;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = VinylFeverListeningPoller/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jonphillips.vinylfever.listeningpoller;
+				PRODUCT_NAME = "VF Listening Poller";
+				PROVISIONING_PROFILE_SPECIFIER = "VF Listening Poller Dev Profile";
+				SDKROOT = macosx;
+			};
+			name = Release;
 		};
 		B93E6939627CA413D115863A /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -621,6 +765,15 @@
 			buildConfigurations = (
 				A1B552F9F91F48E18D5845BB /* Debug */,
 				D40D891F1E75E2F1EA28834C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		CCD0F2B3B35D1CE62E649890 /* Build configuration list for PBXNativeTarget "VinylFeverListeningPoller" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4E5C5FFCDC041C1C7963429E /* Debug */,
+				AC813FE85CEAB1B50DA5C1F9 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
@@ -697,6 +850,10 @@
 			isa = XCSwiftPackageProductDependency;
 			package = AE338F867AA01E7224320B06 /* XCRemoteSwiftPackageReference "sqlite-data" */;
 			productName = SQLiteData;
+		};
+		D953F9671581DFADF50CBB8D /* VinylFeverListening */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VinylFeverListening;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
