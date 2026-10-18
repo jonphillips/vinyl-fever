@@ -15,6 +15,10 @@ xcodegen generate
   -derivedDataPath "$derived_data" \
   build
 
+# Xcode may rewrite the shared scheme while building. Restore xcodegen's canonical output so
+# repeated poller builds leave the checkout unchanged.
+xcodegen generate
+
 macos_dir="$app_path/Contents/MacOS"
 if [[ ! -d "$macos_dir" ]]; then
   echo "error: built app is missing Contents/MacOS" >&2
