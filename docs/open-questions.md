@@ -60,11 +60,14 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
     account and is excluded.
   - **New Music** is graded in full every week, so kept vs passed is a real contrast, and its
     keep rate is Apple's discovery yield, the baseline to beat.
-  - Shortcuts can read the playing song on Jon's phone, so feedback from CarPlay, Siri, and the
-    Action button needs no iOS app.
+  - Keep is Jon's native add to Selections, and Pass is inferred from New Music heard and not
+    added, so neither needs a tap. One shortcut, **VF Note**, captures his spoken reasons from
+    CarPlay, Siri, or the Action button, with no iOS app. `Get Current Song` is blank on a first
+    hearing (it fills in only after the queue moves on), so the shortcut falls back to Shazam's
+    `Recognize Music`, then to the time alone.
 
-  Candidate phasing: S0 probes, S1 playlists in the snapshot with roles, S2 feedback (Shortcuts
-  and notes), S3 exposure and curation logs, then an outcomes milestone. It follows M14 S1; where
+  Candidate phasing: S0 probes, S1 playlists in the snapshot with roles, S2 feedback (VF Note
+  and chat notes), S3 exposure and curation logs, then an outcomes milestone. It follows M14 S1; where
   M13 S3 falls is Jon's call.
 - **Live tracks in playlists** — planned as [M14](milestones/M14-live-tracks-in-playlists.md)
   (2026-10-18). It interleaves with M13: S0 after M13 S1, S1 after M13 S2 (order amended

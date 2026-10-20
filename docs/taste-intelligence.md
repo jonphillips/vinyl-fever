@@ -11,7 +11,8 @@ grades in full, the M13 listening log, and his own spoken reasons. It keeps that
 deterministic and explainable, and lets the chat model do the reasoning: it proposes songs Jon
 probably doesn't know, explains each one against named examples, and Vinyl Fever measures which
 ones he keeps. No scores, no embeddings, no Vinyl Fever-side model calls, and no iPhone app to
-start: Shortcuts capture feedback on the move.
+start: keeps and passes come from what Jon already does, and one shortcut captures his reasons
+on the move.
 
 ## The north star
 
@@ -50,9 +51,19 @@ Read-only AppleScript against Music.app on the laptop:
   moment Vinyl Fever starts taking snapshots of it.
 - **Reading every regular playlist's members** took 49 s with a crude AppleScript that builds
   text. The snapshot's bulk raw-event reader should be much faster; S0 measures it.
-- **Shortcuts can see what's playing** (Jon's phone, 2026-10-20): **Get Current Song** returned
-  the title, artist, and play count of a streamed catalog song ("Skateaway", Dire Straits,
-  0 plays).
+- **Shortcuts can see what's playing, but not on a first hearing** (Jon's phone, 2026-10-20):
+  - **Get Current Song** returned the title, artist, and play count for "Skateaway" (Dire
+    Straits).
+  - It came back **blank for a song Jon was hearing for the first time.** The title appeared
+    only after he moved on to the next track and came back.
+  - **Likely cause:** iOS writes a streamed song's full record only when the queue moves past
+    it, at about the moment it enters recently played. Until then Shortcuts sees an empty
+    placeholder.
+  - **Not yet confirmed:** whether skipping after 10 seconds is enough, or whether the song has
+    to play longer (S0).
+
+  That's exactly the New Music audition, so the feedback design can't depend on Get Current
+  Song (see *Architecture*).
 
 From the web, unverified against Jon's account:
 
@@ -117,7 +128,7 @@ Music.app ──snapshot v2 (laptop)──▶ tracks + every playlist's members 
      Listening/   (M13 log: starts, every device)
      Curation/    playlist adds/removals, favorite/dislike changes      (append-only)
      Exposure/    weekly New Music contents, saved by the mini via API  (append-only)
-     Feedback/    Shortcuts: note / keep / pass on the playing song     (append-only)
+     Feedback/    VF Note shortcut + chat notes: Jon's reasons, verbatim (append-only)
      playlist-roles.json  (Jon-authored)
                 ▼
    vf-mcp ──▶ chat (ChatGPT, Claude Code, Codex): evidence in, candidates out
@@ -136,18 +147,28 @@ Music.app ──snapshot v2 (laptop)──▶ tracks + every playlist's members 
   listening poller. Joined with the listening log (heard) and the curation log (kept), it gives
   **kept vs passed from the same week**. That contrast, shown to the chat, is what teaches it
   what separates a keeper from a pass.
-- **Feedback log, written by Shortcuts** (no app): `Get Current Song`, `Dictate Text`, and for
-  Keep, `Add to Playlist` → the current Selections; then `Dictionary` → `Append to Text File`
-  writes one JSON line. They run from Siri (including CarPlay), the Action button, Control
-  Center, or the Lock Screen:
-  - **VF Note:** the song plus Jon's dictated reason. Reasons are the best feedback Jon gives,
-    and they disappear today.
-  - **VF Keep:** adds the song to Selections and logs it.
-  - **VF Pass:** logs an explicit pass.
+- **Feedback: two verdicts need no tap, and one shortcut covers the third.**
+  - **Keep is native.** Adding the song to Selections, in the Music app or by asking Siri ("add
+    this to my 2026 Selections"), works on a first hearing, and the curation log already sees
+    the add. No shortcut.
+  - **Pass is inferred.** Jon hears New Music in full, so a song he heard (listening log) and
+    didn't add (curation log) within two weeks is a pass. No shortcut.
+  - **VF Note** captures the reason, the best feedback Jon gives and the one that disappears
+    today. It runs from Siri (including CarPlay), the Action button, Control Center, or the Lock
+    Screen. It tries three ways to identify the song:
+    1. `Get Current Song`. It works for songs the phone has a record of, but not on a first
+       hearing (see *Evidence*).
+    2. If the title comes back empty, Shazam's `Recognize Music`, which identifies whatever is
+       audible through the microphone. It takes about 5–10 seconds and works on a first hearing.
+    3. If both fail (a noisy car), it keeps only the time. On the Mac, Vinyl Fever suggests the
+       likely song from that week's New Music list and the listening log, and Jon confirms.
 
-  The line identifies the song by title, artist, and album (the song key), plus the time and
-  which shortcut wrote it. A small iOS app with App Intents can replace the shortcuts later and
-  write the same format, so the Mac side wouldn't change.
+    Then `Dictate Text` takes the reason, and `Dictionary` → `Append to Text File` writes one
+    JSON line: the title, artist, and album (the song key), how the song was identified
+    (`now-playing`, `shazam`, or `time-only`), the time, and the reason.
+
+  A small iOS app with App Intents can replace the shortcut later and write the same format, so
+  the Mac side wouldn't change.
 - **Taste notes from the chat:** an MCP tool records Jon's words into the same Feedback log
   (the melodic-rock playlist critique is the first example). It writes Vinyl Fever's own file,
   never Apple Music.
@@ -179,7 +200,7 @@ results.
    not like the chugging-guitar AOR you passed on").
 5. `stage_playlist`; the ledger records familiarity.
 6. Weeks later: which songs Jon added to Selections or other playlists, replayed on separate
-   days, kept or pruned from the Vinyl Fever playlist, or tagged through a shortcut.
+   days, kept or pruned from the Vinyl Fever playlist, or commented on through VF Note.
 
 ## Apple's data
 
@@ -213,15 +234,19 @@ added.
    - What do `/v1/me/recommendations` and a catalog similar-artists view return?
    - Can `/v1/me/ratings/songs` read hearts and dislikes on catalog songs outside the library?
    - How long does the snapshot read take with both playlist classes' members?
-   - Shortcuts: which iCloud Drive folders `Append to Text File` can write; do Siri in CarPlay
-     and the Action button run it while the phone is locked; does `Add to Playlist` take a
-     catalog song that isn't in the library?
+   - Shortcuts:
+     - Does `Get Current Song` fill in after a 10-second skip and a return, or only after a
+       longer play?
+     - Does `Recognize Music` identify New Music songs reliably, at home and in the car?
+     - Which iCloud Drive folders can `Append to Text File` write to?
+     - Do Siri in CarPlay and the Action button run VF Note while the phone is locked?
+     - Does Siri's "add this to my 2026 Selections" work on a first hearing?
 2. **S1 — Playlists in the snapshot.** Snapshot v2, `playlist-roles.json` and its Settings
    editor, the 2018 rule, `list_playlists`, `playlist_tracks`, and extended `check_tracks`.
    The chat can then use Selections and Replay as examples. Gate: Jon asks for 15 songs "in the
    spirit of my 2025 Selections" and judges them.
-3. **S2 — Feedback.** The shortcuts (exported into the repo, with setup steps),
-   `record_taste_note`, `taste_notes`.
+3. **S2 — Feedback.** The VF Note shortcut (exported into the repo, with setup steps), the Mac's
+   confirmation of time-only notes, `record_taste_note`, and `taste_notes`.
 4. **S3 — Exposure and curation logs.** The mini's weekly New Music save, snapshot diffs,
    `kept_and_passed`, and both baselines.
 5. **Later milestone — outcomes.** The ledger's familiarity field, discovery yield, Apple's
@@ -250,9 +275,11 @@ this is Jon's call.
 1. **No model calls inside Vinyl Fever.** The chat is the interpreter; Vinyl Fever serves
    evidence. That keeps interpretation out of stored data by construction.
 2. **Examples and evidence, not scores.**
-3. **Shortcuts before an app.** They cover CarPlay, Siri, and the Action button with nothing to
-   build or maintain. The Keep shortcut adds to Selections through Apple's own action, by Jon's
-   hand, so Vinyl Fever's "propose, never write" rule is untouched.
+3. **One shortcut before an app, and taps only for reasons.** Keep is Jon's native add to
+   Selections, and Pass is inferred from New Music heard and not added, so the only shortcut is
+   VF Note. It covers CarPlay, Siri, and the Action button with nothing to build or maintain,
+   and it never writes to Apple Music, so Vinyl Fever's "propose, never write" rule is
+   untouched.
 4. **Append-only JSONL in the iCloud Drive Vinyl Fever folder** for the curation, exposure, and
    feedback logs, as for listening (M13 Decision 1): `vf-mcp` reads them with no app running.
    `playlist-roles.json` lives there too, so the mini and `vf-mcp` can read it.
