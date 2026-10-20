@@ -135,8 +135,16 @@ public struct ArtistIdentity: Sendable {
   everything from ` and the `, ` and his `, or ` and her `. Repeat until nothing changes.
 - **Layer 3, aliases:** `key` maps a `baseKey` through Jon's accepted aliases (S1). Each map is
   one hop: the target is never itself a variant.
-- **Credits (matching only, never grouping):** split the key on ` and `, `, `, ` x `, and
-  ` vs `. A part is credited when all of these hold:
+- **Credits (matching only, never grouping):** credits come from the raw name, not the key.
+  The key has already lost its commas, so it can't be split on them (corrected 2026-10-20 in
+  the #95 review; S0 is built this way).
+  - **The band-suffix guard comes first.** It checks the normalized name, after `&` and `+`
+    become `and`. If that name contains ` and the `, ` and his `, or ` and her `, the artist
+    credits only its own key. So `Judah & The Lion` never credits Lion.
+  - Otherwise the raw name is split on ` and ` (including `&` and `+`), `, `, ` x `, and
+    ` vs `, and each part is reduced to its `key`.
+
+  A part is credited when all of these hold:
   - it's in `knownArtists` (some library track's `key` equals it);
   - it isn't `band`, `friends`, `others`, `family`, `orchestra`, or `guests`;
   - it has two or more words, **or** every part of the name is a known artist.
