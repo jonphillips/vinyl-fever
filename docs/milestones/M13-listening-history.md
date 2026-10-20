@@ -9,7 +9,7 @@ Summary: a small **poller** asks Apple Music, once an hour, which songs Jon play
 gives no timestamps and lists each song only once, so the poller compares each answer with the
 previous one, works out what was played in between, and appends that to a **listening log** in
 iCloud Drive. The poller runs on Jon's always-on **Intel Mac mini** as a separate small app,
-because the main app targets macOS 27 and the mini stops at macOS 26. Vinyl Fever can run the
+because the main app targets macOS 27 and the mini stops at macOS 15 Sequoia. Vinyl Fever can run the
 **same poller code** itself, for the laptop as a backup today and for an Apple-silicon mini
 later; a lease makes sure only one Mac polls at a time. `vf-mcp` reads the log, so ChatGPT,
 Claude Code, and Codex can answer "what have I been into lately?". Four slices in four dispatches.
@@ -31,8 +31,8 @@ listens on his iPhone, iPad, and in the car. M13 records that listening from App
   (S2): the log starts filling while S2 is built.
 - **The always-on mini is the right host.** The laptop travels and sleeps. The feed is a web
   API, not the local library, so any Mac signed in to Jon's Apple ID can poll.
-- **One poller engine, two hosts.** The mini is Intel and can't run macOS 27. A separate
-  poller app targeting macOS 26 runs there now. The same Core engine also runs inside Vinyl
+- **One poller engine, two hosts.** The mini is a 2018 Intel model, and its last macOS is 15
+  Sequoia. A separate poller app targeting macOS 15 runs there now. The same engine also runs inside Vinyl
   Fever (S3), so moving to an Apple-silicon mini later is a Settings toggle, not a rewrite. The
   poller app is then retired.
 
@@ -51,7 +51,7 @@ listens on his iPhone, iPad, and in the car. M13 records that listening from App
 ## The spine
 
 ```
-Intel Mac mini (macOS 26)                             laptop (macOS 27)
+Intel Mac mini (macOS 15)                             laptop (macOS 27)
   VF Listening Poller.app, hourly login agent           vf-mcp (in VinylFever.app)
     MusicDataRequest: recent/played/tracks ─┐             ListeningLog.read → plays
     ListeningDiff (Core, pure) ◀── last list (local)      tools: recent_listening,
@@ -190,8 +190,28 @@ Decision 3).
     - period queries' order and caps.
   - Lease tests: a non-holder writes nothing.
 
-- [ ] **S1 — VF Listening Poller app (macOS 26, universal; runs on the Intel mini).** Device
+- [ ] **S1 — VF Listening Poller app (macOS 15, universal; runs on the Intel mini).** Device
   gate owed.
+  - **Amended 2026-10-19 (Decision 2):** the 2018 mini can't run macOS 26, so the poller
+    targets **macOS 15**. Lowering `VinylFeverCore` isn't possible, because its jon-platform
+    dependencies (MCPServerKit, LLMClientKit, LLMHandoffKit) require macOS 26. So
+    `VinylFeverListening` moves out into **its own package**:
+    - **Location:** a new package at `VinylFeverListening/` in the repo root, beside
+      `VinylFeverCore/`, with `platforms: [.macOS(.v15)]`.
+    - **Contents:** the `VinylFeverListening` library and a `VinylFeverListeningTests` test
+      target. It depends only on swift-dependencies.
+    - **What moves:** the target's sources, as they are (no API changes). The listening engine
+      and poller tests move into `VinylFeverListeningTests`. The test that checks
+      `ListeningTextNormalizer.trackKey` equals `LibraryIndex`'s key stays in
+      `VinylFeverCoreTests`, because it needs Core.
+    - **Dependents:** `VinylFeverCore` depends on the new package by path
+      (`../VinylFeverListening`) and keeps its macOS 26 floor. `project.yml` adds the package,
+      and the poller target links its product.
+    - **Verification:** `docs/verification.md` adds
+      `$qr swift test --package-path VinylFeverListening`.
+    - **Build script:** `scripts/build-listening-poller` also fails unless
+      `vtool -show-build` reports `minos 15.0` for every slice of every Mach-O in
+      `Contents/MacOS`.
   - **The run-once poll lives in `VinylFeverListening`**, as `ListeningPoller.pollOnce()`, so S3
     calls the same code. It's a dependency-backed model over four clients:
     - `recentlyPlayedClient` (S0);
@@ -200,7 +220,7 @@ Decision 3).
     - `date`.
   - **A new app target, `VinylFeverListeningPoller`** (product **VF Listening Poller**, bundle
     `com.jonphillips.vinylfever.listeningpoller`), is added in `project.yml`.
-    - Deployment target **macOS 26.0**.
+    - Deployment target **macOS 15.0** (amended from 26.0; see the amendment above).
     - `ARCHS` stays the standard architectures (`arm64 x86_64` under Xcode 27). **The build
       destination decides the slices, not the settings.** A build for a concrete Mac (Xcode's
       "My Mac", or `-destination 'platform=macOS'`) is arm64 only, even with
@@ -350,14 +370,16 @@ Decision 3).
   **MusicKit** App Service, and the development profile **VF Listening Poller Dev Profile**
   covering the laptop. It's installed on the laptop, which is also Codex's build host. A
   throwaway app signed with it built and verified, which proves the profile, not MusicKit.
-- [x] Xcode 27 can build an x86_64 MusicKit binary targeting macOS 26 (checked 2026-10-18 with
-  `swiftc -target x86_64-apple-macos26.0`). Running it is the S1 gate, since this Mac has no
-  Rosetta.
+- [x] Xcode 27 can build the poller universal for **macOS 15**. Checked 2026-10-19: the PR 85
+  app, with its target set to 15.0, built with no availability errors, and every slice of every
+  Mach-O reports `minos 15.0`. The `VinylFeverListening` sources also compile at macOS 15 on
+  their own. Running it is the S1 gate, since this Mac has no Rosetta.
 
 **Before the S1 gate (Jon; the dispatch doesn't wait for these):**
 
 - [ ] **The mini:**
-  - Intel Mac mini (2018) on **macOS 26 Tahoe**, the last Intel release. Confirm the version.
+  - Intel Mac mini (2018) on **macOS 15 Sequoia**, the last release it supports. macOS Tahoe 26
+    needs a 2020 or later Mac mini (Apple silicon). Confirm the version.
   - Signed in to Jon's Apple ID with Apple Music and iCloud Drive on.
   - Set to stay awake and stay logged in. A login agent needs a user session; the mini's
     "always-on" role covers this.
@@ -410,11 +432,22 @@ recommendations and dispatches S0.
    - This is still iCloud, with no server.
    - Unlike the M12 snapshot, the log is **not** derived; it's the only copy of the history.
      iCloud Drive keeps the cloud copy, and the laptop's Time Machine backs it up.
-2. **Hold the poller app (and `VinylFeverListening`) at macOS 26.** The house rule is the
-   newest OS, with exceptions only for a named device (jon-platform `toolchain.md`). The named
-   device is the Intel Mac mini (2018), which can't run macOS 27. The hold is lifted, and the
-   poller app deleted, when an Apple-silicon Mac takes the lease for good (S3 makes that a
-   toggle). The `VinylFeverCore` package is already at macOS 26, so nothing moves.
+2. **Hold the poller app and `VinylFeverListening` at macOS 15, in a package of their own.**
+   - **Why there's an exception:** the house rule is the newest OS, with exceptions only for a
+     named device (jon-platform `toolchain.md`). The named device is the Intel Mac mini (2018).
+   - **Why macOS 15:** its last macOS is 15 Sequoia. macOS Tahoe 26 supports only the 2020 and
+     later Mac mini.
+   - **Corrected 2026-10-19:** this decision first said macOS 26, and Jon caught it while
+     preparing the mini.
+   - **Why a separate package:**
+     - `VinylFeverCore` can't drop to 15, because the jon-platform packages it uses require
+       macOS 26.
+     - Holding Core back would constrain the main app anyway.
+     - The hold now covers only the listening engine and the poller app. Core and the main app
+       keep their floors.
+   - **When it lifts:** when an Apple-silicon Mac takes the lease for good (S3 makes that a
+     toggle). The poller app is then deleted, and `VinylFeverListening` can move up with the
+     rest.
 3. **Build Vinyl Fever's own poller now (S3) rather than when the mini is replaced.** Jon leans
    yes (2026-10-18). It doubles as the laptop's backup poller when the mini is down, and it
    proves the takeover before it matters. It's last, so it doesn't delay S1–S2.

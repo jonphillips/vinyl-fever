@@ -32,7 +32,10 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   `recent_listening` and periods. Merging that plan PR approves its Decisions 1–5 and
   dispatches S0. S0 landed in #83 (2026-10-18). Dispatch 2 (S1) needed only the developer-portal
   App ID and profile, which are done. Owed by Jon before the S1 gate: the mini's macOS 26
-  check, Optimize Mac Storage off, and adding the mini to the profile (M13 *Prerequisites*). The probe evidence moved into the milestone.
+  check, Optimize Mac Storage off, and adding the mini to the profile (M13 *Prerequisites*).
+  The mini is on the profile as of 2026-10-19. The mini's last macOS turned out to be 15
+  Sequoia, not 26, so Decision 2 was amended the same day. The poller and
+  `VinylFeverListening` (now its own package) target macOS 15. The probe evidence moved into the milestone.
 - **Live tracks in playlists** — planned as [M14](milestones/M14-live-tracks-in-playlists.md)
   (2026-10-18). It runs after M13 S2 (Jon: "after the poller"). Probes on 2026-10-18 showed:
   - One API create call mixes catalog songs with Jon's uploaded live tracks, in order, and they
