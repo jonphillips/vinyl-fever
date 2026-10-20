@@ -69,7 +69,7 @@ Create: one call; each ID goes in as `songs` or `library-songs`, in row order
 
 **Dispatch 1: S0. Dispatch 2: S1.** Each owes a device gate.
 
-- [ ] **S0 — The library route (core + app).** Device gate owed.
+- [x] **S0 — The library route (core + app).** Device gate owed.
   - **`AppleMusicCatalogClient` gains three endpoints:**
     - `searchLibraryAlbums(term)`;
     - `libraryAlbumTracks(albumID)`, which follows `next`;

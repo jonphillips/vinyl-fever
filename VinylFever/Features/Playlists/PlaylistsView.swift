@@ -187,12 +187,13 @@ struct PlaylistsView: View {
               ),
               canAddToCreatedPlaylist: model.canAddToCreatedPlaylist(trackIndex: row.request.index),
               canChangeMatch: model.canReopenMatch(trackIndex: row.request.index),
+              isResolvingSelection: model.isResolvingCandidate(trackIndex: row.request.index),
               isPostCreate: model.createdPlaylist != nil,
               addToPlaylist: {
                 Task { await model.addToCreatedPlaylist(trackIndex: row.request.index) }
               },
               reSearch: { Task { await model.reSearch(trackIndex: row.request.index) } },
-              selectCandidate: { model.selectCandidate($0, for: row.request.index) },
+              selectCandidate: { candidate in Task { await model.selectCandidate(candidate, for: row.request.index) } },
               changeMatch: { model.reopen(trackIndex: row.request.index) },
               remove: { model.remove(trackIndex: row.request.index) }
             )
@@ -286,6 +287,7 @@ private struct PlaylistRowView: View {
   @Binding var searchTerm: String
   let canAddToCreatedPlaylist: Bool
   let canChangeMatch: Bool
+  let isResolvingSelection: Bool
   let isPostCreate: Bool
   let addToPlaylist: () -> Void
   let reSearch: () -> Void
@@ -333,20 +335,24 @@ private struct PlaylistRowView: View {
 
   @ViewBuilder
   private var annotationContent: some View {
-    switch annotation {
-    case .some(.inLibrary(let plays, let lastPlayed, let favorited, _)):
-      HStack(spacing: 6) {
-        Text("In library · \(plays) plays")
-        if let lastPlayed {
-          Text("· last \(lastPlayed.formatted(.dateTime.month(.abbreviated).year()))")
-        }
-        if favorited { Text("· ♥") }
-      }
-      .font(.caption).foregroundStyle(.secondary)
-    case .some(.notInLibrary):
-      Label("New to you", systemImage: "sparkle").font(.caption).foregroundStyle(.secondary)
-    case .none, .some(.snapshotUnavailable):
+    if case .matched(let candidate, _) = row.status, candidate.source == .libraryUpload {
       EmptyView()
+    } else {
+      switch annotation {
+      case .some(.inLibrary(let plays, let lastPlayed, let favorited, _)):
+        HStack(spacing: 6) {
+          Text("In library · \(plays) plays")
+          if let lastPlayed {
+            Text("· last \(lastPlayed.formatted(.dateTime.month(.abbreviated).year()))")
+          }
+          if favorited { Text("· ♥") }
+        }
+        .font(.caption).foregroundStyle(.secondary)
+      case .some(.notInLibrary):
+        Label("New to you", systemImage: "sparkle").font(.caption).foregroundStyle(.secondary)
+      case .none, .some(.snapshotUnavailable):
+        EmptyView()
+      }
     }
   }
 
@@ -354,9 +360,13 @@ private struct PlaylistRowView: View {
   private var statusContent: some View {
     switch row.status {
     case .matched(let candidate, _):
-      Label("\(candidate.title) — \(candidate.artistName)", systemImage: "checkmark.circle.fill")
-        .foregroundStyle(.green)
-        .lineLimit(1)
+      VStack(alignment: .leading, spacing: 3) {
+        Label("\(candidate.title) — \(candidate.artistName)", systemImage: "checkmark.circle.fill")
+          .foregroundStyle(.green).lineLimit(1)
+        if let badge = PlaylistRowBadge.text(for: candidate) {
+          Text(badge).font(.caption).foregroundStyle(.secondary)
+        }
+      }
     case .ambiguous(let candidates):
       HStack {
         Label("Choose a match", systemImage: "questionmark.circle")
@@ -368,6 +378,7 @@ private struct PlaylistRowView: View {
           }
         }
         .frame(maxWidth: 390)
+        .disabled(isResolvingSelection)
       }
     case .notFound(let error):
       HStack {
@@ -382,8 +393,16 @@ private struct PlaylistRowView: View {
             .foregroundStyle(.secondary)
         }
       }
+    case .uploadNotFound(let reason, let isFailure):
+      HStack {
+        Button("Search", systemImage: "magnifyingglass") { reSearch() }
+          .disabled(isResolvingSelection)
+        Label(reason, systemImage: isFailure ? "exclamationmark.triangle" : "minus.circle")
+          .foregroundStyle(isFailure ? .red : .secondary)
+          .lineLimit(2)
+      }
     case .duplicate(_, let index):
-      Label("Same catalog song as track #\(index); this row is skipped.", systemImage: "doc.on.doc")
+      Label("Same song as track #\(index); this row is skipped.", systemImage: "doc.on.doc")
         .foregroundStyle(.secondary)
     }
   }
@@ -410,5 +429,12 @@ private struct PlaylistRowView: View {
     .joined(separator: " · ")
     return [candidate.title, candidate.artistName, albumYear].filter { !$0.isEmpty }.joined(
       separator: " — ")
+  }
+}
+
+enum PlaylistRowBadge {
+  static func text(for candidate: CatalogSongCandidate) -> String? {
+    guard candidate.source == .libraryUpload else { return nil }
+    return "Your upload · \(candidate.albumTitle ?? "")"
   }
 }

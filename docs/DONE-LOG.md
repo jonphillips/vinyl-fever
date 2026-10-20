@@ -3,6 +3,14 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-20 — M14 · Dispatch 1 S0 (`m14/s0-library-route`)
+
+Added the Apple Music library album and song search routes, exact upload matching with the
+catalog resolver's retry/backoff, and mixed catalog/upload playlist create and append payloads.
+Snapshot routing offers uploaded copies when catalog matching fails, and preview rows identify
+uploads by album. Core, Listening, and macOS app tests pass; `check-handoff` passes. Live Apple
+Music API calls and the iPhone playback gate remain unverified/owed.
+
 ## 2026-10-18 — M13 · Dispatch 2 S1 (`m13/s1-listening-poller`)
 
 Added the `ListeningPoller` model and coordinated listening store, plus the universal VF Listening
