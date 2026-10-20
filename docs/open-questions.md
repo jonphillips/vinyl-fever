@@ -36,6 +36,17 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   The mini is on the profile as of 2026-10-19. The mini's last macOS turned out to be 15
   Sequoia, not 26, so Decision 2 was amended the same day. The poller and
   `VinylFeverListening` (now its own package) target macOS 15. The probe evidence moved into the milestone.
+- **Listening analytics: what the log is for** (Jon, 2026-10-20). The M13 log is gathering
+  data before there's an analytical strategy, and Jon is fine with that. Directions he named:
+  - **Varying his listening:** what he's been on, and how to steer him away from ruts.
+  - **Heard, then chosen:** which recently played songs he then added to a playlist. That's a
+    much stronger signal than a play, and Vinyl Fever sees the playlist side (M11, M14).
+
+  **Parked: filtering short plays.** The feed counts starts (M13 *Fidelity*). Polling every
+  couple of minutes could estimate listened time from the gap between one song's appearance
+  and the next. It can't size the last song of a session, and Jon didn't want the request rate
+  or the precision before a use exists. Revisit when an analysis needs listens rather than
+  starts.
 - **Live tracks in playlists** — planned as [M14](milestones/M14-live-tracks-in-playlists.md)
   (2026-10-18). It runs after M13 S2 (Jon: "after the poller"). Probes on 2026-10-18 showed:
   - One API create call mixes catalog songs with Jon's uploaded live tracks, in order, and they

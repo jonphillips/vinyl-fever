@@ -103,6 +103,19 @@ reach it directly. Writes go through `NSFileCoordinator`.
   - log → plays is **intentionally lossy**: plays are dated to their hour window, and repeats
     inside one window count once.
   - Gaps and failures are **loud**: every tool result reports its coverage and gaps.
+  - **A play is a start, not a listen.** The feed adds a song when it starts playing. That
+    means:
+    - skips count;
+    - so does the next track that autoplay starts before Jon stops it, even after 2 seconds;
+    - Marvis plays count too, since Marvis uses the system player.
+
+    The feed has no timestamps or listened durations to filter on. This was measured at the S1
+    gate on 2026-10-20: Jon's five plays all appeared, including a 10-second skip and a Marvis
+    play, plus three autoplayed next tracks of about 2 seconds each.
+
+    Filtering short plays is parked (`open-questions.md`, *Listening analytics*). Jon's call,
+    2026-10-20: no faster polling, and counts are good enough until there's an analytical
+    strategy.
 - **Size:** about 24 lines a day, mostly heartbeats. Well under 100 KB a day.
 
 ## The diff (Core, pure)
@@ -142,8 +155,11 @@ tools.
 
 - **`coverage`** goes on every log-backed result: the log's first fetch, the last fetch and its
   age, which Mac polls, and the gaps in the period.
-- **Descriptions** say plainly that `all_time` is Mac library counts, which miss device
-  plays, and that periods come from the listening log since the date polling started.
+- **Descriptions** say plainly:
+  - that `all_time` is Mac library counts, which miss device plays;
+  - that periods come from the listening log since the date polling started;
+  - that a log play is a song *started*, so skips and brief autoplay count. The chat must not
+    present a play as a full listen.
 - The instructions head is already at 500 of its 512 characters, so tool descriptions carry
   this. The head is unchanged.
 - **No log yet:** log-backed calls return `isError` with "Listening history isn't set up yet.
