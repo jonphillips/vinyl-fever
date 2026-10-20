@@ -4,6 +4,7 @@ import LLMHandoffKit
 import Observation
 import Testing
 import VinylFeverCore
+import VinylFeverListening
 
 @testable import VinylFever
 
@@ -19,7 +20,7 @@ struct PlaylistBuilderModelTests {
       StagedPlaylistSummary(handoff: older, name: "Older", trackCount: 1),
     ]
     let stub = InboxStub(summaries: summaries, contents: [newer.url: validPaste, older.url: validPaste])
-    let resolver: @Sendable (PlaylistRequest) async -> [ResolvedPlaylistRow] = { request in
+    let resolver: @Sendable (PlaylistRequest, ArtistIdentity) async -> [ResolvedPlaylistRow] = { request, _ in
       request.tracks.map { track in
         let candidate = CatalogSongCandidate(id: "\(track.artist)-\(track.title)", title: track.title, artistName: track.artist)
         return ResolvedPlaylistRow(request: track, status: .matched(candidate, score: 1))
@@ -70,7 +71,7 @@ struct PlaylistBuilderModelTests {
     let model = withDependencies {
       $0.date.now = Date(timeIntervalSince1970: 10)
       $0.playlistInboxClient = stub.client
-      $0.catalogMatchResolver.resolve = { request in
+      $0.catalogMatchResolver.resolve = { request, _ in
         request.tracks.map { track in
           let candidate = CatalogSongCandidate(id: "B", title: track.title, artistName: track.artist)
           return ResolvedPlaylistRow(request: track, status: .matched(candidate, score: 1))
@@ -127,7 +128,7 @@ struct PlaylistBuilderModelTests {
     let model = withDependencies {
       $0.librarySnapshotStore = LibrarySnapshotStore(
         read: { nil }, write: { _ in }, modifiedAt: { nil })
-      $0.catalogMatchResolver.resolve = { _ in [] }
+      $0.catalogMatchResolver.resolve = { _, _ in [] }
       $0.appleMusicCatalogClient.createLibraryPlaylist = { name, _, ids in
         await capture.record(name: name, description: nil, ids: ids.map(\.id))
         return CreatedPlaylistRef(id: "p", name: name, trackCount: ids.count)
@@ -227,7 +228,7 @@ struct PlaylistBuilderModelTests {
   func catalogMissOffersUploads() async {
     let model = withDependencies {
       $0.appleMusicCatalogClient = authorizedClient()
-      $0.catalogMatchResolver.resolve = { request in
+      $0.catalogMatchResolver.resolve = { request, _ in
         request.tracks.map { ResolvedPlaylistRow(request: $0, status: .notFound(error: nil)) }
       }
     } operation: { PlaylistBuilderModel() }
@@ -252,7 +253,7 @@ struct PlaylistBuilderModelTests {
         libraryAlbums: { _ in [LibraryAlbumCandidate(id: "album", title: "Live at Hall")] },
         albumTracks: { _ in [LibrarySongCandidate(
           id: "upload", title: "Live", artist: "Artist", album: "Live at Hall", hasCatalogID: false)] })
-      $0.catalogMatchResolver.resolve = { request in
+      $0.catalogMatchResolver.resolve = { request, _ in
         await resolverTracks.record(request.tracks.map(\.index))
         return request.tracks.map {
           ResolvedPlaylistRow(request: $0, status: .matched(Self.candidate(id: "catalog", title: $0.title), score: 1))
@@ -266,6 +267,25 @@ struct PlaylistBuilderModelTests {
     await model.resolve()
     #expect(await resolverTracks.values == [[2]])
     #expect(model.rows.map(\.request.index) == [1, 2])
+  }
+
+  @Test("the first catalog resolve receives the library index artist identity")
+  func catalogResolveReceivesLibraryIdentity() async {
+    let identityLog = ArtistIdentityLog()
+    let model = withDependencies {
+      $0.appleMusicCatalogClient = authorizedClient()
+      $0.catalogMatchResolver.resolve = { request, identity in
+        await identityLog.record(identity)
+        return request.tracks.map { ResolvedPlaylistRow(request: $0, status: .notFound(error: nil)) }
+      }
+    } operation: { PlaylistBuilderModel() }
+    model.librarySnapshot = LibrarySnapshot(generatedAt: .now, tracks: [
+      LibraryTrack(persistentID: "paul", name: "Graceland", artist: "Paul Simon"),
+      LibraryTrack(persistentID: "sting", name: "Englishman in New York", artist: "Sting"),
+    ])
+    model.pastedText = "VF-PLAYLIST: v1\n{\"name\":\"Mix\",\"tracks\":[{\"artist\":\"Sting\",\"title\":\"Fields of Gold\"}]}"
+    await model.resolve()
+    #expect(await identityLog.recognizedDuetPartner)
   }
 
   @Test("removing an upload row while candidate resolution is suspended leaves other rows alone")
@@ -283,7 +303,7 @@ struct PlaylistBuilderModelTests {
         },
         albumTracks: { _ in [LibrarySongCandidate(
           id: "upload", title: "Live", artist: "Artist", album: "Live at Hall", hasCatalogID: false)] })
-      $0.catalogMatchResolver.resolve = { request in
+      $0.catalogMatchResolver.resolve = { request, _ in
         request.tracks.map { track in
           ResolvedPlaylistRow(
             request: track,
@@ -332,7 +352,7 @@ struct PlaylistBuilderModelTests {
           if await albumCalls.count == 1 { throw NSError(domain: "test", code: 1) }
           return []
         })
-      $0.catalogMatchResolver.resolve = { _ in [] }
+      $0.catalogMatchResolver.resolve = { _, _ in [] }
     } operation: { PlaylistBuilderModel() }
     model.librarySnapshot = LibrarySnapshot(generatedAt: .now, tracks: [
       LibraryTrack(persistentID: "upload", name: "Starry Eyes", artist: "The Records", album: "Live at Hall", availability: .uploaded)
@@ -390,7 +410,7 @@ struct PlaylistBuilderModelTests {
           if await searchedAlbums.terms.count == 1 { throw NSError(domain: "test", code: 1) }
           return []
         })
-      $0.catalogMatchResolver.resolve = { request in
+      $0.catalogMatchResolver.resolve = { request, _ in
         request.tracks.map { ResolvedPlaylistRow(request: $0, status: .notFound(error: nil)) }
       }
     } operation: { PlaylistBuilderModel() }
@@ -701,7 +721,7 @@ struct PlaylistBuilderModelTests {
       $0.appleMusicCatalogClient = authorizedClient(search: { term, _ in
         [Self.candidate(id: term, title: "Starry Eyes")]
       })
-      $0.catalogMatchResolver.resolve = { request in
+      $0.catalogMatchResolver.resolve = { request, _ in
         request.tracks.map {
           ResolvedPlaylistRow(
             request: $0, status: .matched(Self.candidate(id: "song", title: $0.title), score: 0.9))
@@ -722,7 +742,7 @@ struct PlaylistBuilderModelTests {
         await searchCounter.record()
         return []
       })
-      $0.catalogMatchResolver.resolve = { _ in [] }
+      $0.catalogMatchResolver.resolve = { _, _ in [] }
     } operation: {
       PlaylistBuilderModel()
     }
@@ -759,7 +779,7 @@ struct PlaylistBuilderModelTests {
         await capture.record(name: name, description: description, ids: ids.map(\.id))
         return CreatedPlaylistRef(id: "playlist-1", name: name, trackCount: ids.count)
       })
-      $0.catalogMatchResolver.resolve = { _ in [] }
+      $0.catalogMatchResolver.resolve = { _, _ in [] }
     } operation: {
       PlaylistBuilderModel()
     }
@@ -792,7 +812,7 @@ struct PlaylistBuilderModelTests {
         await capture.record(name: name, description: nil, ids: ids.map(\.id))
         return CreatedPlaylistRef(id: "p", name: name, trackCount: ids.count)
       })
-      $0.catalogMatchResolver.resolve = { _ in [] }
+      $0.catalogMatchResolver.resolve = { _, _ in [] }
     } operation: {
       PlaylistBuilderModel()
     }
@@ -838,7 +858,7 @@ struct PlaylistBuilderModelTests {
         await capture.record(name: name, description: nil, ids: ids.map(\.id))
         return CreatedPlaylistRef(id: "p", name: name, trackCount: ids.count)
       })
-      $0.catalogMatchResolver.resolve = { _ in [] }
+      $0.catalogMatchResolver.resolve = { _, _ in [] }
     } operation: {
       PlaylistBuilderModel()
     }
@@ -864,7 +884,7 @@ struct PlaylistBuilderModelTests {
     let song = Self.candidate(id: "X", title: "Song")
     let model = withDependencies {
       $0.appleMusicCatalogClient = authorizedClient()
-      $0.catalogMatchResolver.resolve = { _ in [] }
+      $0.catalogMatchResolver.resolve = { _, _ in [] }
     } operation: {
       PlaylistBuilderModel()
     }
@@ -890,7 +910,7 @@ struct PlaylistBuilderModelTests {
     let song = Self.candidate(id: "X", title: "Song")
     let model = withDependencies {
       $0.appleMusicCatalogClient = authorizedClient()
-      $0.catalogMatchResolver.resolve = { _ in [] }
+      $0.catalogMatchResolver.resolve = { _, _ in [] }
     } operation: {
       PlaylistBuilderModel()
     }
@@ -922,7 +942,7 @@ struct PlaylistBuilderModelTests {
     let fourth = TrackRequest(index: 4, artist: "The Records", title: "Duplicate")
     let model = withDependencies {
       $0.appleMusicCatalogClient = authorizedClient()
-      $0.catalogMatchResolver.resolve = { _ in [] }
+      $0.catalogMatchResolver.resolve = { _, _ in [] }
     } operation: {
       PlaylistBuilderModel()
     }
@@ -948,7 +968,7 @@ struct PlaylistBuilderModelTests {
     let song = Self.candidate(id: "X", title: "Song")
     let model = withDependencies {
       $0.appleMusicCatalogClient = authorizedClient(append: { _, _ in await barrier.append() })
-      $0.catalogMatchResolver.resolve = { _ in [] }
+      $0.catalogMatchResolver.resolve = { _, _ in [] }
     } operation: {
       PlaylistBuilderModel()
     }
@@ -975,7 +995,7 @@ struct PlaylistBuilderModelTests {
     let song = Self.candidate(id: "X", title: "Song")
     let model = withDependencies {
       $0.appleMusicCatalogClient = authorizedClient(search: { _, _ in [song] })
-      $0.catalogMatchResolver.resolve = { _ in [] }
+      $0.catalogMatchResolver.resolve = { _, _ in [] }
     } operation: {
       PlaylistBuilderModel()
     }
@@ -1003,7 +1023,7 @@ struct PlaylistBuilderModelTests {
     })
     let model = withDependencies {
       $0.appleMusicCatalogClient = client
-      $0.catalogMatchResolver.resolve = { _ in [] }
+      $0.catalogMatchResolver.resolve = { _, _ in [] }
     } operation: {
       PlaylistBuilderModel()
     }
@@ -1039,7 +1059,7 @@ struct PlaylistBuilderModelTests {
     ] {
       let model = withDependencies {
         $0.appleMusicCatalogClient = client
-        $0.catalogMatchResolver.resolve = { _ in [] }
+        $0.catalogMatchResolver.resolve = { _, _ in [] }
       } operation: {
         PlaylistBuilderModel()
       }
@@ -1061,7 +1081,7 @@ struct PlaylistBuilderModelTests {
         if await attempts.count < 3 { throw AppleMusicCatalogBusyError() }
         return [song]
       })
-      $0.catalogMatchResolver.resolve = { _ in [] }
+      $0.catalogMatchResolver.resolve = { _, _ in [] }
     } operation: {
       PlaylistBuilderModel()
     }
@@ -1085,7 +1105,7 @@ struct PlaylistBuilderModelTests {
         await searchedTerms.record(term)
         return [song]
       })
-      $0.catalogMatchResolver.resolve = { _ in [] }
+      $0.catalogMatchResolver.resolve = { _, _ in [] }
     } operation: {
       PlaylistBuilderModel()
     }
@@ -1255,6 +1275,13 @@ private actor SearchTermLog {
 private actor RequestTrackLog {
   private(set) var values: [[Int]] = []
   func record(_ indexes: [Int]) { values.append(indexes) }
+}
+
+private actor ArtistIdentityLog {
+  private(set) var recognizedDuetPartner = false
+  func record(_ identity: ArtistIdentity) {
+    recognizedDuetPartner = identity.credits("Paul Simon & Sting").contains("sting")
+  }
 }
 
 private actor AsyncTestGate {

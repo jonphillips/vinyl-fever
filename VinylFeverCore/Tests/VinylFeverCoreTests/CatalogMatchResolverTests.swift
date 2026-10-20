@@ -2,6 +2,7 @@ import Dependencies
 import Foundation
 import Testing
 import VinylFeverCore
+import VinylFeverListening
 
 @Suite("Catalog match resolver")
 struct CatalogMatchResolverTests {
@@ -31,6 +32,18 @@ struct CatalogMatchResolverTests {
     #expect(rows.count == 2)
     #expect(rows[0].status == .matched(same, score: 0.9))
     #expect(rows[1].status == .duplicate(same, ofTrackIndex: 4))
+  }
+
+  @Test("catalog resolve scores a requested duet partner through the library identity")
+  func duetCreditUsesIdentity() async {
+    let candidate = CatalogSongCandidate(
+      id: "duet", title: "Fields of Gold", artistName: "Paul Simon & Sting")
+    let identity = ArtistIdentity(knownArtists: ["Paul Simon", "Sting"])
+    let rows = await CatalogMatchResolver.resolve(
+      playlist([TrackRequest(index: 1, artist: "Sting", title: "Fields of Gold")]),
+      search: { _ in [candidate] }, identity: identity)
+    #expect(rows.count == 1)
+    #expect(rows[0].status == .matched(candidate, score: 0.9))
   }
 
   @Test("a row search failure becomes a not-found row and leaves the batch intact")

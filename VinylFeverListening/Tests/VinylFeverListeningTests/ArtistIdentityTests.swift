@@ -45,4 +45,20 @@ struct ArtistIdentityTests {
       knownArtists: ["John Cougar", "John Mellencamp"])
     #expect(identity.key("John Cougar") == "john mellencamp")
   }
+
+  @Test("ampersand and plus band suffixes do not create collaborator credits")
+  func bandSuffixCredits() {
+    let identity = ArtistIdentity(knownArtists: [
+      "Judah", "Lion", "Bob Marley", "The Wailers", "Mike", "The Mechanics",
+      "Buddy Hackett", "The Ensemble", "Tom Petty", "The Heartbreakers",
+    ])
+
+    #expect(identity.credits("Judah & The Lion") == ["judah"])
+    #expect(identity.credits("Bob Marley & The Wailers") == ["bob marley"])
+    #expect(identity.credits("Mike + The Mechanics") == ["mike"])
+    #expect(identity.credits("Buddy Hackett & The Ensemble") == ["buddy hackett"])
+    #expect(
+      identity.credits("Tom Petty & The Heartbreakers")
+        == identity.credits("Tom Petty and the Heartbreakers"))
+  }
 }

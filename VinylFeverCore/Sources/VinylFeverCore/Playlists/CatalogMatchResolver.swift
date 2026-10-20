@@ -24,7 +24,7 @@ public struct ResolvedPlaylistRow: Equatable, Sendable, Identifiable {
 
 @DependencyClient
 public struct CatalogMatchResolver: Sendable {
-  public var resolve: @Sendable (_ request: PlaylistRequest) async -> [ResolvedPlaylistRow] = { _ in [] }
+  public var resolve: @Sendable (_ request: PlaylistRequest, _ identity: ArtistIdentity) async -> [ResolvedPlaylistRow] = { _, _ in [] }
 }
 
 extension CatalogMatchResolver: TestDependencyKey {
@@ -40,10 +40,10 @@ extension CatalogMatchResolver {
   public static var liveValue: Self {
     @Dependency(\.appleMusicCatalogClient) var client
     @Dependency(\.continuousClock) var clock
-    return Self { request in
+    return Self { request, identity in
       await resolve(request, clock: clock, search: { term in
         try await client.searchSongs(term, searchResultLimit)
-      })
+      }, identity: identity)
     }
   }
 

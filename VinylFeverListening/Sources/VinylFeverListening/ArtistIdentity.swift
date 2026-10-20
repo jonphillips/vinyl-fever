@@ -58,7 +58,8 @@ public struct ArtistIdentity: Equatable, Sendable {
     let artistKey = aliases[base] ?? base
     guard !artistKey.isEmpty else { return [] }
     var result: Set<String> = [artistKey]
-    let foldedRaw = raw.lowercased()
+    let foldedRaw = ListeningTextNormalizer.artist(
+      raw.replacingOccurrences(of: "+", with: " and "))
     if [" and the ", " and his ", " and her "].contains(where: foldedRaw.contains) {
       return result
     }

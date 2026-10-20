@@ -248,7 +248,7 @@ final class PlaylistBuilderModel {
     if catalogRequest.tracks.isEmpty {
       catalogRows = []
     } else {
-      catalogRows = await resolver.resolve(catalogRequest)
+      catalogRows = await resolver.resolve(catalogRequest, libraryIndex?.artistIdentity ?? .empty)
     }
     let catalogRowsByIndex = Dictionary(
       uniqueKeysWithValues: catalogRows.map { ($0.request.index, $0) })
