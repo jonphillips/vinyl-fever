@@ -55,6 +55,44 @@ struct LibraryMCPServerTests {
     #expect(response.contains("\"isError\":true"))
   }
 
+  @Test("listening tools cover periods, gaps, library joins, validation, and omit IDs")
+  func listeningTools() async throws {
+    let root = temporaryDirectory()
+    let snapshotURL = root.appending(path: "snapshot.json")
+    try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
+    let poller = UUID()
+    let now = Date()
+    let host = "Fixture Mac"
+    let baseline = ListeningFetch(poller: poller, host: host, fetchedAt: now.addingTimeInterval(-3 * 86_400), outcome: .baseline, pagesRead: 1)
+    let play = ListeningFetch(poller: poller, host: host, fetchedAt: now.addingTimeInterval(-2 * 86_400), outcome: .plays, newCount: 1, pagesRead: 1,
+      items: [ListeningItem(kind: .song, id: "secret-id", title: "Version Song", artist: "Version Artist", album: "Live")])
+    let gap = ListeningFetch(poller: poller, host: host, fetchedAt: now.addingTimeInterval(-86_400), outcome: .gap, pagesRead: 5,
+      items: [ListeningItem(kind: .song, id: "private-id", title: "New Song", artist: "New Artist")])
+    let stream = root.appending(path: "Listening/fetches/\(poller.uuidString)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: stream, withIntermediateDirectories: true)
+    var data = try ListeningLogCodec.encode(baseline)
+    data.append(try ListeningLogCodec.encode(play))
+    data.append(try ListeningLogCodec.encode(gap))
+    try data.write(to: stream.appending(path: "2026-10.jsonl"))
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), listeningRootURL: root.appending(path: "Listening"))
+
+    for period in ["24h", "7d", "30d", "90d"] {
+      let result = try #require(await resultJSON(server, id: 30, name: "recent_listening", arguments: #"{"period":"\#(period)"}"#) as? [String: Any])
+      let plays = try #require(result["plays"] as? [[String: Any]])
+      #expect(period == "24h" ? plays.isEmpty : !plays.isEmpty)
+      #expect(result["coverage"] != nil)
+      #expect(!String(describing: result).contains(poller.uuidString))
+      #expect(!String(describing: result).contains("secret-id"))
+    }
+    let artists = try #require(await resultJSON(server, id: 31, name: "top_artists", arguments: #"{"period":"7d"}"#) as? [String: Any])
+    #expect((artists["coverage"] as? [String: Any])?["gaps"] != nil)
+    let tracks = try #require(await resultJSON(server, id: 32, name: "top_tracks", arguments: #"{"period":"90d"}"#) as? [String: Any])
+    #expect(tracks["tracks"] != nil)
+    let invalid = try #require(await call(server, id: 33, name: "top_artists", arguments: #"{"period":"7d","by":"favorites"}"#))
+    #expect(invalid.contains("Only by: plays is allowed"))
+    #expect(invalid.contains("\"isError\":true"))
+  }
+
   @Test("every read tool fails loudly without a snapshot")
   func noSnapshot() async throws {
     let server = LibraryMCPServer.make(snapshotURL: temporaryDirectory().appending(path: "missing.json"), inboxRoot: temporaryDirectory())
