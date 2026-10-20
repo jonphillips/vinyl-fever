@@ -131,7 +131,7 @@ public struct ListeningLog: Sendable {
 
   public init(streams: [[ListeningFetch]], now: Date) {
     let records = streams.flatMap { $0 }.sorted { $0.fetchedAt < $1.fetchedAt }
-    let firstFetch = records.map(\.fetchedAt).min()
+    let firstFetch = records.filter { $0.outcome != .failed }.map(\.fetchedAt).min()
     let latest = records.max { $0.fetchedAt < $1.fetchedAt }
     var allPlays: [ListeningPlay] = []
     var gaps: [ListeningCoverageGap] = []
@@ -139,10 +139,12 @@ public struct ListeningLog: Sendable {
     for stream in streams {
       let ordered = stream.sorted { $0.fetchedAt < $1.fetchedAt }
       var lastSuccessfulFetch: Date?
+      var hasSuccessfulFetch = false
       for fetch in ordered {
         switch fetch.outcome {
         case .baseline, .none:
           lastSuccessfulFetch = fetch.fetchedAt
+          hasSuccessfulFetch = true
         case .plays:
           let start = lastSuccessfulFetch ?? fetch.fetchedAt
           for item in fetch.items.prefix(max(0, fetch.newCount)) {
@@ -150,6 +152,7 @@ public struct ListeningLog: Sendable {
               item: item, windowStart: start, windowEnd: fetch.fetchedAt, poller: fetch.poller))
           }
           lastSuccessfulFetch = fetch.fetchedAt
+          hasSuccessfulFetch = true
         case .gap:
           let start = lastSuccessfulFetch ?? fetch.fetchedAt
           for item in fetch.items {
@@ -161,10 +164,13 @@ public struct ListeningLog: Sendable {
             windowStart: lastSuccessfulFetch, windowEnd: fetch.fetchedAt,
             detail: "The previous feed did not overlap within the page cap."))
           lastSuccessfulFetch = fetch.fetchedAt
+          hasSuccessfulFetch = true
         case .failed:
-          gaps.append(ListeningCoverageGap(
-            poller: fetch.poller, host: fetch.host, outcome: .failed,
-            windowStart: lastSuccessfulFetch, windowEnd: fetch.fetchedAt, detail: fetch.error))
+          if hasSuccessfulFetch {
+            gaps.append(ListeningCoverageGap(
+              poller: fetch.poller, host: fetch.host, outcome: .failed,
+              windowStart: lastSuccessfulFetch, windowEnd: fetch.fetchedAt, detail: fetch.error))
+          }
         }
       }
     }

@@ -217,6 +217,31 @@ struct ListeningEngineTests {
     #expect(log.coverage.lastFetchAge == 60)
   }
 
+  @Test("a failure before the first baseline is not a coverage gap")
+  func initialFailureDoesNotStartCoverage() {
+    let failed = ListeningFetch(poller: poller, host: "Mini", fetchedAt: t0, outcome: .failed, pagesRead: 0, error: "HTTP 401")
+    let baseline = ListeningFetch(poller: poller, host: "Mini", fetchedAt: t0.addingTimeInterval(12 * 60), outcome: .baseline, pagesRead: 1)
+    let plays = ListeningFetch(poller: poller, host: "Mini", fetchedAt: t0.addingTimeInterval(24 * 60), outcome: .plays, newCount: 1, pagesRead: 1, items: [item("one")])
+    let log = ListeningLog(streams: [[failed, baseline, plays]], now: plays.fetchedAt)
+    #expect(log.coverage.firstFetchAt == baseline.fetchedAt)
+    #expect(log.coverage.gaps.isEmpty)
+  }
+
+  @Test("Settings status line reports setup pointer, coverage age, and only recent gaps")
+  func listeningStatusLine() {
+    #expect(ListeningStatusLine.make(fetches: [], now: t0) == ListeningStatusLine.setupPointer)
+    let baseline = ListeningFetch(poller: poller, host: "Mini", fetchedAt: t0.addingTimeInterval(-70 * 86_400), outcome: .baseline, pagesRead: 1)
+    let oldFailure = ListeningFetch(poller: poller, host: "Mini", fetchedAt: t0.addingTimeInterval(-60 * 86_400), outcome: .failed, pagesRead: 0, error: "network")
+    let recentGap = ListeningFetch(poller: poller, host: "Mini", fetchedAt: t0.addingTimeInterval(-2 * 86_400), outcome: .gap, pagesRead: 10)
+    let line = ListeningStatusLine.make(
+      fetches: [baseline, oldFailure, recentGap], now: t0,
+      timeZone: TimeZone(secondsFromGMT: 0)!, locale: Locale(identifier: "en_US_POSIX"))
+    #expect(line.contains("Polling Mac: Mini"))
+    #expect(line.contains("Last fetch 2 days ago"))
+    #expect(line.contains("Coverage since Aug 8 at 10:00"))
+    #expect(line.contains("1 gap in 30 days"))
+  }
+
   @Test("overlapping poller streams collapse duplicate plays and period queries sort and cap")
   func overlappingStreamsAndQueries() {
     let baselineOne = ListeningFetch(poller: poller, host: "Mini", fetchedAt: t0, outcome: .baseline, pagesRead: 1)

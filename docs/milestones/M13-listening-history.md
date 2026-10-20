@@ -338,7 +338,7 @@ to this week?") a week of log to answer from.
     - **If the agent doesn't run headless on the mini, or MusicKit refuses it there, stop and
       flag it** rather than working around it.
 
-- [ ] **S2 — Listening in `vf-mcp` and Settings (core + app).**
+- [x] **S2 — Listening in `vf-mcp` and Settings (core + app).** Device gate owed.
   - Implement the tool surface above in `LibraryMCPServer`. The log is read lazily and reloaded
     when any stream file's `modifiedAt` changes, like the snapshot. Reads are coordinated
     (`NSFileCoordinator`), so a stream file iCloud has offloaded downloads first.

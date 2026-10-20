@@ -2,6 +2,7 @@ import Foundation
 import MCPServerKit
 import Testing
 import VinylFeverCore
+import VinylFeverListening
 
 struct LibraryMCPServerTests {
   @Test("tool list matches the brief's names, properties, enums, and annotations")
@@ -10,11 +11,12 @@ struct LibraryMCPServerTests {
     let tools = try await listedTools(server)
     let expected: [String: Set<String>] = [
       "library_overview": [],
-      "top_artists": ["by", "limit"],
-      "top_tracks": ["by", "limit"],
+      "top_artists": ["by", "period", "limit"],
+      "top_tracks": ["by", "period", "limit"],
       "search_library": ["artist", "title", "album", "genre", "year_from", "year_to", "min_plays", "max_plays", "favorited", "availability", "sort", "limit"],
       "artist_profile": ["artist"],
       "check_tracks": ["tracks"],
+      "recent_listening": ["period", "limit"],
       "stage_playlist": ["name", "description", "tracks"],
     ]
     #expect(Set(tools.compactMap { $0["name"] as? String }) == Set(expected.keys))
@@ -34,10 +36,89 @@ struct LibraryMCPServerTests {
     }
     #expect(enumValues(in: tools, tool: "top_artists", property: "by") == ["plays", "favorites", "recently_added"])
     #expect(enumValues(in: tools, tool: "top_tracks", property: "by") == ["plays", "favorites", "recently_added", "recently_played"])
+    #expect(enumValues(in: tools, tool: "recent_listening", property: "period") == ["24h", "7d", "30d", "90d"])
+    #expect(enumValues(in: tools, tool: "top_artists", property: "period") == ["all_time", "7d", "30d", "90d"])
     let stage = try #require(tools.first { $0["name"] as? String == "stage_playlist" })
     let stageProperties = try #require((stage["inputSchema"] as? [String: Any])?["properties"] as? [String: Any])
     #expect((stageProperties["description"] as? [String: Any])?["description"] as? String
       == "One sentence about the music; it becomes the playlist's description in Apple Music. No library stats, availability notes, or dates.")
+  }
+
+  @Test("listening calls report setup guidance when no listening log exists")
+  func listeningNotSetUp() async throws {
+    let root = temporaryDirectory()
+    let snapshotURL = root.appending(path: "snapshot.json")
+    try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), listeningRootURL: root.appending(path: "Listening"))
+    let response = try #require(await call(server, id: 9, name: "recent_listening", arguments: #"{"period":"7d"}"#))
+    #expect(response.contains("Listening history isn't set up yet"))
+    #expect(response.contains("\"isError\":true"))
+  }
+
+  @Test("listening tools cover periods, gaps, library joins, validation, and omit IDs")
+  func listeningTools() async throws {
+    let root = temporaryDirectory()
+    let snapshotURL = root.appending(path: "snapshot.json")
+    try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
+    let poller = UUID()
+    let now = Date()
+    let host = "Fixture Mac"
+    let baseline = ListeningFetch(poller: poller, host: host, fetchedAt: now.addingTimeInterval(-70 * 86_400), outcome: .baseline, pagesRead: 1)
+    let oldFailure = ListeningFetch(poller: poller, host: host, fetchedAt: now.addingTimeInterval(-60 * 86_400), outcome: .failed, pagesRead: 0, error: "network")
+    let play = ListeningFetch(poller: poller, host: host, fetchedAt: now.addingTimeInterval(-3 * 86_400), outcome: .plays, newCount: 1, pagesRead: 1,
+      items: [ListeningItem(kind: .song, id: "secret-id", title: "Version Song", artist: "Version Artist", album: "Live")])
+    let gap = ListeningFetch(poller: poller, host: host, fetchedAt: now.addingTimeInterval(-2 * 86_400), outcome: .gap, pagesRead: 5,
+      items: [ListeningItem(kind: .song, id: "private-id", title: "New Song", artist: "New Artist")])
+    let stream = root.appending(path: "Listening/fetches/\(poller.uuidString)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: stream, withIntermediateDirectories: true)
+    var data = try ListeningLogCodec.encode(baseline)
+    data.append(try ListeningLogCodec.encode(oldFailure))
+    data.append(try ListeningLogCodec.encode(play))
+    data.append(try ListeningLogCodec.encode(gap))
+    try data.write(to: stream.appending(path: "2026-10.jsonl"))
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), listeningRootURL: root.appending(path: "Listening"))
+
+    for period in ["24h", "7d", "30d", "90d"] {
+      let result = try #require(await resultJSON(server, id: 30, name: "recent_listening", arguments: #"{"period":"\#(period)"}"#) as? [String: Any])
+      let plays = try #require(result["plays"] as? [[String: Any]])
+      #expect(period == "24h" ? plays.isEmpty : !plays.isEmpty)
+      #expect(result["coverage"] != nil)
+      #expect(!String(describing: result).contains(poller.uuidString))
+      #expect(!String(describing: result).contains("secret-id"))
+    }
+    let artists = try #require(await resultJSON(server, id: 31, name: "top_artists", arguments: #"{"period":"7d"}"#) as? [String: Any])
+    let weekGaps = try #require((artists["coverage"] as? [String: Any])?["gaps"] as? [[String: Any]])
+    #expect(weekGaps.count == 1)
+    #expect(weekGaps.first?["outcome"] as? String == "gap")
+    let day = try #require(await resultJSON(server, id: 34, name: "recent_listening", arguments: #"{"period":"24h"}"#) as? [String: Any])
+    let dayGaps = try #require((day["coverage"] as? [String: Any])?["gaps"] as? [[String: Any]])
+    #expect(dayGaps.isEmpty)
+    let tracks = try #require(await resultJSON(server, id: 32, name: "top_tracks", arguments: #"{"period":"90d"}"#) as? [String: Any])
+    #expect(((tracks["coverage"] as? [String: Any])?["gaps"] as? [[String: Any]])?.count == 2)
+    let invalid = try #require(await call(server, id: 33, name: "top_artists", arguments: #"{"period":"7d","by":"favorites"}"#))
+    #expect(invalid.contains("Only by: plays is allowed"))
+    #expect(invalid.contains("\"isError\":true"))
+  }
+
+  @Test("cached listening coverage age advances without a file change")
+  func listeningCoverageAgeRefreshesOnCachedLog() async throws {
+    let root = temporaryDirectory()
+    let snapshotURL = root.appending(path: "snapshot.json")
+    try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
+    let poller = UUID()
+    let instant = Date()
+    let clock = TestClock(instant)
+    let fetches = [ListeningFetch(poller: poller, host: "Fixture Mac", fetchedAt: instant.addingTimeInterval(-3_600), outcome: .baseline, pagesRead: 1)]
+    let stream = root.appending(path: "Listening/fetches/\(poller.uuidString)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: stream, withIntermediateDirectories: true)
+    try ListeningLogCodec.encode(fetches[0]).write(to: stream.appending(path: "2026-10.jsonl"))
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), listeningRootURL: root.appending(path: "Listening"), now: { clock.now() })
+    let first = try #require(await resultJSON(server, id: 40, name: "recent_listening", arguments: #"{"period":"7d"}"#) as? [String: Any])
+    let firstAge = try #require((first["coverage"] as? [String: Any])?["lastFetchAge"] as? Double)
+    clock.advance(by: 3_600)
+    let second = try #require(await resultJSON(server, id: 41, name: "recent_listening", arguments: #"{"period":"7d"}"#) as? [String: Any])
+    let secondAge = try #require((second["coverage"] as? [String: Any])?["lastFetchAge"] as? Double)
+    #expect(abs((secondAge - firstAge) - 3_600) < 1)
   }
 
   @Test("every read tool fails loudly without a snapshot")
@@ -153,11 +234,11 @@ struct LibraryMCPServerTests {
     return LibrarySnapshot(generatedAt: generatedAt, tracks: tracks)
   }
 
-  private func makeServer(snapshot: LibrarySnapshot, inbox: URL? = nil) throws -> (MCPServer, URL) {
+  private func makeServer(snapshot: LibrarySnapshot, inbox: URL? = nil, listeningRootURL: URL? = nil) throws -> (MCPServer, URL) {
     let root = temporaryDirectory()
     let snapshotURL = root.appending(path: "library-snapshot.json")
     try LibrarySnapshotCodec.encode(snapshot).write(to: snapshotURL)
-    return (LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: inbox ?? root.appending(path: "inbox")), snapshotURL)
+    return (LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: inbox ?? root.appending(path: "inbox"), listeningRootURL: listeningRootURL ?? root.appending(path: "Listening")), snapshotURL)
   }
 
   private func listedTools(_ server: MCPServer) async throws -> [[String: Any]] {
@@ -210,5 +291,20 @@ struct LibraryMCPServerTests {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
     try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     return directory
+  }
+}
+
+private final class TestClock: @unchecked Sendable {
+  private let lock = NSLock()
+  private var instant: Date
+
+  init(_ instant: Date) { self.instant = instant }
+  func now() -> Date {
+    lock.lock(); defer { lock.unlock() }
+    return instant
+  }
+  func advance(by interval: TimeInterval) {
+    lock.lock(); defer { lock.unlock() }
+    instant.addTimeInterval(interval)
   }
 }

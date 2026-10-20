@@ -1,7 +1,7 @@
-# Next Up — M13 · Dispatch 3: Listening in `vf-mcp` and Settings
+# Next Up — M15 · Dispatch 1: ArtistIdentity, adopted everywhere
 
-**Slices:** M13 · S2 (branch `m13/s2-listening-tools`)
-**Briefs:** docs/milestones/M13-listening-history.md § S2
-**Done when:** S2's DoD, except its device gate; Core and app tests green; PR opened in `jonphillips/vinyl-fever`.
-**Owed:** M13 S1's Intel mini gate; M13 S2's device gate.
-**Notes:** M14 S0 is complete. M13 S2 precedes M14 S1 per M14 Decision 3 (amended 2026-10-20).
+**Slices:** M15 · S0 (branch `m15/s0-artist-identity`)
+**Briefs:** docs/milestones/M15-artist-identity.md § S0
+**Done when:** S0's DoD; Core and app tests green; PR opened in `jonphillips/vinyl-fever`.
+**Owed:** M13 S1's Intel mini gate; M13 S2's iPad device gate.
+**Notes:** M13 S2 implementation is complete. M15 S0 precedes M14 S1 per M14 Decision 3 (amended 2026-10-20).

@@ -3,6 +3,14 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-20 — M13 · Dispatch 3 S2 (`m13/s2-listening-tools`)
+
+Added the `recent_listening` MCP tool, period-based `top_artists` and `top_tracks` from the
+listening log, coverage in log-backed results, coordinated lazy reads with modification-time
+cache invalidation, and a Listening History status section in Settings. Updated MCP setup guidance
+and the `~/music-chat` template. Core and macOS app tests pass; `check-handoff` passes. The ChatGPT
+iPad device gate remains owed, as does M13 S1's Intel mini gate.
+
 ## 2026-10-20 — M14 · Dispatch 1 S0 (`m14/s0-library-route`)
 
 Added the Apple Music library album and song search routes, exact upload matching with the
