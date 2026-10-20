@@ -233,10 +233,12 @@ struct ListeningEngineTests {
     let baseline = ListeningFetch(poller: poller, host: "Mini", fetchedAt: t0.addingTimeInterval(-70 * 86_400), outcome: .baseline, pagesRead: 1)
     let oldFailure = ListeningFetch(poller: poller, host: "Mini", fetchedAt: t0.addingTimeInterval(-60 * 86_400), outcome: .failed, pagesRead: 0, error: "network")
     let recentGap = ListeningFetch(poller: poller, host: "Mini", fetchedAt: t0.addingTimeInterval(-2 * 86_400), outcome: .gap, pagesRead: 10)
-    let line = ListeningStatusLine.make(fetches: [baseline, oldFailure, recentGap], now: t0)
+    let line = ListeningStatusLine.make(
+      fetches: [baseline, oldFailure, recentGap], now: t0,
+      timeZone: TimeZone(secondsFromGMT: 0)!, locale: Locale(identifier: "en_US_POSIX"))
     #expect(line.contains("Polling Mac: Mini"))
     #expect(line.contains("Last fetch 2 days ago"))
-    #expect(line.contains("Coverage since \(ISO8601DateFormatter().string(from: baseline.fetchedAt))"))
+    #expect(line.contains("Coverage since Aug 8 at 10:00"))
     #expect(line.contains("1 gap in 30 days"))
   }
 
