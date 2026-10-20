@@ -118,7 +118,7 @@ struct SettingsView: View {
           copyButton("tunnel-client init command", key: "tunnel", value: tunnelCommand)
           Text("Use the plugin name Vinyl Fever. The tunnel command needs the tunnel ID from the Platform Tunnels page.")
             .font(.callout).foregroundStyle(.secondary)
-          Text("Tools: library_overview, top_artists, top_tracks, search_library, artist_profile, check_tracks, stage_playlist")
+          Text("Tools: library_overview, top_artists, top_tracks, search_library, artist_profile, check_tracks, recent_listening, stage_playlist")
             .font(.callout).foregroundStyle(.secondary)
         } header: {
           Text("Chat Access (MCP)")
@@ -179,16 +179,7 @@ struct SettingsView: View {
   private func refreshListeningStatus() {
     do {
       let fetches = try listeningStore.readFetches()
-      guard !fetches.isEmpty else {
-        listeningStatus = "Not set up yet. Follow the setup instructions to start collecting history."
-        return
-      }
-      let grouped = Dictionary(grouping: fetches, by: \.poller).values.map { $0 }
-      let coverage = ListeningLog(streams: grouped, now: Date()).coverage
-      let since = coverage.firstFetchAt?.formatted(date: .abbreviated, time: .shortened) ?? "Unknown"
-      let last = coverage.lastFetchAt?.formatted(.relative(presentation: .numeric)) ?? "Unknown"
-      let gaps = coverage.gaps.filter { $0.windowEnd >= Date().addingTimeInterval(-30 * 24 * 60 * 60) }.count
-      listeningStatus = "Polling Mac: \(coverage.host ?? "Unknown") · Last fetch \(last) · Coverage since \(since) · \(gaps) gaps in 30 days"
+      listeningStatus = ListeningStatusLine.make(fetches: fetches, now: Date())
     } catch {
       listeningStatus = "Listening history unavailable · \(error.localizedDescription)"
     }

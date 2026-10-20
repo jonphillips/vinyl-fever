@@ -63,14 +63,16 @@ struct LibraryMCPServerTests {
     let poller = UUID()
     let now = Date()
     let host = "Fixture Mac"
-    let baseline = ListeningFetch(poller: poller, host: host, fetchedAt: now.addingTimeInterval(-3 * 86_400), outcome: .baseline, pagesRead: 1)
-    let play = ListeningFetch(poller: poller, host: host, fetchedAt: now.addingTimeInterval(-2 * 86_400), outcome: .plays, newCount: 1, pagesRead: 1,
+    let baseline = ListeningFetch(poller: poller, host: host, fetchedAt: now.addingTimeInterval(-70 * 86_400), outcome: .baseline, pagesRead: 1)
+    let oldFailure = ListeningFetch(poller: poller, host: host, fetchedAt: now.addingTimeInterval(-60 * 86_400), outcome: .failed, pagesRead: 0, error: "network")
+    let play = ListeningFetch(poller: poller, host: host, fetchedAt: now.addingTimeInterval(-3 * 86_400), outcome: .plays, newCount: 1, pagesRead: 1,
       items: [ListeningItem(kind: .song, id: "secret-id", title: "Version Song", artist: "Version Artist", album: "Live")])
-    let gap = ListeningFetch(poller: poller, host: host, fetchedAt: now.addingTimeInterval(-86_400), outcome: .gap, pagesRead: 5,
+    let gap = ListeningFetch(poller: poller, host: host, fetchedAt: now.addingTimeInterval(-2 * 86_400), outcome: .gap, pagesRead: 5,
       items: [ListeningItem(kind: .song, id: "private-id", title: "New Song", artist: "New Artist")])
     let stream = root.appending(path: "Listening/fetches/\(poller.uuidString)", directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: stream, withIntermediateDirectories: true)
     var data = try ListeningLogCodec.encode(baseline)
+    data.append(try ListeningLogCodec.encode(oldFailure))
     data.append(try ListeningLogCodec.encode(play))
     data.append(try ListeningLogCodec.encode(gap))
     try data.write(to: stream.appending(path: "2026-10.jsonl"))
@@ -85,12 +87,38 @@ struct LibraryMCPServerTests {
       #expect(!String(describing: result).contains("secret-id"))
     }
     let artists = try #require(await resultJSON(server, id: 31, name: "top_artists", arguments: #"{"period":"7d"}"#) as? [String: Any])
-    #expect((artists["coverage"] as? [String: Any])?["gaps"] != nil)
+    let weekGaps = try #require((artists["coverage"] as? [String: Any])?["gaps"] as? [[String: Any]])
+    #expect(weekGaps.count == 1)
+    #expect(weekGaps.first?["outcome"] as? String == "gap")
+    let day = try #require(await resultJSON(server, id: 34, name: "recent_listening", arguments: #"{"period":"24h"}"#) as? [String: Any])
+    let dayGaps = try #require((day["coverage"] as? [String: Any])?["gaps"] as? [[String: Any]])
+    #expect(dayGaps.isEmpty)
     let tracks = try #require(await resultJSON(server, id: 32, name: "top_tracks", arguments: #"{"period":"90d"}"#) as? [String: Any])
-    #expect(tracks["tracks"] != nil)
+    #expect(((tracks["coverage"] as? [String: Any])?["gaps"] as? [[String: Any]])?.count == 2)
     let invalid = try #require(await call(server, id: 33, name: "top_artists", arguments: #"{"period":"7d","by":"favorites"}"#))
     #expect(invalid.contains("Only by: plays is allowed"))
     #expect(invalid.contains("\"isError\":true"))
+  }
+
+  @Test("cached listening coverage age advances without a file change")
+  func listeningCoverageAgeRefreshesOnCachedLog() async throws {
+    let root = temporaryDirectory()
+    let snapshotURL = root.appending(path: "snapshot.json")
+    try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
+    let poller = UUID()
+    let instant = Date()
+    let clock = TestClock(instant)
+    let fetches = [ListeningFetch(poller: poller, host: "Fixture Mac", fetchedAt: instant.addingTimeInterval(-3_600), outcome: .baseline, pagesRead: 1)]
+    let stream = root.appending(path: "Listening/fetches/\(poller.uuidString)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: stream, withIntermediateDirectories: true)
+    try ListeningLogCodec.encode(fetches[0]).write(to: stream.appending(path: "2026-10.jsonl"))
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), listeningRootURL: root.appending(path: "Listening"), now: { clock.now() })
+    let first = try #require(await resultJSON(server, id: 40, name: "recent_listening", arguments: #"{"period":"7d"}"#) as? [String: Any])
+    let firstAge = try #require((first["coverage"] as? [String: Any])?["lastFetchAge"] as? Double)
+    clock.advance(by: 3_600)
+    let second = try #require(await resultJSON(server, id: 41, name: "recent_listening", arguments: #"{"period":"7d"}"#) as? [String: Any])
+    let secondAge = try #require((second["coverage"] as? [String: Any])?["lastFetchAge"] as? Double)
+    #expect(abs((secondAge - firstAge) - 3_600) < 1)
   }
 
   @Test("every read tool fails loudly without a snapshot")
@@ -263,5 +291,20 @@ struct LibraryMCPServerTests {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
     try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     return directory
+  }
+}
+
+private final class TestClock: @unchecked Sendable {
+  private let lock = NSLock()
+  private var instant: Date
+
+  init(_ instant: Date) { self.instant = instant }
+  func now() -> Date {
+    lock.lock(); defer { lock.unlock() }
+    return instant
+  }
+  func advance(by interval: TimeInterval) {
+    lock.lock(); defer { lock.unlock() }
+    instant.addTimeInterval(interval)
   }
 }

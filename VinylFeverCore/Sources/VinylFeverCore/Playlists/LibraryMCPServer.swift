@@ -35,9 +35,12 @@ private struct MCPListeningCoverage: Encodable {
   struct Gap: Encodable { var host: String; var outcome: String; var windowStart: Date?; var windowEnd: Date; var detail: String? }
   var firstFetchAt: Date?; var lastFetchAt: Date?; var lastFetchAge: TimeInterval?; var pollingMac: String?
   var gaps: [Gap]; var collapsedOverlappingPlays: Int
-  init(_ value: ListeningCoverage) {
-    firstFetchAt = value.firstFetchAt; lastFetchAt = value.lastFetchAt; lastFetchAge = value.lastFetchAge
-    pollingMac = value.host; gaps = value.gaps.map { Gap(host: $0.host, outcome: $0.outcome.rawValue, windowStart: $0.windowStart, windowEnd: $0.windowEnd, detail: $0.detail) }
+  init(_ value: ListeningCoverage, now: Date, period: ListeningPeriod) {
+    firstFetchAt = value.firstFetchAt; lastFetchAt = value.lastFetchAt
+    lastFetchAge = value.lastFetchAt.map { max(0, now.timeIntervalSince($0)) }
+    pollingMac = value.host
+    gaps = value.gaps.filter { $0.windowEnd >= now.addingTimeInterval(-period.duration) }
+      .map { Gap(host: $0.host, outcome: $0.outcome.rawValue, windowStart: $0.windowStart, windowEnd: $0.windowEnd, detail: $0.detail) }
     collapsedOverlappingPlays = value.collapsedOverlappingPlays
   }
 }
@@ -193,7 +196,8 @@ public enum LibraryMCPServer {
   public static func make(
     snapshotURL: URL? = nil,
     inboxRoot: URL? = nil,
-    listeningRootURL: URL? = nil
+    listeningRootURL: URL? = nil,
+    now: @escaping @Sendable () -> Date = { Date() }
   ) -> MCPServer {
     let context = LibraryMCPContext(snapshotURL: snapshotURL, inboxRoot: inboxRoot, listeningRootURL: listeningRootURL)
     let readOnly = MCPToolAnnotations(readOnly: true, openWorld: false)
@@ -214,7 +218,9 @@ public enum LibraryMCPServer {
         if let value = p.period, value != "all_time" {
           guard p.by == nil || p.by == "plays" else { throw ArgumentError.periodRanking }
           let log = try await context.listeningLog()
-          return .json(MCPListeningArtists(artists: log.topArtists(period: try listeningPeriod(value), now: Date(), limit: p.limit ?? LibraryIndex.defaultLimit), coverage: MCPListeningCoverage(log.coverage)))
+          let period = try listeningPeriod(value)
+          let instant = now()
+          return .json(MCPListeningArtists(artists: log.topArtists(period: period, now: instant, limit: p.limit ?? LibraryIndex.defaultLimit), coverage: MCPListeningCoverage(log.coverage, now: instant, period: period)))
         }
         let (index, _) = try await context.index()
         return .json(index.topArtists(by: try ranking(p.by, allowed: ["plays", "favorites", "recently_added"]), limit: p.limit ?? LibraryIndex.defaultLimit))
@@ -224,7 +230,9 @@ public enum LibraryMCPServer {
         if let value = p.period, value != "all_time" {
           guard p.by == nil || p.by == "plays" else { throw ArgumentError.periodRanking }
           let log = try await context.listeningLog()
-          return .json(MCPListeningTracks(tracks: log.topTracks(period: try listeningPeriod(value), now: Date(), limit: p.limit ?? LibraryIndex.defaultLimit), coverage: MCPListeningCoverage(log.coverage)))
+          let period = try listeningPeriod(value)
+          let instant = now()
+          return .json(MCPListeningTracks(tracks: log.topTracks(period: period, now: instant, limit: p.limit ?? LibraryIndex.defaultLimit), coverage: MCPListeningCoverage(log.coverage, now: instant, period: period)))
         }
         let (index, _) = try await context.index()
         return .json(index.topTracks(by: try ranking(p.by, allowed: ["plays", "favorites", "recently_added", "recently_played"]), limit: p.limit ?? LibraryIndex.defaultLimit).map(MCPTrack.init))
@@ -251,12 +259,14 @@ public enum LibraryMCPServer {
       },
       MCPTool(name: "recent_listening", description: "Show songs started in Jon's listening log, newest first. Skips and brief autoplay count as plays, not full listens. Coverage begins when polling started.", inputSchema: recentListeningSchema, annotations: readOnly) { input in
         let p = try decode(ListeningPayload.self, from: input, schema: recentListeningSchema)
+        let period = try listeningPeriod(p.period ?? "24h")
+        let instant = now()
         let log = try await context.listeningLog()
         let (index, _) = try await context.index()
-        let plays = log.recentPlays(period: try listeningPeriod(p.period ?? "24h"), now: Date(), limit: p.limit ?? LibraryIndex.defaultLimit)
+        let plays = log.recentPlays(period: period, now: instant, limit: p.limit ?? LibraryIndex.defaultLimit)
         let checks = index.checkTracks(plays.map { (artist: $0.item.artist, title: $0.item.title) })
         let rows = zip(plays, checks).map { play, check in MCPRecentListening.Play(artist: play.item.artist, title: play.item.title, album: play.item.album, windowStart: play.windowStart, windowEnd: play.windowEnd, inLibrary: check.owned) }
-        return .json(MCPRecentListening(plays: rows, coverage: MCPListeningCoverage(log.coverage)))
+        return .json(MCPRecentListening(plays: rows, coverage: MCPListeningCoverage(log.coverage, now: instant, period: period)))
       },
       MCPTool(name: "stage_playlist", description: "Stage a playlist proposal for Jon to review in Vinyl Fever; it does not change Apple Music.", inputSchema: stageSchema, annotations: MCPToolAnnotations(destructive: false, openWorld: false)) { input in
         let payload = try decode(PlaylistToolPayload.self, from: input, schema: stageSchema)
