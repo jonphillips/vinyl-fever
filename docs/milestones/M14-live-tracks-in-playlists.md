@@ -1,7 +1,7 @@
 # Milestone 14 — Live Tracks in Playlists (Jon's own uploads)
 
 *Let a playlist mix Apple Music catalog songs with Jon's own uploaded recordings, such as the live
-shows from his drives. It starts after M13 S2; see Decision 3. Rules in
+shows from his drives. S0 starts after M13 S1, and S1 after M13 S2; see Decision 3. Rules in
 [../technical-architecture.md](../technical-architecture.md) and
 `/Users/jon/code/jon-platform/AGENTS.md` apply. Where this doc and those conflict, stop and flag
 it.*
@@ -187,9 +187,15 @@ recommendations. It doesn't dispatch anything: M13 goes first.
    the title alone would turn every request for "Thunder Road" into a choice among hundreds
    of shows. The explicit hint keeps today's catalog behavior for everything else. The
    not-found fallback catches requests that didn't name a show.
-3. **Order: M13 S0 → S1 → S2, then M14, then M13 S3.** Jon wants this after the poller
-   (2026-10-18). M13 S2 and M14 S1 both edit `vf-mcp`, so they run one after the other.
-   M13 S3 (Vinyl Fever's own backup poller) is the least urgent, so it goes last.
+3. **Order: M13 S0 → M13 S1 → M14 S0 → M13 S2 → M14 S1 → M13 S3** (amended 2026-10-20).
+   - **Originally (2026-10-18):** all of M13 through S2, then M14. Jon wanted M14 after the
+     poller.
+   - **The constraint that stays:** M13 S2 and M14 S1 both edit `vf-mcp`, so they still run
+     one after the other.
+   - **Why M14 S0 moves up:** it's core and app only and doesn't touch `vf-mcp`, so it can run
+     while the listening log fills. M13 S2's iPad gate asks about "this week", which tests
+     better with a week of real log behind it (Jon agreed, 2026-10-20).
+   - **M13 S3** (Vinyl Fever's own backup poller) is the least urgent, so it stays last.
 4. **Change the shared contract sentence rather than add a format field.** `VF-PLAYLIST: v1`
    already carries `album`. Saying how to use it for uploads avoids a v2 and keeps old pastes
    valid.
