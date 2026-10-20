@@ -1,7 +1,7 @@
 # Milestone 14 — Live Tracks in Playlists (Jon's own uploads)
 
 *Let a playlist mix Apple Music catalog songs with Jon's own uploaded recordings, such as the live
-shows from his drives. S0 starts after M13 S1, and S1 after M13 S2; see Decision 3. Rules in
+shows from his drives. S0 starts after M13 S1, and S1 after M15 S0; see Decision 3. Rules in
 [../technical-architecture.md](../technical-architecture.md) and
 `/Users/jon/code/jon-platform/AGENTS.md` apply. Where this doc and those conflict, stop and flag
 it.*
@@ -133,16 +133,19 @@ Create: one call; each ID goes in as `songs` or `library-songs`, in row order
     the pinned test is updated.
   - **`check_tracks`** gains `uploadedAlbums` for each song: up to 5 album names of its
     uploaded copies, most played first. Then the model can pick a show without another call.
-    - **It uses S0's upload index and artist rule (Decision 5),** not `check_tracks`' exact
-      song key. Otherwise `Bruce Springsteen` / `Thunder Road` would list only the plainly
-      tagged uploads and miss most of the shows.
+    - **It uses S0's upload index with M15's `ArtistIdentity.matches`,** which replaced
+      Decision 5's prefix rule in [M15](M15-artist-identity.md) S0. Matching by credits means
+      `Bruce Springsteen` / `Thunder Road` lists the `… & The E Street Band (Live)` shows, and
+      a request for Sting lists a `Paul Simon & Sting` show.
     - **Shared code:** take the albums from `LibraryIndex.uploadedCandidates(_:limit:)`, which
       already filters, orders (most played, then album), and dedupes by album.
     - That function currently clamps `limit` to `uploadPickerLimit` (3). Lift the clamp: the
       picker passes 3, and `check_tracks` passes 5.
     - The other `check_tracks` fields (`owned`, `plays`, `versionCount`, `availability`) keep
-      exact matching. A song can therefore show `owned: false` with a non-empty
-      `uploadedAlbums`; the instructions head shouldn't promise otherwise.
+      the song key, which also uses `ArtistIdentity` after M15 S0. Titles still normalize
+      differently (`libraryTitle` for the song key, `title` for uploads), so a song can show
+      `owned: false` with a non-empty `uploadedAlbums`. The instructions head shouldn't promise
+      otherwise.
   - **`PlaylistContract.trackRules`** gains one sentence: "For one of Jon's own recordings,
     such as a live show, set album to the exact album name from his library." That text is
     shared with the ChatGPT Project contract, so `PLAYLIST-CONTRACT.md` is updated and stays
@@ -152,10 +155,10 @@ Create: one call; each ID goes in as `songs` or `library-songs`, in row order
   **DoD:**
   - The instruction pins: the head stands alone, and the new sentence is present.
   - `check_tracks` returns `uploadedAlbums` against the fixture, with no IDs in the output.
-  - `uploadedAlbums` uses the artist-prefix rule:
+  - `uploadedAlbums` uses `ArtistIdentity.matches`:
     - `Bruce Springsteen` / `Thunder Road` lists a show tagged
       `Bruce Springsteen & The E Street Band (Live)`;
-    - `Bruce SpringsteenX` lists none;
+    - `Bruce SpringsteenX` lists none, and `Elvis Costello` lists no `Elvis`-tagged upload;
     - five qualifying shows return all five (the clamp is lifted), and the picker still gets 3.
   - The contract pin is updated with `PLAYLIST-CONTRACT.md`.
   - **Device gate:** in ChatGPT on the iPad, ask for "a 1988 Tunnel of Love tour mix from my
@@ -205,7 +208,8 @@ recommendations. It doesn't dispatch anything: M13 goes first.
    the title alone would turn every request for "Thunder Road" into a choice among hundreds
    of shows. The explicit hint keeps today's catalog behavior for everything else. The
    not-found fallback catches requests that didn't name a show.
-3. **Order: M13 S0 → M13 S1 → M14 S0 → M13 S2 → M14 S1 → M13 S3** (amended 2026-10-20).
+3. **Order: M13 S0 → M13 S1 → M14 S0 → M13 S2 → M15 S0 → M14 S1 → M15 S1 → M13 S3** (amended
+   2026-10-20; M15 inserted the same day, see [M15](M15-artist-identity.md) Decision 5).
    - **Originally (2026-10-18):** all of M13 through S2, then M14. Jon wanted M14 after the
      poller.
    - **The constraint that stays:** M13 S2 and M14 S1 both edit `vf-mcp`, so they still run
@@ -217,7 +221,11 @@ recommendations. It doesn't dispatch anything: M13 goes first.
 4. **Change the shared contract sentence rather than add a format field.** `VF-PLAYLIST: v1`
    already carries `album`. Saying how to use it for uploads avoids a v2 and keeps old pastes
    valid.
-5. **On the library route, artists match by whole-word prefix** (decided in the #89 review,
+5. **Superseded 2026-10-20 by [M15](M15-artist-identity.md) S0,** which replaces the prefix rule
+   with `ArtistIdentity` on every surface. The probe behind M15 found the prefix rule matching
+   `elvis` to `elvis costello` and crediting duets to their first-named artist only. As
+   decided:
+   **On the library route, artists match by whole-word prefix** (decided in the #89 review,
    2026-10-20). Title and album stay exact under `SongTextNormalizer`. Two artists match when
    their normalized forms are equal, or when one is a whole-word prefix of the other. So
    `bruce springsteen` matches `bruce springsteen and the e street band live`, but not

@@ -70,7 +70,7 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   and chat notes), S3 exposure and curation logs, then an outcomes milestone. It follows M14 S1; where
   M13 S3 falls is Jon's call.
 - **Live tracks in playlists** — planned as [M14](milestones/M14-live-tracks-in-playlists.md)
-  (2026-10-18). It interleaves with M13: S0 after M13 S1, S1 after M13 S2 (order amended
+  (2026-10-18). It interleaves with M13: S0 after M13 S1, S1 after M15 S0 (order amended
   2026-10-20, M14 Decision 3). Probes on 2026-10-18 showed:
   - One API create call mixes catalog songs with Jon's uploaded live tracks, in order, and they
     play on his iPhone (Jon checked).
@@ -85,6 +85,15 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
     on the library route, artists match by whole-word prefix, because most of Jon's uploads
     carry variants such as `… & The E Street Band (Live)`. S1's `uploadedAlbums` uses the same
     rule.
+  - **Decision 5 is superseded by [M15](milestones/M15-artist-identity.md)** (2026-10-20), which
+    gives every artist comparison one `ArtistIdentity`.
+- **Artist identity** — planned as [M15](milestones/M15-artist-identity.md) (2026-10-20), after
+  Jon asked why artist matching kept coming back. A probe of his 87,115-track library found
+  three kinds of mismatch: band and live suffixes (34,909 tracks across 293 keys), spelling
+  noise ("The" and apostrophes), and true aliases (44 overlap candidates, about half real). S0
+  is one rule with duet credits. S1 is an alias list Jon approves in Settings. The order is
+  M13 S2 → M15 S0 → M14 S1 → M15 S1 → M13 S3, so M13 S2's completing PR (#93) dispatches
+  M15 S0.
 - **M11: Create can lose the playlist it just made when a later batch fails** (from the #67
   review, 2026-10-15). `createLibraryPlaylist` sends the first 100 IDs with the create call,
   then appends the rest in batches of 100. If a later batch throws, the error drops the
