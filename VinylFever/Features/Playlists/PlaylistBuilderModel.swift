@@ -58,7 +58,8 @@ final class PlaylistBuilderModel {
   private(set) var createdTrackIndexes: Set<Int> = []
   private(set) var addingTrackIndexes: Set<Int> = []
   private(set) var resolvingTrackIndexes: Set<Int> = []
-  private var libraryRouteTrackIndexes: Set<Int> = []
+  private var libraryAlbumHints: [Int: String] = [:]
+  private var snapshotPickerTrackIndexes: Set<Int> = []
   @ObservationIgnored private var rowResolutionTokens: [Int: UUID] = [:]
 
   var visibleRows: [ResolvedPlaylistRow] {
@@ -223,7 +224,8 @@ final class PlaylistBuilderModel {
     removedTrackIndexes = []
     appendedTrackIndexes = []
     createdTrackIndexes = []
-    libraryRouteTrackIndexes = []
+    libraryAlbumHints = [:]
+    snapshotPickerTrackIndexes = []
     resolvingTrackIndexes = []
     rowResolutionTokens = [:]
     searchTerms = Dictionary(
@@ -235,11 +237,19 @@ final class PlaylistBuilderModel {
       libraryIndex?.shouldUseLibraryRoute($0) == true
     }
     let libraryIndexes = Set(libraryRequests.map(\.index))
-    libraryRouteTrackIndexes = libraryIndexes
+    libraryAlbumHints = Dictionary(uniqueKeysWithValues: libraryRequests.compactMap { request in
+      guard let album = request.album, !album.isEmpty else { return nil }
+      return (request.index, album)
+    })
     let catalogRequest = PlaylistRequest(
       name: decoded.request.name, description: decoded.request.description,
       tracks: decoded.request.tracks.filter { !libraryIndexes.contains($0.index) })
-    let catalogRows = await resolver.resolve(catalogRequest)
+    let catalogRows: [ResolvedPlaylistRow]
+    if catalogRequest.tracks.isEmpty {
+      catalogRows = []
+    } else {
+      catalogRows = await resolver.resolve(catalogRequest)
+    }
     let catalogRowsByIndex = Dictionary(
       uniqueKeysWithValues: catalogRows.map { ($0.request.index, $0) })
     rows = decoded.request.tracks.map { request in
@@ -253,6 +263,7 @@ final class PlaylistBuilderModel {
       } else if case .notFound = rows[index].status {
         let uploads = libraryIndex?.uploadedCandidates(request) ?? []
         if !uploads.isEmpty {
+          snapshotPickerTrackIndexes.insert(request.index)
           rows[index].status = .ambiguous(uploads.map { ScoredCandidate(candidate: $0, score: 1) })
         }
       }
@@ -286,13 +297,15 @@ final class PlaylistBuilderModel {
   func selectCandidate(_ candidate: CatalogSongCandidate, for trackIndex: Int) async {
     guard !isCreating, !resolvingTrackIndexes.contains(trackIndex) else { return }
     guard let rowIndex = rows.firstIndex(where: { $0.request.index == trackIndex }) else { return }
-    if candidate.source == .libraryUpload {
+    if candidate.source == .libraryUpload, snapshotPickerTrackIndexes.contains(trackIndex) {
       let request = rows[rowIndex].request
       let token = UUID()
       rowResolutionTokens[trackIndex] = token
       resolvingTrackIndexes.insert(trackIndex)
-      libraryRouteTrackIndexes.insert(trackIndex)
-      let status = await resolveLibrary(request, albumHint: candidate.albumTitle)
+      if let album = candidate.albumTitle, !album.isEmpty {
+        libraryAlbumHints[trackIndex] = album
+      }
+      let status = await resolveLibrary(request, albumHint: libraryAlbumHints[trackIndex])
       defer {
         if rowResolutionTokens[trackIndex] == token {
           rowResolutionTokens.removeValue(forKey: trackIndex)
@@ -304,9 +317,12 @@ final class PlaylistBuilderModel {
         let currentRowIndex = rows.firstIndex(where: { $0.request.index == trackIndex })
       else { return }
       rows[currentRowIndex].status = status
+      snapshotPickerTrackIndexes.remove(trackIndex)
     } else {
       rows[rowIndex].status = .matched(
         candidate, score: CatalogMatchScorer.score(rows[rowIndex].request, candidate))
+      snapshotPickerTrackIndexes.remove(trackIndex)
+      libraryAlbumHints.removeValue(forKey: trackIndex)
     }
     reconcileDuplicates()
   }
@@ -318,6 +334,8 @@ final class PlaylistBuilderModel {
       case .matched = rows[rowIndex].status
     else { return }
     rows[rowIndex].status = .notFound(error: nil)
+    libraryAlbumHints.removeValue(forKey: trackIndex)
+    snapshotPickerTrackIndexes.remove(trackIndex)
     reconcileDuplicates()
   }
 
@@ -336,6 +354,8 @@ final class PlaylistBuilderModel {
     removedTrackIndexes.insert(trackIndex)
     rowResolutionTokens.removeValue(forKey: trackIndex)
     resolvingTrackIndexes.remove(trackIndex)
+    libraryAlbumHints.removeValue(forKey: trackIndex)
+    snapshotPickerTrackIndexes.remove(trackIndex)
     reconcileDuplicates()
   }
 
@@ -447,7 +467,8 @@ final class PlaylistBuilderModel {
     createdTrackIndexes = []
     addingTrackIndexes = []
     resolvingTrackIndexes = []
-    libraryRouteTrackIndexes = []
+    libraryAlbumHints = [:]
+    snapshotPickerTrackIndexes = []
     rowResolutionTokens = [:]
   }
 
@@ -466,8 +487,8 @@ final class PlaylistBuilderModel {
       }
     }
     let status: ResolvedPlaylistRow.Status
-    if libraryRouteTrackIndexes.contains(trackIndex) {
-      status = await resolveLibrary(request)
+    if let albumHint = libraryAlbumHints[trackIndex] {
+      status = await resolveLibrary(request, albumHint: albumHint)
     } else {
       let term = (searchTerms[trackIndex] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
       guard !term.isEmpty else { return }
