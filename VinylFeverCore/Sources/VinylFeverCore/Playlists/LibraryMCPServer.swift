@@ -87,6 +87,7 @@ private actor LibraryMCPContext {
   private let listeningRootURL: URL
   private var cachedListeningLog: ListeningLog?
   private var cachedListeningFiles: [URL: Date] = [:]
+  private var cachedListeningIdentity: ArtistIdentity = .empty
 
   init(snapshotURL: URL?, inboxRoot: URL?, listeningRootURL: URL?) {
     self.snapshotURL = snapshotURL ?? Self.defaultSnapshotURL
@@ -111,6 +112,7 @@ private actor LibraryMCPContext {
   }
 
   func listeningLog(now: Date = Date()) throws -> ListeningLog {
+    let identity = (try? index().0.artistIdentity) ?? .empty
     let fetches = listeningRootURL.appending(path: "fetches", directoryHint: .isDirectory)
     let files = FileManager.default.enumerator(at: fetches, includingPropertiesForKeys: [.contentModificationDateKey])?
       .compactMap { $0 as? URL }.filter { $0.pathExtension == "jsonl" } ?? []
@@ -119,11 +121,13 @@ private actor LibraryMCPContext {
       let date = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
       return date.map { (url, $0) }
     })
-    if let cachedListeningLog, modified == cachedListeningFiles { return cachedListeningLog }
+    if let cachedListeningLog, modified == cachedListeningFiles,
+      identity == cachedListeningIdentity { return cachedListeningLog }
     let streams = try files.map { try Self.readCoordinated($0) }.compactMap { $0 }
-    let log = try ListeningLog(jsonlStreams: streams, now: now)
+    let log = try ListeningLog(jsonlStreams: streams, now: now, identity: identity)
     cachedListeningFiles = modified
     cachedListeningLog = log
+    cachedListeningIdentity = identity
     return log
   }
 

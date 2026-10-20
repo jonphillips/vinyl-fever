@@ -4,7 +4,7 @@ import VinylFeverListening
 
 @Suite("Listening track key integration")
 struct ListeningTrackKeyTests {
-  @Test("listening track keys match the library index key")
+  @Test("listening artist keys match the library index key")
   func listeningTrackKeyMatchesLibraryIndexKey() {
     let titles = [
       "Song feat. Guest",
@@ -13,8 +13,8 @@ struct ListeningTrackKeyTests {
       "Song (2005 Remaster)",
     ]
     for title in titles {
-      let indexKey = "\(SongTextNormalizer.artist("The Records"))|\(SongTextNormalizer.libraryTitle(title))"
-      #expect(ListeningTextNormalizer.trackKey(artist: "The Records", title: title) == indexKey)
+      let indexKey = "records|\(SongTextNormalizer.libraryTitle(title))"
+      #expect("\(ArtistIdentity.empty.key("The Records"))|\(SongTextNormalizer.libraryTitle(title))" == indexKey)
     }
   }
 }

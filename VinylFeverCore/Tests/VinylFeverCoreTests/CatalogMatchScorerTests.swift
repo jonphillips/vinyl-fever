@@ -52,6 +52,13 @@ struct CatalogMatchScorerTests {
     #expect(CatalogMatchScorer.score(request("Eagles", "Hotel California"), candidates: [compilation, original]) == .matched(original, score: 0.9))
   }
 
+  @Test("article and band suffix variants count as an artist match")
+  func artistIdentityScoring() {
+    let eagles = song("Eagles", "Hotel California")
+    #expect(CatalogMatchScorer.score(
+      request("The Eagles", "Hotel California"), candidates: [eagles]) == .matched(eagles, score: 0.9))
+  }
+
   @Test("a year hint alone can select another album for the same song")
   func yearHintSelectsAlbum() {
     let original = song("Eagles", "Hotel California", album: "Hotel California", year: 1976)
@@ -75,7 +82,7 @@ struct CatalogMatchScorerTests {
       return
     }
     #expect(candidates.count == 2)
-    #expect(candidates.first?.candidate.id == "Shoe-Too Late")
+    #expect(candidates.first?.candidate.id == "The Shoes-Too Late")
   }
 
   @Test("nothing close is not found")

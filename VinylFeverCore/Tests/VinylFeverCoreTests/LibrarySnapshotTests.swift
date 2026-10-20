@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import VinylFeverCore
+import VinylFeverListening
 
 @Suite("Library snapshot and index")
 struct LibrarySnapshotTests {
@@ -141,6 +142,60 @@ struct LibrarySnapshotTests {
         artist: "Other Artist", title: "Smooth", candidateArtist: "Santana",
         candidateTitle: "Smooth (feat. Rob Thomas)")
         == .inLibrary(plays: 5, lastPlayed: nil, favorited: false, versionCount: 1))
+  }
+
+  @Test("artist identity drives ownership, profiles, grouping, and album counts")
+  func artistIdentityAcrossLibraryIndex() {
+    let tracks = [
+      LibraryTrack(persistentID: "sting", name: "Fields of Gold", artist: "Paul Simon & Sting", album: "Together"),
+      LibraryTrack(persistentID: "paul", name: "Graceland", artist: "Paul Simon", album: "Graceland"),
+      LibraryTrack(persistentID: "sting-known", name: "Englishman in New York", artist: "Sting", album: "...Nothing Like the Sun"),
+      LibraryTrack(persistentID: "hotel", name: "Hotel California", artist: "Eagles", albumArtist: "The Eagles", album: "Hotel California"),
+      LibraryTrack(persistentID: "hotel-two", name: "Life in the Fast Lane", artist: "The Eagles", albumArtist: "Eagles", album: "Hotel California"),
+    ]
+    let index = LibraryIndex(snapshot: LibrarySnapshot(generatedAt: date, tracks: tracks))
+    #expect(index.checkTracks([(artist: "Sting", title: "Fields of Gold")]).first?.owned == true)
+    #expect(index.checkTracks([(artist: "The Eagles", title: "Hotel California")]).first?.owned == true)
+    #expect(index.artistProfile("Sting")?.trackCount == 2)
+    #expect(index.overview(generatedAt: date).artistCount == 4)
+    #expect(index.overview(generatedAt: date).albumCount == 4)
+  }
+
+  @Test("artist identity index build stays within 1.25x on a library-sized artist fixture")
+  func artistIdentityBuildPerformance() {
+    let tracks = (0..<87_000).map { index in
+      let artist = "Artist \(index % 8_000)"
+      let displayArtist = index.isMultiple(of: 3) ? "The \(artist) and the Band" : artist
+      return LibraryTrack(
+        persistentID: "load-\(index)", name: "Track \(index)", artist: displayArtist,
+        album: "Album \(index % 12_000)", availability: index.isMultiple(of: 6) ? .uploaded : .matched)
+    }
+    let snapshot = LibrarySnapshot(generatedAt: date, tracks: tracks)
+    let clock = ContinuousClock()
+
+    let baselineStart = clock.now
+    let baselineBySong = Dictionary(grouping: tracks) {
+      "\(ListeningTextNormalizer.artist($0.artist))|\(ListeningTextNormalizer.libraryTitle($0.name))"
+    }
+    let baselineUploaded = Dictionary(grouping: tracks.compactMap { track -> (String, String)? in
+      guard track.availability == .uploaded else { return nil }
+      return (ListeningTextNormalizer.title(track.name), ListeningTextNormalizer.artist(track.artist))
+    }, by: \.0)
+    let baselineDuration = seconds(baselineStart.duration(to: clock.now))
+    #expect(baselineBySong.count == tracks.count)
+    #expect(baselineUploaded.count > 0)
+
+    let identityStart = clock.now
+    let index = LibraryIndex(snapshot: snapshot)
+    let identityDuration = seconds(identityStart.duration(to: clock.now))
+    #expect(index.artistIdentity.key("The Artist 42 and the Band") == "artist 42")
+    print("LibraryIndex build: baseline \(baselineDuration)s, ArtistIdentity \(identityDuration)s")
+    #expect(identityDuration <= baselineDuration * 1.25)
+  }
+
+  private func seconds(_ duration: Duration) -> Double {
+    let components = duration.components
+    return Double(components.seconds) + Double(components.attoseconds) / 1_000_000_000_000_000_000
   }
 
   @Test("bulk-column projection maps Music enums and tolerates optional values")

@@ -1,4 +1,5 @@
 import Foundation
+import VinylFeverListening
 
 public struct CatalogSongCandidate: Equatable, Sendable {
   public enum Source: String, Equatable, Sendable { case catalog, libraryUpload }
@@ -61,19 +62,23 @@ public enum CatalogMatchScorer {
     "remix", "acoustic", "demo", "sped up", "slowed",
   ]
 
-  public static func score(_ request: TrackRequest, candidates: [CatalogSongCandidate])
+  public static func score(
+    _ request: TrackRequest, candidates: [CatalogSongCandidate], identity: ArtistIdentity = .empty
+  )
     -> MatchOutcome
   {
     let ranked =
       candidates
-      .map { candidate in ScoredCandidate(candidate: candidate, score: score(request, candidate)) }
+      .map { candidate in
+        ScoredCandidate(candidate: candidate, score: score(request, candidate, identity: identity))
+      }
       .sorted(by: orderedBefore)
     guard let first = ranked.first, first.score >= ambiguousFloor else { return .notFound }
     let firstTitle = SongTextNormalizer.title(first.candidate.title)
-    let firstArtist = SongTextNormalizer.artist(first.candidate.artistName)
+    let firstArtist = identity.key(first.candidate.artistName)
     let bestDifferentSong = ranked.dropFirst().first {
       SongTextNormalizer.title($0.candidate.title) != firstTitle
-        || SongTextNormalizer.artist($0.candidate.artistName) != firstArtist
+        || identity.key($0.candidate.artistName) != firstArtist
     }
     let lead = first.score - (bestDifferentSong?.score ?? 0)
     if first.score >= autoMatchThreshold && lead + 1e-9 >= autoMatchLead {
@@ -82,11 +87,15 @@ public enum CatalogMatchScorer {
     return .ambiguous(Array(ranked.prefix(ambiguousCandidateLimit)))
   }
 
-  public static func score(_ request: TrackRequest, _ candidate: CatalogSongCandidate) -> Double {
+  public static func score(
+    _ request: TrackRequest, _ candidate: CatalogSongCandidate, identity: ArtistIdentity = .empty
+  ) -> Double {
     let titleScore = similarity(
       SongTextNormalizer.title(request.title), SongTextNormalizer.title(candidate.title))
-    let artistScore = similarity(
-      SongTextNormalizer.artist(request.artist), SongTextNormalizer.artist(candidate.artistName))
+    let artistScore = identity.matches(request: request.artist, track: candidate.artistName)
+      ? 1
+      : similarity(
+        SongTextNormalizer.artist(request.artist), SongTextNormalizer.artist(candidate.artistName))
     // The base match tops out at 0.90 so the two hint boosts remain useful when
     // otherwise-identical catalog entries need to be separated.
     var score = (titleScore * 0.55) + (artistScore * 0.35)

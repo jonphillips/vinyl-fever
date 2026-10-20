@@ -157,7 +157,7 @@ public struct ArtistIdentity: Sendable {
 **Dispatch 1: S0** (Core, pure; no device gate). **Dispatch 2: S1** (core + app; one table; a
 device gate).
 
-- [ ] **S0 — `ArtistIdentity`, adopted everywhere (Core).**
+- [x] **S0 — `ArtistIdentity`, adopted everywhere (Core).**
   - Add `ArtistIdentity` to `VinylFeverListening` as specified above, with `.empty` and
     `knownArtists` taken from the library.
   - **`LibraryIndex`** builds its identity from the snapshot: `knownArtists` is the set of

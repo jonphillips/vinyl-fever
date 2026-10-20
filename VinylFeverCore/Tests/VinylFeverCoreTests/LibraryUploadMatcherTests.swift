@@ -1,5 +1,6 @@
 import Testing
 import VinylFeverCore
+import VinylFeverListening
 
 @Suite("Library upload matching")
 struct LibraryUploadMatcherTests {
@@ -118,8 +119,17 @@ struct LibraryUploadMatcherTests {
       index: 1, artist: "Bruce Springsteen", title: "Thunder Road",
       album: "6/22/03 - Disc 2 - Midsummer Second Night")
     #expect(index.shouldUseLibraryRoute(request))
-    #expect(LibraryUploadMatcher.artistsMatch("Bruce Springsteen", live.artist))
-    #expect(!LibraryUploadMatcher.artistsMatch("Bruce SpringsteenX", live.artist))
+    #expect(ArtistIdentity.empty.matches(request: "Bruce Springsteen", track: live.artist))
+    #expect(!ArtistIdentity.empty.matches(request: "Bruce SpringsteenX", track: live.artist))
+  }
+
+  @Test("artist matching does not route a short name to a longer unrelated artist")
+  func noArtistPrefixFalsePositive() {
+    let upload = LibraryTrack(
+      persistentID: "u", name: "Alison", artist: "Elvis", album: "Show", availability: .uploaded)
+    let index = LibraryIndex(snapshot: LibrarySnapshot(generatedAt: .now, tracks: [upload]))
+    #expect(!index.shouldUseLibraryRoute(TrackRequest(
+      index: 1, artist: "Elvis Costello", title: "Alison", album: "Show")))
   }
 
   @Test("catalog-route fallbacks offer the three most-played uploads")
