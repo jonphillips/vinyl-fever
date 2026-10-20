@@ -320,7 +320,8 @@ final class PlaylistBuilderModel {
       snapshotPickerTrackIndexes.remove(trackIndex)
     } else {
       rows[rowIndex].status = .matched(
-        candidate, score: CatalogMatchScorer.score(rows[rowIndex].request, candidate))
+        candidate, score: CatalogMatchScorer.score(
+          rows[rowIndex].request, candidate, identity: libraryIndex?.artistIdentity ?? .empty))
       snapshotPickerTrackIndexes.remove(trackIndex)
       libraryAlbumHints.removeValue(forKey: trackIndex)
     }
@@ -498,7 +499,8 @@ final class PlaylistBuilderModel {
           try await client.searchSongs($0, CatalogMatchResolver.searchResultLimit)
         }
         status =
-          switch CatalogMatchScorer.score(request, candidates: candidates) {
+          switch CatalogMatchScorer.score(
+            request, candidates: candidates, identity: libraryIndex?.artistIdentity ?? .empty) {
           case .matched(let candidate, let score): .matched(candidate, score: score)
           case .ambiguous(let candidates): .ambiguous(candidates)
           case .notFound: .notFound(error: nil)
@@ -520,7 +522,7 @@ final class PlaylistBuilderModel {
   ) async -> ResolvedPlaylistRow.Status {
     let client = appleMusic
     let result = await LibraryUploadMatcher.match(
-      request, albumHint: albumHint, clock: clock,
+      request, albumHint: albumHint, identity: libraryIndex?.artistIdentity ?? .empty, clock: clock,
       searchAlbums: { try await client.searchLibraryAlbums($0) },
       albumTracks: { try await client.libraryAlbumTracks($0) },
       searchSongs: { try await client.searchLibrarySongs($0, $1) }
@@ -580,7 +582,8 @@ final class PlaylistBuilderModel {
       }
       rows[rowIndex].status = .matched(
         candidate,
-        score: CatalogMatchScorer.score(row.request, candidate)
+        score: CatalogMatchScorer.score(
+          row.request, candidate, identity: libraryIndex?.artistIdentity ?? .empty)
       )
     }
 
@@ -603,7 +606,8 @@ final class PlaylistBuilderModel {
         firstRowByCatalogID[key] = row.request.index
         rows[rowIndex].status = .matched(
           candidate,
-          score: CatalogMatchScorer.score(row.request, candidate)
+          score: CatalogMatchScorer.score(
+            row.request, candidate, identity: libraryIndex?.artistIdentity ?? .empty)
         )
       }
     }

@@ -3,6 +3,15 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-20 — M15 · Dispatch 1 S0 (`m15/s0-artist-identity`)
+
+Added `ArtistIdentity` to `VinylFeverListening` and adopted it across library ownership and
+grouping, upload routing, catalog scoring, and listening history. `vf-mcp` now builds its log
+with the library identity when a snapshot is available. Listening and Core tests and the macOS
+app tests pass; `check-handoff` passes. On an 87,000-track, 8,000-artist fixture with one third
+suffix variants, the index build measured 3.46 s before and 3.64 s with `ArtistIdentity`.
+Advanced `NEXT_UP.md` to M14 S1.
+
 ## 2026-10-20 — M13 · Dispatch 3 S2 (`m13/s2-listening-tools`)
 
 Added the `recent_listening` MCP tool, period-based `top_artists` and `top_tracks` from the

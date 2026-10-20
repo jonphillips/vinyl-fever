@@ -1,6 +1,7 @@
 import Dependencies
 import DependenciesMacros
 import Foundation
+import VinylFeverListening
 
 public struct ResolvedPlaylistRow: Equatable, Sendable, Identifiable {
   public enum Status: Equatable, Sendable {
@@ -88,7 +89,8 @@ extension CatalogMatchResolver {
     _ request: PlaylistRequest,
     maximumConcurrentSearches: Int = Self.maximumConcurrentSearches,
     clock: any Clock<Duration> = ContinuousClock(),
-    search: @escaping @Sendable (String) async throws -> [CatalogSongCandidate]
+    search: @escaping @Sendable (String) async throws -> [CatalogSongCandidate],
+    identity: ArtistIdentity = .empty
   ) async -> [ResolvedPlaylistRow] {
     let requests = request.tracks
     guard !requests.isEmpty else { return [] }
@@ -100,14 +102,14 @@ extension CatalogMatchResolver {
       for _ in 0..<concurrency {
         let index = nextIndex
         nextIndex += 1
-        group.addTask { (index, await match(requests[index], clock: clock, search: search)) }
+        group.addTask { (index, await match(requests[index], clock: clock, search: search, identity: identity)) }
       }
       while let (index, status) = await group.next() {
         results[index] = ResolvedPlaylistRow(request: requests[index], status: status)
         if nextIndex < requests.count {
           let newIndex = nextIndex
           nextIndex += 1
-          group.addTask { (newIndex, await match(requests[newIndex], clock: clock, search: search)) }
+          group.addTask { (newIndex, await match(requests[newIndex], clock: clock, search: search, identity: identity)) }
         }
       }
     }
@@ -130,11 +132,12 @@ extension CatalogMatchResolver {
   private static func match(
     _ request: TrackRequest,
     clock: any Clock<Duration>,
-    search: @escaping @Sendable (String) async throws -> [CatalogSongCandidate]
+    search: @escaping @Sendable (String) async throws -> [CatalogSongCandidate],
+    identity: ArtistIdentity
   ) async -> ResolvedPlaylistRow.Status {
     do {
       let candidates = try await Self.search("\(request.artist) \(request.title)", clock: clock, search: search)
-      switch CatalogMatchScorer.score(request, candidates: candidates) {
+      switch CatalogMatchScorer.score(request, candidates: candidates, identity: identity) {
       case let .matched(candidate, score): return .matched(candidate, score: score)
       case let .ambiguous(candidates): return .ambiguous(candidates)
       case .notFound: return .notFound(error: nil)

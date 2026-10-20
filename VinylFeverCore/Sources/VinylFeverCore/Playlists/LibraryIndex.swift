@@ -1,4 +1,5 @@
 import Foundation
+import VinylFeverListening
 
 public enum LibraryRanking: Equatable, Sendable {
   case plays, favorites, recentlyAdded, recentlyPlayed
@@ -69,6 +70,9 @@ public struct LibraryIndex: Sendable {
   private let tracks: [LibraryTrack]
   private let bySong: [String: [LibraryTrack]]
   private let uploadedByTitle: [String: [UploadedTrackEntry]]
+  public let artistIdentity: ArtistIdentity
+  private let artistKeys: [String: String]
+  private let artistCredits: [String: Set<String>]
 
   private struct UploadedTrackEntry: Sendable {
     var track: LibraryTrack
@@ -79,13 +83,25 @@ public struct LibraryIndex: Sendable {
 
   public init(snapshot: LibrarySnapshot) {
     tracks = snapshot.tracks
-    bySong = Dictionary(grouping: snapshot.tracks, by: Self.songKey)
+    let knownArtists = Set(snapshot.tracks.map(\.artist))
+    let artistNames = Set(snapshot.tracks.flatMap { [$0.artist, $0.albumArtist] })
+    let identity = ArtistIdentity(knownArtists: knownArtists)
+    let keys = Dictionary(uniqueKeysWithValues: artistNames.map { ($0, identity.key($0)) })
+    let credits = Dictionary(uniqueKeysWithValues: artistNames.map { ($0, identity.credits($0)) })
+    artistIdentity = identity
+    artistKeys = keys
+    artistCredits = credits
+    bySong = Dictionary(grouping: snapshot.tracks.flatMap { track in
+      (credits[track.artist] ?? [identity.key(track.artist)]).map {
+        (key: "\($0)|\(SongTextNormalizer.libraryTitle(track.name))", track: track)
+      }
+    }, by: \.key).mapValues { $0.map(\.track) }
     uploadedByTitle = Dictionary(grouping: snapshot.tracks.compactMap { track in
       guard track.availability == .uploaded else { return nil }
       return UploadedTrackEntry(
         track: track,
         normalizedTitle: SongTextNormalizer.title(track.name),
-        normalizedArtist: SongTextNormalizer.artist(track.artist),
+        normalizedArtist: track.artist,
         normalizedAlbum: SongTextNormalizer.album(track.album))
     }, by: \.normalizedTitle)
   }
@@ -93,21 +109,21 @@ public struct LibraryIndex: Sendable {
   public func shouldUseLibraryRoute(_ request: TrackRequest) -> Bool {
     guard let album = request.album, !album.isEmpty else { return false }
     let title = SongTextNormalizer.title(request.title)
-    let artist = SongTextNormalizer.artist(request.artist)
+    let artist = request.artist
     let albumKey = SongTextNormalizer.album(album)
     return (uploadedByTitle[title] ?? []).contains { entry in
       entry.normalizedAlbum == albumKey
-        && LibraryUploadMatcher.artistsMatch(artist, entry.normalizedArtist)
+        && artistIdentity.matches(request: artist, track: entry.normalizedArtist)
     }
   }
 
   public func uploadedCandidates(_ request: TrackRequest, limit: Int = 3)
     -> [CatalogSongCandidate]
   {
-    let artist = SongTextNormalizer.artist(request.artist)
+    let artist = request.artist
     var albums: Set<String> = []
     return (uploadedByTitle[SongTextNormalizer.title(request.title)] ?? [])
-      .filter { LibraryUploadMatcher.artistsMatch(artist, $0.normalizedArtist) }
+      .filter { artistIdentity.matches(request: artist, track: $0.normalizedArtist) }
       .sorted { lhs, rhs in
         lhs.track.playCount == rhs.track.playCount
           ? lhs.normalizedAlbum.localizedStandardCompare(rhs.normalizedAlbum) == .orderedAscending
@@ -139,11 +155,11 @@ public struct LibraryIndex: Sendable {
     ).mapValues(\.count)
     return LibraryOverview(
       generatedAt: generatedAt, trackCount: tracks.count,
-      artistCount: Set(tracks.map { SongTextNormalizer.artist($0.artist) }.filter { !$0.isEmpty })
+      artistCount: Set(tracks.compactMap { artistKeys[$0.artist] }.filter { !$0.isEmpty })
         .count,
       albumCount: Set(
         tracks.map {
-          "\(SongTextNormalizer.artist($0.albumArtist.isEmpty ? $0.artist : $0.albumArtist))|\(SongTextNormalizer.album($0.album))"
+          "\(artistKeys[$0.albumArtist.isEmpty ? $0.artist : $0.albumArtist] ?? artistIdentity.key($0.albumArtist.isEmpty ? $0.artist : $0.albumArtist))|\(SongTextNormalizer.album($0.album))"
         }
       ).count,
       genreCounts: genres, decadeCounts: decades,
@@ -179,10 +195,10 @@ public struct LibraryIndex: Sendable {
   }
 
   public func artistProfile(_ artist: String) -> LibraryArtistProfile? {
-    let key = SongTextNormalizer.artist(artist)
+    let artistKey = artistIdentity.key(artist)
     let owned = tracks.filter {
-      SongTextNormalizer.artist($0.artist) == key
-        || SongTextNormalizer.artist($0.albumArtist) == key
+      (artistCredits[$0.artist] ?? [artistIdentity.key($0.artist)]).contains(artistKey)
+        || (artistCredits[$0.albumArtist] ?? [artistIdentity.key($0.albumArtist)]).contains(artistKey)
     }
     guard !owned.isEmpty else { return nil }
     return LibraryArtistProfile(
@@ -197,7 +213,7 @@ public struct LibraryIndex: Sendable {
 
   public func checkTracks(_ requests: [(artist: String, title: String)]) -> [LibraryTrackCheck] {
     requests.prefix(Self.maximumCheckTracks).map { request in
-      let matches = bySong[Self.songKey(artist: request.artist, title: request.title)] ?? []
+      let matches = bySong[songKey(artist: request.artist, title: request.title)] ?? []
       return LibraryTrackCheck(
         artist: request.artist, title: request.title, owned: !matches.isEmpty,
         plays: matches.reduce(0) { $0 + $1.playCount }, versionCount: matches.count,
@@ -212,12 +228,12 @@ public struct LibraryIndex: Sendable {
     snapshotAvailable: Bool = true
   ) -> LibraryAnnotation {
     guard snapshotAvailable else { return .snapshotUnavailable }
-    var matches = bySong[Self.songKey(artist: artist, title: title)] ?? []
+    var matches = bySong[songKey(artist: artist, title: title)] ?? []
     if let candidateArtist, let candidateTitle,
-      SongTextNormalizer.artist(candidateArtist) != SongTextNormalizer.artist(artist)
+      artistIdentity.key(candidateArtist) != artistIdentity.key(artist)
         || SongTextNormalizer.title(candidateTitle) != SongTextNormalizer.title(title)
     {
-      matches += bySong[Self.songKey(artist: candidateArtist, title: candidateTitle)] ?? []
+      matches += bySong[songKey(artist: candidateArtist, title: candidateTitle)] ?? []
     }
     guard !matches.isEmpty else { return .notInLibrary }
     return .inLibrary(
@@ -226,11 +242,8 @@ public struct LibraryIndex: Sendable {
       favorited: matches.contains(where: \.favorited), versionCount: matches.count)
   }
 
-  private static func songKey(_ track: LibraryTrack) -> String {
-    songKey(artist: track.artist, title: track.name)
-  }
-  private static func songKey(artist: String, title: String) -> String {
-    "\(SongTextNormalizer.artist(artist))|\(SongTextNormalizer.libraryTitle(title))"
+  private func songKey(artist: String, title: String) -> String {
+    "\(artistIdentity.key(artist))|\(SongTextNormalizer.libraryTitle(title))"
   }
   private static func cap(_ limit: Int) -> Int { min(max(1, limit), maximumLimit) }
   private func nonempty(_ value: String?) -> String? {
@@ -242,7 +255,7 @@ public struct LibraryIndex: Sendable {
   }
 
   private func artistGroups() -> [LibraryArtistSummary] {
-    Dictionary(grouping: tracks, by: { SongTextNormalizer.artist($0.artist) }).map { key, tracks in
+    Dictionary(grouping: tracks, by: { artistKeys[$0.artist] ?? artistIdentity.key($0.artist) }).map { key, tracks in
       LibraryArtistSummary(
         artist: tracks.first?.artist ?? key, plays: tracks.reduce(0) { $0 + $1.playCount },
         favorites: tracks.filter(\.favorited).count, trackCount: tracks.count,

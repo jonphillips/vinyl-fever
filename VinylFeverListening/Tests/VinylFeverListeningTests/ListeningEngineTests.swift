@@ -316,6 +316,26 @@ struct ListeningEngineTests {
     #expect(ListeningTextNormalizer.artist("Daft Punk") == "daft punk")
   }
 
+  @Test("artist identity groups band variants while keeping duet rows distinct")
+  func artistIdentityGrouping() {
+    let baseline = ListeningFetch(poller: poller, host: "Mini", fetchedAt: t0, outcome: .baseline, pagesRead: 1)
+    let plays = [
+      item("springsteen", title: "Thunder Road", artist: "Bruce Springsteen & The E Street Band (Live)"),
+      item("springsteen-plain", title: "Born to Run", artist: "Bruce Springsteen"),
+      item("duet", title: "The Boxer", artist: "Paul Simon & Sting"),
+    ].enumerated().map { index, value in
+      ListeningFetch(
+        poller: poller, host: "Mini", fetchedAt: t0.addingTimeInterval(Double(index + 1)),
+        outcome: .plays, newCount: 1, pagesRead: 1, items: [value])
+    }
+    let identity = ArtistIdentity(knownArtists: ["Bruce Springsteen", "Paul Simon", "Sting"])
+    let log = ListeningLog(streams: [[baseline] + plays], now: plays.last!.fetchedAt, identity: identity)
+    let artists = log.topArtists(period: .month, now: plays.last!.fetchedAt)
+    #expect(artists.count == 2)
+    #expect(artists.map(\.plays).sorted() == [1, 2])
+    #expect(artists.contains(where: { $0.artist == "Paul Simon & Sting" && $0.plays == 1 }))
+  }
+
   @Test("a year of JSONL log files loads quickly with one or two pollers")
   func yearOfLogLoadsQuickly() throws {
     let now = date("2026-10-18T00:00:00Z")

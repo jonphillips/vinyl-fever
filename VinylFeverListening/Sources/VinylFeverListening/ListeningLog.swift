@@ -122,14 +122,17 @@ public enum ListeningTextNormalizer {
 public struct ListeningLog: Sendable {
   public let plays: [ListeningPlay]
   public let coverage: ListeningCoverage
+  private let artistIdentity: ArtistIdentity
+  private let artistKeys: [String: String]
 
-  public init(jsonlStreams: [Data], now: Date) throws {
+  public init(jsonlStreams: [Data], now: Date, identity: ArtistIdentity = .empty) throws {
     let files = try jsonlStreams.map(ListeningLogCodec.decodeJSONL)
     let streams = Dictionary(grouping: files.flatMap { $0 }, by: \.poller).values.map { $0 }
-    self.init(streams: streams, now: now)
+    self.init(streams: streams, now: now, identity: identity)
   }
 
-  public init(streams: [[ListeningFetch]], now: Date) {
+  public init(streams: [[ListeningFetch]], now: Date, identity: ArtistIdentity = .empty) {
+    artistIdentity = identity
     let records = streams.flatMap { $0 }.sorted { $0.fetchedAt < $1.fetchedAt }
     let firstFetch = records.filter { $0.outcome != .failed }.map(\.fetchedAt).min()
     let latest = records.max { $0.fetchedAt < $1.fetchedAt }
@@ -175,7 +178,10 @@ public struct ListeningLog: Sendable {
       }
     }
 
-    let merged = Self.collapseOverlappingPlays(allPlays)
+    artistKeys = Dictionary(uniqueKeysWithValues: Set(allPlays.map { $0.item.artist }).map {
+      ($0, identity.key($0))
+    })
+    let merged = Self.collapseOverlappingPlays(allPlays, artistKeys: artistKeys)
     self.plays = merged.plays.sorted {
       if $0.windowEnd != $1.windowEnd { return $0.windowEnd > $1.windowEnd }
       return $0.item.title.localizedStandardCompare($1.item.title) == .orderedAscending
@@ -202,7 +208,7 @@ public struct ListeningLog: Sendable {
     period: ListeningPeriod, now: Date, limit: Int = ListeningQueryLimit.default
   ) -> [ListeningArtistCount] {
     let grouped = Dictionary(grouping: periodPlays(period: period, now: now)) {
-      ListeningTextNormalizer.artist($0.item.artist)
+      artistIdentity.key($0.item.artist)
     }
     return grouped.compactMap { key, plays in
       guard !key.isEmpty, let artist = plays.first?.item.artist else { return nil }
@@ -218,7 +224,7 @@ public struct ListeningLog: Sendable {
     period: ListeningPeriod, now: Date, limit: Int = ListeningQueryLimit.default
   ) -> [ListeningTrackCount] {
     let grouped = Dictionary(grouping: periodPlays(period: period, now: now)) {
-      ListeningTextNormalizer.trackKey(artist: $0.item.artist, title: $0.item.title)
+      Self.trackKey(artist: $0.item.artist, title: $0.item.title, artistKeys: artistKeys)
     }
     return grouped.compactMap { key, plays in
       guard !key.hasSuffix("|") else { return nil }
@@ -236,11 +242,13 @@ public struct ListeningLog: Sendable {
     return plays.filter { $0.windowEnd >= cutoff }
   }
 
-  private static func collapseOverlappingPlays(_ plays: [ListeningPlay])
+  private static func collapseOverlappingPlays(
+    _ plays: [ListeningPlay], artistKeys: [String: String]
+  )
     -> (plays: [ListeningPlay], collapsed: Int)
   {
     let keyedPlays = plays.map { play in
-      (key: ListeningTextNormalizer.trackKey(artist: play.item.artist, title: play.item.title), play: play)
+      (key: trackKey(artist: play.item.artist, title: play.item.title, artistKeys: artistKeys), play: play)
     }
     var kept: [ListeningPlay] = []
     var collapsed = 0
@@ -271,5 +279,9 @@ public struct ListeningLog: Sendable {
       }
     }
     return (kept, collapsed)
+  }
+
+  private static func trackKey(artist: String, title: String, artistKeys: [String: String]) -> String {
+    "\(artistKeys[artist] ?? ArtistIdentity.baseKey(artist))|\(ListeningTextNormalizer.libraryTitle(title))"
   }
 }

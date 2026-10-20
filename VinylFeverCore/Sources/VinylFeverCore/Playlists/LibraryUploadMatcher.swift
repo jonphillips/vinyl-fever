@@ -1,4 +1,5 @@
 import Foundation
+import VinylFeverListening
 
 public enum LibraryUploadMatcher {
   // The S0 picker is capped at the three most-played uploads in its brief.
@@ -11,15 +12,10 @@ public enum LibraryUploadMatcher {
     case failed(String)
   }
 
-  public static func artistsMatch(_ lhs: String, _ rhs: String) -> Bool {
-    let left = SongTextNormalizer.artist(lhs)
-    let right = SongTextNormalizer.artist(rhs)
-    return left == right || left.hasPrefix(right + " ") || right.hasPrefix(left + " ")
-  }
-
   public static func match(
     _ request: TrackRequest,
     albumHint: String? = nil,
+    identity: ArtistIdentity = .empty,
     clock: any Clock<Duration> = ContinuousClock(),
     searchAlbums: @escaping @Sendable (String) async throws -> [LibraryAlbumCandidate],
     albumTracks: @escaping @Sendable (String) async throws -> [LibrarySongCandidate],
@@ -39,7 +35,7 @@ public enum LibraryUploadMatcher {
             candidates += try await CatalogMatchResolver.retryingSearch(
               value.id, clock: clock, search: albumTracks)
           }
-          let matching = exactMatches(candidates, request: request, album: album)
+          let matching = exactMatches(candidates, request: request, album: album, identity: identity)
           if !matching.isEmpty { return outcome(matching) }
           break
         }
@@ -64,7 +60,7 @@ public enum LibraryUploadMatcher {
           }
           candidates += page
         }
-        let matching = exactMatches(candidates, request: request, album: album)
+        let matching = exactMatches(candidates, request: request, album: album, identity: identity)
           .prefix(AppleMusicCatalogClient.librarySongSearchCap).map { $0 }
         if !matching.isEmpty { return outcome(matching) }
         if candidates.count >= AppleMusicCatalogClient.librarySongSearchCap { break }
@@ -76,7 +72,7 @@ public enum LibraryUploadMatcher {
   }
 
   private static func exactMatches(
-    _ values: [LibrarySongCandidate], request: TrackRequest, album: String?
+    _ values: [LibrarySongCandidate], request: TrackRequest, album: String?, identity: ArtistIdentity
   ) -> [CatalogSongCandidate] {
     values.filter { value in
       let albumMatches = album.map {
@@ -84,7 +80,7 @@ public enum LibraryUploadMatcher {
       } ?? true
       return !value.hasCatalogID
         && SongTextNormalizer.title(value.title) == SongTextNormalizer.title(request.title)
-        && artistsMatch(value.artist, request.artist)
+        && identity.matches(request: request.artist, track: value.artist)
         && albumMatches
     }.map(\.candidate)
   }
