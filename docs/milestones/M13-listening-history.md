@@ -171,7 +171,8 @@ tools.
 prerequisites. It owes a gate on the mini. **Dispatch 3: S2.** **Dispatch 4: S3.** The log
 starts filling at the S1 gate, so S2 has real data by the time it lands.
 [M14](M14-live-tracks-in-playlists.md) (live tracks in playlists) interleaves: **M14 S0 runs
-between S1 and S2**, and **M14 S1 between S2 and S3** (M14 Decision 3, amended 2026-10-20). So
+between S1 and S2**, and **M14 S1 between S2 and S3** (M14 Decision 3, amended 2026-10-20).
+[M15](M15-artist-identity.md) S0 and S1 also run between S2 and S3, around M14 S1. So
 the dispatch after S1 is M14 S0, not S2. That gives S2's iPad gate ("what have I been listening
 to this week?") a week of log to answer from.
 
