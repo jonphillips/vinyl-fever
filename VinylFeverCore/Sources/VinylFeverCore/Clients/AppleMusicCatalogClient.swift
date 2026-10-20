@@ -4,16 +4,47 @@ import Foundation
 
 @DependencyClient
 public struct AppleMusicCatalogClient: Sendable {
+  /// Apple Music documents 100 as the maximum page size for library song search.
+  public static let librarySearchPageSize = 100
   public var authorizationStatus: @Sendable () async -> MusicKitAuthorization = { .notDetermined }
   public var requestAuthorization: @Sendable () async -> MusicKitAuthorization = { .notDetermined }
   public var subscriptionStatus: @Sendable () async throws -> AppleMusicSubscriptionStatus
   public var searchSongs: @Sendable (_ term: String, _ limit: Int) async throws -> [CatalogSongCandidate]
+  public var searchLibraryAlbums: @Sendable (_ term: String) async throws -> [LibraryAlbumCandidate]
+  public var libraryAlbumTracks: @Sendable (_ albumID: String) async throws -> [LibrarySongCandidate]
+  public var searchLibrarySongs: @Sendable (_ term: String, _ offset: Int) async throws -> [LibrarySongCandidate]
   public var createLibraryPlaylist: @Sendable (
     _ name: String,
     _ description: String?,
-    _ songIDs: [String]
+    _ songs: [PlaylistSongReference]
   ) async throws -> CreatedPlaylistRef
-  public var appendToLibraryPlaylist: @Sendable (_ id: String, _ songIDs: [String]) async throws -> Void
+  public var appendToLibraryPlaylist: @Sendable (_ id: String, _ songs: [PlaylistSongReference]) async throws -> Void
+}
+
+public struct PlaylistSongReference: Equatable, Sendable {
+  public var id: String
+  public var source: CatalogSongCandidate.Source
+  public init(id: String, source: CatalogSongCandidate.Source) { self.id = id; self.source = source }
+}
+
+public struct LibraryAlbumCandidate: Equatable, Sendable {
+  public var id: String
+  public var title: String
+  public init(id: String, title: String) { self.id = id; self.title = title }
+}
+
+public struct LibrarySongCandidate: Equatable, Sendable {
+  public var id: String
+  public var title: String
+  public var artist: String
+  public var album: String
+  public var hasCatalogID: Bool
+  public init(id: String, title: String, artist: String, album: String, hasCatalogID: Bool) {
+    self.id = id; self.title = title; self.artist = artist; self.album = album; self.hasCatalogID = hasCatalogID
+  }
+  public var candidate: CatalogSongCandidate {
+    CatalogSongCandidate(id: id, title: title, artistName: artist, albumTitle: album, source: .libraryUpload)
+  }
 }
 
 public enum MusicKitAuthorization: Equatable, Sendable {

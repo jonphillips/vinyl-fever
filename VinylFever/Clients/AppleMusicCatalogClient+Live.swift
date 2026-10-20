@@ -44,6 +44,32 @@ extension AppleMusicCatalogClient {
           )
         }
       },
+      searchLibraryAlbums: { term in
+        let page = try await Self.getLibraryPage(path: "/v1/me/library/albums", query: [
+          URLQueryItem(name: "term", value: term),
+          URLQueryItem(name: "limit", value: String(Self.librarySearchPageSize)),
+        ])
+        return page.data.map { LibraryAlbumCandidate(id: $0.id, title: $0.attributes.name) }
+      },
+      libraryAlbumTracks: { albumID in
+        var path = "/v1/me/library/albums/\(albumID)/tracks?limit=\(Self.librarySearchPageSize)"
+        var songs: [LibrarySongCandidate] = []
+        while true {
+          let page = try await Self.getLibraryPage(urlOrPath: path)
+          songs += page.data.map(Self.librarySong)
+          guard let next = page.next else { break }
+          path = next
+        }
+        return songs
+      },
+      searchLibrarySongs: { term, offset in
+        let page = try await Self.getLibraryPage(path: "/v1/me/library/songs", query: [
+          URLQueryItem(name: "term", value: term),
+          URLQueryItem(name: "limit", value: String(Self.librarySearchPageSize)),
+          URLQueryItem(name: "offset", value: String(offset)),
+        ])
+        return page.data.map(Self.librarySong)
+      },
       createLibraryPlaylist: { name, description, songIDs in
         guard !songIDs.isEmpty else {
           throw PlaylistCreationError.noTracks
@@ -51,7 +77,7 @@ extension AppleMusicCatalogClient {
         let firstChunk = Array(songIDs.prefix(100))
         let body = PlaylistCreateBody(
           attributes: .init(name: name, description: description),
-          relationships: .init(tracks: .init(data: firstChunk.map(PlaylistTrackData.song)))
+          relationships: .init(tracks: .init(data: firstChunk.map(PlaylistTrackData.init)))
         )
         let data = try JSONEncoder().encode(body)
         let response = try await Self.perform(
@@ -91,13 +117,50 @@ extension AppleMusicCatalogClient {
     }
   }
 
-  private static func append(_ songIDs: [String], to playlistID: String) async throws {
-    let data = try JSONEncoder().encode(PlaylistTracksBody(data: songIDs.map(PlaylistTrackData.song)))
+  private static func append(_ songIDs: [PlaylistSongReference], to playlistID: String) async throws {
+    let data = try JSONEncoder().encode(PlaylistTracksBody(data: songIDs.map(PlaylistTrackData.init)))
     _ = try await perform(
       path: "/v1/me/library/playlists/\(playlistID)/tracks",
       method: "POST",
       body: data
     )
+  }
+
+  private static func getLibraryPage(path: String, query: [URLQueryItem] = []) async throws -> LibraryPage {
+    guard var components = URLComponents(string: "https://api.music.apple.com\(path)") else {
+      throw AppleMusicAPIError(statusCode: 0, detail: "The Apple Music library API URL is invalid.")
+    }
+    if !query.isEmpty { components.queryItems = query }
+    guard let url = components.url else {
+      throw AppleMusicAPIError(statusCode: 0, detail: "The Apple Music library API URL is invalid.")
+    }
+    return try await getLibraryPage(urlOrPath: url.absoluteString)
+  }
+
+  private static func getLibraryPage(urlOrPath: String) async throws -> LibraryPage {
+    guard let url = urlOrPath.hasPrefix("https://")
+      ? URL(string: urlOrPath) : URL(string: "https://api.music.apple.com\(urlOrPath)")
+    else { throw AppleMusicAPIError(statusCode: 0, detail: "Apple Music returned an invalid pagination URL.") }
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    let response: MusicDataResponse
+    do { response = try await MusicDataRequest(urlRequest: request).response() }
+    catch let error as MusicDataRequest.Error {
+      if error.status == 429 { throw AppleMusicCatalogBusyError() }
+      throw AppleMusicAPIError(statusCode: error.status, detail: error.detailText)
+    } catch where Self.isUnreadableResponse(error) {
+      throw AppleMusicCatalogBusyError()
+    }
+    guard (200..<300).contains(response.urlResponse.statusCode) else {
+      throw AppleMusicAPIError(statusCode: response.urlResponse.statusCode, detail: Self.apiErrorDetail(from: response.data))
+    }
+    do { return try JSONDecoder().decode(LibraryPage.self, from: response.data) }
+    catch { throw AppleMusicAPIError(statusCode: 200, detail: "Apple Music returned an unreadable library response: \(error.localizedDescription)") }
+  }
+
+  private static func librarySong(_ value: LibraryPage.Resource) -> LibrarySongCandidate {
+    LibrarySongCandidate(id: value.id, title: value.attributes.name, artist: value.attributes.artistName ?? "",
+      album: value.attributes.albumName ?? "", hasCatalogID: value.attributes.catalogId != nil)
   }
 
   /// MusicDataRequest supplies the user and developer tokens for this Apple Music API request.
@@ -181,9 +244,27 @@ private struct PlaylistTracksBody: Encodable {
 
 private struct PlaylistTrackData: Encodable {
   var id: String
-  var type = "songs"
+  var type: String
 
-  static func song(_ id: String) -> Self { Self(id: id) }
+  init(_ ref: PlaylistSongReference) {
+    id = ref.id
+    type = ref.source == .libraryUpload ? "library-songs" : "songs"
+  }
+}
+
+private struct LibraryPage: Decodable {
+  var data: [Resource]
+  var next: String?
+  struct Resource: Decodable {
+    var id: String
+    var attributes: Attributes
+  }
+  struct Attributes: Decodable {
+    var name: String
+    var artistName: String?
+    var albumName: String?
+    var catalogId: String?
+  }
 }
 
 private struct PlaylistCreateResponse: Decodable {

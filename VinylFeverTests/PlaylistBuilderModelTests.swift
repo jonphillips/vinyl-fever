@@ -129,7 +129,7 @@ struct PlaylistBuilderModelTests {
         read: { nil }, write: { _ in }, modifiedAt: { nil })
       $0.catalogMatchResolver.resolve = { _ in [] }
       $0.appleMusicCatalogClient.createLibraryPlaylist = { name, _, ids in
-        await capture.record(name: name, description: nil, ids: ids)
+        await capture.record(name: name, description: nil, ids: ids.map(\.id))
         return CreatedPlaylistRef(id: "p", name: name, trackCount: ids.count)
       }
     } operation: {
@@ -173,6 +173,65 @@ struct PlaylistBuilderModelTests {
     #expect(model.visibleRows.map(\.request.index) == [])
     #expect(model.createdTrackIndexes == [2, 4])
     #expect(await capture.value?.2 == ["fresh", "last"])
+  }
+
+  @Test("creating a playlist preserves mixed catalog and upload source types in row order")
+  func createMixedSongSources() async {
+    let capture = PlaylistSongReferenceCapture()
+    let catalog = CatalogSongCandidate(id: "same", title: "Studio", artistName: "Artist")
+    let upload = CatalogSongCandidate(id: "upload", title: "Live", artistName: "Artist", albumTitle: "Live at Hall", source: .libraryUpload)
+    let model = withDependencies {
+      $0.appleMusicCatalogClient = authorizedClient(create: { name, _, songs in
+        await capture.record(songs)
+        return CreatedPlaylistRef(id: "p", name: name, trackCount: songs.count)
+      })
+    } operation: { PlaylistBuilderModel() }
+    model.playlistName = "Mixed"
+    model.rows = [
+      ResolvedPlaylistRow(request: TrackRequest(index: 1, artist: "Artist", title: "Studio"), status: .matched(catalog, score: 1)),
+      ResolvedPlaylistRow(request: TrackRequest(index: 2, artist: "Artist", title: "Live", album: "Live at Hall"), status: .matched(upload, score: 1)),
+    ]
+    await model.createPlaylist()
+    #expect(await capture.value == [
+      PlaylistSongReference(id: "same", source: .catalog),
+      PlaylistSongReference(id: "upload", source: .libraryUpload),
+    ])
+  }
+
+  @Test("duplicate detection distinguishes catalog songs from library uploads")
+  func duplicateDetectionUsesSourceAndID() async {
+    let catalog = CatalogSongCandidate(id: "same", title: "Song", artistName: "Artist")
+    let upload = CatalogSongCandidate(id: "same", title: "Song", artistName: "Artist", source: .libraryUpload)
+    let model = PlaylistBuilderModel()
+    model.rows = [
+      ResolvedPlaylistRow(request: TrackRequest(index: 1, artist: "Artist", title: "Song"), status: .matched(upload, score: 1)),
+      ResolvedPlaylistRow(request: TrackRequest(index: 2, artist: "Artist", title: "Song"), status: .notFound(error: nil)),
+    ]
+    await model.selectCandidate(catalog, for: 2)
+    #expect(model.rows[1].status == .matched(catalog, score: 0.9))
+  }
+
+  @Test("appending an upload sends the library song source")
+  func appendUploadSource() async {
+    let capture = PlaylistSongReferenceCapture()
+    let catalog = Self.candidate(id: "catalog", title: "Studio")
+    let upload = CatalogSongCandidate(
+      id: "upload", title: "Live", artistName: "Artist", albumTitle: "Live at Hall",
+      source: .libraryUpload)
+    let model = withDependencies {
+      $0.appleMusicCatalogClient = authorizedClient(append: { _, songs in
+        await capture.record(songs)
+      })
+    } operation: { PlaylistBuilderModel() }
+    model.playlistName = "Mixed"
+    model.rows = [
+      ResolvedPlaylistRow(request: TrackRequest(index: 1, artist: "Artist", title: "Studio"), status: .matched(catalog, score: 1)),
+      ResolvedPlaylistRow(request: TrackRequest(index: 2, artist: "Artist", title: "Live", album: "Live at Hall"), status: .notFound(error: nil)),
+    ]
+    await model.createPlaylist()
+    model.rows[1].status = .matched(upload, score: 1)
+    await model.addToCreatedPlaylist(trackIndex: 2)
+    #expect(await capture.value == [PlaylistSongReference(id: "upload", source: .libraryUpload)])
   }
 
   @Test("failed snapshot refresh retains the previous snapshot")
@@ -422,7 +481,7 @@ struct PlaylistBuilderModelTests {
   }
 
   @Test("candidate selection resolves an ambiguous row")
-  func candidateSelection() {
+  func candidateSelection() async {
     let first = Self.candidate(id: "one", title: "Song")
     let second = Self.candidate(id: "two", title: "Song")
     let track = TrackRequest(index: 1, artist: "The Records", title: "Song")
@@ -435,7 +494,7 @@ struct PlaylistBuilderModelTests {
           ScoredCandidate(candidate: second, score: 0.7),
         ]))
     ]
-    model.selectCandidate(second, for: 1)
+    await model.selectCandidate(second, for: 1)
     #expect(model.rows[0].status == .matched(second, score: 0.9))
   }
 
@@ -445,7 +504,7 @@ struct PlaylistBuilderModelTests {
     let first = Self.candidate(id: "first", title: "First")
     let model = withDependencies {
       $0.appleMusicCatalogClient = authorizedClient(create: { name, description, ids in
-        await capture.record(name: name, description: description, ids: ids)
+        await capture.record(name: name, description: description, ids: ids.map(\.id))
         return CreatedPlaylistRef(id: "playlist-1", name: name, trackCount: ids.count)
       })
       $0.catalogMatchResolver.resolve = { _ in [] }
@@ -478,7 +537,7 @@ struct PlaylistBuilderModelTests {
     let song = Self.candidate(id: "X", title: "Song")
     let model = withDependencies {
       $0.appleMusicCatalogClient = authorizedClient(create: { name, _, ids in
-        await capture.record(name: name, description: nil, ids: ids)
+        await capture.record(name: name, description: nil, ids: ids.map(\.id))
         return CreatedPlaylistRef(id: "p", name: name, trackCount: ids.count)
       })
       $0.catalogMatchResolver.resolve = { _ in [] }
@@ -492,7 +551,7 @@ struct PlaylistBuilderModelTests {
       ResolvedPlaylistRow(request: second, status: .matched(song, score: 0.9)),
     ]
 
-    model.selectCandidate(song, for: 1)
+    await model.selectCandidate(song, for: 1)
 
     #expect(model.rows[1].status == .duplicate(song, ofTrackIndex: 1))
     await model.createPlaylist()
@@ -524,7 +583,7 @@ struct PlaylistBuilderModelTests {
     let song = Self.candidate(id: "X", title: "Song")
     let model = withDependencies {
       $0.appleMusicCatalogClient = authorizedClient(create: { name, _, ids in
-        await capture.record(name: name, description: nil, ids: ids)
+        await capture.record(name: name, description: nil, ids: ids.map(\.id))
         return CreatedPlaylistRef(id: "p", name: name, trackCount: ids.count)
       })
       $0.catalogMatchResolver.resolve = { _ in [] }
@@ -541,7 +600,7 @@ struct PlaylistBuilderModelTests {
     ]
 
     model.remove(trackIndex: 1)
-    model.selectCandidate(song, for: 3)
+    await model.selectCandidate(song, for: 3)
     await model.createPlaylist()
 
     #expect(model.rows[1].status == .matched(song, score: 0.9))
@@ -567,7 +626,7 @@ struct PlaylistBuilderModelTests {
     ]
     await model.createPlaylist()
 
-    model.selectCandidate(song, for: 2)
+    await model.selectCandidate(song, for: 2)
 
     #expect(model.rows[1].status == .duplicate(song, ofTrackIndex: 1))
     #expect(model.visibleRows.map(\.request.index) == [2])
@@ -595,7 +654,7 @@ struct PlaylistBuilderModelTests {
     ]
     await model.createPlaylist()
 
-    model.selectCandidate(song, for: 1)
+    await model.selectCandidate(song, for: 1)
 
     #expect(model.rows[0].status == .duplicate(song, ofTrackIndex: 2))
     #expect(model.rows[1].status == .matched(song, score: 0.9))
@@ -626,7 +685,7 @@ struct PlaylistBuilderModelTests {
     #expect(!model.canAddToCreatedPlaylist(trackIndex: 3))
     #expect(!model.canAddToCreatedPlaylist(trackIndex: 4))
 
-    model.selectCandidate(Self.candidate(id: "Y", title: "Other"), for: 2)
+    await model.selectCandidate(Self.candidate(id: "Y", title: "Other"), for: 2)
 
     #expect(model.canAddToCreatedPlaylist(trackIndex: 2))
   }
@@ -688,7 +747,7 @@ struct PlaylistBuilderModelTests {
   @Test("a row fixed after creation appends to the new playlist and leaves the table")
   func addsPreviouslyUnresolvedRow() async {
     let appendCapture = PlaylistAppendCapture()
-    let client = authorizedClient(append: { id, ids in await appendCapture.record(id: id, ids: ids)
+    let client = authorizedClient(append: { id, ids in await appendCapture.record(id: id, ids: ids.map(\.id))
     })
     let model = withDependencies {
       $0.appleMusicCatalogClient = client
@@ -809,17 +868,20 @@ struct PlaylistBuilderModelTests {
       canPlayCatalogContent: true, hasCloudLibraryEnabled: true),
     search: @escaping @Sendable (String, Int) async throws -> [CatalogSongCandidate] = { _, _ in []
     },
-    create: @escaping @Sendable (String, String?, [String]) async throws -> CreatedPlaylistRef = {
+    create: @escaping @Sendable (String, String?, [PlaylistSongReference]) async throws -> CreatedPlaylistRef = {
       name, _, ids in
       CreatedPlaylistRef(id: "playlist", name: name, trackCount: ids.count)
     },
-    append: @escaping @Sendable (String, [String]) async throws -> Void = { _, _ in }
+    append: @escaping @Sendable (String, [PlaylistSongReference]) async throws -> Void = { _, _ in }
   ) -> AppleMusicCatalogClient {
     AppleMusicCatalogClient(
       authorizationStatus: { authorization },
       requestAuthorization: { authorization },
       subscriptionStatus: { subscription },
       searchSongs: search,
+      searchLibraryAlbums: { _ in [] },
+      libraryAlbumTracks: { _ in [] },
+      searchLibrarySongs: { _, _ in [] },
       createLibraryPlaylist: create,
       appendToLibraryPlaylist: append
     )
@@ -895,6 +957,11 @@ private actor PlaylistCreateCapture {
   func record(name: String, description: String?, ids: [String]) {
     value = (name, description, ids)
   }
+}
+
+private actor PlaylistSongReferenceCapture {
+  private(set) var value: [PlaylistSongReference] = []
+  func record(_ songs: [PlaylistSongReference]) { value = songs }
 }
 
 private actor PlaylistAppendCapture {

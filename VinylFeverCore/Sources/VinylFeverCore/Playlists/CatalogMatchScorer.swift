@@ -1,6 +1,7 @@
 import Foundation
 
 public struct CatalogSongCandidate: Equatable, Sendable {
+  public enum Source: String, Equatable, Sendable { case catalog, libraryUpload }
   public let id: String
   public let title: String
   public let artistName: String
@@ -8,6 +9,7 @@ public struct CatalogSongCandidate: Equatable, Sendable {
   public let releaseDate: Date?
   public let durationSeconds: Double?
   public let isrc: String?
+  public let source: Source
 
   public init(
     id: String,
@@ -16,7 +18,8 @@ public struct CatalogSongCandidate: Equatable, Sendable {
     albumTitle: String? = nil,
     releaseDate: Date? = nil,
     durationSeconds: Double? = nil,
-    isrc: String? = nil
+    isrc: String? = nil,
+    source: Source = .catalog
   ) {
     self.id = id
     self.title = title
@@ -25,6 +28,7 @@ public struct CatalogSongCandidate: Equatable, Sendable {
     self.releaseDate = releaseDate
     self.durationSeconds = durationSeconds
     self.isrc = isrc
+    self.source = source
   }
 }
 

@@ -192,7 +192,7 @@ struct PlaylistsView: View {
                 Task { await model.addToCreatedPlaylist(trackIndex: row.request.index) }
               },
               reSearch: { Task { await model.reSearch(trackIndex: row.request.index) } },
-              selectCandidate: { model.selectCandidate($0, for: row.request.index) },
+              selectCandidate: { candidate in Task { await model.selectCandidate(candidate, for: row.request.index) } },
               changeMatch: { model.reopen(trackIndex: row.request.index) },
               remove: { model.remove(trackIndex: row.request.index) }
             )
@@ -354,9 +354,13 @@ private struct PlaylistRowView: View {
   private var statusContent: some View {
     switch row.status {
     case .matched(let candidate, _):
-      Label("\(candidate.title) — \(candidate.artistName)", systemImage: "checkmark.circle.fill")
-        .foregroundStyle(.green)
-        .lineLimit(1)
+      VStack(alignment: .leading, spacing: 3) {
+        Label("\(candidate.title) — \(candidate.artistName)", systemImage: "checkmark.circle.fill")
+          .foregroundStyle(.green).lineLimit(1)
+        if candidate.source == .libraryUpload {
+          Text("Your upload · \(candidate.albumTitle ?? "")").font(.caption).foregroundStyle(.secondary)
+        }
+      }
     case .ambiguous(let candidates):
       HStack {
         Label("Choose a match", systemImage: "questionmark.circle")
@@ -383,7 +387,7 @@ private struct PlaylistRowView: View {
         }
       }
     case .duplicate(_, let index):
-      Label("Same catalog song as track #\(index); this row is skipped.", systemImage: "doc.on.doc")
+      Label("Same song as track #\(index); this row is skipped.", systemImage: "doc.on.doc")
         .foregroundStyle(.secondary)
     }
   }

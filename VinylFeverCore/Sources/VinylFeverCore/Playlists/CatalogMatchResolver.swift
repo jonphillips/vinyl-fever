@@ -52,6 +52,14 @@ extension CatalogMatchResolver {
     clock: any Clock<Duration>,
     search: @Sendable (String) async throws -> [CatalogSongCandidate]
   ) async throws -> [CatalogSongCandidate] {
+    try await retryingSearch(term, clock: clock, search: search)
+  }
+
+  public static func retryingSearch<Value: Sendable>(
+    _ term: String,
+    clock: any Clock<Duration>,
+    search: @Sendable (String) async throws -> [Value]
+  ) async throws -> [Value] {
     var attempt = 1
     while true {
       do {
@@ -107,10 +115,11 @@ extension CatalogMatchResolver {
     return results.compactMap { optionalRow in
       guard var row = optionalRow else { return nil }
       if case let .matched(candidate, _) = row.status {
-        if let firstIndex = firstTrackIndexByCatalogID[candidate.id] {
+        let key = "\(candidate.source.rawValue)|\(candidate.id)"
+        if let firstIndex = firstTrackIndexByCatalogID[key] {
           row.status = .duplicate(candidate, ofTrackIndex: firstIndex)
         } else {
-          firstTrackIndexByCatalogID[candidate.id] = row.request.index
+          firstTrackIndexByCatalogID[key] = row.request.index
         }
       }
       return row

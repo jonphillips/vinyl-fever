@@ -221,6 +221,17 @@ final class PlaylistBuilderModel {
         ($0.index, "\($0.artist) \($0.title)")
       })
     rows = await resolver.resolve(decoded.request)
+    for index in rows.indices {
+      let request = rows[index].request
+      if LibraryUploadMatcher.shouldUseLibraryRoute(request, snapshot: librarySnapshot) {
+        rows[index].status = await resolveLibrary(request)
+      } else if case .notFound = rows[index].status {
+        let uploads = LibraryUploadMatcher.uploadedCandidates(request, snapshot: librarySnapshot)
+        if !uploads.isEmpty {
+          rows[index].status = .ambiguous(uploads.map { ScoredCandidate(candidate: $0, score: 1) })
+        }
+      }
+    }
     reconcileDuplicates()
     hasResolvedPaste = true
   }
@@ -247,11 +258,15 @@ final class PlaylistBuilderModel {
     }
   }
 
-  func selectCandidate(_ candidate: CatalogSongCandidate, for trackIndex: Int) {
+  func selectCandidate(_ candidate: CatalogSongCandidate, for trackIndex: Int) async {
     guard !isCreating else { return }
     guard let rowIndex = rows.firstIndex(where: { $0.request.index == trackIndex }) else { return }
-    rows[rowIndex].status = .matched(
-      candidate, score: CatalogMatchScorer.score(rows[rowIndex].request, candidate))
+    if candidate.source == .libraryUpload {
+      rows[rowIndex].status = await resolveLibrary(rows[rowIndex].request, albumHint: candidate.albumTitle)
+    } else {
+      rows[rowIndex].status = .matched(
+        candidate, score: CatalogMatchScorer.score(rows[rowIndex].request, candidate))
+    }
     reconcileDuplicates()
   }
 
@@ -286,8 +301,12 @@ final class PlaylistBuilderModel {
     isCreating = true
     operationError = nil
     defer { isCreating = false }
-    let matched = visibleRows.compactMap { row -> CatalogSongCandidate? in
-      if case .matched(let candidate, _) = row.status { candidate } else { nil }
+    let matched = visibleRows.compactMap { row -> PlaylistSongReference? in
+      if case .matched(let candidate, _) = row.status {
+        PlaylistSongReference(id: candidate.id, source: candidate.source)
+      } else {
+        nil
+      }
     }
     do {
       let trackIndexes = Set(
@@ -298,7 +317,7 @@ final class PlaylistBuilderModel {
         playlistName.trimmingCharacters(in: .whitespacesAndNewlines),
         playlistDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
           ? nil : playlistDescription.trimmingCharacters(in: .whitespacesAndNewlines),
-        matched.map(\.id)
+        matched
       )
       createdTrackIndexes = trackIndexes
       createdPlaylist = playlist
@@ -332,7 +351,9 @@ final class PlaylistBuilderModel {
     defer { addingTrackIndexes.remove(trackIndex) }
     operationError = nil
     do {
-      try await appleMusic.appendToLibraryPlaylist(createdPlaylist.id, [candidate.id])
+      try await appleMusic.appendToLibraryPlaylist(
+        createdPlaylist.id,
+        [PlaylistSongReference(id: candidate.id, source: candidate.source)])
       guard let currentPlaylist = self.createdPlaylist, currentPlaylist.id == createdPlaylist.id
       else { return }
       appendedTrackIndexes.insert(trackIndex)
@@ -407,6 +428,25 @@ final class PlaylistBuilderModel {
     reconcileDuplicates()
   }
 
+  private func resolveLibrary(
+    _ request: TrackRequest, albumHint: String? = nil
+  ) async -> ResolvedPlaylistRow.Status {
+    let client = appleMusic
+    let result = await LibraryUploadMatcher.match(
+      request, albumHint: albumHint, clock: clock,
+      searchAlbums: { try await client.searchLibraryAlbums($0) },
+      albumTracks: { try await client.libraryAlbumTracks($0) },
+      searchSongs: { try await client.searchLibrarySongs($0, $1) }
+    )
+    let status: ResolvedPlaylistRow.Status = switch result {
+    case let .matched(candidate): .matched(candidate, score: 1)
+    case let .ambiguous(candidates):
+      .ambiguous(candidates.map { ScoredCandidate(candidate: $0, score: 1) })
+    case let .notFound(reason): .notFound(error: reason)
+    }
+    return status
+  }
+
   private func passGates() async -> Bool {
     let status = await appleMusic.authorizationStatus()
     let authorized = status == .authorized ? status : await appleMusic.requestAuthorization()
@@ -446,8 +486,9 @@ final class PlaylistBuilderModel {
       case .ambiguous, .notFound:
         continue
       }
-      if firstRowByCatalogID[candidate.id] == nil {
-        firstRowByCatalogID[candidate.id] = row.request.index
+      let key = "\(candidate.source.rawValue)|\(candidate.id)"
+      if firstRowByCatalogID[key] == nil {
+        firstRowByCatalogID[key] = row.request.index
       }
       rows[rowIndex].status = .matched(
         candidate,
@@ -467,10 +508,11 @@ final class PlaylistBuilderModel {
       case .ambiguous, .notFound:
         continue
       }
-      if let firstTrackIndex = firstRowByCatalogID[candidate.id] {
+      let key = "\(candidate.source.rawValue)|\(candidate.id)"
+      if let firstTrackIndex = firstRowByCatalogID[key] {
         rows[rowIndex].status = .duplicate(candidate, ofTrackIndex: firstTrackIndex)
       } else {
-        firstRowByCatalogID[candidate.id] = row.request.index
+        firstRowByCatalogID[key] = row.request.index
         rows[rowIndex].status = .matched(
           candidate,
           score: CatalogMatchScorer.score(row.request, candidate)
