@@ -2,6 +2,7 @@ import Foundation
 import MCPServerKit
 import Testing
 import VinylFeverCore
+import VinylFeverListening
 
 struct LibraryMCPServerTests {
   @Test("tool list matches the brief's names, properties, enums, and annotations")
@@ -10,11 +11,12 @@ struct LibraryMCPServerTests {
     let tools = try await listedTools(server)
     let expected: [String: Set<String>] = [
       "library_overview": [],
-      "top_artists": ["by", "limit"],
-      "top_tracks": ["by", "limit"],
+      "top_artists": ["by", "period", "limit"],
+      "top_tracks": ["by", "period", "limit"],
       "search_library": ["artist", "title", "album", "genre", "year_from", "year_to", "min_plays", "max_plays", "favorited", "availability", "sort", "limit"],
       "artist_profile": ["artist"],
       "check_tracks": ["tracks"],
+      "recent_listening": ["period", "limit"],
       "stage_playlist": ["name", "description", "tracks"],
     ]
     #expect(Set(tools.compactMap { $0["name"] as? String }) == Set(expected.keys))
@@ -34,10 +36,23 @@ struct LibraryMCPServerTests {
     }
     #expect(enumValues(in: tools, tool: "top_artists", property: "by") == ["plays", "favorites", "recently_added"])
     #expect(enumValues(in: tools, tool: "top_tracks", property: "by") == ["plays", "favorites", "recently_added", "recently_played"])
+    #expect(enumValues(in: tools, tool: "recent_listening", property: "period") == ["24h", "7d", "30d", "90d"])
+    #expect(enumValues(in: tools, tool: "top_artists", property: "period") == ["all_time", "7d", "30d", "90d"])
     let stage = try #require(tools.first { $0["name"] as? String == "stage_playlist" })
     let stageProperties = try #require((stage["inputSchema"] as? [String: Any])?["properties"] as? [String: Any])
     #expect((stageProperties["description"] as? [String: Any])?["description"] as? String
       == "One sentence about the music; it becomes the playlist's description in Apple Music. No library stats, availability notes, or dates.")
+  }
+
+  @Test("listening calls report setup guidance when no listening log exists")
+  func listeningNotSetUp() async throws {
+    let root = temporaryDirectory()
+    let snapshotURL = root.appending(path: "snapshot.json")
+    try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), listeningRootURL: root.appending(path: "Listening"))
+    let response = try #require(await call(server, id: 9, name: "recent_listening", arguments: #"{"period":"7d"}"#))
+    #expect(response.contains("Listening history isn't set up yet"))
+    #expect(response.contains("\"isError\":true"))
   }
 
   @Test("every read tool fails loudly without a snapshot")
@@ -153,11 +168,11 @@ struct LibraryMCPServerTests {
     return LibrarySnapshot(generatedAt: generatedAt, tracks: tracks)
   }
 
-  private func makeServer(snapshot: LibrarySnapshot, inbox: URL? = nil) throws -> (MCPServer, URL) {
+  private func makeServer(snapshot: LibrarySnapshot, inbox: URL? = nil, listeningRootURL: URL? = nil) throws -> (MCPServer, URL) {
     let root = temporaryDirectory()
     let snapshotURL = root.appending(path: "library-snapshot.json")
     try LibrarySnapshotCodec.encode(snapshot).write(to: snapshotURL)
-    return (LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: inbox ?? root.appending(path: "inbox")), snapshotURL)
+    return (LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: inbox ?? root.appending(path: "inbox"), listeningRootURL: listeningRootURL ?? root.appending(path: "Listening")), snapshotURL)
   }
 
   private func listedTools(_ server: MCPServer) async throws -> [[String: Any]] {

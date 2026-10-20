@@ -8,7 +8,8 @@ Vinyl Fever bundles the `vf-mcp` stdio helper at:
 
 Use the resolved path shown in **Settings → Chat Access (MCP)** if the app is installed elsewhere.
 The helper reads `~/Library/Application Support/VinylFever/LibrarySnapshot/library-snapshot.json`
-and stages playlist proposals in `~/Library/Application Support/VinylFever/PlaylistInbox/`.
+and stages playlist proposals in `~/Library/Application Support/VinylFever/PlaylistInbox/`. It reads
+listening history from `iCloud Drive/Vinyl Fever/Listening/` when polling has been set up.
 Only Create in Vinyl Fever writes a playlist to Apple Music.
 
 For ChatGPT, create a `vinyl-fever` Secure MCP Tunnel and install the `Vinyl Fever` plugin. The
@@ -29,15 +30,21 @@ The helper exposes these tools:
 - `search_library`
 - `artist_profile`
 - `check_tracks`
+- `recent_listening`
 - `stage_playlist`
+
+`top_artists` and `top_tracks` accept `period: 7d`, `30d`, or `90d` for log-backed counts;
+omit `period` or use `all_time` for Mac library counts. Log-backed responses include coverage.
+Ask `recent_listening` before claiming what Jon is into lately. A logged play means a song started;
+skips and brief autoplay count, so don't present it as a full listen.
 
 For Claude Code and Codex, use a dedicated `~/music-chat` folder. Save this as
 `~/music-chat/AGENTS.md`:
 
 ```markdown
 Keep music conversations warm, curious, and grounded in Jon's library. Ask before making
-assumptions about taste. Use the Vinyl Fever tools for library claims, and check tracks before
-proposing a final list.
+assumptions about taste. Use the Vinyl Fever tools for library claims, check tracks before
+proposing a final list, and ask `recent_listening` before claiming what Jon is into lately.
 
 The JSON object must have a non-empty name and at least one track. Each track needs artist and
 title; album and year are optional hints, and year means the original release year.

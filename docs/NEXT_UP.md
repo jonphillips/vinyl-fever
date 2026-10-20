@@ -1,7 +1,7 @@
-# Next Up — M13 · Dispatch 3: Listening in `vf-mcp` and Settings
+# Next Up — M14 · Dispatch 2: Let the chat ask for uploads
 
-**Slices:** M13 · S2 (branch `m13/s2-listening-tools`)
-**Briefs:** docs/milestones/M13-listening-history.md § S2
-**Done when:** S2's DoD, except its device gate; Core and app tests green; PR opened in `jonphillips/vinyl-fever`.
-**Owed:** M13 S1's Intel mini gate; M13 S2's device gate.
-**Notes:** M14 S0 is complete. M13 S2 precedes M14 S1 per M14 Decision 3 (amended 2026-10-20).
+**Slices:** M14 · S1 (branch `m14/s1-mcp-uploads`)
+**Briefs:** docs/milestones/M14-live-tracks-in-playlists.md § S1
+**Done when:** S1's DoD, except its device gate; Core and app tests green; PR opened in `jonphillips/vinyl-fever`.
+**Owed:** M13 S1's Intel mini gate; M13 S2's iPad device gate; M14 S1's device gate.
+**Notes:** M14 S0 and M13 S2 implementation are complete.

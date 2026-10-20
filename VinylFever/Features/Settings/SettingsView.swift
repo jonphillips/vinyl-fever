@@ -3,6 +3,7 @@ import Dependencies
 import SQLiteData
 import SwiftUI
 import VinylFeverCore
+import VinylFeverListening
 
 struct SettingsView: View {
   @Bindable var model: AppModel
@@ -14,7 +15,9 @@ struct SettingsView: View {
   @State private var didCopyPlaylistInstructions = false
   @State private var copiedMCPConfig: String?
   @State private var librarySnapshotStatus = "Checking…"
+  @State private var listeningStatus = "Checking…"
   @Dependency(\.librarySnapshotStore) private var librarySnapshotStore
+  @Dependency(\.listeningStore) private var listeningStore
 
   private var settings: AppSetting {
     AppSetting.current(from: persistedSettings)
@@ -61,6 +64,17 @@ struct SettingsView: View {
           )
           .font(.callout)
           .foregroundStyle(.secondary)
+        }
+
+        Section {
+          Text(listeningStatus)
+          LabeledContent("iCloud folder", value: listeningStore.listeningFolder().path(percentEncoded: false))
+            .textSelection(.enabled)
+          Link("Listening history setup", destination: URL(string: "https://github.com/jonphillips/vinyl-fever/blob/main/docs/listening/POLLER-SETUP.md")!)
+        } header: {
+          Text("Listening History")
+        } footer: {
+          Text("Listening history begins when polling is set up. A play means a song started; skips and brief autoplay count.")
         }
 
         Section("Frontier Model") {
@@ -127,6 +141,7 @@ struct SettingsView: View {
       .task {
         model.loadFrontierKeyPreview()
         await refreshLibrarySnapshotStatus()
+        refreshListeningStatus()
       }
       .toolbar {
         ToolbarItem {
@@ -158,6 +173,24 @@ struct SettingsView: View {
       librarySnapshotStatus = "\(snapshot.trackCount.formatted()) tracks · \(modifiedAt.formatted(.relative(presentation: .numeric)))"
     } catch {
       librarySnapshotStatus = "Unavailable · \(error.localizedDescription)"
+    }
+  }
+
+  private func refreshListeningStatus() {
+    do {
+      let fetches = try listeningStore.readFetches()
+      guard !fetches.isEmpty else {
+        listeningStatus = "Not set up yet. Follow the setup instructions to start collecting history."
+        return
+      }
+      let grouped = Dictionary(grouping: fetches, by: \.poller).values.map { $0 }
+      let coverage = ListeningLog(streams: grouped, now: Date()).coverage
+      let since = coverage.firstFetchAt?.formatted(date: .abbreviated, time: .shortened) ?? "Unknown"
+      let last = coverage.lastFetchAt?.formatted(.relative(presentation: .numeric)) ?? "Unknown"
+      let gaps = coverage.gaps.filter { $0.windowEnd >= Date().addingTimeInterval(-30 * 24 * 60 * 60) }.count
+      listeningStatus = "Polling Mac: \(coverage.host ?? "Unknown") · Last fetch \(last) · Coverage since \(since) · \(gaps) gaps in 30 days"
+    } catch {
+      listeningStatus = "Listening history unavailable · \(error.localizedDescription)"
     }
   }
 
