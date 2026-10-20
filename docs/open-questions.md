@@ -47,6 +47,25 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   and the next. It can't size the last song of a session, and Jon didn't want the request rate
   or the precision before a use exists. Revisit when an analysis needs listens rather than
   starts.
+
+  The analytical strategy is now the *Taste Intelligence* candidate below.
+- **Taste Intelligence** — candidate v1 design in [taste-intelligence.md](taste-intelligence.md)
+  (Jon and the architect, 2026-10-20, from a Codex brief). Vinyl Fever learns Jon's taste from
+  evidence he already produces and lets the chat do the reasoning, aiming at "15 songs I
+  probably don't know but will love, explained, and learn which stick." Key findings:
+  - Explicit signals are nearly unused: 19 favorites, 4 dislikes, 70 ratings in 87,114 tracks.
+  - **Jon's Selections** (2021–2026, 512 songs) is the strongest signal: songs from the current
+    year he adds as he hears them.
+  - **Replay** 2018–2026 is in the library now, ranked; pre-2018 data is a shared family
+    account and is excluded.
+  - **New Music** is graded in full every week, so kept vs passed is a real contrast, and its
+    keep rate is Apple's discovery yield, the baseline to beat.
+  - Shortcuts can read the playing song on Jon's phone, so feedback from CarPlay, Siri, and the
+    Action button needs no iOS app.
+
+  Candidate phasing: S0 probes, S1 playlists in the snapshot with roles, S2 feedback (Shortcuts
+  and notes), S3 exposure and curation logs, then an outcomes milestone. It follows M14 S1; where
+  M13 S3 falls is Jon's call.
 - **Live tracks in playlists** — planned as [M14](milestones/M14-live-tracks-in-playlists.md)
   (2026-10-18). It interleaves with M13: S0 after M13 S1, S1 after M13 S2 (order amended
   2026-10-20, M14 Decision 3). Probes on 2026-10-18 showed:

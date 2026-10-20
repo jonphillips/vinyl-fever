@@ -17,6 +17,7 @@ Related source material:
 
 - [Efforts](efforts/README.md)
 - [Listening](listening/README.md)
+- [Taste Intelligence (candidate design)](taste-intelligence.md)
 - [reference/MusicWorkbench_Codex_Handoff.md](reference/MusicWorkbench_Codex_Handoff.md)
 - [reference/apple_music_library_strategy.md](reference/apple_music_library_strategy.md)
 - [reference/duplicate-detection-strategy.md](reference/duplicate-detection-strategy.md)
