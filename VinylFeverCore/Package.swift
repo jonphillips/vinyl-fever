@@ -9,10 +9,10 @@ let package = Package(
   ],
   products: [
     .library(name: "VinylFeverCore", targets: ["VinylFeverCore"]),
-    .library(name: "VinylFeverListening", targets: ["VinylFeverListening"]),
     .executable(name: "vf-mcp", targets: ["VinylFeverMCP"]),
   ],
   dependencies: [
+    .package(path: "../VinylFeverListening"),
     .package(url: "https://github.com/pointfreeco/sqlite-data", from: "1.0.0"),
     .package(url: "https://github.com/pointfreeco/swift-custom-dump", from: "1.0.0"),
     .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.0.0"),
@@ -25,16 +25,9 @@ let package = Package(
   ],
   targets: [
     .target(
-      name: "VinylFeverListening",
-      dependencies: [
-        .product(name: "Dependencies", package: "swift-dependencies"),
-        .product(name: "DependenciesMacros", package: "swift-dependencies"),
-      ]
-    ),
-    .target(
       name: "VinylFeverCore",
       dependencies: [
-        "VinylFeverListening",
+        .product(name: "VinylFeverListening", package: "VinylFeverListening"),
         .product(name: "Dependencies", package: "swift-dependencies"),
         .product(name: "DependenciesMacros", package: "swift-dependencies"),
         .product(name: "SQLiteData", package: "sqlite-data"),
@@ -48,7 +41,7 @@ let package = Package(
       name: "VinylFeverCoreTests",
       dependencies: [
         "VinylFeverCore",
-        "VinylFeverListening",
+        .product(name: "VinylFeverListening", package: "VinylFeverListening"),
         .product(name: "CustomDump", package: "swift-custom-dump"),
         .product(name: "DependenciesTestSupport", package: "swift-dependencies"),
         .product(name: "LLMClientKit", package: "LLMClientKit"),

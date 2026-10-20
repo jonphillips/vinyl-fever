@@ -6,6 +6,7 @@ The standing pattern for every dispatch. Run each command through
 
 ```bash
 qr=~/code/jon-platform/scripts/quiet-run
+$qr swift test --package-path VinylFeverListening
 $qr swift test --package-path VinylFeverCore
 $qr xcodebuild -scheme VinylFever -destination 'platform=macOS' test
 ~/code/jon-platform/scripts/check-handoff     # warn-only document-shape hygiene (ADR-0005)

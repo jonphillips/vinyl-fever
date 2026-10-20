@@ -16,6 +16,8 @@ settings:
 packages:
   VinylFeverCore:
     path: VinylFeverCore
+  VinylFeverListening:
+    path: VinylFeverListening
   swift-dependencies:
     url: https://github.com/pointfreeco/swift-dependencies
     from: 1.0.0
@@ -31,11 +33,11 @@ targets:
   VinylFeverListeningPoller:
     type: application
     platform: macOS
-    deploymentTarget: "26.0"
+    deploymentTarget: "15.0"
     sources:
       - VinylFeverListeningPoller
     dependencies:
-      - package: VinylFeverCore
+      - package: VinylFeverListening
         product: VinylFeverListening
     postBuildScripts:
       - name: Install listening poller agent definition

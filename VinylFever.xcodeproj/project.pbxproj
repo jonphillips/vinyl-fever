@@ -72,6 +72,7 @@
 		CC336537557BE54F0DB166E6 /* VinylFeverCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VinylFeverCore; path = VinylFeverCore; sourceTree = SOURCE_ROOT; };
 		CD2798F08C3813916195B870 /* PlaylistsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistsView.swift; sourceTree = "<group>"; };
 		CE24892ADA40E7507D033765 /* AppModelCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelCleanupTests.swift; sourceTree = "<group>"; };
+		E3DD830BE940FBC150E799DB /* VinylFeverListening */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VinylFeverListening; path = VinylFeverListening; sourceTree = SOURCE_ROOT; };
 		E5FF662CC6F9DD3413947EB1 /* PlaylistBuilderModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistBuilderModelTests.swift; sourceTree = "<group>"; };
 		EE18C43EC91F35A2305CD2A7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		EFE8FAAEE05BF9BF9A136EDE /* MusicAppClient+Live.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MusicAppClient+Live.swift"; sourceTree = "<group>"; };
@@ -186,6 +187,7 @@
 			children = (
 				37594C5E09F565DC70AF0A3C /* LLMClientKit */,
 				CC336537557BE54F0DB166E6 /* VinylFeverCore */,
+				E3DD830BE940FBC150E799DB /* VinylFeverListening */,
 			);
 			name = Packages;
 			sourceTree = "<group>";
@@ -356,6 +358,7 @@
 				91086051D9EC56BBA794DAD1 /* XCRemoteSwiftPackageReference "swift-navigation" */,
 				7950EA78620E8A407134CD86 /* XCLocalSwiftPackageReference "../jon-platform/packages/LLMClientKit" */,
 				91CC58644ABC044D48488747 /* XCLocalSwiftPackageReference "VinylFeverCore" */,
+				1E831CEF3887F72899D7FF1E /* XCLocalSwiftPackageReference "VinylFeverListening" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 82F110051A55E3158FF9916B /* Products */;
@@ -622,7 +625,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonphillips.vinylfever.listeningpoller;
 				PRODUCT_NAME = "VF Listening Poller";
 				PROVISIONING_PROFILE_SPECIFIER = "VF Listening Poller Dev Profile";
@@ -693,7 +696,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonphillips.vinylfever.listeningpoller;
 				PRODUCT_NAME = "VF Listening Poller";
 				PROVISIONING_PROFILE_SPECIFIER = "VF Listening Poller Dev Profile";
@@ -790,6 +793,10 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
+		1E831CEF3887F72899D7FF1E /* XCLocalSwiftPackageReference "VinylFeverListening" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = VinylFeverListening;
+		};
 		7950EA78620E8A407134CD86 /* XCLocalSwiftPackageReference "../jon-platform/packages/LLMClientKit" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = "../jon-platform/packages/LLMClientKit";

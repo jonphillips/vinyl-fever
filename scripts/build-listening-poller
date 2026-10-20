@@ -32,7 +32,15 @@ while IFS= read -r -d '' binary; do
       echo "error: $binary is not universal (architectures: $archs)" >&2
       exit 1
     fi
-    echo "$(basename "$binary"): $archs"
+    for architecture in $archs; do
+      build_info="$(vtool -show-build -arch "$architecture" "$binary")"
+      minimum_os="$(awk '$1 == "minos" { print $2 }' <<<"$build_info")"
+      if [[ "$minimum_os" != "15.0" ]]; then
+        echo "error: $(basename "$binary") ($architecture) minimum OS is ${minimum_os:-unknown}, expected 15.0" >&2
+        exit 1
+      fi
+      echo "$(basename "$binary") ($architecture): minos $minimum_os"
+    done
   fi
 done < <(find "$macos_dir" -type f -print0)
 
@@ -40,6 +48,12 @@ codesign --verify --deep --strict "$app_path"
 echo "codesign: verified"
 
 info_plist="$app_path/Contents/Info.plist"
+minimum_system_version="$(plutil -extract LSMinimumSystemVersion raw -o - "$info_plist")"
+if [[ "$minimum_system_version" != "15.0" ]]; then
+  echo "error: LSMinimumSystemVersion is $minimum_system_version, expected 15.0" >&2
+  exit 1
+fi
+echo "LSMinimumSystemVersion: $minimum_system_version"
 usage_description="$(plutil -extract NSAppleMusicUsageDescription raw -o - "$info_plist")"
 echo "NSAppleMusicUsageDescription: $usage_description"
 

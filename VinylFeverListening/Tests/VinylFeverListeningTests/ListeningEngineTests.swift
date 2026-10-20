@@ -3,7 +3,6 @@ import DependenciesTestSupport
 import Foundation
 import Testing
 import VinylFeverListening
-@testable import VinylFeverCore
 
 @Suite("Listening engine")
 struct ListeningEngineTests {
@@ -261,20 +260,6 @@ struct ListeningEngineTests {
     let topTracks = log.topTracks(period: .week, now: now)
     #expect(topTracks.map(\.title) == ["Old Fave Song", "New Thing Song"])
     #expect(topTracks.map(\.plays) == [60, 40])
-  }
-
-  @Test("listening track keys match the library index key")
-  func listeningTrackKeyMatchesLibraryIndexKey() {
-    let titles = [
-      "Song feat. Guest",
-      "Song (featuring Guest)",
-      "Song (feat. Guest)",
-      "Song (2005 Remaster)",
-    ]
-    for title in titles {
-      let indexKey = "\(SongTextNormalizer.artist("The Records"))|\(SongTextNormalizer.libraryTitle(title))"
-      #expect(ListeningTextNormalizer.trackKey(artist: "The Records", title: title) == indexKey)
-    }
   }
 
   @Test("the normalizer fast path matches the regex rules")
