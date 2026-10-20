@@ -55,6 +55,37 @@ struct LibraryMCPServerTests {
     #expect(response.contains("\"isError\":true"))
   }
 
+  @Test("check_tracks returns up to five matching upload album names without IDs")
+  func checkTracksUploadedAlbums() async throws {
+    let root = temporaryDirectory()
+    let snapshotURL = root.appending(path: "snapshot.json")
+    let uploads = (1...5).map { number in
+      LibraryTrack(
+        persistentID: "private-upload-id-\(number)", name: "Thunder Road",
+        artist: "Bruce Springsteen & The E Street Band (Live)", album: "Show \(number)",
+        playCount: 6 - number, availability: .uploaded)
+    }
+    let almostMatch = LibraryTrack(
+      persistentID: "private-unrelated-id", name: "Alison", artist: "Elvis", album: "Show",
+      availability: .uploaded)
+    try LibrarySnapshotCodec.encode(LibrarySnapshot(generatedAt: .now, tracks: uploads + [almostMatch]))
+      .write(to: snapshotURL)
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"))
+
+    let springsteen = try #require(await resultJSON(
+      server, id: 40, name: "check_tracks",
+      arguments: #"{"tracks":[{"artist":"Bruce Springsteen","title":"Thunder Road"}]}"#
+    ) as? [[String: Any]])
+    #expect(springsteen.first?["uploadedAlbums"] as? [String] == (1...5).map { "Show \($0)" })
+    #expect(!String(describing: springsteen).contains("private-upload-id"))
+
+    let falsePositives = try #require(await resultJSON(
+      server, id: 41, name: "check_tracks",
+      arguments: #"{"tracks":[{"artist":"Bruce SpringsteenX","title":"Thunder Road"},{"artist":"Elvis Costello","title":"Alison"}]}"#
+    ) as? [[String: Any]])
+    #expect(falsePositives.allSatisfy { ($0["uploadedAlbums"] as? [String]) == [] })
+  }
+
   @Test("listening tools cover periods, gaps, library joins, validation, and omit IDs")
   func listeningTools() async throws {
     let root = temporaryDirectory()
@@ -216,7 +247,7 @@ struct LibraryMCPServerTests {
 
   @Test("instructions use the brief's standalone head and only the track rules tail")
   func instructions() {
-    let briefParagraph = "Vinyl Fever exposes Jon's Apple Music library and listening stats. Use these tools for any claim about what Jon owns, has played, or has loved — never guess. Before proposing a final list, call check_tracks on it. Tracks with availability \"uploaded\" are library-only and can't be added to a catalog playlist; leave them out. When Jon asks for the playlist, call stage_playlist with the final list instead of printing it; Jon reviews and creates it in Vinyl Fever. Snapshot age is in library_overview."
+    let briefParagraph = "Vinyl Fever exposes Jon's Apple Music library and listening stats. Use these tools for any claim about what Jon owns, has played, or has loved — never guess. Before proposing a final list, call check_tracks on it. For Jon's uploads, use an exact album from uploadedAlbums as the album hint. When Jon asks for the playlist, call stage_playlist with the final list instead of printing it; Jon reviews and creates it in Vinyl Fever. Snapshot age is in library_overview."
     #expect(LibraryMCPServer.instructions.hasPrefix(briefParagraph))
     #expect(LibraryMCPServer.instructionHead == briefParagraph)
     #expect(LibraryMCPServer.instructionHead.count <= 512)

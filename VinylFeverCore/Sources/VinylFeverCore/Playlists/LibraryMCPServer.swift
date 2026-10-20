@@ -191,7 +191,7 @@ private struct ListeningHistoryNotSetUp: LocalizedError {
 /// Factory for the standalone `vf-mcp` helper and the instructions used by every client.
 public enum LibraryMCPServer {
   public static let instructionHead = """
-  Vinyl Fever exposes Jon's Apple Music library and listening stats. Use these tools for any claim about what Jon owns, has played, or has loved — never guess. Before proposing a final list, call check_tracks on it. Tracks with availability "uploaded" are library-only and can't be added to a catalog playlist; leave them out. When Jon asks for the playlist, call stage_playlist with the final list instead of printing it; Jon reviews and creates it in Vinyl Fever. Snapshot age is in library_overview.
+  Vinyl Fever exposes Jon's Apple Music library and listening stats. Use these tools for any claim about what Jon owns, has played, or has loved — never guess. Before proposing a final list, call check_tracks on it. For Jon's uploads, use an exact album from uploadedAlbums as the album hint. When Jon asks for the playlist, call stage_playlist with the final list instead of printing it; Jon reviews and creates it in Vinyl Fever. Snapshot age is in library_overview.
   """
   public static let instructions: String = {
     instructionHead + "\n\n" + PlaylistContract.trackRules
