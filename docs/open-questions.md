@@ -81,6 +81,10 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
     Uploaded plus matched is about 81,000, against iCloud Music Library's 100,000-song limit.
   - The full evidence is in the milestone. Merging that plan PR approves its Decisions 1–4.
     M13 S1's completing PR (#85) dispatches M14 S0.
+  - **S0 merged as #89 and its device gate passed (2026-10-20).** The review added Decision 5:
+    on the library route, artists match by whole-word prefix, because most of Jon's uploads
+    carry variants such as `… & The E Street Band (Live)`. S1's `uploadedAlbums` uses the same
+    rule.
 - **M11: Create can lose the playlist it just made when a later batch fails** (from the #67
   review, 2026-10-15). `createLibraryPlaylist` sends the first 100 IDs with the create call,
   then appends the rest in batches of 100. If a later batch throws, the error drops the

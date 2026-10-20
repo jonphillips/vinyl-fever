@@ -69,7 +69,7 @@ Create: one call; each ID goes in as `songs` or `library-songs`, in row order
 
 **Dispatch 1: S0. Dispatch 2: S1.** Each owes a device gate.
 
-- [x] **S0 — The library route (core + app).** Device gate owed.
+- [x] **S0 — The library route (core + app).** Device gate passed 2026-10-20. Merged as #89.
   - **`AppleMusicCatalogClient` gains three endpoints:**
     - `searchLibraryAlbums(term)`;
     - `libraryAlbumTracks(albumID)`, which follows `next`;
@@ -117,10 +117,13 @@ Create: one call; each ID goes in as `songs` or `library-songs`, in row order
     - the upload badge text;
     - append sends `library-songs`.
   - The live API calls are **unverified** in the PR.
-  - **Device gate:** paste a mixed `VF-PLAYLIST` with 3 live tracks with album hints,
-    including "Thunder Road" from *6/22/03 - Disc 2 - Midsummer Second Night*, and 3 catalog
-    songs. The preview shows the three upload badges. Create it. It plays on the iPhone in
-    order.
+  - **Device gate (passed 2026-10-20, no longer owed):** paste a mixed `VF-PLAYLIST` with 3
+    live tracks with album hints, including "Thunder Road" from *6/22/03 - Disc 2 - Midsummer
+    Second Night*, and 3 catalog songs. The preview shows the three upload badges. Create it.
+    It plays on the iPhone in order.
+    - **Result:** Jon reported it passed.
+    - The review changed the brief: library-route artists match by whole-word prefix
+      (Decision 5).
 
 - [ ] **S1 — Let the chat ask for uploads (`vf-mcp` + contract).** Device gate owed.
   - **The instructions head** replaces "Tracks with availability "uploaded" are library-only
@@ -130,6 +133,16 @@ Create: one call; each ID goes in as `songs` or `library-songs`, in row order
     the pinned test is updated.
   - **`check_tracks`** gains `uploadedAlbums` for each song: up to 5 album names of its
     uploaded copies, most played first. Then the model can pick a show without another call.
+    - **It uses S0's upload index and artist rule (Decision 5),** not `check_tracks`' exact
+      song key. Otherwise `Bruce Springsteen` / `Thunder Road` would list only the plainly
+      tagged uploads and miss most of the shows.
+    - **Shared code:** take the albums from `LibraryIndex.uploadedCandidates(_:limit:)`, which
+      already filters, orders (most played, then album), and dedupes by album.
+    - That function currently clamps `limit` to `uploadPickerLimit` (3). Lift the clamp: the
+      picker passes 3, and `check_tracks` passes 5.
+    - The other `check_tracks` fields (`owned`, `plays`, `versionCount`, `availability`) keep
+      exact matching. A song can therefore show `owned: false` with a non-empty
+      `uploadedAlbums`; the instructions head shouldn't promise otherwise.
   - **`PlaylistContract.trackRules`** gains one sentence: "For one of Jon's own recordings,
     such as a live show, set album to the exact album name from his library." That text is
     shared with the ChatGPT Project contract, so `PLAYLIST-CONTRACT.md` is updated and stays
@@ -139,6 +152,11 @@ Create: one call; each ID goes in as `songs` or `library-songs`, in row order
   **DoD:**
   - The instruction pins: the head stands alone, and the new sentence is present.
   - `check_tracks` returns `uploadedAlbums` against the fixture, with no IDs in the output.
+  - `uploadedAlbums` uses the artist-prefix rule:
+    - `Bruce Springsteen` / `Thunder Road` lists a show tagged
+      `Bruce Springsteen & The E Street Band (Live)`;
+    - `Bruce SpringsteenX` lists none;
+    - five qualifying shows return all five (the clamp is lifted), and the picker still gets 3.
   - The contract pin is updated with `PLAYLIST-CONTRACT.md`.
   - **Device gate:** in ChatGPT on the iPad, ask for "a 1988 Tunnel of Love tour mix from my
     shows plus a few studio cuts". It calls `check_tracks`, then stages; the list appears under
@@ -199,3 +217,15 @@ recommendations. It doesn't dispatch anything: M13 goes first.
 4. **Change the shared contract sentence rather than add a format field.** `VF-PLAYLIST: v1`
    already carries `album`. Saying how to use it for uploads avoids a v2 and keeps old pastes
    valid.
+5. **On the library route, artists match by whole-word prefix** (decided in the #89 review,
+   2026-10-20). Title and album stay exact under `SongTextNormalizer`. Two artists match when
+   their normalized forms are equal, or when one is a whole-word prefix of the other. So
+   `bruce springsteen` matches `bruce springsteen and the e street band live`, but not
+   `bruce springsteenx`. The rule is `LibraryUploadMatcher.artistsMatch`.
+   - **Why:** Jon's uploads mostly carry artist variants. Of about 14,600 Springsteen uploads,
+     only 2,610 are tagged plain `Bruce Springsteen`; 7,130 are `… & The E Street Band`, 2,788
+     are `Bruce Springsteen (Live)`, and 1,622 are `… & The E Street Band (Live)`. With exact
+     matching, the S0 gate's own Thunder Road upload didn't route.
+   - **Where it applies:** the routing rule, the picker's upload candidates, the matcher, and
+     S1's `uploadedAlbums`. The catalog route and `check_tracks`' other fields keep exact
+     matching.
