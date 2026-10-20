@@ -26,9 +26,18 @@ extension RecentlyPlayedClient: DependencyKey {
   public static var liveValue: Self {
     Self(page: { offset in
       let request = try Self.request(offset: offset)
-      let response = try await MusicDataRequest(urlRequest: request).response()
+      let response: MusicDataResponse
+      do {
+        response = try await MusicDataRequest(urlRequest: request).response()
+      } catch let error as MusicDataRequest.Error {
+        guard !(200..<300).contains(error.status) else { throw error }
+        throw RecentlyPlayedError.httpStatus(
+          error.status,
+          detail: Self.joinedErrorDetail(title: error.title, detail: error.detailText)
+        )
+      }
       guard (200..<300).contains(response.urlResponse.statusCode) else {
-        throw RecentlyPlayedError.httpStatus(response.urlResponse.statusCode)
+        throw Self.httpError(status: response.urlResponse.statusCode, body: response.data)
       }
       let payload = try JSONDecoder().decode(RecentlyPlayedResponse.self, from: response.data)
       return RecentlyPlayedPage(items: try payload.data.map { try $0.listeningItem }, hasNext: payload.next != nil)
@@ -52,6 +61,23 @@ extension RecentlyPlayedClient: DependencyKey {
     request.httpMethod = "GET"
     return request
   }
+
+  static func httpError(status: Int, body: Data) -> RecentlyPlayedError {
+    let response = try? JSONDecoder().decode(AppleMusicErrorResponse.self, from: body)
+    let error = response?.errors?.first
+    return .httpStatus(
+      status,
+      detail: joinedErrorDetail(title: error?.title, detail: error?.detail)
+    )
+  }
+
+  static func joinedErrorDetail(title: String?, detail: String?) -> String? {
+    let parts = [title, detail].compactMap { value -> String? in
+      guard let value, !value.isEmpty else { return nil }
+      return value
+    }
+    return parts.isEmpty ? nil : parts.joined(separator: ": ")
+  }
 }
 
 extension DependencyValues {
@@ -63,15 +89,29 @@ extension DependencyValues {
 
 public enum RecentlyPlayedError: Error, LocalizedError, Equatable, Sendable {
   case invalidEndpoint
-  case httpStatus(Int)
+  case httpStatus(Int, detail: String?)
   case unsupportedResource(String)
 
   public var errorDescription: String? {
     switch self {
     case .invalidEndpoint: "Apple Music's recently-played endpoint is invalid."
-    case let .httpStatus(status): "Apple Music returned HTTP \(status)."
+    case let .httpStatus(status, detail):
+      if let detail {
+        "Apple Music returned HTTP \(status) (\(detail))."
+      } else {
+        "Apple Music returned HTTP \(status)."
+      }
     case let .unsupportedResource(type): "Apple Music returned an unsupported track type: \(type)."
     }
+  }
+}
+
+private struct AppleMusicErrorResponse: Decodable {
+  var errors: [Item]?
+
+  struct Item: Decodable {
+    var title: String?
+    var detail: String?
   }
 }
 

@@ -14,13 +14,17 @@ folder). Keep the app in `/Applications` so Login Items can find it after update
 
 ## First launch
 
-1. Open **VF Listening Poller** from `/Applications` on the mini.
-2. Click **Authorize** and allow Apple Music access.
-3. Turn on **Poll every hour on this Mac**.
-4. If macOS asks for approval, click **Open Login Items** and allow VF Listening
+1. Open the Music app on the mini and confirm it's signed in to your Apple Music
+   account (the Account menu shows your Apple ID).
+2. Open **VF Listening Poller** from `/Applications` on the mini.
+3. Click **Authorize** and allow Apple Music access.
+4. Turn on **Poll every hour on this Mac**.
+5. If macOS asks for approval, click **Open Login Items** and allow VF Listening
    Poller in **System Settings → General → Login Items**.
-5. Confirm that a `baseline` record appears on the laptop in iCloud Drive → Vinyl
+6. Confirm that a `baseline` record appears on the laptop in iCloud Drive → Vinyl
    Fever → Listening → `fetches/<poller-id>/`.
+   If the first record is `failed` with HTTP 401, open Music, then turn **Poll
+   every hour on this Mac** off and on again; turning it on polls immediately.
 
 Keep the mini logged in and awake. Turn off **Optimize Mac Storage** for iCloud
 Drive so the listening folder stays available to the poller.

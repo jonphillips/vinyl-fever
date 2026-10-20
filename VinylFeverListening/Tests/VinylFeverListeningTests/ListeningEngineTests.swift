@@ -2,7 +2,7 @@ import Dependencies
 import DependenciesTestSupport
 import Foundation
 import Testing
-import VinylFeverListening
+@testable import VinylFeverListening
 
 @Suite("Listening engine")
 struct ListeningEngineTests {
@@ -116,6 +116,21 @@ struct ListeningEngineTests {
     #expect(components.path == "/v1/me/recent/played/tracks")
     #expect(queryItems.map(\.name) == ["types", "limit", "offset"])
     #expect(queryItems.map(\.value) == ["songs,library-songs", String(ListeningDiff.pageSize), "60"])
+  }
+
+  @Test("HTTP errors include Apple's title and detail when available")
+  func httpErrorIncludesAppleDetail() {
+    let response = Data(
+      #"{"errors":[{"status":"401","code":"40100","title":"Unauthorized","detail":"A valid Apple Music user token is required."}]}"#.utf8
+    )
+    let error = RecentlyPlayedClient.httpError(status: 401, body: response)
+    #expect(
+      error.errorDescription ==
+        "Apple Music returned HTTP 401 (Unauthorized: A valid Apple Music user token is required.)."
+    )
+
+    let invalidResponse = RecentlyPlayedClient.httpError(status: 401, body: Data("not JSON".utf8))
+    #expect(invalidResponse.errorDescription == "Apple Music returned HTTP 401.")
   }
 
   @Test("baseline, empty feed, distinct catalog and library identities, and page-cap gap")
