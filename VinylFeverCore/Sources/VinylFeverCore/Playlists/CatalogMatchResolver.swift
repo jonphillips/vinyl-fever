@@ -7,6 +7,7 @@ public struct ResolvedPlaylistRow: Equatable, Sendable, Identifiable {
     case matched(CatalogSongCandidate, score: Double)
     case ambiguous([ScoredCandidate])
     case notFound(error: String?)
+    case uploadNotFound(reason: String, isFailure: Bool)
     case duplicate(CatalogSongCandidate, ofTrackIndex: Int)
   }
 

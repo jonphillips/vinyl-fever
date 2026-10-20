@@ -4,8 +4,10 @@ import Foundation
 
 @DependencyClient
 public struct AppleMusicCatalogClient: Sendable {
-  /// Apple Music documents 100 as the maximum page size for library song search.
-  public static let librarySearchPageSize = 100
+  /// Apple Music documents 25 as the maximum library search page size.
+  public static let librarySearchPageSize = 25
+  /// The S0 resolver caps one term at four 25-result library search pages.
+  public static let librarySongSearchCap = 100
   public var authorizationStatus: @Sendable () async -> MusicKitAuthorization = { .notDetermined }
   public var requestAuthorization: @Sendable () async -> MusicKitAuthorization = { .notDetermined }
   public var subscriptionStatus: @Sendable () async throws -> AppleMusicSubscriptionStatus

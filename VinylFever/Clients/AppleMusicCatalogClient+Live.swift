@@ -45,41 +45,44 @@ extension AppleMusicCatalogClient {
         }
       },
       searchLibraryAlbums: { term in
-        let page = try await Self.getLibraryPage(path: "/v1/me/library/albums", query: [
-          URLQueryItem(name: "term", value: term),
-          URLQueryItem(name: "limit", value: String(Self.librarySearchPageSize)),
-        ])
-        return page.data.map { LibraryAlbumCandidate(id: $0.id, title: $0.attributes.name) }
+        var offset = 0
+        var albums: [LibraryAlbumCandidate] = []
+        var pageCount = Self.librarySearchPageSize
+        while albums.count < Self.librarySongSearchCap,
+          pageCount == Self.librarySearchPageSize
+        {
+          let page = try await Self.getLibrarySearchPage(
+            term: term, resource: .albums, offset: offset)
+          let resources = page.albumResults?.items ?? []
+          pageCount = resources.count
+          albums += resources.map(\.albumCandidate)
+          offset += Self.librarySearchPageSize
+        }
+        return Array(albums.prefix(Self.librarySongSearchCap))
       },
       libraryAlbumTracks: { albumID in
         var path = "/v1/me/library/albums/\(albumID)/tracks?limit=\(Self.librarySearchPageSize)"
         var songs: [LibrarySongCandidate] = []
         while true {
           let page = try await Self.getLibraryPage(urlOrPath: path)
-          songs += page.data.map(Self.librarySong)
+          songs += page.relationshipItems.map(\.songCandidate)
           guard let next = page.next else { break }
           path = next
         }
         return songs
       },
       searchLibrarySongs: { term, offset in
-        let page = try await Self.getLibraryPage(path: "/v1/me/library/songs", query: [
-          URLQueryItem(name: "term", value: term),
-          URLQueryItem(name: "limit", value: String(Self.librarySearchPageSize)),
-          URLQueryItem(name: "offset", value: String(offset)),
-        ])
-        return page.data.map(Self.librarySong)
+        let page = try await Self.getLibrarySearchPage(
+          term: term, resource: .songs, offset: offset)
+        return (page.songResults?.items ?? []).map(\.songCandidate)
       },
       createLibraryPlaylist: { name, description, songIDs in
         guard !songIDs.isEmpty else {
           throw PlaylistCreationError.noTracks
         }
         let firstChunk = Array(songIDs.prefix(100))
-        let body = PlaylistCreateBody(
-          attributes: .init(name: name, description: description),
-          relationships: .init(tracks: .init(data: firstChunk.map(PlaylistTrackData.init)))
-        )
-        let data = try JSONEncoder().encode(body)
+        let data = try AppleMusicPlaylistRequestEncoder.createBody(
+          name: name, description: description, songs: firstChunk)
         let response = try await Self.perform(
           path: "/v1/me/library/playlists",
           method: "POST",
@@ -118,7 +121,7 @@ extension AppleMusicCatalogClient {
   }
 
   private static func append(_ songIDs: [PlaylistSongReference], to playlistID: String) async throws {
-    let data = try JSONEncoder().encode(PlaylistTracksBody(data: songIDs.map(PlaylistTrackData.init)))
+    let data = try AppleMusicPlaylistRequestEncoder.appendBody(songs: songIDs)
     _ = try await perform(
       path: "/v1/me/library/playlists/\(playlistID)/tracks",
       method: "POST",
@@ -126,7 +129,21 @@ extension AppleMusicCatalogClient {
     )
   }
 
-  private static func getLibraryPage(path: String, query: [URLQueryItem] = []) async throws -> LibraryPage {
+  private static func getLibrarySearchPage(
+    term: String, resource: LibrarySearchResource, offset: Int
+  ) async throws -> LibrarySearchPage {
+    let type = resource == .albums ? "library-albums" : "library-songs"
+    return try await getLibraryPage(
+      path: "/v1/me/library/search",
+      query: [
+        URLQueryItem(name: "types", value: type),
+        URLQueryItem(name: "term", value: term),
+        URLQueryItem(name: "limit", value: String(Self.librarySearchPageSize)),
+        URLQueryItem(name: "offset", value: String(offset)),
+      ])
+  }
+
+  private static func getLibraryPage(path: String, query: [URLQueryItem] = []) async throws -> LibrarySearchPage {
     guard var components = URLComponents(string: "https://api.music.apple.com\(path)") else {
       throw AppleMusicAPIError(statusCode: 0, detail: "The Apple Music library API URL is invalid.")
     }
@@ -137,7 +154,7 @@ extension AppleMusicCatalogClient {
     return try await getLibraryPage(urlOrPath: url.absoluteString)
   }
 
-  private static func getLibraryPage(urlOrPath: String) async throws -> LibraryPage {
+  private static func getLibraryPage(urlOrPath: String) async throws -> LibrarySearchPage {
     guard let url = urlOrPath.hasPrefix("https://")
       ? URL(string: urlOrPath) : URL(string: "https://api.music.apple.com\(urlOrPath)")
     else { throw AppleMusicAPIError(statusCode: 0, detail: "Apple Music returned an invalid pagination URL.") }
@@ -154,13 +171,8 @@ extension AppleMusicCatalogClient {
     guard (200..<300).contains(response.urlResponse.statusCode) else {
       throw AppleMusicAPIError(statusCode: response.urlResponse.statusCode, detail: Self.apiErrorDetail(from: response.data))
     }
-    do { return try JSONDecoder().decode(LibraryPage.self, from: response.data) }
+    do { return try JSONDecoder().decode(LibrarySearchPage.self, from: response.data) }
     catch { throw AppleMusicAPIError(statusCode: 200, detail: "Apple Music returned an unreadable library response: \(error.localizedDescription)") }
-  }
-
-  private static func librarySong(_ value: LibraryPage.Resource) -> LibrarySongCandidate {
-    LibrarySongCandidate(id: value.id, title: value.attributes.name, artist: value.attributes.artistName ?? "",
-      album: value.attributes.albumName ?? "", hasCatalogID: value.attributes.catalogId != nil)
   }
 
   /// MusicDataRequest supplies the user and developer tokens for this Apple Music API request.
@@ -214,56 +226,6 @@ private enum PlaylistCreationError: LocalizedError {
     case .noTracks: "Choose at least one matched song before creating a playlist."
     case let .invalidResponse(detail): "Apple Music returned an unreadable playlist response: \(detail)"
     }
-  }
-}
-
-// The request shape follows Apple's Music API. The concise playlist creation payload is
-// adapted from MusadoraKit's MIT-licensed LibraryPlaylistCreationRequest and post technique
-// (https://github.com/rryam/MusadoraKit).
-private struct PlaylistCreateBody: Encodable {
-  var attributes: Attributes
-  var relationships: Relationships
-
-  struct Attributes: Encodable {
-    var name: String
-    var description: String?
-  }
-
-  struct Relationships: Encodable {
-    var tracks: Tracks
-  }
-
-  struct Tracks: Encodable {
-    var data: [PlaylistTrackData]
-  }
-}
-
-private struct PlaylistTracksBody: Encodable {
-  var data: [PlaylistTrackData]
-}
-
-private struct PlaylistTrackData: Encodable {
-  var id: String
-  var type: String
-
-  init(_ ref: PlaylistSongReference) {
-    id = ref.id
-    type = ref.source == .libraryUpload ? "library-songs" : "songs"
-  }
-}
-
-private struct LibraryPage: Decodable {
-  var data: [Resource]
-  var next: String?
-  struct Resource: Decodable {
-    var id: String
-    var attributes: Attributes
-  }
-  struct Attributes: Decodable {
-    var name: String
-    var artistName: String?
-    var albumName: String?
-    var catalogId: String?
   }
 }
 

@@ -8,40 +8,13 @@ public enum LibraryUploadMatcher {
     case matched(CatalogSongCandidate)
     case ambiguous([CatalogSongCandidate])
     case notFound(reason: String)
+    case failed(String)
   }
 
-  public static func shouldUseLibraryRoute(
-    _ request: TrackRequest, snapshot: LibrarySnapshot?
-  ) -> Bool {
-    guard let album = request.album, !album.isEmpty, let snapshot else { return false }
-    return snapshot.tracks.contains { track in
-      track.availability == .uploaded
-        && SongTextNormalizer.artist(track.artist) == SongTextNormalizer.artist(request.artist)
-        && SongTextNormalizer.title(track.name) == SongTextNormalizer.title(request.title)
-        && SongTextNormalizer.album(track.album) == SongTextNormalizer.album(album)
-    }
-  }
-
-  public static func uploadedCandidates(
-    _ request: TrackRequest, snapshot: LibrarySnapshot?
-  ) -> [CatalogSongCandidate] {
-    guard let snapshot else { return [] }
-    let uploads = snapshot.tracks.filter { track in
-      track.availability == .uploaded
-        && SongTextNormalizer.artist(track.artist) == SongTextNormalizer.artist(request.artist)
-        && SongTextNormalizer.title(track.name) == SongTextNormalizer.title(request.title)
-    }.sorted { lhs, rhs in
-      lhs.playCount == rhs.playCount
-        ? lhs.album.localizedStandardCompare(rhs.album) == .orderedAscending
-        : lhs.playCount > rhs.playCount
-    }
-    var albums: Set<String> = []
-    return uploads.filter { albums.insert(SongTextNormalizer.album($0.album)).inserted }
-      .prefix(uploadPickerLimit).map {
-      CatalogSongCandidate(
-        id: $0.persistentID, title: $0.name, artistName: $0.artist,
-        albumTitle: $0.album, source: .libraryUpload)
-    }
+  public static func artistsMatch(_ lhs: String, _ rhs: String) -> Bool {
+    let left = SongTextNormalizer.artist(lhs)
+    let right = SongTextNormalizer.artist(rhs)
+    return left == right || left.hasPrefix(right + " ") || right.hasPrefix(left + " ")
   }
 
   public static func match(
@@ -71,7 +44,7 @@ public enum LibraryUploadMatcher {
           break
         }
       } catch {
-        return .notFound(reason: error.localizedDescription)
+        return .failed(error.localizedDescription)
       }
     }
 
@@ -81,22 +54,24 @@ public enum LibraryUploadMatcher {
           try await searchSongs($0, 0)
         }
         var candidates = first
-        while candidates.count < AppleMusicCatalogClient.librarySearchPageSize {
+        var page = first
+        while candidates.count < AppleMusicCatalogClient.librarySongSearchCap,
+          page.count == AppleMusicCatalogClient.librarySearchPageSize
+        {
           let offset = candidates.count
-          let page = try await CatalogMatchResolver.retryingSearch(term, clock: clock) {
+          page = try await CatalogMatchResolver.retryingSearch(term, clock: clock) {
             try await searchSongs($0, offset)
           }
-          guard !page.isEmpty else { break }
           candidates += page
         }
         let matching = exactMatches(candidates, request: request, album: album)
-          .prefix(AppleMusicCatalogClient.librarySearchPageSize).map { $0 }
+          .prefix(AppleMusicCatalogClient.librarySongSearchCap).map { $0 }
         if !matching.isEmpty { return outcome(matching) }
-        if candidates.count >= AppleMusicCatalogClient.librarySearchPageSize { break }
+        if candidates.count >= AppleMusicCatalogClient.librarySongSearchCap { break }
       }
       return .notFound(reason: "Apple Music's library search couldn't reach this upload.")
     } catch {
-      return .notFound(reason: error.localizedDescription)
+      return .failed(error.localizedDescription)
     }
   }
 
@@ -109,7 +84,7 @@ public enum LibraryUploadMatcher {
       } ?? true
       return !value.hasCatalogID
         && SongTextNormalizer.title(value.title) == SongTextNormalizer.title(request.title)
-        && SongTextNormalizer.artist(value.artist) == SongTextNormalizer.artist(request.artist)
+        && artistsMatch(value.artist, request.artist)
         && albumMatches
     }.map(\.candidate)
   }

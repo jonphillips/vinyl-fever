@@ -68,10 +68,58 @@ public struct LibraryIndex: Sendable {
 
   private let tracks: [LibraryTrack]
   private let bySong: [String: [LibraryTrack]]
+  private let uploadedByTitle: [String: [UploadedTrackEntry]]
+
+  private struct UploadedTrackEntry: Sendable {
+    var track: LibraryTrack
+    var normalizedTitle: String
+    var normalizedArtist: String
+    var normalizedAlbum: String
+  }
 
   public init(snapshot: LibrarySnapshot) {
     tracks = snapshot.tracks
     bySong = Dictionary(grouping: snapshot.tracks, by: Self.songKey)
+    uploadedByTitle = Dictionary(grouping: snapshot.tracks.compactMap { track in
+      guard track.availability == .uploaded else { return nil }
+      return UploadedTrackEntry(
+        track: track,
+        normalizedTitle: SongTextNormalizer.title(track.name),
+        normalizedArtist: SongTextNormalizer.artist(track.artist),
+        normalizedAlbum: SongTextNormalizer.album(track.album))
+    }, by: \.normalizedTitle)
+  }
+
+  public func shouldUseLibraryRoute(_ request: TrackRequest) -> Bool {
+    guard let album = request.album, !album.isEmpty else { return false }
+    let title = SongTextNormalizer.title(request.title)
+    let artist = SongTextNormalizer.artist(request.artist)
+    let albumKey = SongTextNormalizer.album(album)
+    return (uploadedByTitle[title] ?? []).contains { entry in
+      entry.normalizedAlbum == albumKey
+        && LibraryUploadMatcher.artistsMatch(artist, entry.normalizedArtist)
+    }
+  }
+
+  public func uploadedCandidates(_ request: TrackRequest, limit: Int = 3)
+    -> [CatalogSongCandidate]
+  {
+    let artist = SongTextNormalizer.artist(request.artist)
+    var albums: Set<String> = []
+    return (uploadedByTitle[SongTextNormalizer.title(request.title)] ?? [])
+      .filter { LibraryUploadMatcher.artistsMatch(artist, $0.normalizedArtist) }
+      .sorted { lhs, rhs in
+        lhs.track.playCount == rhs.track.playCount
+          ? lhs.normalizedAlbum.localizedStandardCompare(rhs.normalizedAlbum) == .orderedAscending
+          : lhs.track.playCount > rhs.track.playCount
+      }
+      .filter { albums.insert($0.normalizedAlbum).inserted }
+      .prefix(min(max(limit, 0), LibraryUploadMatcher.uploadPickerLimit))
+      .map { entry in
+        CatalogSongCandidate(
+          id: entry.track.persistentID, title: entry.track.name, artistName: entry.track.artist,
+          albumTitle: entry.track.album, source: .libraryUpload)
+      }
   }
 
   public func overview(generatedAt: Date) -> LibraryOverview {
