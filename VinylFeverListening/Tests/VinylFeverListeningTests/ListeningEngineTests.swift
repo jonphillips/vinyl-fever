@@ -2,8 +2,7 @@ import Dependencies
 import DependenciesTestSupport
 import Foundation
 import Testing
-import VinylFeverListening
-@testable import VinylFeverCore
+@testable import VinylFeverListening
 
 @Suite("Listening engine")
 struct ListeningEngineTests {
@@ -117,6 +116,21 @@ struct ListeningEngineTests {
     #expect(components.path == "/v1/me/recent/played/tracks")
     #expect(queryItems.map(\.name) == ["types", "limit", "offset"])
     #expect(queryItems.map(\.value) == ["songs,library-songs", String(ListeningDiff.pageSize), "60"])
+  }
+
+  @Test("HTTP errors include Apple's title and detail when available")
+  func httpErrorIncludesAppleDetail() {
+    let response = Data(
+      #"{"errors":[{"status":"401","code":"40100","title":"Unauthorized","detail":"A valid Apple Music user token is required."}]}"#.utf8
+    )
+    let error = RecentlyPlayedClient.httpError(status: 401, body: response)
+    #expect(
+      error.errorDescription ==
+        "Apple Music returned HTTP 401 (Unauthorized: A valid Apple Music user token is required.)."
+    )
+
+    let invalidResponse = RecentlyPlayedClient.httpError(status: 401, body: Data("not JSON".utf8))
+    #expect(invalidResponse.errorDescription == "Apple Music returned HTTP 401.")
   }
 
   @Test("baseline, empty feed, distinct catalog and library identities, and page-cap gap")
@@ -263,18 +277,18 @@ struct ListeningEngineTests {
     #expect(topTracks.map(\.plays) == [60, 40])
   }
 
-  @Test("listening track keys match the library index key")
-  func listeningTrackKeyMatchesLibraryIndexKey() {
-    let titles = [
-      "Song feat. Guest",
-      "Song (featuring Guest)",
-      "Song (feat. Guest)",
-      "Song (2005 Remaster)",
-    ]
-    for title in titles {
-      let indexKey = "\(SongTextNormalizer.artist("The Records"))|\(SongTextNormalizer.libraryTitle(title))"
-      #expect(ListeningTextNormalizer.trackKey(artist: "The Records", title: title) == indexKey)
-    }
+  @Test("the normalizer fast path matches the regex rules")
+  func normalizerFastPathMatchesRegexRules() {
+    #expect(ListeningTextNormalizer.artist("Artist ft Guest") == "artist")
+    #expect(ListeningTextNormalizer.artist("Artist FT Guest") == "artist")
+    #expect(ListeningTextNormalizer.libraryTitle("Song ft Guest") == "song")
+    #expect(ListeningTextNormalizer.libraryTitle("Song FT Guest") == "song")
+    #expect(ListeningTextNormalizer.artist("Artist feat. Guest") == "artist")
+    #expect(ListeningTextNormalizer.libraryTitle("Song featuring Guest") == "song")
+    #expect(ListeningTextNormalizer.libraryTitle("Song (with Guest)") == "song")
+    #expect(ListeningTextNormalizer.title("Song (2005 Remaster)") == "song")
+    #expect(ListeningTextNormalizer.artist("Withered Hand") == "withered hand")
+    #expect(ListeningTextNormalizer.artist("Daft Punk") == "daft punk")
   }
 
   @Test("a year of JSONL log files loads quickly with one or two pollers")

@@ -1,7 +1,7 @@
-# Next Up — M13 · Dispatch 2: S1 VF Listening Poller
+# Next Up — M14 · Dispatch 1: S0 library route
 
-**Slices:** M13 · S1 (branch `m13/s1-listening-poller`)
-**Briefs:** docs/milestones/M13-listening-history.md § S1 (including its 2026-10-19 amendment), plus *Listening log (format v1)*
-**Done when:** S1's DoD, except its device gate; core and app tests green; `scripts/build-listening-poller` output in the PR; PR opened in `jonphillips/vinyl-fever`.
-**Owed:** S1's device gate on the Intel mini (Jon, about 24 h, after the PR is green and his *Before the S1 gate* prerequisites are done).
-**Notes:** `pollOnce()` goes in `VinylFeverListening`, not the app, so S3 reuses it; the app target is a thin window plus the `--poll` entry point. The target is macOS 15.0, and `VinylFeverListening` moves into its own macOS 15 package (S1 amendment); `VinylFeverCore` stays at macOS 26. Only a `generic/platform=macOS` build is universal, so the slices come from the build script, not from Xcode's Run. It signs with the **VF Listening Poller Dev Profile**, which is installed on this Mac; if Xcode can't find it, stop and say so in the PR. A `failed` line never replaces `last-list.json`. This Mac has no Rosetta, so the x86_64 slice is checked with `lipo`, not run. Leave the live MusicKit call and `SMAppService` registration unverified.
+**Slices:** M14 · S0 (branch `m14/s0-library-route`)
+**Briefs:** docs/milestones/M14-live-tracks-in-playlists.md § S0, plus *The resolve flow*
+**Done when:** S0's DoD, except its device gate; listening, core, and app tests green; PR opened in `jonphillips/vinyl-fever`.
+**Owed:** M13 S1's Intel mini gate (Jon, in progress); M14 S0's device gate (Jon: a mixed `VF-PLAYLIST` with three uploads previews with upload badges and plays on the iPhone in order).
+**Notes:** M14 S0 runs before M13 S2 (M14 Decision 3, amended 2026-10-20). It must not touch `vf-mcp` or `LibraryMCPServer`; M13 S2 edits them next. The new library endpoints share the resolver's 429/5xx retry and backoff. `SongTextNormalizer` forwards to `VinylFeverListening`'s normalizer, so call it rather than copying its rules. Leave the live library API calls unverified.

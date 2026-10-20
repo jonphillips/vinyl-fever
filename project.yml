@@ -16,6 +16,8 @@ settings:
 packages:
   VinylFeverCore:
     path: VinylFeverCore
+  VinylFeverListening:
+    path: VinylFeverListening
   swift-dependencies:
     url: https://github.com/pointfreeco/swift-dependencies
     from: 1.0.0
@@ -28,6 +30,44 @@ packages:
   LLMClientKit:
     path: ../jon-platform/packages/LLMClientKit
 targets:
+  VinylFeverListeningPoller:
+    type: application
+    platform: macOS
+    deploymentTarget: "15.0"
+    sources:
+      - VinylFeverListeningPoller
+    dependencies:
+      - package: VinylFeverListening
+        product: VinylFeverListening
+    postBuildScripts:
+      - name: Install listening poller agent definition
+        inputFiles:
+          - $(SRCROOT)/VinylFeverListeningPoller/VFListeningPollerAgent.plist
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Library/LaunchAgents/VFListeningPollerAgent.plist
+        script: |
+          set -euo pipefail
+          destination="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Library/LaunchAgents"
+          mkdir -p "$destination"
+          cp "$SRCROOT/VinylFeverListeningPoller/VFListeningPollerAgent.plist" "$destination/VFListeningPollerAgent.plist"
+    info:
+      path: VinylFeverListeningPoller/Info.plist
+      properties:
+        CFBundleDisplayName: VF Listening Poller
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSAppleMusicUsageDescription: VF Listening Poller reads the songs you've played recently from Apple Music.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jonphillips.vinylfever.listeningpoller
+        PRODUCT_NAME: VF Listening Poller
+        GENERATE_INFOPLIST_FILE: NO
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "Apple Development"
+        DEVELOPMENT_TEAM: 7MQEE539G9
+        PROVISIONING_PROFILE_SPECIFIER: VF Listening Poller Dev Profile
   VinylFever:
     type: application
     platform: macOS
@@ -109,6 +149,12 @@ targets:
         CODE_SIGN_IDENTITY: "Apple Development"
         DEVELOPMENT_TEAM: 7MQEE539G9
 schemes:
+  VF Listening Poller:
+    build:
+      targets:
+        VinylFeverListeningPoller: all
+    run:
+      config: Debug
   VinylFever:
     build:
       targets:

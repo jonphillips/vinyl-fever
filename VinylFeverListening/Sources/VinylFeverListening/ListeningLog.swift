@@ -58,22 +58,27 @@ public struct ListeningCoverage: Codable, Equatable, Sendable {
 /// so the app can use the same identity when it joins listening plays to its library.
 public enum ListeningTextNormalizer {
   public static func artist(_ raw: String) -> String {
-    text(raw.replacingOccurrences(
+    guard containsCreditMarker(raw) else { return text(raw) }
+    return text(raw.replacingOccurrences(
       of: #"\b(feat\.?|ft\.?|with)\b.*$"#,
       with: "", options: [.regularExpression, .caseInsensitive]))
   }
 
   public static func title(_ raw: String) -> String {
     var value = raw
-    value = value.replacingOccurrences(
-      of: #"\s*[\(\[]\s*(feat\.?|ft\.?|with)\b[^)\]]*[)\]]"#,
-      with: "", options: [.regularExpression, .caseInsensitive])
-    value = value.replacingOccurrences(
-      of: #"\s*[\(\[](?:(?:19|20)\d{2}\s+)?remaster(?:ed)?[^)\]]*[)\]]"#,
-      with: "", options: [.regularExpression, .caseInsensitive])
-    value = value.replacingOccurrences(
-      of: #"\s+[-–—]\s+(?:(?:19|20)\d{2}\s+)?remaster(?:ed)?(?:\s+(?:19|20)\d{2})?\s*$"#,
-      with: "", options: [.regularExpression, .caseInsensitive])
+    if raw.contains("(") || raw.contains("[") {
+      value = value.replacingOccurrences(
+        of: #"\s*[\(\[]\s*(feat\.?|ft\.?|with)\b[^)\]]*[)\]]"#,
+        with: "", options: [.regularExpression, .caseInsensitive])
+    }
+    if raw.range(of: "remaster", options: .caseInsensitive) != nil {
+      value = value.replacingOccurrences(
+        of: #"\s*[\(\[](?:(?:19|20)\d{2}\s+)?remaster(?:ed)?[^)\]]*[)\]]"#,
+        with: "", options: [.regularExpression, .caseInsensitive])
+      value = value.replacingOccurrences(
+        of: #"\s+[-–—]\s+(?:(?:19|20)\d{2}\s+)?remaster(?:ed)?(?:\s+(?:19|20)\d{2})?\s*$"#,
+        with: "", options: [.regularExpression, .caseInsensitive])
+    }
     return text(value)
   }
 
@@ -83,13 +88,22 @@ public enum ListeningTextNormalizer {
 
   /// Library metadata can store a guest credit directly in the title.
   public static func libraryTitle(_ raw: String) -> String {
-    var value = raw.replacingOccurrences(
-      of: #"\s*[\(\[]\s*(?:feat\.?|ft\.?|featuring)\s+[^)\]]*[)\]]"#,
-      with: "", options: [.regularExpression, .caseInsensitive])
-    value = value.replacingOccurrences(
-      of: #"\s+(?:feat\.?|ft\.?|featuring)\s+.*$"#,
-      with: "", options: [.regularExpression, .caseInsensitive])
+    var value = raw
+    if containsCreditMarker(raw) {
+      value = raw.replacingOccurrences(
+        of: #"\s*[\(\[]\s*(?:feat\.?|ft\.?|featuring)\s+[^)\]]*[)\]]"#,
+        with: "", options: [.regularExpression, .caseInsensitive])
+      value = value.replacingOccurrences(
+        of: #"\s+(?:feat\.?|ft\.?|featuring)\s+.*$"#,
+        with: "", options: [.regularExpression, .caseInsensitive])
+    }
     return title(value)
+  }
+
+  private static func containsCreditMarker(_ raw: String) -> Bool {
+    raw.range(of: "feat", options: .caseInsensitive) != nil
+      || raw.range(of: "ft", options: .caseInsensitive) != nil
+      || raw.range(of: "with", options: .caseInsensitive) != nil
   }
 
   public static func album(_ raw: String) -> String {

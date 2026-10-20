@@ -208,8 +208,8 @@ to this week?") a week of log to answer from.
     - period queries' order and caps.
   - Lease tests: a non-holder writes nothing.
 
-- [ ] **S1 — VF Listening Poller app (macOS 15, universal; runs on the Intel mini).** Device
-  gate owed.
+- [x] **S1 — VF Listening Poller app (macOS 15, universal; runs on the Intel mini).**
+  Implementation complete; the Intel mini device gate remains owed.
   - **Amended 2026-10-19 (Decision 2):** the 2018 mini can't run macOS 26, so the poller
     targets **macOS 15**. Lowering `VinylFeverCore` isn't possible, because its jon-platform
     dependencies (MCPServerKit, LLMClientKit, LLMHandoffKit) require macOS 26. So

@@ -3,6 +3,15 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-18 — M13 · Dispatch 2 S1 (`m13/s1-listening-poller`)
+
+Added the `ListeningPoller` model and coordinated listening store, plus the universal VF Listening
+Poller app with authorization, hourly `SMAppService` agent setup, and status window. Added the
+poller setup guide and tests for baseline, subsequent fetches, lease skipping, authorization and
+fetch failures, and UTC month naming. Core tests and the macOS app tests pass. The build script
+verified arm64 and x86_64 slices and the app signature. The live MusicKit call and agent
+registration remain unverified; Jon's Intel mini device gate is owed.
+
 ## 2026-10-18 — M13 · Dispatch 1 S0 (`m13/s0-listening-engine`)
 
 Added the pure `VinylFeverListening` package target with the versioned JSONL codec, paged

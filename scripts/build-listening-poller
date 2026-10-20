@@ -1,0 +1,73 @@
+#!/bin/bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+derived_data="$repo_root/.build/ListeningPollerDerivedData"
+app_path="$derived_data/Build/Products/Debug/VF Listening Poller.app"
+
+cd "$repo_root"
+xcodegen generate
+/Users/jon/code/jon-platform/scripts/quiet-run xcodebuild \
+  -project VinylFever.xcodeproj \
+  -scheme "VF Listening Poller" \
+  -configuration Debug \
+  -destination 'generic/platform=macOS' \
+  -derivedDataPath "$derived_data" \
+  build
+
+# Xcode may rewrite the shared scheme while building. Restore xcodegen's canonical output so
+# repeated poller builds leave the checkout unchanged.
+xcodegen generate
+
+macos_dir="$app_path/Contents/MacOS"
+if [[ ! -d "$macos_dir" ]]; then
+  echo "error: built app is missing Contents/MacOS" >&2
+  exit 1
+fi
+
+while IFS= read -r -d '' binary; do
+  if file "$binary" | grep -q 'Mach-O'; then
+    archs="$(lipo -archs "$binary")"
+    if [[ " $archs " != *" arm64 "* || " $archs " != *" x86_64 "* ]]; then
+      echo "error: $binary is not universal (architectures: $archs)" >&2
+      exit 1
+    fi
+    for architecture in $archs; do
+      build_info="$(vtool -show-build -arch "$architecture" "$binary")"
+      minimum_os="$(awk '$1 == "minos" { print $2 }' <<<"$build_info")"
+      if [[ "$minimum_os" != "15.0" ]]; then
+        echo "error: $(basename "$binary") ($architecture) minimum OS is ${minimum_os:-unknown}, expected 15.0" >&2
+        exit 1
+      fi
+      echo "$(basename "$binary") ($architecture): minos $minimum_os"
+    done
+  fi
+done < <(find "$macos_dir" -type f -print0)
+
+codesign --verify --deep --strict "$app_path"
+echo "codesign: verified"
+
+info_plist="$app_path/Contents/Info.plist"
+minimum_system_version="$(plutil -extract LSMinimumSystemVersion raw -o - "$info_plist")"
+if [[ "$minimum_system_version" != "15.0" ]]; then
+  echo "error: LSMinimumSystemVersion is $minimum_system_version, expected 15.0" >&2
+  exit 1
+fi
+echo "LSMinimumSystemVersion: $minimum_system_version"
+usage_description="$(plutil -extract NSAppleMusicUsageDescription raw -o - "$info_plist")"
+echo "NSAppleMusicUsageDescription: $usage_description"
+
+agent_plist="$app_path/Contents/Library/LaunchAgents/VFListeningPollerAgent.plist"
+executable="$(plutil -extract CFBundleExecutable raw -o - "$info_plist")"
+argument_0="$(plutil -extract ProgramArguments.0 raw -o - "$agent_plist")"
+argument_1="$(plutil -extract ProgramArguments.1 raw -o - "$agent_plist")"
+if [[ "$argument_0" != "$executable" ]]; then
+  echo "error: ProgramArguments.0 ($argument_0) does not match CFBundleExecutable ($executable)" >&2
+  exit 1
+fi
+if [[ "$argument_1" != "--poll" ]]; then
+  echo "error: ProgramArguments.1 must be --poll (found $argument_1)" >&2
+  exit 1
+fi
+echo "launch agent arguments: verified"
+echo "app: $app_path"
