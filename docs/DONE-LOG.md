@@ -8,10 +8,12 @@ History, newest first. The PR that completes a dispatch adds an entry naming its
 Added `scripts/install-vinyl-fever` to generate, build, verify signing and this Mac's
 provisioning profile, install with rollback protection, restart the tunnel agent, and run the
 MCP smoke probe. Added `scripts/mcp-smoke` for `initialize`, `tools/list`, `library_overview`, and
-`recent_listening`. ShellCheck and the dry run passed. The laptop gate installed Debug, restarted
-the ready tunnel, and passed all MCP calls; listening coverage reported Jon's Mac mini and a
-56-minute-old fetch. A forced bad-profile run stopped before installation and left the installed
-app unchanged. Advanced `NEXT_UP.md` to M16 S2.
+`recent_listening`. ShellCheck and the dry run passed, and the initial laptop install and forced
+profile failure passed. Architect review found issues in app-process detection, fresh-Mac
+listening coverage, rollback tunnel restart, and platform checkout lookup; all were fixed. The
+self-test passed. The rerun passed with the app open, the forced profile failure stopped before
+installation, and the forced smoke failure restored the prior app and restarted the tunnel.
+`lsof` confirmed the running helper used the restored bundle's inode. `NEXT_UP.md` points to M16 S2.
 
 ## 2026-10-21 — M16 · Dispatch 1 S0 (`m16/s0-safe-database-home`)
 

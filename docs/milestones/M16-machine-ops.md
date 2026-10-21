@@ -118,13 +118,14 @@ serving ChatGPT, and a new Mac is one command from "what's missing?"
     `recent_listening` coverage, which Mac polls and the last fetch's age.
 
   **DoD:**
-  - `shellcheck` passes on both scripts. `-n` output is reviewed in the PR.
+  - `shellcheck` passes on the installer, `mcp-smoke --self-test` passes, and `-n` output is reviewed in the PR.
   - **Device gate (laptop):** one run from a clean checkout of `main` installs, restarts the
     tunnel, and passes the smoke test. A second run with the profile check forced to fail stops
     before touching `/Applications`.
-  - **Gate passed 2026-10-21:** Debug installed from this checkout; `vf-mcp` smoke calls passed,
-    the tunnel returned ready, and the forced bad-profile run exited before install with the
-    installed app unchanged.
+  - **Gate passed 2026-10-21 after review changes:** plain Debug install passed with Vinyl Fever
+    open (the dialog appeared and the app quit); forced profile failure stopped before install;
+    forced smoke failure restored the prior app and restarted the tunnel. `lsof` showed the
+    running helper and installed helper share inode `538835276`.
 
 - [ ] **S2 — `scripts/setup-mac` (check, then apply what can be automated).**
   - `setup-mac [--role build,chat,poll] [--apply]`. The default is a read-only report: one line

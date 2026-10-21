@@ -2,6 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+platform_root="$repo_root/../jon-platform"
 configuration="Debug"
 dry_run=false
 while (($#)); do
@@ -25,6 +26,10 @@ done
 [[ "$configuration" == Debug || "$configuration" == Release ]] || {
   echo "error: configuration must be Debug or Release" >&2
   exit 2
+}
+[[ -x "$platform_root/scripts/quiet-run" ]] || {
+  echo "error: jon-platform sibling checkout or scripts/quiet-run is missing; see docs/setup/README.md#build-mac" >&2
+  exit 1
 }
 
 derived_data="$repo_root/.build/InstallDerivedData"
@@ -52,7 +57,7 @@ fi
 
 cd "$repo_root"
 xcodegen generate
-/Users/jon/code/jon-platform/scripts/quiet-run xcodebuild \
+"$platform_root/scripts/quiet-run" xcodebuild \
   -project VinylFever.xcodeproj \
   -scheme VinylFever \
   -configuration "$configuration" \
@@ -94,13 +99,20 @@ if ! /usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices' "$profile_plist" 2>/
 fi
 echo "provisioning: $profile_name includes this Mac"
 
-if [[ -d "$installed_app" ]] && /usr/bin/osascript -e 'tell application "System Events" to (name of processes) contains "Vinyl Fever"' | grep -q true; then
+running_count() {
+  /usr/bin/osascript -e 'tell application "System Events" to count (every process whose bundle identifier is "com.jonphillips.vinylfever" and background only is false)'
+}
+if [[ "$(running_count)" -gt 0 ]]; then
   /usr/bin/osascript -e 'display dialog "Vinyl Fever is running. Quit it to install the verified build?" buttons {"Cancel", "Quit Vinyl Fever"} default button "Quit Vinyl Fever" with title "Install Vinyl Fever"' >/dev/null
-  /usr/bin/osascript -e 'tell application "Vinyl Fever" to quit'
+  /usr/bin/osascript -e 'tell application id "com.jonphillips.vinylfever" to quit'
   for _ in {1..30}; do
-    if ! /usr/bin/osascript -e 'tell application "System Events" to (name of processes) contains "Vinyl Fever"' | grep -q true; then break; fi
+    if [[ "$(running_count)" -eq 0 ]]; then break; fi
     sleep 1
   done
+  [[ "$(running_count)" -eq 0 ]] || {
+    echo "error: Vinyl Fever is still running after 30 seconds; quit it before installing" >&2
+    exit 1
+  }
 fi
 
 stage_app="/Applications/.VinylFever.app.install-new.$$"
@@ -113,6 +125,13 @@ cleanup() {
     if $had_previous && [[ -d "$previous_app" ]]; then
       mv "$previous_app" "$installed_app"
       echo "install: restored previous app" >&2
+    fi
+    if launchctl print "gui/$(id -u)/$tunnel_label" >/dev/null 2>&1; then
+      if launchctl kickstart -k "gui/$(id -u)/$tunnel_label"; then
+        echo "tunnel: restarted against restored app" >&2
+      else
+        echo "warning: could not restart tunnel against restored app" >&2
+      fi
     fi
   fi
   rm -rf "$stage_app"
@@ -151,8 +170,8 @@ recent_summary="$(printf '%s\n' "$smoke_report" | awk -F ' — ' '/^recent_liste
 status_summary="not configured"
 if command -v mcp-tunnel >/dev/null 2>&1; then
   status_summary="$(mcp-tunnel status vinyl-fever 2>&1)" || status_summary="unavailable: $status_summary"
-elif [[ -x /Users/jon/code/jon-platform/scripts/mcp-tunnel ]]; then
-  status_summary="$(/Users/jon/code/jon-platform/scripts/mcp-tunnel status vinyl-fever 2>&1)" || status_summary="unavailable: $status_summary"
+elif [[ -x "$platform_root/scripts/mcp-tunnel" ]]; then
+  status_summary="$("$platform_root/scripts/mcp-tunnel" status vinyl-fever 2>&1)" || status_summary="unavailable: $status_summary"
 fi
 printf '\n%-24s %s\n' "Check" "Result"
 printf '%-24s %s\n' "Build and signature" "passed"

@@ -2,9 +2,12 @@
 """Probe the bundled Vinyl Fever MCP helper over its stdio JSON-RPC interface."""
 
 import json
+import os
 import subprocess
 import sys
 import time
+from contextlib import redirect_stderr
+from io import StringIO
 
 
 def fail(message):
@@ -12,12 +15,14 @@ def fail(message):
     raise SystemExit(1)
 
 
-def summarize(result):
-    if result.get("isError"):
-        fail(f"tool returned isError: {result}")
+def summarize(result, allow_setup_warning=False):
     chunks = [item.get("text", "") for item in result.get("content", []) if item.get("type") == "text"]
     text = " ".join(chunks).strip()
-    if "not set up yet" in text.lower():
+    if result.get("isError"):
+        if allow_setup_warning and "set up yet" in text.lower():
+            return text[:240], True
+        fail(f"tool returned isError: {text or result}")
+    if allow_setup_warning and "set up yet" in text.lower():
         return text[:240], True
     try:
         value = json.loads(text)
@@ -35,8 +40,25 @@ def summarize(result):
 
 
 def main():
+    if len(sys.argv) == 2 and sys.argv[1] == "--self-test":
+        warning, is_warning = summarize({
+            "isError": True,
+            "content": [{"type": "text", "text": "Listening history isn't set up yet. Run the setup-mac guide."}],
+        }, allow_setup_warning=True)
+        assert is_warning and "isn't set up yet" in warning
+        try:
+            with redirect_stderr(StringIO()):
+                summarize({"isError": True, "content": [{"type": "text", "text": "The helper failed."}]}, allow_setup_warning=True)
+        except SystemExit as error:
+            assert error.code == 1
+        else:
+            raise AssertionError("an unrelated recent_listening error must fail")
+        print("mcp-smoke self-test: passed")
+        return
+    if os.environ.get("VF_MCP_SMOKE_FAIL") == "1":
+        fail("forced smoke failure requested by VF_MCP_SMOKE_FAIL")
     if len(sys.argv) != 2:
-        fail("usage: python3 -I scripts/mcp-smoke <helper>")
+        fail("usage: python3 -I scripts/mcp-smoke <helper> | --self-test")
     helper = sys.argv[1]
     try:
         process = subprocess.Popen(
@@ -91,7 +113,7 @@ def main():
 
         for name, arguments in (("library_overview", {}), ("recent_listening", {"period": "24h"})):
             result, elapsed = request("tools/call", {"name": name, "arguments": arguments})
-            summary, warning = summarize(result)
+            summary, warning = summarize(result, allow_setup_warning=name == "recent_listening")
             suffix = " (warning)" if warning else ""
             print(f"{name}: {elapsed:.2f}s — {summary}{suffix}")
     finally:
