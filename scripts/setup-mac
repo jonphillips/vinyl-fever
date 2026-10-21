@@ -1,0 +1,268 @@
+#!/bin/bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+platform_root="$repo_root/../jon-platform"
+# shellcheck disable=SC1091 # loaded from the script's own directory
+source "$repo_root/scripts/machine.conf"
+
+roles="build,chat,poll"
+apply=false
+while (($#)); do
+  case "$1" in
+    --role)
+      (($# >= 2)) || { echo "error: --role requires build, chat, and/or poll" >&2; exit 2; }
+      roles="$2"
+      shift 2
+      ;;
+    --apply) apply=true; shift ;;
+    -h|--help)
+      echo "Usage: scripts/setup-mac [--role build,chat,poll] [--apply]"
+      exit 0
+      ;;
+    *) echo "error: unknown argument: $1" >&2; exit 2 ;;
+  esac
+done
+
+IFS=',' read -r -a selected_roles <<< "$roles"
+for role in "${selected_roles[@]}"; do
+  [[ "$role" == build || "$role" == chat || "$role" == poll ]] || {
+    echo "error: unknown role: $role" >&2
+    exit 2
+  }
+done
+
+failed=0
+report() {
+  local status="$1" name="$2" anchor="$3" detail="${4:-}"
+  printf '%-7s %s — %s#%s' "$status" "$name" "$guide" "$anchor"
+  [[ -z "$detail" ]] || printf ' (%s)' "$detail"
+  printf '\n'
+  [[ "$status" != failed ]] || failed=1
+}
+guide="https://github.com/jonphillips/vinyl-fever/blob/main/docs/setup/README.md"
+has_role() { [[ ",${roles}," == *",$1,"* ]]; }
+manual() { report manual "$1" "$2" "complete this step by hand"; }
+result() { report "$1" "$2" "$3" "${4:-}"; }
+
+# Every Mac
+manual "Sign in with Apple ID and enable Apple Music Sync Library" every-mac
+icloud_root="$HOME/Library/Mobile Documents/com~apple~CloudDocs"
+if [[ -d "$icloud_root" ]]; then result passed "iCloud Drive folder" every-mac
+else manual "iCloud Drive is enabled and its folder is available" every-mac; fi
+manual "iCloud Keychain is enabled" every-mac
+manual "Optimize Mac Storage is off" every-mac
+
+profile_dir="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
+provisioning_udid="$(system_profiler SPHardwareDataType 2>/dev/null | awk -F ': ' '/Provisioning UDID/ {print $2; exit}')"
+profile_installed() {
+  local wanted="$1" file decoded name devices
+  [[ -d "$profile_dir" && -n "$provisioning_udid" ]] || return 1
+  for file in "$profile_dir"/*.provisionprofile; do
+    [[ -f "$file" ]] || continue
+    decoded="$(mktemp)"
+    if security cms -D -i "$file" > "$decoded" 2>/dev/null; then
+      name="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$decoded" 2>/dev/null || true)"
+      devices="$(/usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices' "$decoded" 2>/dev/null || true)"
+      rm -f "$decoded"
+      if [[ "$name" == "$wanted" && "$devices" == *"$provisioning_udid"* ]]; then return 0; fi
+    else
+      rm -f "$decoded"
+    fi
+  done
+  return 1
+}
+if profile_installed "$VF_APP_PROFILE_NAME" && profile_installed "$VF_POLLER_PROFILE_NAME"; then
+  result passed "development profiles include this Mac" signing-adding-a-mac-to-the-profiles
+else
+  manual "Register this Mac and install both development profiles" signing-adding-a-mac-to-the-profiles
+fi
+
+if has_role build; then
+  if xcode-select -p >/dev/null 2>&1 && xcodebuild -checkFirstLaunchStatus >/dev/null 2>&1; then
+    result passed "Xcode installed and first launch complete" build-mac
+  else
+    result failed "Xcode installed and first launch complete" build-mac "run Xcode once and finish component setup"
+  fi
+
+  brew_missing=()
+  if command -v brew >/dev/null 2>&1; then
+    for package in "${VF_BREW_PACKAGES[@]}"; do
+      formula="${package##*/}"
+      brew list --formula "$formula" >/dev/null 2>&1 || brew_missing+=("$package")
+    done
+  else
+    brew_missing=("${VF_BREW_PACKAGES[@]}")
+  fi
+  if ((${#brew_missing[@]} == 0)); then
+    result passed "Homebrew packages" build-mac
+  elif $apply && command -v brew >/dev/null 2>&1; then
+    brew install "${brew_missing[@]}"
+    result passed "Homebrew packages" build-mac "installed ${brew_missing[*]}"
+  else
+    result failed "Homebrew packages" build-mac "missing: ${brew_missing[*]}"
+  fi
+
+  if [[ -d "$platform_root/.git" ]]; then result passed "jon-platform sibling checkout" build-mac
+  elif $apply && [[ ! -e "$platform_root" ]]; then
+    git clone https://github.com/jonphillips/jon-platform "$platform_root"
+    result passed "jon-platform sibling checkout" build-mac "cloned"
+  else
+    result failed "jon-platform sibling checkout" build-mac "expected at $platform_root"
+  fi
+
+  identity="$(security find-identity -v -p codesigning 2>/dev/null | grep -F "Apple Development" | grep -F "$VF_TEAM_ID" || true)"
+  if [[ -n "$identity" ]]; then result passed "Apple Development identity for $VF_TEAM_ID" signing
+  else manual "Create an Apple Development certificate for team $VF_TEAM_ID" signing-adding-a-mac-to-the-profiles; fi
+
+  installer="$repo_root/scripts/install-vinyl-fever"
+  if [[ -x "$installer" ]] && $apply; then "$installer"; result passed "Vinyl Fever installed and smoke tested" build-mac
+  elif [[ -d /Applications/VinylFever.app ]]; then result passed "Vinyl Fever installed" build-mac
+  else result failed "Vinyl Fever installed" build-mac "run setup-mac --apply"; fi
+fi
+
+if has_role chat; then
+  mcp_tunnel="$platform_root/scripts/mcp-tunnel"
+  if [[ ! -x "$mcp_tunnel" ]]; then
+    result failed "jon-platform mcp-tunnel script" chat-host "expected at $mcp_tunnel"
+  fi
+  if ! command -v tunnel-client >/dev/null 2>&1 && $apply && command -v brew >/dev/null 2>&1; then
+    brew install "$VF_TUNNEL_BREW_PACKAGE"
+  fi
+  key_length="$(security find-generic-password -a "$USER" -s openai-tunnel-runtime -w 2>/dev/null | wc -c | tr -d ' ' || true)"
+  if [[ "${key_length:-0}" -ge 150 ]]; then result passed "runtime key in Login Keychain" chat-host
+  elif $apply && [[ -x "$mcp_tunnel" ]]; then
+    echo "Copy the runtime key to the clipboard; setup-mac will store it now."
+    "$mcp_tunnel" store-key
+    result passed "runtime key in Login Keychain" chat-host "stored"
+  else result failed "runtime key in Login Keychain" chat-host "key is never displayed"; fi
+
+  tunnel_client="$(command -v tunnel-client || true)"
+  tunnel_yaml="$HOME/.config/tunnel-client/$VF_TUNNEL_PROFILE.yaml"
+  health_port_file="$HOME/.config/mcp-tunnel/$VF_TUNNEL_PROFILE.health-port"
+  if $apply && [[ -r "$tunnel_yaml" && ! -r "$health_port_file" ]]; then
+    configured_port="$(sed -nE 's/^[[:space:]]*listen_addr:[[:space:]]*"[^:]+:([0-9]+)".*/\1/p' "$tunnel_yaml" | head -n 1)"
+    if [[ "$configured_port" =~ ^[0-9]+$ ]]; then
+      mkdir -p "$(dirname "$health_port_file")"
+      printf '%s\n' "$configured_port" > "$health_port_file"
+    fi
+  fi
+  profile_updated=false
+  if [[ -x "$tunnel_client" && -r "$tunnel_yaml" && -r "$health_port_file" ]] \
+    && grep -Fq "$VF_TUNNEL_ID" "$tunnel_yaml" \
+    && grep -Fq "/Applications/VinylFever.app/Contents/Helpers/vf-mcp" "$tunnel_yaml"; then
+    result passed "tunnel-client profile" chat-host
+  elif $apply && [[ -x "$tunnel_client" && -x "$mcp_tunnel" ]]; then
+    "$mcp_tunnel" init "$VF_TUNNEL_PROFILE" "$VF_TUNNEL_ID" \
+      "/Applications/VinylFever.app/Contents/Helpers/vf-mcp" --force
+    profile_updated=true
+    result passed "tunnel-client profile" chat-host "initialized"
+  else result failed "tunnel-client profile" chat-host "expected tunnel ID and installed helper path"; fi
+
+  tunnel_label="com.jonphillips.mcp-tunnel.$VF_TUNNEL_PROFILE"
+  agent_updated=false
+  if launchctl print "gui/$(id -u)/$tunnel_label" >/dev/null 2>&1; then
+    if $profile_updated && $apply && [[ -x "$mcp_tunnel" ]]; then
+      "$mcp_tunnel" install-agent "$VF_TUNNEL_PROFILE"
+      agent_updated=true
+      result passed "tunnel LaunchAgent loaded" chat-host "restarted with updated profile"
+    else
+      result passed "tunnel LaunchAgent loaded" chat-host
+    fi
+  elif $apply && [[ -x "$tunnel_client" && -x "$mcp_tunnel" ]]; then
+    "$mcp_tunnel" install-agent "$VF_TUNNEL_PROFILE"
+    agent_updated=true
+    result passed "tunnel LaunchAgent loaded" chat-host "installed"
+  else result failed "tunnel LaunchAgent loaded" chat-host; fi
+  health_port="$(cat "$health_port_file" 2>/dev/null || true)"
+  if $agent_updated; then
+    # Match the installer's 60-second /readyz gate while launchd starts the helper.
+    tunnel_ready=false
+    for _ in {1..60}; do
+      if [[ -n "$health_port" ]] && curl --fail --silent "http://127.0.0.1:$health_port/readyz" >/dev/null 2>&1; then
+        tunnel_ready=true
+        break
+      fi
+      sleep 1
+    done
+  elif [[ -n "$health_port" ]] \
+    && "$mcp_tunnel" status "$VF_TUNNEL_PROFILE" >/dev/null 2>&1 \
+    && curl --fail --silent "http://127.0.0.1:$health_port/readyz" >/dev/null 2>&1; then
+    tunnel_ready=true
+  else
+    tunnel_ready=false
+  fi
+  if $tunnel_ready; then
+    result passed "mcp-tunnel is ready" chat-host
+  else result failed "mcp-tunnel is ready" chat-host "run mcp-tunnel status $VF_TUNNEL_PROFILE"; fi
+
+  music_chat="$HOME/music-chat"
+  if [[ -f "$music_chat/AGENTS.md" && -f "$music_chat/CLAUDE.md" && -f "$music_chat/.mcp.json" ]]; then
+    result passed "music-chat client files" chat-host
+  elif $apply; then
+    mkdir -p "$music_chat"
+    cp "$repo_root/docs/chatgpt/music-chat/AGENTS.md" "$repo_root/docs/chatgpt/music-chat/CLAUDE.md" "$repo_root/docs/chatgpt/music-chat/.mcp.json" "$music_chat/"
+    result passed "music-chat client files" chat-host "copied templates"
+  else result failed "music-chat client files" chat-host "run setup-mac --apply"; fi
+
+  codex_config="$HOME/.codex/config.toml"
+  if [[ -f "$codex_config" ]] && grep -Fq '[mcp_servers.vinyl-fever]' "$codex_config"; then
+    result passed "Codex MCP server entry" chat-host
+  elif $apply; then
+    mkdir -p "$(dirname "$codex_config")"
+    touch "$codex_config"
+    cat >> "$codex_config" <<EOF
+
+[mcp_servers.vinyl-fever]
+command = "/Applications/VinylFever.app/Contents/Helpers/vf-mcp"
+args = []
+EOF
+    result passed "Codex MCP server entry" chat-host "added"
+  else result failed "Codex MCP server entry" chat-host "run setup-mac --apply"; fi
+fi
+
+if has_role poll; then
+  auto_login="$(defaults read /Library/Preferences/com.apple.loginwindow autoLoginUser 2>/dev/null || true)"
+  if [[ "$auto_login" == "$USER" ]]; then result passed "automatic login enabled" polling-mac
+  else result failed "automatic login enabled" polling-mac "set automatic login to the current account in Users & Groups"; fi
+  filevault="$(fdesetup status 2>/dev/null || echo 'FileVault status unavailable')"
+  if [[ "$filevault" == *"On"* ]]; then
+    result passed "FileVault status" polling-mac "$filevault; it blocks automatic login"
+  else
+    result passed "FileVault status" polling-mac "$filevault"
+  fi
+  manual "Approve the poller in Login Items if macOS asks" polling-mac-apple-silicon
+
+  power="$(pmset -g 2>/dev/null || true)"
+  sleep_value="$(awk '$1 == "sleep" {print $2; exit}' <<< "$power")"
+  restart_value="$(awk '$1 == "autorestart" {print $2; exit}' <<< "$power")"
+  if [[ "$sleep_value" == 0 && "$restart_value" == 1 ]]; then
+    result passed "sleep disabled and restart after power failure enabled" polling-mac
+  else
+    result failed "sleep disabled and restart after power failure enabled" polling-mac \
+      "run: sudo pmset -a sleep 0; sudo pmset -a autorestart 1"
+  fi
+
+  listening_root="$HOME/Library/Mobile Documents/com~apple~CloudDocs/Vinyl Fever/Listening"
+  poll_host="$(scutil --get ComputerName 2>/dev/null || hostname -s)"
+  lease_host="$(plutil -extract host raw -o - "$listening_root/lease.json" 2>/dev/null || true)"
+  latest_fetch="$(find "$listening_root/fetches" -type f -name '*.jsonl' -exec stat -f '%m' {} + 2>/dev/null | sort -nr | head -n 1)"
+  now="$(date +%s)"
+  if [[ -z "$lease_host" ]]; then
+    result failed "listening lease and fetch freshness" polling-mac "lease.json is missing or unreadable"
+  elif [[ "$lease_host" != "$poll_host" ]]; then
+    result failed "listening lease and fetch freshness" polling-mac "lease held by $lease_host"
+  elif [[ ! "$latest_fetch" =~ ^[0-9]+$ ]]; then
+    result failed "listening lease and fetch freshness" polling-mac "no fetch records found"
+  else
+    # Two hours covers two missed hourly fetches (M16 constants register).
+    fetch_age=$((now - latest_fetch))
+    if ((fetch_age >= 2 * 60 * 60)); then
+      result failed "listening lease and fetch freshness" polling-mac "latest fetch is $((fetch_age / 60)) min old"
+    else
+      result passed "listening lease and fetch freshness" polling-mac "lease held here; latest fetch $((fetch_age / 60)) min ago"
+    fi
+  fi
+fi
+
+if ((failed)); then exit 1; fi

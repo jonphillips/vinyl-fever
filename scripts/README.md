@@ -16,6 +16,13 @@ Do not assume `--dry-run` means no writes; verify per script (for example
 - `python/` — batch conversion, tag scrubbing, dedup, triage, and compilation
   helpers. Tests in `python/tests/`.
 
+## Mac setup
+
+[`setup-mac`](setup-mac) checks the Build, Chat, and Poll roles against
+[`docs/setup/README.md`](../docs/setup/README.md). It reports first by default;
+pass `--apply` to install or restore the steps the script can automate. Shared,
+non-secret machine constants live in [`machine.conf`](machine.conf).
+
 ## Setup
 
 ```sh

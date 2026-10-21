@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "vinyl-fever": {
+      "command": "/Applications/VinylFever.app/Contents/Helpers/vf-mcp",
+      "args": []
+    }
+  }
+}
