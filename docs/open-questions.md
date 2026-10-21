@@ -198,6 +198,26 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   S0 moves the database to `VinylFever/VinylFever.sqlite`, refuses instead of erasing, and backs
   up before migrating. It goes right after M13 S3. S1 adds `scripts/install-vinyl-fever` and S2
   adds `scripts/setup-mac`. A manual backup is at `VinylFever/Backups/SQLiteData-2026-10-21.db`.
+  **S0 merged as #108, and its laptop gate passed (2026-10-21).** Jon moved the empty
+  post-gate `SQLiteData.db` to the Trash and kept `SQLiteData.db.moved-to-VinylFever` for now.
+  There's no new Mac mini on order, so S2's gate is the laptop plus the Intel mini.
+- **Listening handover hole** (from the #105 review, 2026-10-21). On a lease handover, plays
+  between the old holder's last fetch and the new holder's baseline are absorbed by the baseline.
+  `coverage` doesn't report that window as a gap, which conflicts with M13's "gaps and failures
+  are loud". It's up to one poll interval (an hour) per handover. **Recommendation:** measure it
+  at the M13 S3 gate. Then either report the window as a gap in `coverage` (cheap), or have the
+  new holder diff against the old holder's last list (exact, but it reads another Mac's stream).
+- **An idle listening agent can't be stopped on its own** (from the #105 review). While another
+  Mac holds the lease, Settings shows this Mac's toggle as off, so the only way to unregister its
+  idle agent is to take the lease and then turn polling off. The idle agent's hourly run skips
+  and writes nothing. **Recommendation:** a "Stop this Mac's idle agent" button, if an idle agent
+  ever matters in practice.
+- **Wall-clock tests flake under load** (from the #108 review). Two tests assert absolute timings:
+  the M15 index-build ratio (`LibrarySnapshotTests`, "within 1.25x") and Listening's "a year of
+  JSONL log files loads quickly" (under 2 s). Both failed with this Mac at load average 60–116
+  from system daemons, and both passed when re-run and on `main`. **Recommendation:** move them
+  behind an opt-in perf tag, or measure with a generous ratio against an in-run baseline, so
+  `swift test` stays a correctness signal.
 
 ## V1 Scope
 

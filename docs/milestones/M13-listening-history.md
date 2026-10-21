@@ -42,7 +42,8 @@ listens on his iPhone, iPad, and in the car. M13 records that listening from App
   newest-first list of catalog songs and library songs (including uploaded ones), from every
   device. The default (`songs` only) hides library plays, which were most of Jon's listening.
 - Each request returns at most 30 items, paged with `offset`. The songs-only list ran out at 74
-  items; the merged list's depth is **unmeasured**.
+  items. The merged list's depth, measured at the S1 gate's baseline (2026-10-20), was 171 items
+  (6 pages).
 - There are no timestamps. The list is de-duplicated: a song appears once, at its most recent
   play.
 - The probe was a signed build of the app, run the way a login agent would run it, and MusicKit
@@ -210,7 +211,7 @@ to this week?") a week of log to answer from.
   - Lease tests: a non-holder writes nothing.
 
 - [x] **S1 — VF Listening Poller app (macOS 15, universal; runs on the Intel mini).**
-  Implementation complete; the Intel mini device gate remains owed.
+  Implementation complete; the Intel mini device gate passed (closed 2026-10-21; see below).
   - **Amended 2026-10-19 (Decision 2):** the 2018 mini can't run macOS 26, so the poller
     targets **macOS 15**. Lowering `VinylFeverCore` isn't possible, because its jon-platform
     dependencies (MCPServerKit, LLMClientKit, LLMHandoffKit) require macOS 26. So
@@ -337,6 +338,13 @@ to this week?") a week of log to answer from.
       overlap.
     - **If the agent doesn't run headless on the mini, or MusicKit refuses it there, stop and
       flag it** rather than working around it.
+  - **Gate result (2026-10-20 → 21):**
+    - The agent ran headless and MusicKit authorized it. The first line was a `failed` HTTP 401;
+      the baseline followed 12 minutes later, which fits the setup guide's re-toggle fix.
+    - The baseline read 171 items (6 pages). The plays, Marvis, and skip checks passed on
+      2026-10-20 (see the format section's *Fidelity*).
+    - Over 26 hours: 26 hourly lines with no gaps (7 `plays`, 19 `none`), and every line after
+      the baseline read 1 page.
 
 - [x] **S2 — Listening in `vf-mcp` and Settings (core + app).** Device gate owed.
   - Implement the tool surface above in `LibraryMCPServer`. The log is read lazily and reloaded
@@ -379,7 +387,8 @@ to this week?") a week of log to answer from.
     holder's next run writes nothing; turning off keeps the lease.
   - **Device gate:** take over from the laptop for a few hours, then hand back from the mini.
     `recent_listening` shows continuous coverage across both handovers, with no duplicate
-    plays.
+    plays. Note how long each handover's hole was (`open-questions.md`, *Listening handover
+    hole*).
 
 ## Prerequisites (Jon, not the executor's)
 

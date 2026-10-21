@@ -44,9 +44,9 @@ serving ChatGPT, and a new Mac is one command from "what's missing?"
 ## Slices
 
 **Dispatch 1: S0** (Core + app; device gate). **Dispatch 2: S1** (scripts; device gate).
-**Dispatch 3: S2** (scripts; device gate on the new mini).
+**Dispatch 3: S2** (scripts; device gate on the laptop and the Intel mini).
 
-- [x] **S0 — The database's own home (Core + app).** Implementation complete; laptop device gate remains owed.
+- [x] **S0 — The database's own home (Core + app).** Merged as #108; the laptop device gate passed 2026-10-21.
   - The live path is `~/Library/Application Support/VinylFever/VinylFever.sqlite`, next to the
     snapshot and inboxes. `VinylFeverDatabase.open()` passes it to
     `SQLiteData.defaultDatabase(path:configuration:)`, so `.test` and `.preview` keep their
@@ -161,9 +161,13 @@ serving ChatGPT, and a new Mac is one command from "what's missing?"
 
   **DoD:**
   - `shellcheck` passes. `--apply` run twice changes nothing the second time.
-  - **Device gate (the new Apple-silicon mini):** a report on the bare mini lists what's
-    missing. Then the guide plus `--apply --role poll` gets it polling, and a final report has
-    no failures.
+  - **Device gate (laptop and Intel mini; amended 2026-10-21, as no new mini is planned):**
+    - **Laptop:** `--role build,chat` reports no failures. Remove one thing per role, such as
+      the tunnel agent (`mcp-tunnel uninstall-agent vinyl-fever`) or a Homebrew package. Then
+      the report flags it, `--apply` restores it, and a second `--apply` changes nothing.
+    - **Intel mini (macOS 15, no Xcode):** run from a copy of `scripts/`. `--role poll` passes
+      the lease, freshness, `pmset`, and automatic-login checks for the VF Listening Poller.
+      The Vinyl Fever app checks are skipped there.
 
 ## Constants register (starting values)
 

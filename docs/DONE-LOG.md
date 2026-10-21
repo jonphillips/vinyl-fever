@@ -9,8 +9,11 @@ Moved the live database to `~/Library/Application Support/VinylFever/VinylFever.
 adopted and preserved a verified Vinyl Fever database from SQLiteData's shared default path, and
 replaced Debug schema erasure with typed refusal of newer data plus pre-migration backups. Added
 the database path to Settings and updated the replacement-Mac guide. Listening and Core suites and
-the macOS app tests pass. Jon's laptop device gate remains owed. Plan #107 approved the database
-migration policy; the S0 laptop gate now also covers refusal while a pre-S0 copy is running.
+the macOS app tests pass. Plan #107 approved the database migration policy. After two fix rounds
+(the adoption's staging WAL and a duplicate-copy guard, then limiting that guard to live launches),
+it merged as #108. Jon passed the laptop device gate on 2026-10-21: the running pre-S0 copy was
+refused, then adoption carried all 83 aliases, the recipe, the policy, and 75 run records, and a
+pre-S0 build started on an empty `SQLiteData.db` without touching the new file.
 
 ## 2026-10-21 — M13 · Dispatch 4 S3 (`m13/s3-in-app-poller`)
 
@@ -69,7 +72,9 @@ Poller app with authorization, hourly `SMAppService` agent setup, and status win
 poller setup guide and tests for baseline, subsequent fetches, lease skipping, authorization and
 fetch failures, and UTC month naming. Core tests and the macOS app tests pass. The build script
 verified arm64 and x86_64 slices and the app signature. The live MusicKit call and agent
-registration remain unverified; Jon's Intel mini device gate is owed.
+registration remain unverified; Jon's Intel mini device gate is owed. The gate closed on
+2026-10-21 from the log: 26 hourly fetches with no gaps after the baseline (171 items, 6 pages),
+every later fetch reading 1 page. The plays half had passed on 2026-10-20.
 
 ## 2026-10-18 — M13 · Dispatch 1 S0 (`m13/s0-listening-engine`)
 
