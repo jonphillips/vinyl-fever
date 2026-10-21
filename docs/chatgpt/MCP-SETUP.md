@@ -12,7 +12,7 @@ and stages playlist proposals in `~/Library/Application Support/VinylFever/Playl
 listening history from `iCloud Drive/Vinyl Fever/Listening/` when polling has been set up.
 Only Create in Vinyl Fever writes a playlist to Apple Music.
 
-For ChatGPT, create a `vinyl-fever` Secure MCP Tunnel and install the `Vinyl Fever` plugin. The
+For ChatGPT, connect the Secure MCP Tunnel and install the `Vinyl Fever` plugin. The tunnel ID and the per-Mac steps for a new or replacement Mac are in [Setting up a Mac](../setup/README.md#chat-host). The
 shared tunnel, key, client, and troubleshooting steps are in
 [jon-platform `docs/ios/mcp-access.md`](../../../jon-platform/docs/ios/mcp-access.md). Configure
 the local helper with:
