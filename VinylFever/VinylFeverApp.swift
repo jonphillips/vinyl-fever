@@ -12,6 +12,7 @@ private let listeningLogger = Logger(subsystem: "com.jonphillips.vinylfever", ca
 
 @main
 enum VinylFeverMain {
+  @MainActor
   static func main() async {
     if CommandLine.arguments.contains("--poll-listening") {
       do {
@@ -26,13 +27,18 @@ enum VinylFeverMain {
       }
       return
     }
+    let legacyPath = VinylFeverDatabase.legacyDatabaseURL.path(percentEncoded: false)
+    let databasePath = VinylFeverDatabase.liveDatabaseURL.path(percentEncoded: false)
+    if VinylFeverDatabase.needsLegacyAdoption(legacyPath: legacyPath, newPath: databasePath),
+      anotherRegularVinylFeverCopyIsRunning()
+    {
+      showStartupAlert("Quit the other copy of Vinyl Fever, then open this one again.")
+      return
+    }
     do {
       try prepareDependencies(includeDatabase: true)
     } catch {
-      let alert = NSAlert()
-      alert.alertStyle = .critical
-      alert.messageText = error.localizedDescription
-      alert.runModal()
+      showStartupAlert(error.localizedDescription)
       return
     }
     VinylFeverWindow.main()
@@ -58,6 +64,25 @@ private struct VinylFeverWindow: App {
       SettingsView(model: model)
     }
   }
+}
+
+@MainActor
+private func anotherRegularVinylFeverCopyIsRunning() -> Bool {
+  let bundleIdentifier = Bundle.main.bundleIdentifier ?? "com.jonphillips.vinylfever"
+  let currentProcessID = ProcessInfo.processInfo.processIdentifier
+  return NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
+    .contains { $0.processIdentifier != currentProcessID && $0.activationPolicy == .regular }
+}
+
+@MainActor
+private func showStartupAlert(_ message: String) {
+  let application = NSApplication.shared
+  application.setActivationPolicy(.regular)
+  application.activate(ignoringOtherApps: true)
+  let alert = NSAlert()
+  alert.alertStyle = .critical
+  alert.messageText = message
+  alert.runModal()
 }
 
 private func prepareDependencies(includeDatabase: Bool) throws {

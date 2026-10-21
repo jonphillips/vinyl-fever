@@ -81,9 +81,12 @@ serving ChatGPT, and a new Mac is one command from "what's missing?"
     - a failed verification leaves both files and throws;
     - an unknown migration throws the typed "older build" error and changes nothing;
     - pending migrations make a backup first, and only the newest 5 are kept.
-  - **Device gate (laptop):** install the S0 build. Aliases (83), the recipe, and the policy are
-    all there. `SQLiteData.db.moved-to-VinylFever` exists. Launching a pre-S0 DerivedData build
-    starts on an empty `SQLiteData.db`, with the new file untouched.
+  - **Device gate (laptop):** before installing, quit every copy of Vinyl Fever. Install the S0
+    build and confirm the 83 aliases, recipe, and policy are present and
+    `SQLiteData.db.moved-to-VinylFever` exists. Launch a pre-S0 DerivedData build and leave it
+    running, then launch the S0 build again; it must refuse with "Quit the other copy of Vinyl
+    Fever, then open this one again." Quit the pre-S0 copy and relaunch S0. Finally launch the
+    pre-S0 build and confirm it creates an empty `SQLiteData.db` without changing the new file.
 
 - [ ] **S1 — `scripts/install-vinyl-fever` (build → verify → install → restart → smoke).**
   - `xcodegen generate`, then build the `VinylFever` scheme into

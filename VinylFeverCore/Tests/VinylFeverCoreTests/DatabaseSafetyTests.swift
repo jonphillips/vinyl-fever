@@ -11,20 +11,38 @@ struct DatabaseSafetyTests {
     let legacyPath = root.appending(path: "SQLiteData.db").path(percentEncoded: false)
     let newPath = root.appending(path: "VinylFever/VinylFever.sqlite").path(percentEncoded: false)
 
-    do {
-      let legacy = try open(path: legacyPath)
-      try legacy.write { db in
-        try db.execute(sql: "INSERT INTO sourceLabels (id, token, isBuiltIn) VALUES ('adopted-id', 'adopted-row', 0)")
-      }
+    let legacy = try open(path: legacyPath)
+    try legacy.write { db in
+      try db.execute(sql: "INSERT INTO sourceLabels (id, token, isBuiltIn) VALUES ('adopted-id', 'adopted-row', 0)")
+      try db.execute(sql: "INSERT INTO sourceLabels (id, token, isBuiltIn) VALUES ('wal-id-1', 'wal-row-1', 0)")
+      try db.execute(sql: "INSERT INTO sourceLabels (id, token, isBuiltIn) VALUES ('wal-id-2', 'wal-row-2', 0)")
     }
+    let legacyWAL = try FileManager.default.attributesOfItem(atPath: legacyPath + "-wal")
+    #expect((legacyWAL[.size] as? NSNumber)?.intValue ?? 0 > 0)
 
     let database = try open(path: newPath, legacyPath: legacyPath)
-    let adoptedRow = try database.read { db in
-      try String.fetchOne(db, sql: "SELECT token FROM sourceLabels WHERE token = 'adopted-row'")
+    let adoptedRows = try database.read { db in
+      try String.fetchAll(db, sql: "SELECT token FROM sourceLabels WHERE token LIKE '%row%' ORDER BY token")
     }
-    #expect(adoptedRow == "adopted-row")
+    #expect(adoptedRows == ["adopted-row", "wal-row-1", "wal-row-2"])
     #expect(FileManager.default.fileExists(atPath: legacyPath + ".moved-to-VinylFever"))
     #expect(!FileManager.default.fileExists(atPath: legacyPath))
+    let stagingFiles = try FileManager.default.contentsOfDirectory(atPath: root.appending(path: "VinylFever").path(percentEncoded: false))
+      .filter { $0.hasPrefix(".VinylFever-adoption-") }
+    #expect(stagingFiles.isEmpty)
+  }
+
+  @Test
+  func needsLegacyAdoptionOnlyWhenLegacyExistsAndNewFileDoesNot() throws {
+    let root = temporaryDirectory()
+    let legacyPath = root.appending(path: "SQLiteData.db").path(percentEncoded: false)
+    let newPath = root.appending(path: "VinylFever.sqlite").path(percentEncoded: false)
+
+    #expect(!VinylFeverDatabase.needsLegacyAdoption(legacyPath: legacyPath, newPath: newPath))
+    #expect(FileManager.default.createFile(atPath: legacyPath, contents: Data()))
+    #expect(VinylFeverDatabase.needsLegacyAdoption(legacyPath: legacyPath, newPath: newPath))
+    #expect(FileManager.default.createFile(atPath: newPath, contents: Data()))
+    #expect(!VinylFeverDatabase.needsLegacyAdoption(legacyPath: legacyPath, newPath: newPath))
   }
 
   @Test
@@ -130,7 +148,7 @@ struct DatabaseSafetyTests {
 
     for index in 0..<7 {
       let path = root.appending(path: "Pending-\(index).sqlite").path(percentEncoded: false)
-      _ = try DatabaseQueue(path: path)
+      try makePartiallyMigratedDatabase(path: path)
       _ = try open(path: path, backupDirectory: backupsPath)
     }
 
@@ -143,9 +161,21 @@ struct DatabaseSafetyTests {
       path: root.appending(path: "Backups").appending(path: backup).path(percentEncoded: false)
     )
     let wasPreMigration = try backupDB.read { db in
-      try !db.tableExists("sourceLabels")
+      try !db.tableExists("appSettings")
     }
     #expect(wasPreMigration)
+  }
+
+  @Test
+  func emptyNewDatabaseDoesNotCreateAMigrationBackup() throws {
+    let root = temporaryDirectory()
+    let path = root.appending(path: "VinylFever.sqlite").path(percentEncoded: false)
+    let backupsPath = root.appending(path: "Backups").path(percentEncoded: false)
+    _ = try DatabaseQueue(path: path)
+
+    _ = try open(path: path, backupDirectory: backupsPath)
+
+    #expect(!FileManager.default.fileExists(atPath: backupsPath))
   }
 
   private func temporaryDirectory() -> URL {
@@ -160,6 +190,24 @@ struct DatabaseSafetyTests {
       $0.uuid = .incrementing
     } operation: {
       try VinylFeverDatabase.open(path: path, legacyPath: legacyPath, backupDirectory: backupDirectory)
+    }
+  }
+
+  private func makePartiallyMigratedDatabase(path: String) throws {
+    let database = try DatabaseQueue(path: path)
+    try database.writeWithoutTransaction { db in
+      try db.create(table: "grdb_migrations") {
+        $0.column("identifier", .text).notNull().primaryKey()
+      }
+      try db.create(table: "sourceLabels") {
+        $0.column("id", .text).notNull().primaryKey()
+        $0.column("token", .text).notNull().defaults(to: "")
+        $0.column("isBuiltIn", .boolean).notNull().defaults(to: false)
+      }
+      try db.execute(
+        sql: "INSERT INTO grdb_migrations (identifier) VALUES (?)",
+        arguments: ["Create 'sourceLabels' table"]
+      )
     }
   }
 }

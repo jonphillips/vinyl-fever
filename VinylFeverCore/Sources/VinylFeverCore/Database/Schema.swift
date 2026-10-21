@@ -24,6 +24,11 @@ public enum VinylFeverDatabase {
   public static let liveDatabaseURL = FileManager.default.homeDirectoryForCurrentUser
     .appending(path: "Library/Application Support/VinylFever/VinylFever.sqlite")
 
+  public static func needsLegacyAdoption(legacyPath: String, newPath: String) -> Bool {
+    let fileManager = FileManager.default
+    return !fileManager.fileExists(atPath: newPath) && fileManager.fileExists(atPath: legacyPath)
+  }
+
   public static func open(
     path: String? = nil,
     legacyPath: String? = nil,
@@ -71,7 +76,8 @@ public enum VinylFeverDatabase {
     }
 
     let hasPendingMigrations = try database.read { try !migrator.hasCompletedMigrations($0) }
-    if hasPendingMigrations, isLive || backupDirectory != nil {
+    let hasAppliedMigrations = try database.read { try !migrator.appliedIdentifiers($0).isEmpty }
+    if hasPendingMigrations, hasAppliedMigrations, (isLive || backupDirectory != nil) {
       let directory = backupDirectory
         ?? liveDatabaseURL.deletingLastPathComponent().appending(path: "Backups").path(percentEncoded: false)
       try makeMigrationBackup(of: database, in: directory)
@@ -85,7 +91,7 @@ public enum VinylFeverDatabase {
 
   private static func adoptLegacyDatabaseIfNeeded(oldPath: String, newPath: String) throws {
     let fileManager = FileManager.default
-    guard !fileManager.fileExists(atPath: newPath), fileManager.fileExists(atPath: oldPath) else { return }
+    guard needsLegacyAdoption(legacyPath: oldPath, newPath: newPath) else { return }
 
     do {
       let newURL = URL(fileURLWithPath: newPath)
@@ -120,11 +126,29 @@ public enum VinylFeverDatabase {
         guard let expectedRowCounts else { return }
 
         try validateDatabase(at: stagingURL.path(percentEncoded: false), expectedRowCounts: expectedRowCounts)
+        let stagingWALURL = URL(fileURLWithPath: stagingURL.path + "-wal")
+        if fileManager.fileExists(atPath: stagingWALURL.path),
+          let attributes = try? fileManager.attributesOfItem(atPath: stagingWALURL.path),
+          let size = attributes[.size] as? NSNumber,
+          size.intValue > 0
+        {
+          throw VinylFeverDatabaseError.adoptionFailed("The staged database still has data in its WAL.")
+        }
 
         guard !fileManager.fileExists(atPath: newPath) else {
           throw VinylFeverDatabaseError.adoptionFailed("The new database appeared during adoption.")
         }
         try fileManager.moveItem(at: stagingURL, to: newURL)
+        do {
+          for sidecar in [stagingWALURL, URL(fileURLWithPath: stagingURL.path + "-shm")] {
+            if fileManager.fileExists(atPath: sidecar.path) {
+              try fileManager.removeItem(at: sidecar)
+            }
+          }
+        } catch {
+          try? fileManager.removeItem(at: newURL)
+          throw error
+        }
 
         let oldURL = URL(fileURLWithPath: oldPath)
         let archivedURL = URL(fileURLWithPath: oldPath + ".moved-to-VinylFever")
@@ -175,14 +199,31 @@ public enum VinylFeverDatabase {
   }
 
   private static func validateDatabase(at path: String, expectedRowCounts: [String: Int]) throws {
-    let database = try DatabaseQueue(path: path)
-    let integrity = try database.read { try String.fetchOne($0, sql: "PRAGMA integrity_check") }
-    guard integrity == "ok" else {
-      throw VinylFeverDatabaseError.adoptionFailed("The copied database failed SQLite integrity_check: \(integrity ?? "no result").")
+    do {
+      let database = try DatabaseQueue(path: path)
+      let integrity = try database.read { try String.fetchOne($0, sql: "PRAGMA integrity_check") }
+      guard integrity == "ok" else {
+        throw VinylFeverDatabaseError.adoptionFailed("The copied database failed SQLite integrity_check: \(integrity ?? "no result").")
+      }
+      let copiedRowCounts = try tableRowCounts(from: database)
+      guard copiedRowCounts == expectedRowCounts else {
+        throw VinylFeverDatabaseError.adoptionFailed("The copied database's table row counts do not match the original.")
+      }
+      let busy = try database.writeWithoutTransaction { db in
+        try Int.fetchOne(db, sql: "PRAGMA wal_checkpoint(TRUNCATE)") ?? 1
+      }
+      guard busy == 0 else {
+        throw VinylFeverDatabaseError.adoptionFailed("The copied database WAL could not be checkpointed.")
+      }
     }
-    let copiedRowCounts = try tableRowCounts(from: database)
-    guard copiedRowCounts == expectedRowCounts else {
-      throw VinylFeverDatabaseError.adoptionFailed("The copied database's table row counts do not match the original.")
+
+    let walURL = URL(fileURLWithPath: path + "-wal")
+    if FileManager.default.fileExists(atPath: walURL.path),
+      let attributes = try? FileManager.default.attributesOfItem(atPath: walURL.path),
+      let size = attributes[.size] as? NSNumber,
+      size.intValue > 0
+    {
+      throw VinylFeverDatabaseError.adoptionFailed("The copied database WAL still contains data after checkpointing.")
     }
   }
 

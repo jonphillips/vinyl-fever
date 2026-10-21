@@ -9,8 +9,8 @@ Moved the live database to `~/Library/Application Support/VinylFever/VinylFever.
 adopted and preserved a verified Vinyl Fever database from SQLiteData's shared default path, and
 replaced Debug schema erasure with typed refusal of newer data plus pre-migration backups. Added
 the database path to Settings and updated the replacement-Mac guide. Listening and Core suites and
-the macOS app tests pass. Jon's laptop device gate remains owed; the database migration policy is
-escalated for review because this dispatch changes persisted-schema safety.
+the macOS app build passes. Jon's laptop device gate remains owed. Plan #107 approved the database
+migration policy; the S0 laptop gate now also covers refusal while a pre-S0 copy is running.
 
 ## 2026-10-21 — M13 · Dispatch 4 S3 (`m13/s3-in-app-poller`)
 
