@@ -3,6 +3,15 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-20 — M14 · Dispatch 2 S1 (`m14/s1-vf-mcp-uploaded-albums`)
+
+`check_tracks` now returns `uploadedAlbums`: up to 5 named albums of Jon's uploads, most played
+first, matched with `ArtistIdentity`. The shared upload-candidate clamp is lifted, and the picker
+keeps 3. The `vf-mcp` instruction head, `PlaylistContract.trackRules`, `PLAYLIST-CONTRACT.md`,
+and the `~/music-chat` template tell the model to use an upload's exact album as the hint. Core
+and macOS app tests pass. Jon passed the iPad device gate the same day, so M14 is complete.
+(#97 merged without this entry; the M15 S1 plan PR added it.)
+
 ## 2026-10-20 — M15 · Dispatch 1 S0 (`m15/s0-artist-identity`)
 
 Added `ArtistIdentity` to `VinylFeverListening` and adopted it across library ownership and
