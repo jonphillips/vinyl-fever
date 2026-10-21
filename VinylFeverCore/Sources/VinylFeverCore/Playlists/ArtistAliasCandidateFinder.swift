@@ -1,4 +1,5 @@
 import Foundation
+import SQLiteData
 import VinylFeverListening
 
 public struct ArtistAliasCandidate: Codable, Equatable, Identifiable, Sendable {
@@ -19,18 +20,16 @@ public enum ArtistAliasCandidateFinder {
   private static let structuralWords: Set<String> = ["band", "trio", "quartet", "experience", "acoustic"]
   private static let excluded: Set<String> = ["various", "various artists", "soundtrack", "cast recording", "original cast recording"]
 
-  public static func candidates(in index: LibraryIndex, decidedPairs: Set<String> = []) -> [ArtistAliasCandidate] {
-    let tracks = index.aliasEvidenceTracks
+  public static func candidates(in tracks: [LibraryTrack], decidedPairs: Set<String> = []) -> [ArtistAliasCandidate] {
     var display: [String: [String: Int]] = [:]
     var titlesByKey: [String: Set<String>] = [:]
     var titleKeys: [String: Set<String>] = [:]
     for track in tracks {
       let key = ArtistIdentity.baseKey(track.artist)
-      guard !key.isEmpty else { continue }
+      guard !key.isEmpty, !excluded.contains(key) else { continue }
       display[key, default: [:]][track.artist, default: 0] += 1
       let title = titleKey(track.name)
       guard title.count >= 4 else { continue }
-      titlesByKey[key, default: []].insert(title)
       titleKeys[title, default: []].insert(key)
     }
     var keys: [String] = []
@@ -38,6 +37,7 @@ public enum ArtistAliasCandidateFinder {
     keys.sort()
     var evidencePairs: Set<String> = []
     for (title, owners) in titleKeys where owners.count <= 5 && title.count >= 4 {
+      for owner in owners { titlesByKey[owner, default: []].insert(title) }
       let values: [String] = owners.sorted()
       if values.count > 1 {
         for left in 0..<(values.count - 1) {
@@ -109,13 +109,11 @@ public enum ArtistAliasCandidateFinder {
     let keySet = Set(keys)
     var result: Set<String> = []
     var reordered: [String: [String]] = [:]
-    var joined: [String: String] = [:]
     for key in keys {
       let words = key.split(separator: " ").map(String.init)
       var sortedWords = words
       sortedWords.sort()
       reordered[sortedWords.joined(separator: " "), default: []].append(key)
-      joined[words.joined()] = key
       for suffix in [["band"], ["trio"], ["quartet"], ["experience"], ["acoustic", "trio"]] {
         guard words.count > suffix.count,
           Array(words.suffix(suffix.count)) == suffix else { continue }
@@ -128,16 +126,28 @@ public enum ArtistAliasCandidateFinder {
         for j in (i + 1)..<group.count { result.insert(pair(group[i], group[j])) }
       }
     }
-    // A joined-word key such as `john lennonplastic` can contain the joined
-    // spelling of a known key. Probe prefixes so this stays linear in key length.
+    // A joined-word key such as `john lennonplastic ono band` extends the
+    // known key's last word inside one candidate word.
     for key in keys {
-      let flat = key.replacingOccurrences(of: " ", with: "")
-      let scalars = Array(flat)
-      guard scalars.count > 1 else { continue }
-      for length in 1..<scalars.count {
-        let prefix = String(scalars.prefix(length))
-        guard let known = joined[prefix], known != key else { continue }
-        result.insert(pair(key, known))
+      let words = key.split(separator: " ").map(String.init)
+      guard words.count >= 2 else { continue }
+      for index in 1..<words.count {
+        let expanded = words[index]
+        for split in 0..<expanded.count {
+          let knownLast = String(expanded.prefix(expanded.count - split))
+          let extra = String(expanded.suffix(split))
+          guard extra.count >= 4, knownLast.count >= 3 else { continue }
+          let known = (Array(words[..<index]) + [knownLast]).joined(separator: " ")
+          if keySet.contains(known) { result.insert(pair(key, known)) }
+        }
+      }
+      // One extra inner word is a common expanded artist spelling.
+      if words.count >= 3 {
+        for index in 1..<(words.count - 1) {
+          let knownWords = Array(words[..<index]) + Array(words[(index + 1)...])
+          let known = knownWords.joined(separator: " ")
+          if keySet.contains(known) { result.insert(pair(key, known)) }
+        }
       }
     }
     return result
@@ -154,7 +164,26 @@ public struct ArtistAliasesDocument: Codable, Equatable, Sendable {
   public init(aliases: [String: String]) { self.aliases = aliases }
 }
 
-public enum ArtistAliasesCodecError: Error, Equatable { case unsupportedFormat(String); case newerVersion(Int) }
+public enum ArtistAliasesCodecError: Error, Equatable, LocalizedError {
+  case unsupportedFormat(String)
+  case newerVersion(Int)
+
+  public var errorDescription: String? {
+    switch self {
+    case .newerVersion: "Update Vinyl Fever to read these artist aliases."
+    case let .unsupportedFormat(format): "Unsupported artist alias format: \(format)."
+    }
+  }
+}
+
+public enum ArtistAliasExporter {
+  public static func export(database: any DatabaseWriter, store: LibrarySnapshotStore) async throws {
+    let aliases = try await database.read { db in
+      ArtistAlias.acceptedMap(try ArtistAlias.all.fetchAll(db))
+    }
+    try await store.writeAliases(aliases)
+  }
+}
 
 public enum ArtistAliasesCodec {
   public static func encode(_ aliases: [String: String]) throws -> Data {

@@ -51,6 +51,30 @@ struct ArtistAliasesModelTests {
     #expect(swappedModel.candidates.count == 1)
   }
 
+  @Test("decisions reuse the opened snapshot and only reload database decisions")
+  func decisionsReuseSnapshot() async throws {
+    let database = try VinylFeverDatabase.open(path: FileManager.default.temporaryDirectory
+      .appending(path: "ArtistAliasesReads-\(UUID().uuidString).sqlite").path(percentEncoded: false))
+    let snapshot = snapshotFixture()
+    let reads = SnapshotReadCounter()
+    let model = withDependencies {
+      $0.defaultDatabase = database
+      $0.librarySnapshotStore = LibrarySnapshotStore(
+        read: { await reads.read(snapshot) }, write: { _ in }, readAliases: { [:] },
+        writeAliases: { _ in }, modifiedAt: { nil })
+    } operation: {
+      ArtistAliasesModel()
+    }
+    await model.load()
+    let candidate = try #require(model.candidates.first)
+    await model.decide(candidate, canonical: candidate.canonical)
+    await model.decide(candidate, canonical: nil)
+    await model.decide(candidate, canonical: candidate.canonical)
+    let accepted = try #require(model.accepted.first)
+    await model.undo(accepted)
+    #expect(await reads.count == 1)
+  }
+
   private func snapshotFixture() -> LibrarySnapshot {
     let tracks = (1...4).flatMap { number in
       [
@@ -61,5 +85,13 @@ struct ArtistAliasesModelTests {
       LibraryTrack(persistentID: "canonical-extra-\($0)", name: "Canonical Song \($0)", artist: "Canonical Artist")
     }
     return LibrarySnapshot(generatedAt: .now, tracks: tracks)
+  }
+}
+
+private actor SnapshotReadCounter {
+  private(set) var count = 0
+  func read(_ snapshot: LibrarySnapshot) -> LibrarySnapshot {
+    count += 1
+    return snapshot
   }
 }

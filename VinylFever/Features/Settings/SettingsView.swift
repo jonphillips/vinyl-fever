@@ -56,7 +56,13 @@ struct SettingsView: View {
         } header: {
           Text("Apple Music Import")
         } footer: {
-          Text("Vinyl Fever imports by copying files into Music's “Automatically Add” folder instead of scripting Music directly, which avoids the “Music did not respond in time” errors. Point this at …/Media.localized/Automatically Add to Music.localized inside your Music library (on its external drive).")
+          Text(
+            "Vinyl Fever imports by copying files into Music's “Automatically Add” folder "
+              + "instead of scripting Music directly, which avoids the “Music did not respond "
+              + "in time” errors. Point this at "
+              + "…/Media.localized/Automatically Add to Music.localized inside your Music library "
+              + "(on its external drive)."
+          )
           .font(.callout)
           .foregroundStyle(.secondary)
         }

@@ -13,6 +13,7 @@ final class ArtistAliasesModel {
   var accepted: [ArtistAlias] = []
   var isLoading = false
   var errorMessage: String?
+  private var allCandidates: [ArtistAliasCandidate] = []
 
   func load() async {
     isLoading = true
@@ -21,12 +22,15 @@ final class ArtistAliasesModel {
       let rows = try await database.read { db in try ArtistAlias.all.fetchAll(db) }
       accepted = rows.filter { $0.decision == "accepted" }.sorted { $0.variant < $1.variant }
       guard let snapshot = try await snapshotStore.read() else {
+        allCandidates = []
         candidates = []
         errorMessage = "Refresh the library snapshot to find artist aliases."
         return
       }
-      let index = LibraryIndex(snapshot: snapshot)
-      candidates = ArtistAliasCandidateFinder.candidates(in: index, decidedPairs: ArtistAlias.decidedPairs(rows))
+      allCandidates = await Task.detached(priority: .userInitiated) {
+        ArtistAliasCandidateFinder.candidates(in: snapshot.tracks)
+      }.value
+      applyDecisions(rows)
       errorMessage = nil
     } catch { errorMessage = error.localizedDescription }
   }
@@ -40,22 +44,40 @@ final class ArtistAliasesModel {
           accepted: canonical != nil,
           in: db)
       }
-      try await exportAliases()
-      await load()
-    } catch { errorMessage = error.localizedDescription }
+    } catch {
+      errorMessage = error.localizedDescription
+      return
+    }
+    await reloadDecisions()
+    do { try await ArtistAliasExporter.export(database: database, store: snapshotStore) }
+    catch { errorMessage = error.localizedDescription }
   }
 
   func undo(_ alias: ArtistAlias) async {
+    do { try await database.write { db in try ArtistAlias.undo(alias.variant, in: db) } }
+    catch {
+      errorMessage = error.localizedDescription
+      return
+    }
+    await reloadDecisions()
+    do { try await ArtistAliasExporter.export(database: database, store: snapshotStore) }
+    catch { errorMessage = error.localizedDescription }
+  }
+
+  private func reloadDecisions() async {
     do {
-      try await database.write { db in try ArtistAlias.undo(alias.variant, in: db) }
-      try await exportAliases()
-      await load()
+      let rows = try await database.read { db in try ArtistAlias.all.fetchAll(db) }
+      accepted = rows.filter { $0.decision == "accepted" }.sorted { $0.variant < $1.variant }
+      applyDecisions(rows)
+      errorMessage = nil
     } catch { errorMessage = error.localizedDescription }
   }
 
-  private func exportAliases() async throws {
-    let aliases = try await database.read { db in ArtistAlias.acceptedMap(try ArtistAlias.all.fetchAll(db)) }
-    try await snapshotStore.writeAliases(aliases)
+  private func applyDecisions(_ rows: [ArtistAlias]) {
+    let decidedPairs = ArtistAlias.decidedPairs(rows)
+    candidates = allCandidates.filter {
+      !decidedPairs.contains(ArtistAliasCandidateFinder.pair($0.variant, $0.canonical))
+    }
   }
 }
 

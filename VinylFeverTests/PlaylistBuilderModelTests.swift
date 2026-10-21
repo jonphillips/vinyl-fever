@@ -2,6 +2,7 @@ import Dependencies
 import Foundation
 import LLMHandoffKit
 import Observation
+import SQLiteData
 import Testing
 import VinylFeverCore
 import VinylFeverListening
@@ -549,6 +550,53 @@ struct PlaylistBuilderModelTests {
     #expect(model.librarySnapshotError == "Music unavailable")
   }
 
+  @Test("snapshot refresh rebuilds the alias export from accepted database rows")
+  func snapshotRefreshExportsAcceptedAliases() async throws {
+    let database = try VinylFeverDatabase.open(path: FileManager.default.temporaryDirectory
+      .appending(path: "SnapshotAliasExport-\(UUID().uuidString).sqlite").path(percentEncoded: false))
+    try await database.write { db in
+      try ArtistAlias.decide(variant: "John Cougar Mellencamp", canonical: "John Mellencamp", accepted: true, in: db)
+    }
+    let writes = SnapshotRefreshWrites()
+    let snapshot = LibrarySnapshot(generatedAt: .now, tracks: [])
+    let model = withDependencies {
+      $0.defaultDatabase = database
+      $0.musicAppClient.requestAutomationPermission = { .authorized }
+      $0.musicAppClient.readLibrarySnapshot = { snapshot }
+      $0.librarySnapshotStore = LibrarySnapshotStore(
+        read: { nil }, write: { await writes.captureSnapshot($0) }, readAliases: { [:] },
+        writeAliases: { await writes.aliases($0) }, modifiedAt: { nil })
+    } operation: {
+      PlaylistBuilderModel()
+    }
+    await model.refreshLibrarySnapshot()
+    #expect(await writes.aliasMap == ["john cougar mellencamp": "john mellencamp"])
+    #expect(await writes.snapshot == snapshot)
+    #expect(model.librarySnapshotError == nil)
+  }
+
+  @Test("snapshot refresh completes when the alias export cannot be written")
+  func snapshotRefreshSurvivesAliasExportFailure() async throws {
+    let database = try testDatabase()
+    let writes = SnapshotRefreshWrites()
+    let snapshot = LibrarySnapshot(generatedAt: .now, tracks: [])
+    let model = withDependencies {
+      $0.defaultDatabase = database
+      $0.musicAppClient.requestAutomationPermission = { .authorized }
+      $0.musicAppClient.readLibrarySnapshot = { snapshot }
+      $0.librarySnapshotStore = LibrarySnapshotStore(
+        read: { nil }, write: { await writes.captureSnapshot($0) }, readAliases: { [:] },
+        writeAliases: { _ in throw NSError(domain: "alias export", code: 1, userInfo: [NSLocalizedDescriptionKey: "Alias file unavailable"]) },
+        modifiedAt: { nil })
+    } operation: {
+      PlaylistBuilderModel()
+    }
+    await model.refreshLibrarySnapshot()
+    #expect(await writes.snapshot == snapshot)
+    #expect(model.librarySnapshot == snapshot)
+    #expect(model.librarySnapshotError?.contains("Alias file unavailable") == true)
+  }
+
   @Test(
     "annotations resolve owned and unowned matches and hide badges for failed or duplicate rows")
   func annotationVisibilityByRowState() async throws {
@@ -637,13 +685,15 @@ struct PlaylistBuilderModelTests {
   }
 
   @Test("launch refresh runs only when the saved snapshot is stale")
-  func launchRefreshThreshold() async {
+  func launchRefreshThreshold() async throws {
+    let database = try testDatabase()
     let now = Date(timeIntervalSince1970: 2_000_000_000)
     let previous = LibrarySnapshot(generatedAt: now.addingTimeInterval(-7 * 60 * 60), tracks: [])
     let refreshed = LibrarySnapshot(
       generatedAt: now, tracks: [LibraryTrack(persistentID: "new", name: "Song", artist: "Artist")])
     let staleCounter = SearchCallCounter()
     let staleModel = await withDependencies {
+      $0.defaultDatabase = database
       $0.date.now = now
       $0.musicAppClient.automationPermission = { .authorized }
       $0.musicAppClient.readLibrarySnapshot = {
@@ -662,6 +712,7 @@ struct PlaylistBuilderModelTests {
 
     let freshCounter = SearchCallCounter()
     let freshModel = await withDependencies {
+      $0.defaultDatabase = database
       $0.date.now = now
       $0.musicAppClient.automationPermission = { .authorized }
       $0.musicAppClient.readLibrarySnapshot = {
@@ -680,13 +731,15 @@ struct PlaylistBuilderModelTests {
   }
 
   @Test("launch refresh only checks automation permission; manual refresh asks for it")
-  func refreshPermissionPrompting() async {
+  func refreshPermissionPrompting() async throws {
+    let database = try testDatabase()
     let now = Date(timeIntervalSince1970: 2_000_000_000)
     let refreshed = LibrarySnapshot(
       generatedAt: now, tracks: [LibraryTrack(persistentID: "new", name: "Song", artist: "Artist")])
     let requests = SearchCallCounter()
     let reads = SearchCallCounter()
     let model = withDependencies {
+      $0.defaultDatabase = database
       $0.date.now = now
       $0.musicAppClient.automationPermission = { .notDetermined }
       $0.musicAppClient.requestAutomationPermission = {
@@ -716,6 +769,11 @@ struct PlaylistBuilderModelTests {
     #expect(await reads.count == 1)
     #expect(model.librarySnapshot == refreshed)
     #expect(model.librarySnapshotError == nil)
+  }
+
+  private func testDatabase() throws -> any SQLiteData.DatabaseWriter {
+    try VinylFeverDatabase.open(path: FileManager.default.temporaryDirectory
+      .appending(path: "PlaylistBuilder-\(UUID().uuidString).sqlite").path(percentEncoded: false))
   }
 
   @Test("a denied manual refresh reads nothing and keeps the previous snapshot")
@@ -1254,6 +1312,13 @@ private actor PlaylistCreateCapture {
   func record(name: String, description: String?, ids: [String]) {
     value = (name, description, ids)
   }
+}
+
+private actor SnapshotRefreshWrites {
+  private(set) var aliasMap: [String: String] = [:]
+  private(set) var snapshot: LibrarySnapshot?
+  func aliases(_ value: [String: String]) { aliasMap = value }
+  func captureSnapshot(_ value: LibrarySnapshot) { snapshot = value }
 }
 
 private actor PlaylistSongReferenceCapture {

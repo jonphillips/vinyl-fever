@@ -2,6 +2,7 @@ import Dependencies
 import Foundation
 import LLMHandoffKit
 import Observation
+import SQLiteData
 import VinylFeverCore
 
 @MainActor
@@ -13,6 +14,7 @@ final class PlaylistBuilderModel {
   @ObservationIgnored @Dependency(\.continuousClock) private var clock
   @ObservationIgnored @Dependency(\.musicAppClient) private var musicApp
   @ObservationIgnored @Dependency(\.librarySnapshotStore) private var snapshotStore
+  @ObservationIgnored @Dependency(\.defaultDatabase) private var database
   @ObservationIgnored @Dependency(\.playlistInboxClient) private var playlistInbox
   @ObservationIgnored @Dependency(\.date.now) private var now
 
@@ -194,8 +196,11 @@ final class PlaylistBuilderModel {
     }
     do {
       let snapshot = try await musicApp.readLibrarySnapshot()
-      let aliases = try snapshotStore.readAliases()
-      try await snapshotStore.writeAliases(aliases)
+      do {
+        try await ArtistAliasExporter.export(database: database, store: snapshotStore)
+      } catch {
+        librarySnapshotError = "Library refreshed, but artist aliases could not be exported: \(error.localizedDescription)"
+      }
       try await snapshotStore.write(snapshot)
       librarySnapshot = snapshot
     } catch { librarySnapshotError = error.localizedDescription }

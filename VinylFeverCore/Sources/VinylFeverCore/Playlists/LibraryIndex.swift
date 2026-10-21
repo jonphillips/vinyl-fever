@@ -69,7 +69,6 @@ public struct LibraryIndex: Sendable {
   public static let maximumCheckTracks = 200
 
   private let tracks: [LibraryTrack]
-  public var aliasEvidenceTracks: [LibraryTrack] { tracks }
   private let bySong: [String: [LibraryTrack]]
   private let uploadedByTitle: [String: [UploadedTrackEntry]]
   public let artistIdentity: ArtistIdentity

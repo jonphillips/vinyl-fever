@@ -159,12 +159,14 @@ public enum VinylFeverDatabase {
     migrator.registerMigration("Create 'artistAliases' table") { db in
       try #sql("""
         CREATE TABLE "artistAliases" (
-          "variant" TEXT PRIMARY KEY NOT NULL,
+          "variant" TEXT NOT NULL,
           "canonical" TEXT NOT NULL,
           "decision" TEXT NOT NULL CHECK ("decision" IN ('accepted', 'rejected')),
-          "decidedAt" TEXT NOT NULL
+          "decidedAt" TEXT NOT NULL,
+          PRIMARY KEY ("variant", "canonical")
         ) STRICT
         """).execute(db)
+      try #sql("CREATE UNIQUE INDEX \"artistAliases_acceptedVariant\" ON \"artistAliases\" (\"variant\") WHERE \"decision\" = 'accepted'").execute(db)
     }
   }
 
