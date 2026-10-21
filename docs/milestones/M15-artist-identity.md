@@ -104,6 +104,15 @@ cases.
     - cast recordings and `various`: Alan Menken, Meredith Willson, Robert Preston, Shirley
       Jones, the Carter Family, a cast recording ~ Paul Simon, Trey Parker;
     - `big daddy` ~ Chris Rock.
+  - **Corrected 2026-10-20 in the #101 review.** The Swift finder, run on the real snapshot
+    with the S1 rules applied as written, finds **34** overlap candidates, not 44. The
+    difference is in two pairs above:
+    - `john cougar mellencamp` / `john mellencamp` share only 2 counted titles;
+    - `on a friday` / `radiohead` share 3.
+
+    The structural shape added to S1, one inner word inserted, finds the Mellencamp pair. No
+    rule finds `on a friday`, or `john cougar` (4 remixes, no titles shared with Mellencamp).
+    That gap is an open question: a manual Add alias in the sheet.
 - **Two false merges in layer 2, accepted:** `martha and the vandellas` / `martha and the
   muffins` (5 tracks) and `eddie and the hot rods` / `eddie and the tide` (4 tracks). Neither
   pair shares a title, so neither merge changes a match. Grouping counts move by a handful.
@@ -223,23 +232,38 @@ device gate).
 - [ ] **S1 — Artist aliases Jon approves (core + app; one table).** Device gate owed.
   - **Candidate finder (Core, pure, over `LibraryIndex`).** It returns pairs of `baseKey`s
     with their most common display spelling, track counts, and up to 3 shared titles as
-    evidence. It has two sources:
+    evidence. It reads only each track's artist and title, so it takes the snapshot's tracks
+    and doesn't need a built index. It has two sources:
     - **Title overlap:** two keys share at least 4 distinct normalized titles (4 or more
-      characters, from titles at most 5 keys share), and that's at least half of the smaller
-      key's titles.
-    - **Structure:** a key that's a known artist plus `band`, `trio`, `quartet`, `experience`,
-      or `acoustic trio`; a key whose words are a known artist's words reordered; a key that's
-      a known artist with words joined (`lennonplastic`).
+      characters), and that's at least half of the smaller key's titles. Each key's title set
+      holds only titles that at most 5 keys share, so both counts leave out the standards.
+    - **Structure** (J is a known key; K is the candidate):
+      - **suffix:** K is J plus `band`, `trio`, `quartet`, `experience`, or `acoustic trio`;
+      - **reordered:** K's words are J's words in another order;
+      - **joined:** the join falls inside a word. J has 2 or more words and its last word is at
+        least 3 characters. K's words, up to some word W, are J's words, and W is J's last word
+        plus at least 4 more characters (`john lennon` → `john lennonplastic ono band`).
+        A whole-word prefix never qualifies: `elvis` / `elvis costello` is the M14 false
+        positive this milestone removes;
+      - **inserted (added 2026-10-20, #101 review):** J has 2 or more words, and K is J with
+        exactly one word inserted between J's first and last words (`john mellencamp` →
+        `john cougar mellencamp`, `daryl hall john oates` → `daryl hall and john oates`).
 
-    The finder excludes `various`, `various artists`, `soundtrack`, `cast recording`, and
-    `original cast recording`. It proposes the key with more tracks as canonical, and pairs Jon
-    has decided never come back.
-  - **Table `artistAliases`** (SQLiteData, new migration): `variant TEXT PRIMARY KEY`,
-    `canonical TEXT NOT NULL`, `decision TEXT NOT NULL` (`accepted` | `rejected`),
-    `decidedAt`. It isn't synced. The rules on accept:
-    - no chains: accepting A → B while B → C exists stores A → C;
-    - accepting B → C re-points every A → B to A → C;
-    - an alias to itself is refused.
+    The finder drops `various`, `various artists`, `soundtrack`, `cast recording`, and
+    `original cast recording` before either source runs. It proposes the key with more tracks
+    as canonical, and pairs Jon has decided never come back.
+  - **Table `artistAliases`** (SQLiteData, new migration; schema amended in the #101 review
+    and approved by Jon on 2026-10-20): `variant TEXT NOT NULL`, `canonical TEXT NOT NULL`,
+    `decision TEXT NOT NULL` (`accepted` | `rejected`), `decidedAt`,
+    `PRIMARY KEY (variant, canonical)`, plus a unique index on `variant` where
+    `decision = 'accepted'`. A variant can have many rejections but only one alias. It isn't
+    synced.
+    - A rejection inserts its pair and changes no other row.
+    - Accepting first removes any row for the same pair (in either direction) and any other
+      accepted row for the variant.
+    - No chains: accepting A → B while B → C exists stores A → C.
+    - Accepting B → C re-points every A → B to A → C, replacing a rejected (A, C) row.
+    - An alias to itself is refused.
   - **Export for `vf-mcp`.** On every decision and every snapshot refresh, the app writes
     `artist-aliases.json` atomically beside the snapshot:
     `{"format":"vf-artist-aliases","version":1,"aliases":{"john cougar mellencamp":"john mellencamp",…}}`.
@@ -251,24 +275,40 @@ device gate).
       the shared titles;
     - **Same artist** (with a swap for which name is canonical) and **Different** buttons;
     - accepted aliases, each with **Undo**.
+
+    It finds candidates off the main actor, once per open or Refresh. A decision or an undo
+    re-reads only the decision rows and refilters the cached candidates.
   - The app's own index (preview badges, the picker) uses the accepted aliases too.
 
   **DoD:**
-  - Finder tests: an overlap pair; each structural shape; the exclusions; the proposed
-    direction; decided pairs stay hidden.
-  - Store tests: chain collapse on accept and on re-point; a self-alias is refused; undo
-    removes the row and the candidate returns.
-  - Export: codec round trip; a newer version errors; the file is rewritten on decide.
+  - Finder tests:
+    - an overlap pair; each of the four structural shapes; the exclusions; the proposed
+      direction; decided pairs stay hidden;
+    - not candidates: `elvis` / `elvis costello`, `moby` / `moby grape`, `billy joel` /
+      `billy joe`, a pair whose shared titles are all held by more than 5 keys, and `various`
+      sharing rare titles with an artist.
+  - Finder load test on the 87,000-track, 8,000-artist fixture; the PR states the time.
+  - Store tests:
+    - chain collapse on accept and on re-point; a self-alias is refused; undo removes the row
+      and the candidate returns;
+    - accepting `elvis` → `elvis presley` and then rejecting (`elvis`, `elvis costello`) keeps
+      both rows and the alias;
+    - two rejections for one variant both stay hidden.
+  - Export: codec round trip; a newer version errors; the file is rewritten on decide, and
+    from the database on a snapshot refresh.
   - `vf-mcp` tests with an alias file:
-    - `check_tracks` `John Cougar` / `Ain't Even Done With the Night` is `owned` against a
-      `John Mellencamp` track;
+    - `check_tracks` `John Cougar Mellencamp` / `Ain't Even Done With the Night` is `owned`
+      against a `John Mellencamp` track;
     - `top_artists` (`all_time`) shows `elvis` and `elvis presley` as one row;
     - with no file, nothing changes.
-  - Model tests for the sheet: decide, swap, undo.
+  - Model tests for the sheet: decide, swap, undo; a decision doesn't re-read the snapshot.
   - The PR is a schema change, so it escalates to Jon (ADR-0005 D9).
-  - **Device gate:** Jon works through the candidate list in Settings (expect about 45). Then,
-    in a chat, `check_tracks` for a John Cougar–era song is owned, and `top_artists` lists
-    Elvis Presley once.
+  - **Device gate:** Jon works through the candidate list in Settings. On today's library,
+    expect about 100: 34 overlap, 22 suffix, 28 reordered, 23 inserted, and 1 joined, with some
+    pairs found by more than one shape. Most reordered pairs are one duet credited in both
+    orders. Then, in a chat:
+    - `check_tracks` for a `John Cougar Mellencamp` song is owned;
+    - `top_artists` lists Elvis Presley once.
 
 ## Constants register (starting values)
 
@@ -276,9 +316,11 @@ device gate).
 | --- | --- | --- |
 | Suffix markers | ` and the `, ` and his `, ` and her `, ` live`, ` solo` | Measured: covers the top merges with 2 false merges. |
 | Generic credit words | band, friends, others, family, orchestra, guests | Measured: `bruce hornsby and band` → The Band. |
-| Overlap threshold | ≥ 4 shared titles and ≥ 50% of the smaller key | Measured: 44 candidates, about half real. |
-| Shared-title cap | titles shared by ≤ 5 keys | Standards like "White Christmas" otherwise pair everyone. |
-| Structural suffixes | band, trio, quartet, experience, acoustic trio | Seen in the candidates. |
+| Overlap threshold | ≥ 4 shared titles and ≥ 50% of the smaller key | Measured: 34 candidates in Swift (44 in the Python probe), about half real. |
+| Shared-title cap | titles shared by ≤ 5 keys, in both counts | Standards like "White Christmas" otherwise pair everyone. |
+| Structural suffixes | band, trio, quartet, experience, acoustic trio | Seen in the candidates; 22 pairs. |
+| Joined-word minimums | known key ≥ 2 words, last word ≥ 3 characters, joined-on part ≥ 4 characters | Measured: leaves only `john lennonplastic`; without them, 2,958 candidates (#101). |
+| Inserted words | exactly 1, between the known key's first and last words | Measured: 23 pairs, mostly real. |
 
 ## Out of scope — with destinations
 
@@ -293,6 +335,8 @@ device gate).
   Intelligence's composition level, after its S3.
 - **Automatic aliases from title overlap.** About half the candidates are covers, producers, or
   cast recordings. → No: Jon decides each one once.
+- **Adding an alias by hand** (`john cougar`, `on a friday`, which no rule finds). → A candidate
+  in `open-questions.md`, after S1's gate.
 
 ## Decisions
 

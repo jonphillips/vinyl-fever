@@ -96,6 +96,20 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   is one rule with duet credits. S1 is an alias list Jon approves in Settings. The order is
   M13 S2 → M15 S0 → M14 S1 → M15 S1 → M13 S3, so M13 S2's completing PR (#93) dispatches
   M15 S0.
+  - **S1 (#101) went back for changes (2026-10-20).** On the real snapshot its finder returned
+    2,958 candidates, because the joined-words rule had become a prefix rule. A Different click
+    could also delete an accepted alias. Jon approved the schema fix: one row per
+    (variant, canonical) pair, with one accepted alias per variant. The milestone now adds an
+    inserted-word shape and expects about 100 candidates at the gate.
+- **Adding an artist alias by hand** (from the #101 review, 2026-10-20). M15 S1's finder can't
+  propose an alias without evidence in the library. `john cougar` (4 remixes) shares no titles
+  with `john mellencamp`, and `on a friday` (Radiohead's early name) shares 3 titles, one short
+  of the threshold. Both are real aliases that Jon would have to type himself.
+  - **Candidate:** an **Add alias…** button in the Artist Aliases sheet. Jon types two
+    spellings, and the decision goes through the same store rules as an accepted candidate:
+    base keys, no chains, re-pointing.
+  - **Decide after S1's gate**, once Jon has seen what the finder misses. If it's only these
+    two, a seeded pair or a one-off decision row is simpler than new UI.
 - **Library duplicates report** (Jon, 2026-10-20, from the M14 S1 device gate). Jon asked for a 1988
   Tunnel of Love mix. Two rows went to the picker: Roulette and Chimes of Freedom. ChatGPT had
   sent the exact album, `1988‐07‐03: Stockholms Stadion, Stockholm, Sweden`, with U+2010 hyphens.
