@@ -87,6 +87,10 @@ targets:
         product: LLMClientKit
     postBuildScripts:
       - name: Build and embed vf-mcp helper
+        # No input files list the helper's Swift sources, so dependency analysis would skip this
+        # phase whenever the outputs exist and embed a stale helper. SwiftPM's own build is
+        # incremental, so running every time is cheap.
+        basedOnDependencyAnalysis: false
         outputFiles:
           - $(DERIVED_FILE_DIR)/vf-mcp-build
           - $(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers/vf-mcp

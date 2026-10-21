@@ -386,6 +386,7 @@
 /* Begin PBXShellScriptBuildPhase section */
 		C3B842E00EC4D2EE27A92CB7 /* Build and embed vf-mcp helper */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
