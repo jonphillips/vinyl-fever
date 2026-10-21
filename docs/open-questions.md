@@ -101,15 +101,28 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
     could also delete an accepted alias. Jon approved the schema fix: one row per
     (variant, canonical) pair, with one accepted alias per variant. The milestone now adds an
     inserted-word shape and expects about 100 candidates at the gate.
-- **Adding an artist alias by hand** (from the #101 review, 2026-10-20). M15 S1's finder can't
-  propose an alias without evidence in the library. `john cougar` (4 remixes) shares no titles
-  with `john mellencamp`, and `on a friday` (Radiohead's early name) shares 3 titles, one short
-  of the threshold. Both are real aliases that Jon would have to type himself.
-  - **Candidate:** an **Add alias…** button in the Artist Aliases sheet. Jon types two
-    spellings, and the decision goes through the same store rules as an accepted candidate:
-    base keys, no chains, re-pointing.
-  - **Decide after S1's gate**, once Jon has seen what the finder misses. If it's only these
-    two, a seeded pair or a one-off decision row is simpler than new UI.
+  - **S1 merged as #101, and its device gate passed (2026-10-21). M15 is complete.** Jon worked
+    through all 100 candidates (73 accepted, 10 rejected).
+- **Artist Aliases sheet follow-ups** (from the #101 review and M15 S1's gate, 2026-10-20/21).
+  - **Adding an alias by hand.** The finder can't propose an alias without evidence in the
+    library. `john cougar` (4 remixes) shares no titles with `john mellencamp`, and
+    `on a friday` (Radiohead's early name) shares 3 titles, one short of the threshold. Both are
+    real aliases that Jon would have to type himself.
+    - **Candidate:** an **Add alias…** button in the sheet. Jon types two spellings, and the
+      decision goes through the same store rules as an accepted candidate: base keys, no
+      chains, re-pointing.
+    - **Jon to decide, now that the gate has passed.** If these two are the only misses, a
+      one-off decision row is simpler than new UI.
+  - **The direction choice is invisible and doesn't need to exist.** Jon didn't know the two
+    **Same artist** buttons pick the canonical spelling, so 49 of his 73 accepted aliases point
+    at the smaller key (`bruce springsteen` → `bruce springsteen band`). It doesn't change
+    behavior: matching and grouping compare keys, and display names come from track tags. The
+    Accepted list is the only place it shows, and it reads backwards. The swap was the
+    architect's brief, and it gives Jon a choice that has no effect.
+    - **Candidate:** one **Same artist** button, with the key that has more tracks always
+      canonical. A one-time migration re-points Jon's 49 rows the same way, and the Accepted
+      list shows display spellings instead of keys. Small, cosmetic, and it can ride along with
+      Add alias if that's built.
 - **Library duplicates report** (Jon, 2026-10-20, from the M14 S1 device gate). Jon asked for a 1988
   Tunnel of Love mix. Two rows went to the picker: Roulette and Chimes of Freedom. ChatGPT had
   sent the exact album, `1988‐07‐03: Stockholms Stadion, Stockholm, Sweden`, with U+2010 hyphens.

@@ -172,7 +172,7 @@ public struct ArtistIdentity: Sendable {
 ## Slices
 
 **Dispatch 1: S0** (Core, pure; no device gate). **Dispatch 2: S1** (core + app; one table; a
-device gate).
+device gate). **Both are done, and S1's device gate passed: M15 is complete (2026-10-21).**
 
 - [x] **S0 — `ArtistIdentity`, adopted everywhere (Core).**
   - Add `ArtistIdentity` to `VinylFeverListening` as specified above, with `.empty` and
@@ -229,7 +229,8 @@ device gate).
     diversity (at least 8,000 distinct artists, a third with suffix variants) finishes within
     1.25× of today's build time on the same fixture. The PR states both times.
 
-- [x] **S1 — Artist aliases Jon approves (core + app; one table).** Implementation complete; device gate remains owed.
+- [x] **S1 — Artist aliases Jon approves (core + app; one table).** Device gate passed
+  2026-10-21. Merged as #101 after one fix round.
   - **Candidate finder (Core, pure, over `LibraryIndex`).** It returns pairs of `baseKey`s
     with their most common display spelling, track counts, and up to 3 shared titles as
     evidence. It reads only each track's artist and title, so it takes the snapshot's tracks
@@ -303,12 +304,31 @@ device gate).
     - with no file, nothing changes.
   - Model tests for the sheet: decide, swap, undo; a decision doesn't re-read the snapshot.
   - The PR is a schema change, so it escalates to Jon (ADR-0005 D9).
-  - **Device gate:** Jon works through the candidate list in Settings. On today's library,
-    expect about 100: 34 overlap, 22 suffix, 28 reordered, 23 inserted, and 1 joined, with some
-    pairs found by more than one shape. Most reordered pairs are one duet credited in both
-    orders. Then, in a chat:
+  - **Device gate (passed 2026-10-21, no longer owed):** Jon works through the candidate list in
+    Settings. On today's library, expect about 100: 34 overlap, 22 suffix, 28 reordered,
+    23 inserted, and 1 joined, with some pairs found by more than one shape. Most reordered pairs
+    are one duet credited in both orders. Then, in a chat:
     - `check_tracks` for a `John Cougar Mellencamp` song is owned;
     - `top_artists` lists Elvis Presley once.
+    - **Result:** The finder proposed exactly 100 candidates. Jon worked through all of them:
+      73 accepted, and 10 rejected (Martyn Joseph ~ Springsteen, Phil Spector ~ his four acts,
+      Big Boi ~ OutKast, Robert Preston ~ Meredith Willson, Joe Turner ~ Joe Lynn Turner,
+      Room Experience ~ Room, and Big Daddy ~ Chris Rock). The architect ran the chat checks on
+      the embedded `vf-mcp` against the real files:
+      - `John Cougar Mellencamp` / `Pink Houses` and `/ Ain't Even Done With the Night` are owned;
+      - `artist_profile` covers 766 tracks for Mellencamp and 629 for Elvis Presley (605 + 24);
+      - `Elvis Costello` / `Alison` still matches on its own, and `Moby` isn't credited with
+        Moby Grape's `Omaha`.
+
+      Library `top_artists` ranks by plays, and Elvis (1 play) falls outside its cap of 200, so
+      the profile counts stand in for the "listed once" check.
+    - **Finding: the sheet's direction choice isn't visible.** Jon didn't know the two
+      **Same artist** buttons choose the canonical spelling, so 49 of the 73 accepted aliases
+      point at the smaller key (`bruce springsteen` → `bruce springsteen band`, `elvis presley` →
+      `elvis`). This doesn't change behavior: grouping and matching compare keys on both sides,
+      and every display name comes from the tracks' own tags (`top_artists` still shows
+      "Bruce Springsteen", 15,645 tracks). Only the Accepted list reads backwards. Follow-up
+      is in `open-questions.md`.
 
 ## Constants register (starting values)
 

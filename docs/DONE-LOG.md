@@ -8,8 +8,9 @@ History, newest first. The PR that completes a dispatch adds an entry naming its
 Added a pure alias candidate finder, local `artistAliases` decisions in SQLiteData, the Settings
 review sheet, atomic `artist-aliases.json` export, and alias-aware app and `vf-mcp` indexes.
 Alias chains collapse to one canonical key and decisions can be undone. Listening, Core, and
-macOS app tests pass; `check-handoff` passes. The schema change is escalated to Jon. M15 S1's
-Settings/device gate remains owed.
+macOS app tests pass; `check-handoff` passes. The schema change is escalated to Jon. After one
+fix round (the finder's rules and a two-column primary key; Jon approved the schema), it merged
+as #101. Jon passed the Settings/device gate on 2026-10-21, so M15 is complete.
 
 ## 2026-10-20 — M14 · Dispatch 2 S1 (`m14/s1-vf-mcp-uploaded-albums`)
 
