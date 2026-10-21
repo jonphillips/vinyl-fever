@@ -14,6 +14,7 @@ private let listeningLogger = Logger(subsystem: "com.jonphillips.vinylfever", ca
 enum VinylFeverMain {
   @MainActor
   static func main() async {
+    @Dependency(\.context) var context
     if CommandLine.arguments.contains("--poll-listening") {
       do {
         try prepareDependencies(includeDatabase: false)
@@ -29,7 +30,8 @@ enum VinylFeverMain {
     }
     let legacyPath = VinylFeverDatabase.legacyDatabaseURL.path(percentEncoded: false)
     let databasePath = VinylFeverDatabase.liveDatabaseURL.path(percentEncoded: false)
-    if VinylFeverDatabase.needsLegacyAdoption(legacyPath: legacyPath, newPath: databasePath),
+    if context == .live,
+      VinylFeverDatabase.needsLegacyAdoption(legacyPath: legacyPath, newPath: databasePath),
       anotherRegularVinylFeverCopyIsRunning()
     {
       showStartupAlert("Quit the other copy of Vinyl Fever, then open this one again.")
