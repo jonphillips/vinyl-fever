@@ -192,6 +192,13 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   builds and archives today. **Recommendation:** watch it. If archives get frequent, cache the
   scratch path across builds, or build the helper as an Xcode target in the same build graph.
 
+- **Machine ops** — planned as [M16](milestones/M16-machine-ops.md) (2026-10-21). The app's
+  database is SQLiteData's default `~/Library/Application Support/SQLiteData.db`, and Debug
+  builds erase it on any unknown migration, so opening an older Debug build wipes Jon's aliases.
+  S0 moves the database to `VinylFever/VinylFever.sqlite`, refuses instead of erasing, and backs
+  up before migrating. It goes right after M13 S3. S1 adds `scripts/install-vinyl-fever` and S2
+  adds `scripts/setup-mac`. A manual backup is at `VinylFever/Backups/SQLiteData-2026-10-21.db`.
+
 ## V1 Scope
 
 - Which existing script is most important after `music_pipeline.sh`?
