@@ -137,6 +137,8 @@ struct SettingsView: View {
             .textSelection(.enabled)
           LabeledContent("Library snapshot", value: snapshotPath)
             .textSelection(.enabled)
+          LabeledContent("Database", value: databasePath)
+            .textSelection(.enabled)
           LabeledContent("Snapshot status", value: librarySnapshotStatus)
           copyButton("Claude Code .mcp.json", key: "claude", value: claudeConfig)
           copyButton("Codex config.toml", key: "codex", value: codexConfig)
@@ -224,6 +226,10 @@ struct SettingsView: View {
     FileManager.default.homeDirectoryForCurrentUser
       .appending(path: "Library/Application Support/VinylFever/LibrarySnapshot/library-snapshot.json")
       .path(percentEncoded: false)
+  }
+
+  private var databasePath: String {
+    VinylFeverDatabase.liveDatabaseURL.path(percentEncoded: false)
   }
 
   private var claudeConfig: String {

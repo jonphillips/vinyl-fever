@@ -3,6 +3,15 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-21 — M16 · Dispatch 1 S0 (`m16/s0-safe-database-home`)
+
+Moved the live database to `~/Library/Application Support/VinylFever/VinylFever.sqlite`, safely
+adopted and preserved a verified Vinyl Fever database from SQLiteData's shared default path, and
+replaced Debug schema erasure with typed refusal of newer data plus pre-migration backups. Added
+the database path to Settings and updated the replacement-Mac guide. Listening and Core suites and
+the macOS app tests pass. Jon's laptop device gate remains owed. Plan #107 approved the database
+migration policy; the S0 laptop gate now also covers refusal while a pre-S0 copy is running.
+
 ## 2026-10-21 — M13 · Dispatch 4 S3 (`m13/s3-in-app-poller`)
 
 Added Vinyl Fever's headless listening poller and hourly agent, with confirmed takeover in both

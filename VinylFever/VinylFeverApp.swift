@@ -1,7 +1,9 @@
+import AppKit
 import Dependencies
 import Foundation
 import MusicKit
 import os
+import SQLiteData
 import SwiftUI
 import VinylFeverCore
 import VinylFeverListening
@@ -10,10 +12,12 @@ private let listeningLogger = Logger(subsystem: "com.jonphillips.vinylfever", ca
 
 @main
 enum VinylFeverMain {
+  @MainActor
   static func main() async {
+    @Dependency(\.context) var context
     if CommandLine.arguments.contains("--poll-listening") {
-      prepareDependencies(includeDatabase: false)
       do {
+        try prepareDependencies(includeDatabase: false)
         let result = try await ListeningPoller().pollOnce()
         if case let .fetched(fetch) = result, fetch.outcome == .failed {
           listeningLogger.error("Listening poll recorded failure: \(fetch.error ?? "Unknown error", privacy: .public)")
@@ -24,6 +28,21 @@ enum VinylFeverMain {
       }
       return
     }
+    let legacyPath = VinylFeverDatabase.legacyDatabaseURL.path(percentEncoded: false)
+    let databasePath = VinylFeverDatabase.liveDatabaseURL.path(percentEncoded: false)
+    if context == .live,
+      VinylFeverDatabase.needsLegacyAdoption(legacyPath: legacyPath, newPath: databasePath),
+      anotherRegularVinylFeverCopyIsRunning()
+    {
+      showStartupAlert("Quit the other copy of Vinyl Fever, then open this one again.")
+      return
+    }
+    do {
+      try prepareDependencies(includeDatabase: true)
+    } catch {
+      showStartupAlert(error.localizedDescription)
+      return
+    }
     VinylFeverWindow.main()
   }
 }
@@ -32,7 +51,6 @@ private struct VinylFeverWindow: App {
   @State private var model: AppModel
 
   init() {
-    prepareDependencies(includeDatabase: true)
     _model = State(initialValue: AppModel())
   }
 
@@ -50,13 +68,38 @@ private struct VinylFeverWindow: App {
   }
 }
 
-private func prepareDependencies(includeDatabase: Bool) {
+@MainActor
+private func anotherRegularVinylFeverCopyIsRunning() -> Bool {
+  let bundleIdentifier = Bundle.main.bundleIdentifier ?? "com.jonphillips.vinylfever"
+  let currentProcessID = ProcessInfo.processInfo.processIdentifier
+  return NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
+    .contains { $0.processIdentifier != currentProcessID && $0.activationPolicy == .regular }
+}
+
+@MainActor
+private func showStartupAlert(_ message: String) {
+  let application = NSApplication.shared
+  application.setActivationPolicy(.regular)
+  application.activate(ignoringOtherApps: true)
+  let alert = NSAlert()
+  alert.alertStyle = .critical
+  alert.messageText = message
+  alert.runModal()
+}
+
+private func prepareDependencies(includeDatabase: Bool) throws {
+  let database: (any DatabaseWriter)?
+  if includeDatabase {
+    database = try VinylFeverDatabase.open()
+  } else {
+    database = nil
+  }
   prepareDependencies {
     $0.listeningStore = .liveValue
     $0.recentlyPlayedClient = .liveValue
     $0.listeningAuthorizationClient = .liveValue
-    if includeDatabase {
-      try! $0.bootstrapDatabase()
+    if let database {
+      $0.defaultDatabase = database
       $0.scriptClient = .liveValue
       $0.audioMetadataClient = .liveValue
       $0.toolPathClient = .liveValue

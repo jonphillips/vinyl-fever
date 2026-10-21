@@ -80,6 +80,9 @@ Per-feature tier targeting and no-key behavior:
 
 Use SQLiteData for app state.
 
+Merged database migrations are immutable. Add a new migration for schema changes; never edit a
+migration that may have shipped.
+
 SQLiteData starts with the app. Do not defer real persistence until after a JSON
 or in-memory prototype.
 
