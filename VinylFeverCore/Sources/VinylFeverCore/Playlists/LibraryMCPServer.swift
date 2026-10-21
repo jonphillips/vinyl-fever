@@ -79,9 +79,11 @@ private struct MCPArtistProfile: Encodable {
 
 private actor LibraryMCPContext {
   private let snapshotURL: URL
+  private var aliasesURL: URL { snapshotURL.deletingLastPathComponent().appending(path: "artist-aliases.json") }
   private let inbox: HandoffInbox
   private var cachedIndex: LibraryIndex?
   private var cachedModifiedAt: Date?
+  private var cachedAliasesModifiedAt: Date?
   private var cachedGeneratedAt: Date?
   private var cachedOverview: LibraryOverview?
   private let listeningRootURL: URL
@@ -147,12 +149,16 @@ private actor LibraryMCPContext {
     guard let modifiedAt = attributes?[.modificationDate] as? Date else {
       throw SnapshotUnavailable()
     }
-    if let cachedIndex, let cachedGeneratedAt, cachedModifiedAt == modifiedAt { return (cachedIndex, cachedGeneratedAt) }
+    let aliasesModifiedAt = (try? FileManager.default.attributesOfItem(atPath: aliasesURL.path)[.modificationDate]) as? Date
+    if let cachedIndex, let cachedGeneratedAt, cachedModifiedAt == modifiedAt,
+      cachedAliasesModifiedAt == aliasesModifiedAt { return (cachedIndex, cachedGeneratedAt) }
     do {
       let snapshot = try LibrarySnapshotCodec.decode(Data(contentsOf: snapshotURL))
-      let index = LibraryIndex(snapshot: snapshot)
+      let aliases = try aliasesModifiedAt == nil ? [:] : ArtistAliasesCodec.decode(Data(contentsOf: aliasesURL))
+      let index = LibraryIndex(snapshot: snapshot, aliases: aliases)
       cachedIndex = index
       cachedModifiedAt = modifiedAt
+      cachedAliasesModifiedAt = aliasesModifiedAt
       cachedGeneratedAt = snapshot.generatedAt
       cachedOverview = index.overview(generatedAt: snapshot.generatedAt)
       return (index, snapshot.generatedAt)

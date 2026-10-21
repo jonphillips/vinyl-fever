@@ -229,7 +229,7 @@ device gate).
     diversity (at least 8,000 distinct artists, a third with suffix variants) finishes within
     1.25× of today's build time on the same fixture. The PR states both times.
 
-- [ ] **S1 — Artist aliases Jon approves (core + app; one table).** Device gate owed.
+- [x] **S1 — Artist aliases Jon approves (core + app; one table).** Implementation complete; device gate remains owed.
   - **Candidate finder (Core, pure, over `LibraryIndex`).** It returns pairs of `baseKey`s
     with their most common display spelling, track counts, and up to 3 shared titles as
     evidence. It reads only each track's artist and title, so it takes the snapshot's tracks

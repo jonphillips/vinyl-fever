@@ -91,6 +91,43 @@ struct LibraryMCPServerTests {
     #expect(falsePositives.allSatisfy { ($0["uploadedAlbums"] as? [String]) == [] })
   }
 
+  @Test("MCP applies the exported alias map to library checks and artist grouping")
+  func artistAliasesFromExport() async throws {
+    let root = temporaryDirectory()
+    let snapshotURL = root.appending(path: "snapshot.json")
+    let tracks = [
+      LibraryTrack(persistentID: "cougar", name: "Ain't Even Done With the Night", artist: "John Mellencamp", playCount: 3),
+      LibraryTrack(persistentID: "elvis", name: "Song One", artist: "Elvis", playCount: 2),
+      LibraryTrack(persistentID: "presley", name: "Song Two", artist: "Elvis Presley", playCount: 4),
+    ]
+    try LibrarySnapshotCodec.encode(LibrarySnapshot(generatedAt: .now, tracks: tracks)).write(to: snapshotURL)
+    let aliases: [String: String] = [
+      "john cougar mellencamp": "john mellencamp",
+      "elvis": "elvis presley",
+    ]
+    try ArtistAliasesCodec.encode(aliases).write(to: root.appending(path: "artist-aliases.json"))
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"))
+    let check = try #require(await resultJSON(
+      server, id: 81, name: "check_tracks",
+      arguments: #"{"tracks":[{"artist":"John Cougar Mellencamp","title":"Ain't Even Done With the Night"}]}"#
+    ) as? [[String: Any]])
+    #expect(check.first?["owned"] as? Bool == true)
+    let artists = try #require(await resultJSON(
+      server, id: 82, name: "top_artists", arguments: #"{"period":"all_time"}"#
+    ) as? [[String: Any]])
+    #expect(artists.filter { ($0["artist"] as? String)?.lowercased().contains("elvis") == true }.count == 1)
+
+    let noFileRoot = temporaryDirectory()
+    let noFileSnapshot = noFileRoot.appending(path: "snapshot.json")
+    try LibrarySnapshotCodec.encode(LibrarySnapshot(generatedAt: .now, tracks: tracks)).write(to: noFileSnapshot)
+    let noFileServer = LibraryMCPServer.make(snapshotURL: noFileSnapshot, inboxRoot: noFileRoot.appending(path: "inbox"))
+    let unchanged = try #require(await resultJSON(
+      noFileServer, id: 83, name: "check_tracks",
+      arguments: #"{"tracks":[{"artist":"John Cougar Mellencamp","title":"Ain't Even Done With the Night"}]}"#
+    ) as? [[String: Any]])
+    #expect(unchanged.first?["owned"] as? Bool == false)
+  }
+
   @Test("listening tools cover periods, gaps, library joins, validation, and omit IDs")
   func listeningTools() async throws {
     let root = temporaryDirectory()

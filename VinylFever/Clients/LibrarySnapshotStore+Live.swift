@@ -19,6 +19,17 @@ extension LibrarySnapshotStore {
           at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try LibrarySnapshotCodec.encode(snapshot).write(to: fileURL, options: .atomic)
       },
+      readAliases: {
+        let aliasesURL = fileURL.deletingLastPathComponent().appending(path: "artist-aliases.json")
+        guard FileManager.default.fileExists(atPath: aliasesURL.path(percentEncoded: false)) else { return [:] }
+        return try ArtistAliasesCodec.decode(Data(contentsOf: aliasesURL))
+      },
+      writeAliases: { aliases in
+        try FileManager.default.createDirectory(
+          at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let aliasesURL = fileURL.deletingLastPathComponent().appending(path: "artist-aliases.json")
+        try ArtistAliasesCodec.encode(aliases).write(to: aliasesURL, options: .atomic)
+      },
       modifiedAt: {
         guard FileManager.default.fileExists(atPath: fileURL.path(percentEncoded: false)) else {
           return nil

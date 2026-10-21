@@ -16,6 +16,7 @@ struct SettingsView: View {
   @State private var copiedMCPConfig: String?
   @State private var librarySnapshotStatus = "Checking…"
   @State private var listeningStatus = "Checking…"
+  @State private var isShowingArtistAliases = false
   @Dependency(\.librarySnapshotStore) private var librarySnapshotStore
   @Dependency(\.listeningStore) private var listeningStore
 
@@ -126,6 +127,8 @@ struct SettingsView: View {
           Text("The helper reads the last library snapshot Vinyl Fever built. Chat can stage a playlist for review, but only Create in Vinyl Fever changes Apple Music.")
         }
 
+        artistAliasesSection
+
         Section("Source Labels") {
           SourceLabelEditor(
             sourceLabels: SourceLabel.deduplicated(persistedSourceLabels),
@@ -154,6 +157,7 @@ struct SettingsView: View {
       }
     }
     .frame(minWidth: 620, minHeight: 420)
+    .sheet(isPresented: $isShowingArtistAliases) { ArtistAliasesView() }
     .task(id: settings) {
       await model.refreshToolStatuses(settings: settings)
     }
@@ -161,6 +165,12 @@ struct SettingsView: View {
 
   private func refreshButtonTapped() async {
     await model.refreshToolStatuses(settings: settings)
+  }
+
+  private var artistAliasesSection: some View {
+    Section("Library") {
+      Button("Artist Aliases…") { isShowingArtistAliases = true }
+    }
   }
 
   private func refreshLibrarySnapshotStatus() async {

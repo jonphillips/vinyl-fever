@@ -2,6 +2,7 @@ import Dependencies
 import Foundation
 import LLMHandoffKit
 import Observation
+import SQLiteData
 import VinylFeverCore
 
 @MainActor
@@ -13,6 +14,7 @@ final class PlaylistBuilderModel {
   @ObservationIgnored @Dependency(\.continuousClock) private var clock
   @ObservationIgnored @Dependency(\.musicAppClient) private var musicApp
   @ObservationIgnored @Dependency(\.librarySnapshotStore) private var snapshotStore
+  @ObservationIgnored @Dependency(\.defaultDatabase) private var database
   @ObservationIgnored @Dependency(\.playlistInboxClient) private var playlistInbox
   @ObservationIgnored @Dependency(\.date.now) private var now
 
@@ -37,8 +39,10 @@ final class PlaylistBuilderModel {
       snapshotIndexBuildID = buildID
       libraryIndex = nil
       guard let librarySnapshot else { return }
+      let aliases = (try? snapshotStore.readAliases()) ?? [:]
+      currentArtistAliases = aliases
       libraryIndexTask = Task.detached(priority: .userInitiated) { [weak self] in
-        let index = LibraryIndex(snapshot: librarySnapshot)
+        let index = LibraryIndex(snapshot: librarySnapshot, aliases: aliases)
         await MainActor.run {
           guard let self, self.snapshotIndexBuildID == buildID else { return }
           self.libraryIndex = index
@@ -47,6 +51,7 @@ final class PlaylistBuilderModel {
     }
   }
   private var libraryIndex: LibraryIndex?
+  @ObservationIgnored private var currentArtistAliases: [String: String] = [:]
   @ObservationIgnored private var snapshotIndexBuildID = UUID()
   @ObservationIgnored private var libraryIndexTask: Task<Void, Never>?
   var librarySnapshotError: String?
@@ -108,6 +113,22 @@ final class PlaylistBuilderModel {
 
   func waitForLibraryIndex() async {
     await libraryIndexTask?.value
+  }
+
+  private func refreshArtistAliases() {
+    guard let librarySnapshot, let aliases = try? snapshotStore.readAliases(),
+      aliases != currentArtistAliases else { return }
+    currentArtistAliases = aliases
+    let buildID = UUID()
+    snapshotIndexBuildID = buildID
+    libraryIndex = nil
+    libraryIndexTask = Task.detached(priority: .userInitiated) { [weak self] in
+      let index = LibraryIndex(snapshot: librarySnapshot, aliases: aliases)
+      await MainActor.run {
+        guard let self, self.snapshotIndexBuildID == buildID else { return }
+        self.libraryIndex = index
+      }
+    }
   }
 
   func visibleAnnotation(for row: ResolvedPlaylistRow) -> LibraryAnnotation? {
@@ -175,6 +196,11 @@ final class PlaylistBuilderModel {
     }
     do {
       let snapshot = try await musicApp.readLibrarySnapshot()
+      do {
+        try await ArtistAliasExporter.export(database: database, store: snapshotStore)
+      } catch {
+        librarySnapshotError = "Library refreshed, but artist aliases could not be exported: \(error.localizedDescription)"
+      }
       try await snapshotStore.write(snapshot)
       librarySnapshot = snapshot
     } catch { librarySnapshotError = error.localizedDescription }
@@ -232,6 +258,7 @@ final class PlaylistBuilderModel {
       uniqueKeysWithValues: decoded.request.tracks.map {
         ($0.index, "\($0.artist) \($0.title)")
       })
+    refreshArtistAliases()
     await libraryIndexTask?.value
     let libraryRequests = decoded.request.tracks.filter {
       libraryIndex?.shouldUseLibraryRoute($0) == true
