@@ -1,10 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
 platform_root="$repo_root/../jon-platform"
 # shellcheck disable=SC1091 # loaded from the script's own directory
-source "$repo_root/scripts/machine.conf"
+source "$script_dir/machine.conf"
 
 roles="build,chat,poll"
 apply=false
@@ -18,6 +19,7 @@ while (($#)); do
     --apply) apply=true; shift ;;
     -h|--help)
       echo "Usage: scripts/setup-mac [--role build,chat,poll] [--apply]"
+      echo "Without --role, checks all roles: build, chat, and poll."
       exit 0
       ;;
     *) echo "error: unknown argument: $1" >&2; exit 2 ;;
@@ -111,12 +113,25 @@ if has_role build; then
     result failed "jon-platform sibling checkout" build-mac "expected at $platform_root"
   fi
 
-  identity="$(security find-identity -v -p codesigning 2>/dev/null | grep -F "Apple Development" | grep -F "$VF_TEAM_ID" || true)"
-  if [[ -n "$identity" ]]; then result passed "Apple Development identity for $VF_TEAM_ID" signing
+  identity_names="$(security find-identity -v -p codesigning 2>/dev/null \
+    | sed -nE 's/^[[:space:]]*[0-9]+\)[[:space:]]+[[:xdigit:]]+[[:space:]]+"(Apple Development:[^"]+)"$/\1/p')"
+  identity_matches_team=false
+  while IFS= read -r identity_name; do
+    [[ -n "$identity_name" ]] || continue
+    subject="$(security find-certificate -c "$identity_name" -p 2>/dev/null \
+      | openssl x509 -noout -subject 2>/dev/null || true)"
+    if [[ "$subject" =~ (^|[,/])[[:space:]]*OU[[:space:]]*=[[:space:]]*"$VF_TEAM_ID"([,/]|$) ]]; then
+      identity_matches_team=true
+      break
+    fi
+  done <<< "$identity_names"
+  if $identity_matches_team; then result passed "Apple Development identity for $VF_TEAM_ID" signing
   else manual "Create an Apple Development certificate for team $VF_TEAM_ID" signing-adding-a-mac-to-the-profiles; fi
 
   installer="$repo_root/scripts/install-vinyl-fever"
-  if [[ -x "$installer" ]] && $apply; then "$installer"; result passed "Vinyl Fever installed and smoke tested" build-mac
+  if [[ ! -d /Applications/VinylFever.app && -x "$installer" ]] && $apply; then
+    "$installer"
+    result passed "Vinyl Fever installed and smoke tested" build-mac
   elif [[ -d /Applications/VinylFever.app ]]; then result passed "Vinyl Fever installed" build-mac
   else result failed "Vinyl Fever installed" build-mac "run setup-mac --apply"; fi
 fi
@@ -197,13 +212,21 @@ if has_role chat; then
   else result failed "mcp-tunnel is ready" chat-host "run mcp-tunnel status $VF_TUNNEL_PROFILE"; fi
 
   music_chat="$HOME/music-chat"
-  if [[ -f "$music_chat/AGENTS.md" && -f "$music_chat/CLAUDE.md" && -f "$music_chat/.mcp.json" ]]; then
+  music_chat_missing=()
+  for template in AGENTS.md CLAUDE.md .mcp.json; do
+    [[ -f "$music_chat/$template" ]] || music_chat_missing+=("$template")
+  done
+  if ((${#music_chat_missing[@]} == 0)); then
     result passed "music-chat client files" chat-host
   elif $apply; then
     mkdir -p "$music_chat"
-    cp "$repo_root/docs/chatgpt/music-chat/AGENTS.md" "$repo_root/docs/chatgpt/music-chat/CLAUDE.md" "$repo_root/docs/chatgpt/music-chat/.mcp.json" "$music_chat/"
-    result passed "music-chat client files" chat-host "copied templates"
-  else result failed "music-chat client files" chat-host "run setup-mac --apply"; fi
+    for template in "${music_chat_missing[@]}"; do
+      if [[ ! -e "$music_chat/$template" ]]; then
+        cp -n "$repo_root/docs/chatgpt/music-chat/$template" "$music_chat/$template"
+      fi
+    done
+    result passed "music-chat client files" chat-host "added ${music_chat_missing[*]}"
+  else result failed "music-chat client files" chat-host "missing: ${music_chat_missing[*]}"; fi
 
   codex_config="$HOME/.codex/config.toml"
   if [[ -f "$codex_config" ]] && grep -Fq '[mcp_servers.vinyl-fever]' "$codex_config"; then

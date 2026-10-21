@@ -3,6 +3,16 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-21 — M16 · Dispatch 3 S2 (`m16/s2-setup-mac`)
+
+Added the role-based `scripts/setup-mac` checker and idempotent repairs, centralized machine
+constants, and extracted the `~/music-chat` files. ShellCheck passed. On the laptop, Build and Chat
+reports had no failures; removing `xcodegen` and unloading the tunnel agent were detected and
+repaired. Repeating Build and Chat `--apply` with the installed app and setup intact made no
+changes. The music-chat scratch-home check preserved customized files and added only the missing
+`CLAUDE.md`. Jon's Intel mini Poll-role gate remains owed after merge; its exact steps are in M16
+S2. `NEXT_UP.md` has no queued dispatch.
+
 ## 2026-10-21 — M16 · Dispatch 2 S1 (`m16/s1-install-vinyl-fever`)
 
 Added `scripts/install-vinyl-fever` to generate, build, verify signing and this Mac's
