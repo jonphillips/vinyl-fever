@@ -1,7 +1,9 @@
+import AppKit
 import Dependencies
 import Foundation
 import MusicKit
 import os
+import SQLiteData
 import SwiftUI
 import VinylFeverCore
 import VinylFeverListening
@@ -12,8 +14,8 @@ private let listeningLogger = Logger(subsystem: "com.jonphillips.vinylfever", ca
 enum VinylFeverMain {
   static func main() async {
     if CommandLine.arguments.contains("--poll-listening") {
-      prepareDependencies(includeDatabase: false)
       do {
+        try prepareDependencies(includeDatabase: false)
         let result = try await ListeningPoller().pollOnce()
         if case let .fetched(fetch) = result, fetch.outcome == .failed {
           listeningLogger.error("Listening poll recorded failure: \(fetch.error ?? "Unknown error", privacy: .public)")
@@ -24,6 +26,15 @@ enum VinylFeverMain {
       }
       return
     }
+    do {
+      try prepareDependencies(includeDatabase: true)
+    } catch {
+      let alert = NSAlert()
+      alert.alertStyle = .critical
+      alert.messageText = error.localizedDescription
+      alert.runModal()
+      return
+    }
     VinylFeverWindow.main()
   }
 }
@@ -32,7 +43,6 @@ private struct VinylFeverWindow: App {
   @State private var model: AppModel
 
   init() {
-    prepareDependencies(includeDatabase: true)
     _model = State(initialValue: AppModel())
   }
 
@@ -50,13 +60,19 @@ private struct VinylFeverWindow: App {
   }
 }
 
-private func prepareDependencies(includeDatabase: Bool) {
+private func prepareDependencies(includeDatabase: Bool) throws {
+  let database: (any DatabaseWriter)?
+  if includeDatabase {
+    database = try VinylFeverDatabase.open()
+  } else {
+    database = nil
+  }
   prepareDependencies {
     $0.listeningStore = .liveValue
     $0.recentlyPlayedClient = .liveValue
     $0.listeningAuthorizationClient = .liveValue
-    if includeDatabase {
-      try! $0.bootstrapDatabase()
+    if let database {
+      $0.defaultDatabase = database
       $0.scriptClient = .liveValue
       $0.audioMetadataClient = .liveValue
       $0.toolPathClient = .liveValue

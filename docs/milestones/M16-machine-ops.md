@@ -46,7 +46,7 @@ serving ChatGPT, and a new Mac is one command from "what's missing?"
 **Dispatch 1: S0** (Core + app; device gate). **Dispatch 2: S1** (scripts; device gate).
 **Dispatch 3: S2** (scripts; device gate on the new mini).
 
-- [ ] **S0 — The database's own home (Core + app).**
+- [x] **S0 — The database's own home (Core + app).** Implementation complete; laptop device gate remains owed.
   - The live path is `~/Library/Application Support/VinylFever/VinylFever.sqlite`, next to the
     snapshot and inboxes. `VinylFeverDatabase.open()` passes it to
     `SQLiteData.defaultDatabase(path:configuration:)`, so `.test` and `.preview` keep their

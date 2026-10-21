@@ -180,8 +180,9 @@ comment in `project.yml`).
 - **New laptop (Build Mac + chat host):** Every Mac, Build Mac, then Chat host. Uninstall the
   tunnel agent on the old laptop. The listening log is already in iCloud Drive. Everything else
   is local to the old Mac. To keep it, quit Vinyl Fever and copy across:
-  - app state and settings (recipes, aliases, run logs): `~/Library/Application Support/SQLiteData.db`,
-    with its `-wal` and `-shm` files. SQLiteData's default name, not a Vinyl Fever folder;
+  - app state and settings (recipes, aliases, run logs):
+    `~/Library/Application Support/VinylFever/VinylFever.sqlite`, with its `-wal` and `-shm`
+    files;
   - inboxes and the snapshot: `~/Library/Application Support/VinylFever/`. The snapshot rebuilds
     on its own, so this is only for the inboxes.
 - **New polling Mac:** Polling Mac, then turn off polling on the old one. A takeover starts a
