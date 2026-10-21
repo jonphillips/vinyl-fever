@@ -3,6 +3,14 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-20 — M15 · Dispatch 2 S1 (`m15/s1-artist-aliases`)
+
+Added a pure alias candidate finder, local `artistAliases` decisions in SQLiteData, the Settings
+review sheet, atomic `artist-aliases.json` export, and alias-aware app and `vf-mcp` indexes.
+Alias chains collapse to one canonical key and decisions can be undone. Listening, Core, and
+macOS app tests pass; `check-handoff` passes. The schema change is escalated to Jon. M15 S1's
+Settings/device gate remains owed.
+
 ## 2026-10-20 — M14 · Dispatch 2 S1 (`m14/s1-vf-mcp-uploaded-albums`)
 
 `check_tracks` now returns `uploadedAlbums`: up to 5 named albums of Jon's uploads, most played

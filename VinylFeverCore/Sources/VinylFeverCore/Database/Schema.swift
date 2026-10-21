@@ -155,6 +155,17 @@ public enum VinylFeverDatabase {
         """)
         .execute(db)
     }
+
+    migrator.registerMigration("Create 'artistAliases' table") { db in
+      try #sql("""
+        CREATE TABLE "artistAliases" (
+          "variant" TEXT PRIMARY KEY NOT NULL,
+          "canonical" TEXT NOT NULL,
+          "decision" TEXT NOT NULL CHECK ("decision" IN ('accepted', 'rejected')),
+          "decidedAt" TEXT NOT NULL
+        ) STRICT
+        """).execute(db)
+    }
   }
 
   public static func seedBuiltInSourceLabels(in database: any DatabaseWriter) throws {

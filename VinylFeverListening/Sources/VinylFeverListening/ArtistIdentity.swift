@@ -12,7 +12,16 @@ public struct ArtistIdentity: Equatable, Sendable {
       let variant = Self.baseKey(entry.key)
       let canonical = Self.baseKey(entry.value)
       if !variant.isEmpty, !canonical.isEmpty, variant != canonical {
-        result[variant] = canonical
+        // Alias input is expected to be canonicalized by the decision store, but
+        // collapsing here keeps imported/exported maps safe as well.
+        var target = canonical
+        var visited: Set<String> = [variant]
+        while let next = aliases[target].map(Self.baseKey), !next.isEmpty,
+          visited.insert(target).inserted
+        {
+          target = next
+        }
+        result[variant] = target
       }
     }
     self.aliases = normalizedAliases

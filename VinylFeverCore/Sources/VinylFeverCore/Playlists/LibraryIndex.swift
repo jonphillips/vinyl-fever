@@ -69,6 +69,7 @@ public struct LibraryIndex: Sendable {
   public static let maximumCheckTracks = 200
 
   private let tracks: [LibraryTrack]
+  public var aliasEvidenceTracks: [LibraryTrack] { tracks }
   private let bySong: [String: [LibraryTrack]]
   private let uploadedByTitle: [String: [UploadedTrackEntry]]
   public let artistIdentity: ArtistIdentity
@@ -82,11 +83,11 @@ public struct LibraryIndex: Sendable {
     var normalizedAlbum: String
   }
 
-  public init(snapshot: LibrarySnapshot) {
+  public init(snapshot: LibrarySnapshot, aliases: [String: String] = [:]) {
     tracks = snapshot.tracks
     let knownArtists = Set(snapshot.tracks.map(\.artist))
     let artistNames = Set(snapshot.tracks.flatMap { [$0.artist, $0.albumArtist] })
-    let identity = ArtistIdentity(knownArtists: knownArtists)
+    let identity = ArtistIdentity(aliases: aliases, knownArtists: knownArtists)
     let keys = Dictionary(uniqueKeysWithValues: artistNames.map { ($0, identity.key($0)) })
     let credits = Dictionary(uniqueKeysWithValues: artistNames.map { ($0, identity.credits($0)) })
     artistIdentity = identity

@@ -118,6 +118,29 @@ struct PlaylistBuilderModelTests {
     }
   }
 
+  @Test("the app library index reads accepted aliases from the snapshot store")
+  func acceptedArtistAliasesReachLibraryIndex() async {
+    let snapshot = LibrarySnapshot(
+      generatedAt: .now,
+      tracks: [LibraryTrack(
+        persistentID: "mellencamp", name: "Ain't Even Done With the Night",
+        artist: "John Mellencamp", albumArtist: "John Mellencamp")])
+    let store = LibrarySnapshotStore(
+      read: { snapshot }, write: { _ in },
+      readAliases: { ["john cougar mellencamp": "john mellencamp"] },
+      writeAliases: { _ in }, modifiedAt: { nil })
+    let model = withDependencies {
+      $0.librarySnapshotStore = store
+    } operation: {
+      PlaylistBuilderModel()
+    }
+    model.librarySnapshot = snapshot
+    await model.waitForLibraryIndex()
+    #expect(model.annotation(
+      for: TrackRequest(index: 1, artist: "John Cougar Mellencamp", title: "Ain't Even Done With the Night"))
+      == .inLibrary(plays: 0, lastPlayed: nil, favorited: false, versionCount: 1))
+  }
+
   @Test("snapshot annotations bulk removal preserve remaining create order")
   func libraryAnnotationsAndBulkRemove() async {
     let played = Self.candidate(id: "played", title: "Frequently Played")
@@ -127,7 +150,7 @@ struct PlaylistBuilderModelTests {
     let capture = PlaylistCreateCapture()
     let model = withDependencies {
       $0.librarySnapshotStore = LibrarySnapshotStore(
-        read: { nil }, write: { _ in }, modifiedAt: { nil })
+        read: { nil }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { nil })
       $0.catalogMatchResolver.resolve = { _, _ in [] }
       $0.appleMusicCatalogClient.createLibraryPlaylist = { name, _, ids in
         await capture.record(name: name, description: nil, ids: ids.map(\.id))
@@ -516,7 +539,7 @@ struct PlaylistBuilderModelTests {
           domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Music unavailable"])
       }
       $0.librarySnapshotStore = LibrarySnapshotStore(
-        read: { previous }, write: { _ in }, modifiedAt: { nil })
+        read: { previous }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { nil })
     } operation: {
       PlaylistBuilderModel()
     }
@@ -536,7 +559,7 @@ struct PlaylistBuilderModelTests {
         LibraryTrack(persistentID: "owned", name: "Owned Song", artist: "The Records", playCount: 4)
       ])
     let store = LibrarySnapshotStore(
-      read: { snapshot }, write: { _ in }, modifiedAt: { now })
+      read: { snapshot }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { now })
     let ownedCandidate = Self.candidate(id: "owned", title: "Owned Song")
     let unownedCandidate = Self.candidate(id: "unowned", title: "New Song")
     let model = withDependencies {
@@ -575,7 +598,7 @@ struct PlaylistBuilderModelTests {
 
   @Test("no snapshot keeps rows unannotated and bulk removal changes nothing")
   func noSnapshotHasNoBadgesOrRemoval() async throws {
-    let store = LibrarySnapshotStore(read: { nil }, write: { _ in }, modifiedAt: { nil })
+    let store = LibrarySnapshotStore(read: { nil }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { nil })
     let model = withDependencies {
       $0.librarySnapshotStore = store
     } operation: {
@@ -628,7 +651,7 @@ struct PlaylistBuilderModelTests {
         return refreshed
       }
       $0.librarySnapshotStore = LibrarySnapshotStore(
-        read: { previous }, write: { _ in }, modifiedAt: { now.addingTimeInterval(-7 * 60 * 60) })
+        read: { previous }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { now.addingTimeInterval(-7 * 60 * 60) })
     } operation: {
       let model = PlaylistBuilderModel()
       await model.loadSnapshotAndRefreshIfStale()
@@ -646,7 +669,7 @@ struct PlaylistBuilderModelTests {
         return refreshed
       }
       $0.librarySnapshotStore = LibrarySnapshotStore(
-        read: { previous }, write: { _ in }, modifiedAt: { now.addingTimeInterval(-2 * 60 * 60) })
+        read: { previous }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { now.addingTimeInterval(-2 * 60 * 60) })
     } operation: {
       let model = PlaylistBuilderModel()
       await model.loadSnapshotAndRefreshIfStale()
@@ -675,7 +698,7 @@ struct PlaylistBuilderModelTests {
         return refreshed
       }
       $0.librarySnapshotStore = LibrarySnapshotStore(
-        read: { nil }, write: { _ in }, modifiedAt: { nil })
+        read: { nil }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { nil })
     } operation: {
       PlaylistBuilderModel()
     }
