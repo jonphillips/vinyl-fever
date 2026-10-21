@@ -59,6 +59,7 @@ public struct LibraryTrackCheck: Codable, Equatable, Sendable {
   public var favorited: Bool
   public var lastPlayed: Date?
   public var availability: [LibraryAvailability]
+  public var uploadedAlbums: [String]
 }
 
 /// An immutable, pre-indexed view of a snapshot. Query methods are deterministic and capped.
@@ -117,20 +118,24 @@ public struct LibraryIndex: Sendable {
     }
   }
 
-  public func uploadedCandidates(_ request: TrackRequest, limit: Int = 3)
+  public func uploadedCandidates(
+    _ request: TrackRequest, limit: Int = LibraryUploadMatcher.uploadPickerLimit,
+    requiringNamedAlbum: Bool = false
+  )
     -> [CatalogSongCandidate]
   {
     let artist = request.artist
     var albums: Set<String> = []
     return (uploadedByTitle[SongTextNormalizer.title(request.title)] ?? [])
       .filter { artistIdentity.matches(request: artist, track: $0.normalizedArtist) }
+      .filter { !requiringNamedAlbum || !$0.normalizedAlbum.isEmpty }
       .sorted { lhs, rhs in
         lhs.track.playCount == rhs.track.playCount
           ? lhs.normalizedAlbum.localizedStandardCompare(rhs.normalizedAlbum) == .orderedAscending
           : lhs.track.playCount > rhs.track.playCount
       }
       .filter { albums.insert($0.normalizedAlbum).inserted }
-      .prefix(min(max(limit, 0), LibraryUploadMatcher.uploadPickerLimit))
+      .prefix(max(limit, 0))
       .map { entry in
         CatalogSongCandidate(
           id: entry.track.persistentID, title: entry.track.name, artistName: entry.track.artist,
@@ -219,7 +224,11 @@ public struct LibraryIndex: Sendable {
         plays: matches.reduce(0) { $0 + $1.playCount }, versionCount: matches.count,
         favorited: matches.contains(where: \.favorited),
         lastPlayed: matches.compactMap(\.lastPlayed).max(),
-        availability: Array(Set(matches.map(\.availability))).sorted { $0.rawValue < $1.rawValue })
+        availability: Array(Set(matches.map(\.availability))).sorted { $0.rawValue < $1.rawValue },
+        uploadedAlbums: uploadedCandidates(
+          TrackRequest(index: 1, artist: request.artist, title: request.title), limit: 5,
+          requiringNamedAlbum: true
+        ).compactMap(\.albumTitle))
     }
   }
 
