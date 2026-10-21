@@ -42,6 +42,8 @@ must be a Mac where Vinyl Fever runs and has built a snapshot.
 
    `ffmpeg`, `ffprobe`, and `metaflac` are called by the live-show import and metadata flows.
    Vinyl Fever looks for them in `/opt/homebrew/bin` and `/usr/local/bin`.
+   The package names and machine-specific setup constants are kept in
+   [`scripts/machine.conf`](../../scripts/machine.conf).
 3. Check out both repos as siblings under `~/code`. The project depends on
    `../jon-platform/packages/LLMClientKit`, and the scripts call
    `~/code/jon-platform/scripts/quiet-run`.
@@ -126,6 +128,8 @@ for Vinyl Fever, so the Tunnels page may still call it something else.
    plugin was added, use **Refresh** on the plugin's detail page.
 
 For Claude Code and Codex, recreate `~/music-chat` from [MCP setup](../chatgpt/MCP-SETUP.md).
+To check or apply the automatable setup steps, run `scripts/setup-mac --role build,chat --apply`;
+see the per-step report first by omitting `--apply`.
 Settings → Chat Access (MCP) copies each client's configuration with the helper path filled in.
 
 ## Polling Mac (Apple silicon)

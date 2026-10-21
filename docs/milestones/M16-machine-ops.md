@@ -127,7 +127,7 @@ serving ChatGPT, and a new Mac is one command from "what's missing?"
     forced smoke failure restored the prior app and restarted the tunnel. `lsof` showed the
     running helper and installed helper share inode `538835276`.
 
-- [ ] **S2 — `scripts/setup-mac` (check, then apply what can be automated).**
+- [x] **S2 — `scripts/setup-mac` (check, then apply what can be automated).**
   - `setup-mac [--role build,chat,poll] [--apply]`. The default is a read-only report: one line
     per step from [the setup guide](../setup/README.md), marked passed, failed, or manual, with
     the guide's anchor for each one that isn't passed.
@@ -140,7 +140,9 @@ serving ChatGPT, and a new Mac is one command from "what's missing?"
     - Homebrew packages; jon-platform as a sibling checkout;
     - an Apple Development identity for team `7MQEE539G9`;
     - both profiles installed and including this Mac.
-    - `--apply` installs the packages, clones jon-platform, then runs `install-vinyl-fever`.
+    - `--apply` installs missing packages and clones jon-platform. It runs
+      `install-vinyl-fever` only when `/Applications/VinylFever.app` is missing; use the installer
+      directly for updates.
   - **Chat role:**
     - the runtime key in the Keychain (checked by presence and length; it's never printed);
     - the `tunnel-client` profile points at `/Applications/VinylFever.app/Contents/Helpers/vf-mcp`
@@ -148,7 +150,8 @@ serving ChatGPT, and a new Mac is one command from "what's missing?"
     - the agent is loaded and `mcp-tunnel status` is ready;
     - `~/music-chat` exists with its files.
     - `--apply` runs `mcp-tunnel store-key` (it asks Jon to copy the key first),
-      `init --force`, and `install-agent`. It writes `~/music-chat` from templates.
+      `init --force`, and `install-agent` when needed. It copies only missing files into
+      `~/music-chat`; existing files, including customized `AGENTS.md`, are never overwritten.
   - **The `~/music-chat` template becomes files.** Move the `AGENTS.md` text out of
     `MCP-SETUP.md` into `docs/chatgpt/music-chat/` (`AGENTS.md`, `CLAUDE.md`, `.mcp.json`), and
     MCP-SETUP links to it. `--apply` copies them and adds `[mcp_servers.vinyl-fever]` to
@@ -166,12 +169,15 @@ serving ChatGPT, and a new Mac is one command from "what's missing?"
   **DoD:**
   - `shellcheck` passes. `--apply` run twice changes nothing the second time.
   - **Device gate (laptop and Intel mini; amended 2026-10-21, as no new mini is planned):**
-    - **Laptop:** `--role build,chat` reports no failures. Remove one thing per role, such as
-      the tunnel agent (`mcp-tunnel uninstall-agent vinyl-fever`) or a Homebrew package. Then
-      the report flags it, `--apply` restores it, and a second `--apply` changes nothing.
-    - **Intel mini (macOS 15, no Xcode):** run from a copy of `scripts/`. `--role poll` passes
-      the lease, freshness, `pmset`, and automatic-login checks for the VF Listening Poller.
-      The Vinyl Fever app checks are skipped there.
+    - **Laptop — passed 2026-10-21:** `--role build,chat` reports no failures. Removing
+      `xcodegen` and unloading the tunnel agent were both detected; `--apply` restored each role,
+      and the follow-up reports passed. With the app already installed, repeating Build and Chat
+      `--apply` made no changes.
+    - **Intel mini (macOS 15, no Xcode) — owed to Jon after merge:** copy `scripts/setup-mac` and
+      `scripts/machine.conf` to any folder on the mini, then run `./setup-mac --role poll`. Expect
+      automatic login, `pmset`, and lease/freshness checks to pass with the lease held by the mini's
+      ComputerName. Record FileVault status; when enabled, it blocks automatic login. Build and
+      Chat checks are skipped on this Poll-only run.
 
 ## Constants register (starting values)
 
