@@ -22,7 +22,12 @@ struct ListeningPollerSettingsView: View {
       Section("Background polling") {
         Toggle("Poll every hour on this Mac", isOn: Binding(
           get: { model.pollingEnabled },
-          set: { enabled in Task { await model.setPollingEnabled(enabled) } }
+          set: { enabled in
+            Task {
+              if enabled { await model.enablePolling() }
+              else { await model.disablePolling() }
+            }
+          }
         ))
         if model.serviceStatus == .requiresApproval {
           Text("Approve VF Listening Poller in Login Items to let it run in the background.")
@@ -49,6 +54,12 @@ struct ListeningPollerSettingsView: View {
     }
     .formStyle(.grouped)
     .task { await model.refresh() }
+    .alert("Make this Mac the poller?", isPresented: $model.isConfirmingTakeover) {
+      Button("Make This Mac the Poller") { Task { await model.confirmTakeover() } }
+      Button("Cancel", role: .cancel) { model.cancelTakeover() }
+    } message: {
+      Text(model.takeoverMessage)
+    }
   }
 }
 
@@ -62,6 +73,9 @@ private final class ListeningPollerSettingsModel {
   private(set) var holdsLease = false
   private(set) var leaseExists = false
   private(set) var errorMessage: String?
+  var isConfirmingTakeover = false
+  private var pendingTakeoverPoller: UUID?
+  private var pendingLease: ListeningLease?
 
   var pollingEnabled: Bool {
     serviceStatus == .enabled || serviceStatus == .requiresApproval
@@ -97,14 +111,58 @@ private final class ListeningPollerSettingsModel {
     await refresh()
   }
 
-  func setPollingEnabled(_ enabled: Bool) async {
+  var takeoverMessage: String {
+    "The \(pendingLease?.host ?? "other Mac") is polling now. Make this Mac the poller?"
+  }
+
+  func enablePolling() async {
+    do {
+      let store = ListeningStore.liveValue
+      let poller = try store.pollerID()
+      let lease = try store.readLease()
+      if let lease, lease.poller != poller {
+        pendingTakeoverPoller = poller
+        pendingLease = lease
+        isConfirmingTakeover = true
+        return
+      }
+      try registerAgent()
+      errorMessage = nil
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+    await refresh()
+  }
+
+  func confirmTakeover() async {
+    guard let poller = pendingTakeoverPoller, let oldLease = pendingLease else { return }
+    do {
+      let store = ListeningStore.liveValue
+      try store.writeLease(ListeningLease(poller: poller, host: store.hostName(), takenAt: Date()))
+      do {
+        try registerAgent()
+      } catch {
+        try? store.writeLease(oldLease)
+        throw error
+      }
+      errorMessage = nil
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+    cancelTakeover()
+    await refresh()
+  }
+
+  func cancelTakeover() {
+    pendingTakeoverPoller = nil
+    pendingLease = nil
+    isConfirmingTakeover = false
+  }
+
+  func disablePolling() async {
     let service = SMAppService.agent(plistName: agentPlistName)
     do {
-      if enabled {
-        try service.register()
-      } else {
-        try await service.unregister()
-      }
+      try await service.unregister()
       serviceStatus = service.status
       errorMessage = nil
     } catch {
@@ -112,6 +170,12 @@ private final class ListeningPollerSettingsModel {
       errorMessage = error.localizedDescription
     }
     await refresh()
+  }
+
+  private func registerAgent() throws {
+    let service = SMAppService.agent(plistName: agentPlistName)
+    try service.register()
+    serviceStatus = service.status
   }
 
   func refresh() async {

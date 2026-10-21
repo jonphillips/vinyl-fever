@@ -80,6 +80,8 @@ targets:
     dependencies:
       - package: VinylFeverCore
         product: VinylFeverCore
+      - package: VinylFeverListening
+        product: VinylFeverListening
       - package: swift-dependencies
         product: Dependencies
       - package: sqlite-data
@@ -106,6 +108,16 @@ targets:
           mkdir -p "$helper_dir"
           cp "$scratch_path/$swift_configuration/vf-mcp" "$helper_dir/vf-mcp"
           chmod 755 "$helper_dir/vf-mcp"
+      - name: Install listening poller agent definition
+        inputFiles:
+          - $(SRCROOT)/VinylFever/VinylFeverListeningAgent.plist
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Library/LaunchAgents/VinylFeverListeningAgent.plist
+        script: |
+          set -euo pipefail
+          destination="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Library/LaunchAgents"
+          mkdir -p "$destination"
+          cp "$SRCROOT/VinylFever/VinylFeverListeningAgent.plist" "$destination/VinylFeverListeningAgent.plist"
     info:
       path: VinylFever/Info.plist
       properties:
