@@ -13,6 +13,10 @@ Read in this order:
 6. [Implementation Plan](implementation-plan.md)
 7. [Open Questions](open-questions.md)
 
+Setup and operations:
+
+- [Setting up a Mac](setup/README.md)
+
 Related source material:
 
 - [Efforts](efforts/README.md)
