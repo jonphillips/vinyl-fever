@@ -94,6 +94,29 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   is one rule with duet credits. S1 is an alias list Jon approves in Settings. The order is
   M13 S2 → M15 S0 → M14 S1 → M15 S1 → M13 S3, so M13 S2's completing PR (#93) dispatches
   M15 S0.
+- **Library duplicates report** (Jon, 2026-10-20, from the M14 S1 device gate). Jon asked for a 1988
+  Tunnel of Love mix. Two rows went to the picker: Roulette and Chimes of Freedom. ChatGPT had
+  sent the exact album, `1988‐07‐03: Stockholms Stadion, Stockholm, Sweden`, with U+2010 hyphens.
+  But Jon's library holds that show twice: that copy, plus `1988-07-03 - Stockholms Stadion -
+  Stockholm, Sweden`, with 35 tracks each. A third copy is tagged `Summer Night - Cd1 (Stockholm -
+  July,3,1988)`. Under `SongTextNormalizer.album` the first two names are identical, so the
+  matcher returns ambiguous. Jon would rather see these duplicates than have Vinyl Fever hide them.
+  - **Rough size (architect's probe of the snapshot):**
+    - 72 uploaded album names (1,237 tracks) collide once case and punctuation are ignored. Some
+      are real splits, such as `Moanin' & Howlin'` / `Moanin' And Howlin'` and
+      `2019-12-20 Harrisburg, PA` / `2019/12/20 Harrisburg, PA`. Some are different artists'
+      albums with the same title, such as `Greatest Hits`.
+    - 129 artist-and-date pairs have differently named albums. This count is crude: a date
+      regex and a rough artist key.
+  - **Candidate:** a read-only report, built from the snapshot, that groups likely duplicate
+    uploads by `ArtistIdentity` key with either the normalized album or the show date. Jon fixes
+    them in Music.app. Possible surfaces: a Settings sheet like M15 S1's alias review, or a
+    `vf-mcp` tool ("what's duplicated in my Springsteen shows?").
+    - It needs a decision on scope: duplicates only, or also near-duplicate album splits such as
+      case-only differences.
+  - **Decided (Jon, 2026-10-20): no exact-album tiebreak in the matcher.** Preferring the
+    upload whose raw album equals the hint would resolve these rows silently and hide the
+    duplicates. The picker stays as it is.
 - **M11: Create can lose the playlist it just made when a later batch fails** (from the #67
   review, 2026-10-15). `createLibraryPlaylist` sends the first 100 IDs with the create call,
   then appends the rest in batches of 100. If a later batch throws, the error drops the
