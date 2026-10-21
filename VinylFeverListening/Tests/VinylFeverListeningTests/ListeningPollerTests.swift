@@ -68,6 +68,72 @@ struct ListeningPollerTests {
     #expect(try store.readFetches().isEmpty)
   }
 
+  @Test("taking over and handing back starts a baseline for each holder")
+  func takeoverAndHandbackBaseline() async throws {
+    let folders = try TemporaryListeningFolders()
+    defer { folders.remove() }
+    let mini = ListeningStore.live(
+      iCloudFolder: folders.cloud,
+      localFolder: folders.root.appendingPathComponent("mini", isDirectory: true),
+      hostName: { "Mini" })
+    let laptop = ListeningStore.live(
+      iCloudFolder: folders.cloud,
+      localFolder: folders.root.appendingPathComponent("laptop", isDirectory: true),
+      hostName: { "Laptop" })
+    let miniPoller = try mini.pollerID()
+    let laptopPoller = try laptop.pollerID()
+    let a = item("a")
+    let b = item("b")
+    let c = item("c")
+    let d = item("d")
+    let e = item("e")
+    let t0 = date("2026-10-21T10:00:00Z")
+
+    let initial = try await poll(store: mini, now: t0) { _ in
+      RecentlyPlayedPage(items: [a, b], hasNext: false)
+    }
+    #expect(fetch(initial)?.outcome == .baseline)
+    let miniPlay = try await poll(store: mini, now: t0.addingTimeInterval(60)) { _ in
+      RecentlyPlayedPage(items: [c, a, b], hasNext: false)
+    }
+    #expect(fetch(miniPlay)?.outcome == .plays)
+
+    try ListeningLeaseRules.takeOver(
+      store: laptop, poller: laptopPoller, host: "Laptop", now: t0.addingTimeInterval(120))
+    let miniCountBeforeSkip = try mini.readFetches().count
+    #expect(try await poll(store: mini, now: t0.addingTimeInterval(180)) { _ in
+      Issue.record("The former holder must not request a page")
+      return RecentlyPlayedPage(items: [], hasNext: false)
+    } == .skipped)
+    #expect(try mini.readFetches().count == miniCountBeforeSkip)
+
+    let laptopBaseline = try await poll(store: laptop, now: t0.addingTimeInterval(240)) { _ in
+      RecentlyPlayedPage(items: [c, a, b], hasNext: false)
+    }
+    #expect(fetch(laptopBaseline)?.outcome == .baseline)
+    let laptopPlay = try await poll(store: laptop, now: t0.addingTimeInterval(300)) { _ in
+      RecentlyPlayedPage(items: [d, c, a, b], hasNext: false)
+    }
+    #expect(fetch(laptopPlay)?.outcome == .plays)
+
+    try ListeningLeaseRules.takeOver(
+      store: mini, poller: miniPoller, host: "Mini", now: t0.addingTimeInterval(360))
+    let laptopCountBeforeSkip = try laptop.readFetches().count
+    #expect(try await poll(store: laptop, now: t0.addingTimeInterval(420)) { _ in
+      Issue.record("The former holder must not request a page")
+      return RecentlyPlayedPage(items: [], hasNext: false)
+    } == .skipped)
+    #expect(try laptop.readFetches().count == laptopCountBeforeSkip)
+
+    let miniHandback = try await poll(store: mini, now: t0.addingTimeInterval(480)) { _ in
+      RecentlyPlayedPage(items: [e, d, c, a, b], hasNext: false)
+    }
+    #expect(fetch(miniHandback)?.outcome == .baseline)
+    let fetches = try mini.readFetches()
+    let streams = Dictionary(grouping: fetches, by: \.poller).values.map { $0 }
+    #expect(ListeningLog(streams: streams, now: t0.addingTimeInterval(480)).coverage.collapsedOverlappingPlays == 0)
+  }
+
   @Test("unauthorized and failed fetches are logged without replacing last-list")
   func failedFetchesPreservePreviousList() async throws {
     let folders = try TemporaryListeningFolders()

@@ -361,7 +361,7 @@ to this week?") a week of log to answer from.
   - **Device gate:** ChatGPT on the iPad answers "what have I been listening to this week?" and
     Jon agrees it's right.
 
-- [ ] **S3 — The same poller inside Vinyl Fever (app; Apple silicon, macOS 27).**
+- [x] **S3 — The same poller inside Vinyl Fever (app; Apple silicon, macOS 27).** Implementation complete; the laptop↔mini device gate remains owed.
   - `VinylFever --poll-listening` runs the S1 headless path. A small custom entry point checks
     the argument before starting the SwiftUI app.
   - The app bundles its own agent plist and registers it with `SMAppService`, as in S1. It uses

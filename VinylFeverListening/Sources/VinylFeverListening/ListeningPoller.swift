@@ -49,6 +49,7 @@ public struct ListeningStore: Sendable {
   public var writeLease: @Sendable (ListeningLease) throws -> Void
   public var readLastList: @Sendable () throws -> [ListeningItem]?
   public var writeLastList: @Sendable ([ListeningItem]) throws -> Void
+  public var clearLastList: @Sendable () throws -> Void
   public var appendFetch: @Sendable (ListeningFetch) throws -> Void
   public var readFetches: @Sendable () throws -> [ListeningFetch]
   public var readLastPollError: @Sendable () throws -> String?
@@ -62,6 +63,7 @@ public struct ListeningStore: Sendable {
     writeLease: @escaping @Sendable (ListeningLease) throws -> Void,
     readLastList: @escaping @Sendable () throws -> [ListeningItem]?,
     writeLastList: @escaping @Sendable ([ListeningItem]) throws -> Void,
+    clearLastList: @escaping @Sendable () throws -> Void = {},
     appendFetch: @escaping @Sendable (ListeningFetch) throws -> Void,
     readFetches: @escaping @Sendable () throws -> [ListeningFetch] = { [] },
     readLastPollError: @escaping @Sendable () throws -> String? = { nil },
@@ -74,6 +76,7 @@ public struct ListeningStore: Sendable {
     self.writeLease = writeLease
     self.readLastList = readLastList
     self.writeLastList = writeLastList
+    self.clearLastList = clearLastList
     self.appendFetch = appendFetch
     self.readFetches = readFetches
     self.readLastPollError = readLastPollError
@@ -87,7 +90,7 @@ extension ListeningStore: TestDependencyKey, DependencyKey {
   public static var testValue: Self {
     Self(
       pollerID: { UUID() }, readLease: { nil }, writeLease: { _ in },
-      readLastList: { nil }, writeLastList: { _ in }, appendFetch: { _ in }, readFetches: { [] },
+      readLastList: { nil }, writeLastList: { _ in }, clearLastList: {}, appendFetch: { _ in }, readFetches: { [] },
       readLastPollError: { nil }, writeLastPollError: { _ in },
       listeningFolder: { URL(fileURLWithPath: "/tmp/Listening") }, hostName: { "Test Mac" }
     )

@@ -33,3 +33,12 @@ The poller does not prompt in the background. Its window shows authorization,
 agent status, the latest fetch, today's play count, and whether this Mac holds the
 lease. A write error appears in the window; headless write errors are recorded in
 the system log and exit non-zero.
+
+## Moving the poller between Macs
+
+In **Vinyl Fever → Settings → Listening History** or in **VF Listening Poller**,
+turn on the polling toggle on the Mac that should take over. If another Mac
+holds the lease, confirm the takeover. The new Mac starts its own stream with a
+baseline fetch, so the handover does not count the current feed as new plays.
+Turning polling off unregisters that Mac's hourly agent and leaves the lease in
+place until another Mac takes over.

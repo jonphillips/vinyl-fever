@@ -22,8 +22,16 @@ struct ListeningPollerSettingsView: View {
       Section("Background polling") {
         Toggle("Poll every hour on this Mac", isOn: Binding(
           get: { model.pollingEnabled },
-          set: { enabled in Task { await model.setPollingEnabled(enabled) } }
+          set: { enabled in
+            Task {
+              if enabled { await model.enablePolling() }
+              else { await model.disablePolling() }
+            }
+          }
         ))
+        if let idleMessage = model.idleAgentMessage {
+          Text(idleMessage).foregroundStyle(.secondary)
+        }
         if model.serviceStatus == .requiresApproval {
           Text("Approve VF Listening Poller in Login Items to let it run in the background.")
             .foregroundStyle(.secondary)
@@ -49,6 +57,12 @@ struct ListeningPollerSettingsView: View {
     }
     .formStyle(.grouped)
     .task { await model.refresh() }
+    .alert("Make this Mac the poller?", isPresented: $model.isConfirmingTakeover) {
+      Button("Make This Mac the Poller") { Task { await model.confirmTakeover() } }
+      Button("Cancel", role: .cancel) { model.cancelTakeover() }
+    } message: {
+      Text(model.takeoverMessage)
+    }
   }
 }
 
@@ -62,9 +76,20 @@ private final class ListeningPollerSettingsModel {
   private(set) var holdsLease = false
   private(set) var leaseExists = false
   private(set) var errorMessage: String?
+  var isConfirmingTakeover = false
+  private var pendingTakeoverPoller: UUID?
+  private var pendingLease: ListeningLease?
+  private var leaseHost: String?
 
   var pollingEnabled: Bool {
-    serviceStatus == .enabled || serviceStatus == .requiresApproval
+    (serviceStatus == .enabled || serviceStatus == .requiresApproval)
+      && !(leaseExists && !holdsLease)
+  }
+
+  var idleAgentMessage: String? {
+    let agentRegistered = serviceStatus == .enabled || serviceStatus == .requiresApproval
+    guard agentRegistered, leaseExists, !holdsLease else { return nil }
+    return "\(leaseHost ?? "Another Mac") is polling. This Mac's agent is idle until you turn polling back on here."
   }
 
   var authorizationLabel: String {
@@ -97,14 +122,58 @@ private final class ListeningPollerSettingsModel {
     await refresh()
   }
 
-  func setPollingEnabled(_ enabled: Bool) async {
+  var takeoverMessage: String {
+    "\(pendingLease?.host ?? "Another Mac") is polling now. Make this Mac the poller?"
+  }
+
+  func enablePolling() async {
+    do {
+      let store = ListeningStore.liveValue
+      let poller = try store.pollerID()
+      let lease = try store.readLease()
+      if let lease, lease.poller != poller {
+        pendingTakeoverPoller = poller
+        pendingLease = lease
+        isConfirmingTakeover = true
+        return
+      }
+      try registerAgentIfNeeded()
+      errorMessage = nil
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+    await refresh()
+  }
+
+  func confirmTakeover() async {
+    guard let poller = pendingTakeoverPoller, let oldLease = pendingLease else { return }
+    do {
+      let store = ListeningStore.liveValue
+      try ListeningLeaseRules.takeOver(store: store, poller: poller, host: store.hostName(), now: Date())
+      do {
+        try registerAgentIfNeeded()
+      } catch {
+        try? store.writeLease(oldLease)
+        throw error
+      }
+      errorMessage = nil
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+    cancelTakeover()
+    await refresh()
+  }
+
+  func cancelTakeover() {
+    pendingTakeoverPoller = nil
+    pendingLease = nil
+    isConfirmingTakeover = false
+  }
+
+  func disablePolling() async {
     let service = SMAppService.agent(plistName: agentPlistName)
     do {
-      if enabled {
-        try service.register()
-      } else {
-        try await service.unregister()
-      }
+      try await service.unregister()
       serviceStatus = service.status
       errorMessage = nil
     } catch {
@@ -112,6 +181,12 @@ private final class ListeningPollerSettingsModel {
       errorMessage = error.localizedDescription
     }
     await refresh()
+  }
+
+  private func registerAgentIfNeeded() throws {
+    let service = SMAppService.agent(plistName: agentPlistName)
+    if service.status != .enabled { try service.register() }
+    serviceStatus = service.status
   }
 
   func refresh() async {
@@ -124,6 +199,7 @@ private final class ListeningPollerSettingsModel {
       let lease = try store.readLease()
       leaseExists = lease != nil
       holdsLease = lease?.poller == poller
+      leaseHost = lease?.host
       let fetches = try store.readFetches()
       lastFetch = fetches.last
       let startOfDay = Calendar.current.startOfDay(for: Date())

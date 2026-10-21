@@ -1,6 +1,8 @@
 import AppKit
 import Dependencies
+import Observation
 import SQLiteData
+import ServiceManagement
 import SwiftUI
 import VinylFeverCore
 import VinylFeverListening
@@ -15,7 +17,7 @@ struct SettingsView: View {
   @State private var didCopyPlaylistInstructions = false
   @State private var copiedMCPConfig: String?
   @State private var librarySnapshotStatus = "Checking…"
-  @State private var listeningStatus = "Checking…"
+  @State private var listeningModel = ListeningPollingSettingsModel()
   @State private var isShowingArtistAliases = false
   @Dependency(\.librarySnapshotStore) private var librarySnapshotStore
   @Dependency(\.listeningStore) private var listeningStore
@@ -68,7 +70,29 @@ struct SettingsView: View {
         }
 
         Section {
-          Text(listeningStatus)
+          Text(listeningModel.statusLine)
+          Toggle("Poll listening on this Mac", isOn: Binding(
+            get: { listeningModel.pollingEnabled },
+            set: { enabled in
+              Task {
+                if enabled { await listeningModel.enablePolling() }
+                else { await listeningModel.disablePolling() }
+              }
+            }
+          ))
+          LabeledContent("Poller", value: listeningModel.leaseLabel)
+          if let idleMessage = listeningModel.idleAgentMessage {
+            Text(idleMessage).foregroundStyle(.secondary)
+          }
+          if listeningModel.requiresApproval {
+            Text("Approve Vinyl Fever in Login Items to let it poll in the background.")
+              .foregroundStyle(.secondary)
+            Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
+          }
+          if let error = listeningModel.errorMessage {
+            Label(error, systemImage: "exclamationmark.triangle.fill")
+              .foregroundStyle(.red)
+          }
           LabeledContent("iCloud folder", value: listeningStore.listeningFolder().path(percentEncoded: false))
             .textSelection(.enabled)
           Link("Listening history setup", destination: URL(string: "https://github.com/jonphillips/vinyl-fever/blob/main/docs/listening/POLLER-SETUP.md")!)
@@ -144,7 +168,7 @@ struct SettingsView: View {
       .task {
         model.loadFrontierKeyPreview()
         await refreshLibrarySnapshotStatus()
-        refreshListeningStatus()
+        await listeningModel.refresh()
       }
       .toolbar {
         ToolbarItem {
@@ -155,6 +179,12 @@ struct SettingsView: View {
           }
         }
       }
+    }
+    .alert("Make this Mac the poller?", isPresented: $listeningModel.isConfirmingTakeover) {
+      Button("Make This Mac the Poller") { Task { await listeningModel.confirmTakeover() } }
+      Button("Cancel", role: .cancel) { listeningModel.cancelTakeover() }
+    } message: {
+      Text(listeningModel.takeoverMessage)
     }
     .frame(minWidth: 620, minHeight: 420)
     .sheet(isPresented: $isShowingArtistAliases) { ArtistAliasesView() }
@@ -183,15 +213,6 @@ struct SettingsView: View {
       librarySnapshotStatus = "\(snapshot.trackCount.formatted()) tracks · \(modifiedAt.formatted(.relative(presentation: .numeric)))"
     } catch {
       librarySnapshotStatus = "Unavailable · \(error.localizedDescription)"
-    }
-  }
-
-  private func refreshListeningStatus() {
-    do {
-      let fetches = try listeningStore.readFetches()
-      listeningStatus = ListeningStatusLine.make(fetches: fetches, now: Date())
-    } catch {
-      listeningStatus = "Listening history unavailable · \(error.localizedDescription)"
     }
   }
 
@@ -225,6 +246,159 @@ struct SettingsView: View {
     } label: {
       Label(copiedMCPConfig == key ? "Copied \(title)" : "Copy \(title)", systemImage: copiedMCPConfig == key ? "checkmark" : "doc.on.doc")
     }
+  }
+}
+
+struct ListeningAgentClient {
+  var isEnabled: @Sendable () -> Bool
+  var requiresApproval: @Sendable () -> Bool
+  var register: @Sendable () throws -> Void
+  var unregister: @Sendable () async throws -> Void
+
+  static var liveValue: Self {
+    return Self(
+      isEnabled: { SMAppService.agent(plistName: "VinylFeverListeningAgent.plist").status == .enabled },
+      requiresApproval: { SMAppService.agent(plistName: "VinylFeverListeningAgent.plist").status == .requiresApproval },
+      register: { try SMAppService.agent(plistName: "VinylFeverListeningAgent.plist").register() },
+      unregister: { try await SMAppService.agent(plistName: "VinylFeverListeningAgent.plist").unregister() }
+    )
+  }
+}
+
+extension ListeningAgentClient: TestDependencyKey, DependencyKey {
+  static var testValue: Self {
+    Self(
+      isEnabled: { fatalError("Override listeningAgentClient in tests before reading its status.") },
+      requiresApproval: { fatalError("Override listeningAgentClient in tests before reading its status.") },
+      register: { fatalError("Override listeningAgentClient in tests before registering the agent.") },
+      unregister: { fatalError("Override listeningAgentClient in tests before unregistering the agent.") }
+    )
+  }
+}
+
+extension DependencyValues {
+  var listeningAgentClient: ListeningAgentClient {
+    get { self[ListeningAgentClient.self] }
+    set { self[ListeningAgentClient.self] = newValue }
+  }
+}
+
+@MainActor
+@Observable
+final class ListeningPollingSettingsModel {
+  @ObservationIgnored @Dependency(\.listeningStore) private var store
+  @ObservationIgnored @Dependency(\.listeningAgentClient) private var agent
+  @ObservationIgnored @Dependency(\.date) private var date
+  private var pendingTakeoverPoller: UUID?
+  private var leaseHost: String?
+
+  private(set) var statusLine = ListeningStatusLine.setupPointer
+  private(set) var holdsLease = false
+  private(set) var leaseExists = false
+  private(set) var errorMessage: String?
+  var isConfirmingTakeover = false
+
+  init() {}
+
+  var hasRegisteredAgent: Bool { agent.isEnabled() || agent.requiresApproval() }
+  var pollingEnabled: Bool { hasRegisteredAgent && !isAnotherMacPolling }
+  var requiresApproval: Bool { agent.requiresApproval() }
+  private var isAnotherMacPolling: Bool { leaseExists && !holdsLease }
+
+  var takeoverMessage: String {
+    "\(leaseHost ?? "Another Mac") is polling now. Make this Mac the poller?"
+  }
+
+  var idleAgentMessage: String? {
+    guard hasRegisteredAgent, isAnotherMacPolling else { return nil }
+    return "\(leaseHost ?? "Another Mac") is polling. This Mac's agent is idle until you turn polling back on here."
+  }
+
+  var leaseLabel: String {
+    if holdsLease { "This Mac holds the lease" }
+    else if let leaseHost { "\(leaseHost) holds the lease" }
+    else if leaseExists { "Another Mac holds the lease" }
+    else { "No lease yet" }
+  }
+
+  func refresh() async {
+    do {
+      let poller = try store.pollerID()
+      let lease = try store.readLease()
+      leaseExists = lease != nil
+      holdsLease = lease?.poller == poller
+      leaseHost = lease?.host
+      let fetches = try store.readFetches()
+      statusLine = ListeningStatusLine.make(fetches: fetches, now: date())
+      errorMessage = try store.readLastPollError()
+        ?? (fetches.last?.outcome == .failed ? fetches.last?.error : nil)
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+  }
+
+  func enablePolling() async {
+    do {
+      let poller = try store.pollerID()
+      let lease = try store.readLease()
+      if let lease, lease.poller != poller {
+        pendingTakeoverPoller = poller
+        leaseHost = lease.host
+        isConfirmingTakeover = true
+        return
+      }
+      try await activate(poller: poller, oldLease: lease)
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+  }
+
+  func confirmTakeover() async {
+    guard let poller = pendingTakeoverPoller else { return }
+    do {
+      let oldLease = try store.readLease()
+      try ListeningLeaseRules.takeOver(store: store, poller: poller, host: store.hostName(), now: date())
+      do {
+        try registerAgentIfNeeded()
+        errorMessage = nil
+      } catch {
+        if let oldLease { try? store.writeLease(oldLease) }
+        throw error
+      }
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+    pendingTakeoverPoller = nil
+    isConfirmingTakeover = false
+    await refresh()
+  }
+
+  func cancelTakeover() {
+    pendingTakeoverPoller = nil
+    isConfirmingTakeover = false
+  }
+
+  func disablePolling() async {
+    do {
+      try await agent.unregister()
+      errorMessage = nil
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+    await refresh()
+  }
+
+  private func activate(poller: UUID, oldLease: ListeningLease?) async throws {
+    if let oldLease, oldLease.poller != poller {
+      try ListeningLeaseRules.takeOver(store: store, poller: poller, host: store.hostName(), now: date())
+    }
+    try registerAgentIfNeeded()
+    errorMessage = nil
+    await refresh()
+  }
+
+  private func registerAgentIfNeeded() throws {
+    if !agent.isEnabled() { try agent.register() }
   }
 }
 
