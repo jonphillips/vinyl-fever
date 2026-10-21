@@ -33,6 +33,9 @@ targets:
   VinylFeverListeningPoller:
     type: application
     platform: macOS
+    # Matches PRODUCT_NAME below. Without it xcodegen names the scheme's product after the target
+    # and Xcode rewrites the shared scheme to the real name on every open.
+    productName: VF Listening Poller
     deploymentTarget: "15.0"
     sources:
       - VinylFeverListeningPoller

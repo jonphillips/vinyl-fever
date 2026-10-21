@@ -58,12 +58,12 @@
 		59513EA8B3113F9F15330147 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
 		5D4CD6D94E922DC5DDBA0BD1 /* CollectionInboxAppendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionInboxAppendTests.swift; sourceTree = "<group>"; };
 		5FCF80A0CE45B6E77A178A11 /* ToolPathClient+Live.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ToolPathClient+Live.swift"; sourceTree = "<group>"; };
-		65015F25ACA06219DA6CC422 /* VinylFeverListeningPoller.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VinylFeverListeningPoller.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		684446C1A4565D3485DA367F /* ListeningPollerSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListeningPollerSettingsView.swift; sourceTree = "<group>"; };
 		68E3D973791AA21665A4AEC0 /* SetlistNormalizerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetlistNormalizerSheet.swift; sourceTree = "<group>"; };
 		69C21F1532ECDDF576AB20D2 /* PlaylistBuilderModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistBuilderModel.swift; sourceTree = "<group>"; };
 		8635979346BE2956055A7DC8 /* VinylFever.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VinylFever.entitlements; sourceTree = "<group>"; };
 		8AD3A453FDC0D3B42EB1247C /* VinylFeverApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VinylFeverApp.swift; sourceTree = "<group>"; };
+		918965A7B0D2572C362F2557 /* VF Listening Poller.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "VF Listening Poller.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1E74BD06E9B4E42D2157A7A /* VinylFeverTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VinylFeverTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AED24466777F0409DA88B3E3 /* CollectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionsView.swift; sourceTree = "<group>"; };
 		C31F0056F9D91F1791025ED1 /* PoliciesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PoliciesView.swift; sourceTree = "<group>"; };
@@ -195,8 +195,8 @@
 		82F110051A55E3158FF9916B /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				918965A7B0D2572C362F2557 /* VF Listening Poller.app */,
 				C5BA3EE762A82EB875DF3A8E /* VinylFever.app */,
-				65015F25ACA06219DA6CC422 /* VinylFeverListeningPoller.app */,
 				A1E74BD06E9B4E42D2157A7A /* VinylFeverTests.xctest */,
 			);
 			name = Products;
@@ -275,7 +275,7 @@
 				D953F9671581DFADF50CBB8D /* VinylFeverListening */,
 			);
 			productName = VinylFeverListeningPoller;
-			productReference = 65015F25ACA06219DA6CC422 /* VinylFeverListeningPoller.app */;
+			productReference = 918965A7B0D2572C362F2557 /* VF Listening Poller.app */;
 			productType = "com.apple.product-type.application";
 		};
 		D61F076DD1B7CD15209A3DED /* VinylFeverTests */ = {

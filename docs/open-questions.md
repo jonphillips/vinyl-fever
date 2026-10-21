@@ -134,24 +134,6 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   runs. Candidate fix: a one-line `$0.uuid = .incrementing` override in that test. It's small
   enough to fold into the next dispatch that touches the Inbox, or to send as its own small
   effort.
-- **The poller's shared scheme flips between xcodegen and Xcode** (found while opening #96,
-  2026-10-20). `VF Listening Poller.xcscheme` on `main` is Xcode's version (#92). Every
-  `xcodegen generate`, including the `post-merge` / `post-checkout` hooks, rewrites it. So a
-  fresh checkout or worktree with no Xcode open shows it modified. That trips `orient`'s
-  clean-tree check, and a bulk `git add` commits it, as #85 did. In Jon's checkout, Xcode
-  rewrites it back.
-  - **The difference that matters:** xcodegen writes `BuildableName = "VinylFeverListeningPoller.app"`,
-    while Xcode writes the real product, `VF Listening Poller.app`. The rest is noise: scheme
-    `version` 1.7 vs 1.3, `runPostActionsOnFailure`, `onlyGenerateCoverageForSpecifiedTargets`,
-    and an empty `CommandLineArguments`.
-  - **Probable fix (unverified):** set `productName: VF Listening Poller` on the
-    `VinylFeverListeningPoller` target in `project.yml`, so xcodegen generates the name Xcode
-    keeps. Then check whether the version attributes still differ. If they do, decide which
-    file is the source of truth: keep xcodegen's output and let Xcode's rewrite show as a local
-    change, or exclude the scheme from generation.
-  - **Done when:** `xcodegen generate` in a clean worktree leaves `git status` clean, and
-    opening the project in Xcode doesn't change the file. It's small enough to ride along in
-    the next executor PR that touches `project.yml`, or to send as its own small effort.
 - **Folder-picked compilation appends leave derived folders behind** (from the #65 review,
   2026-10-14). A compilation append builds `Working/` and `Output/` *inside* the user's picked
   folder, and after #65 `Output/` holds a copy of every track. Nothing cleans either one up after
