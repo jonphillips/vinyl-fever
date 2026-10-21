@@ -91,7 +91,7 @@ serving ChatGPT, and a new Mac is one command from "what's missing?"
     4. Launch the pre-S0 build again. It starts on a new empty `SQLiteData.db`, and the new file
        remains untouched.
 
-- [ ] **S1 — `scripts/install-vinyl-fever` (build → verify → install → restart → smoke).**
+- [x] **S1 — `scripts/install-vinyl-fever` (build → verify → install → restart → smoke).**
   - `xcodegen generate`, then build the `VinylFever` scheme into
     `.build/InstallDerivedData`, then `xcodegen generate` again so the checkout stays clean
     (the `build-listening-poller` pattern). `--configuration Debug|Release`, defaulting to
@@ -118,10 +118,14 @@ serving ChatGPT, and a new Mac is one command from "what's missing?"
     `recent_listening` coverage, which Mac polls and the last fetch's age.
 
   **DoD:**
-  - `shellcheck` passes on both scripts. `-n` output is reviewed in the PR.
+  - `shellcheck` passes on the installer, `mcp-smoke --self-test` passes, and `-n` output is reviewed in the PR.
   - **Device gate (laptop):** one run from a clean checkout of `main` installs, restarts the
     tunnel, and passes the smoke test. A second run with the profile check forced to fail stops
     before touching `/Applications`.
+  - **Gate passed 2026-10-21 after review changes:** plain Debug install passed with Vinyl Fever
+    open (the dialog appeared and the app quit); forced profile failure stopped before install;
+    forced smoke failure restored the prior app and restarted the tunnel. `lsof` showed the
+    running helper and installed helper share inode `538835276`.
 
 - [ ] **S2 — `scripts/setup-mac` (check, then apply what can be automated).**
   - `setup-mac [--role build,chat,poll] [--apply]`. The default is a read-only report: one line

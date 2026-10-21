@@ -3,6 +3,18 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-21 — M16 · Dispatch 2 S1 (`m16/s1-install-vinyl-fever`)
+
+Added `scripts/install-vinyl-fever` to generate, build, verify signing and this Mac's
+provisioning profile, install with rollback protection, restart the tunnel agent, and run the
+MCP smoke probe. Added `scripts/mcp-smoke` for `initialize`, `tools/list`, `library_overview`, and
+`recent_listening`. ShellCheck and the dry run passed, and the initial laptop install and forced
+profile failure passed. Architect review found issues in app-process detection, fresh-Mac
+listening coverage, rollback tunnel restart, and platform checkout lookup; all were fixed. The
+self-test passed. The rerun passed with the app open, the forced profile failure stopped before
+installation, and the forced smoke failure restored the prior app and restarted the tunnel.
+`lsof` confirmed the running helper used the restored bundle's inode. `NEXT_UP.md` points to M16 S2.
+
 ## 2026-10-21 — M16 · Dispatch 1 S0 (`m16/s0-safe-database-home`)
 
 Moved the live database to `~/Library/Application Support/VinylFever/VinylFever.sqlite`, safely

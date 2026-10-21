@@ -1,0 +1,187 @@
+#!/bin/bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+platform_root="$repo_root/../jon-platform"
+configuration="Debug"
+dry_run=false
+while (($#)); do
+  case "$1" in
+    --configuration)
+      (($# >= 2)) || { echo "error: --configuration requires Debug or Release" >&2; exit 2; }
+      configuration="$2"
+      shift 2
+      ;;
+    -n)
+      dry_run=true
+      shift
+      ;;
+    -h|--help)
+      echo "Usage: scripts/install-vinyl-fever [--configuration Debug|Release] [-n]"
+      exit 0
+      ;;
+    *) echo "error: unknown argument: $1" >&2; exit 2 ;;
+  esac
+done
+[[ "$configuration" == Debug || "$configuration" == Release ]] || {
+  echo "error: configuration must be Debug or Release" >&2
+  exit 2
+}
+[[ -x "$platform_root/scripts/quiet-run" ]] || {
+  echo "error: jon-platform sibling checkout or scripts/quiet-run is missing; see docs/setup/README.md#build-mac" >&2
+  exit 1
+}
+
+derived_data="$repo_root/.build/InstallDerivedData"
+build_app="$derived_data/Build/Products/$configuration/VinylFever.app"
+installed_app="/Applications/VinylFever.app"
+helper="$installed_app/Contents/Helpers/vf-mcp"
+tunnel_label="com.jonphillips.mcp-tunnel.vinyl-fever"
+profile_path="$build_app/Contents/embedded.provisionprofile"
+
+if $dry_run; then
+  cat <<EOF
+cd $repo_root
+xcodegen generate
+xcodebuild -project VinylFever.xcodeproj -scheme VinylFever -configuration $configuration -destination 'platform=macOS' -derivedDataPath $derived_data build
+xcodegen generate
+Verify codesign, bundled vf-mcp, embedded Vinyl Fever Dev Profile, and this Mac's Provisioning UDID
+If Vinyl Fever is running, prompt and quit it
+Stage $build_app beside $installed_app, swap it in while retaining the previous app
+If $tunnel_label is loaded, kickstart it and wait for /readyz
+python3 -I scripts/mcp-smoke $helper
+On smoke failure, restore the previous app; on success, remove the backup and report mcp-tunnel status
+EOF
+  exit 0
+fi
+
+cd "$repo_root"
+xcodegen generate
+"$platform_root/scripts/quiet-run" xcodebuild \
+  -project VinylFever.xcodeproj \
+  -scheme VinylFever \
+  -configuration "$configuration" \
+  -destination 'platform=macOS' \
+  -derivedDataPath "$derived_data" \
+  build
+xcodegen generate
+
+codesign --verify --deep --strict "$build_app"
+echo "codesign: verified"
+[[ -x "$build_app/Contents/Helpers/vf-mcp" ]] || {
+  echo "error: built app is missing executable Contents/Helpers/vf-mcp" >&2
+  exit 1
+}
+echo "vf-mcp: present"
+[[ -f "$profile_path" ]] || {
+  echo "error: built app has no embedded provisioning profile" >&2
+  exit 1
+}
+profile_plist="$(mktemp)"
+trap 'rm -f "$profile_plist"' EXIT
+security cms -D -i "$profile_path" > "$profile_plist"
+profile_name="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$profile_plist" 2>/dev/null || true)"
+[[ "$profile_name" == "Vinyl Fever Dev Profile" ]] || {
+  echo "error: embedded profile is '${profile_name:-unknown}', expected Vinyl Fever Dev Profile; see docs/setup/README.md#signing-adding-a-mac-to-the-profiles" >&2
+  exit 1
+}
+provisioning_udid="$(system_profiler SPHardwareDataType -json | plutil -extract SPHardwareDataType.0.provisioning_UDID raw -o - - 2>/dev/null || true)"
+if [[ -z "$provisioning_udid" ]]; then
+  provisioning_udid="$(system_profiler SPHardwareDataType | awk -F ': ' '/Provisioning UDID/ {print $2; exit}')"
+fi
+[[ -n "$provisioning_udid" ]] || {
+  echo "error: could not read this Mac's Provisioning UDID from system_profiler SPHardwareDataType; see docs/setup/README.md#signing-adding-a-mac-to-the-profiles" >&2
+  exit 1
+}
+if ! /usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices' "$profile_plist" 2>/dev/null | grep -Fq "$provisioning_udid"; then
+  echo "error: Vinyl Fever Dev Profile does not include this Mac ($provisioning_udid); see docs/setup/README.md#signing-adding-a-mac-to-the-profiles" >&2
+  exit 1
+fi
+echo "provisioning: $profile_name includes this Mac"
+
+running_count() {
+  /usr/bin/osascript -e 'tell application "System Events" to count (every process whose bundle identifier is "com.jonphillips.vinylfever" and background only is false)'
+}
+if [[ "$(running_count)" -gt 0 ]]; then
+  /usr/bin/osascript -e 'display dialog "Vinyl Fever is running. Quit it to install the verified build?" buttons {"Cancel", "Quit Vinyl Fever"} default button "Quit Vinyl Fever" with title "Install Vinyl Fever"' >/dev/null
+  /usr/bin/osascript -e 'tell application id "com.jonphillips.vinylfever" to quit'
+  for _ in {1..30}; do
+    if [[ "$(running_count)" -eq 0 ]]; then break; fi
+    sleep 1
+  done
+  [[ "$(running_count)" -eq 0 ]] || {
+    echo "error: Vinyl Fever is still running after 30 seconds; quit it before installing" >&2
+    exit 1
+  }
+fi
+
+stage_app="/Applications/.VinylFever.app.install-new.$$"
+previous_app="/Applications/.VinylFever.app.install-previous.$$"
+swapped=false
+had_previous=false
+cleanup() {
+  if $swapped; then
+    rm -rf "$installed_app"
+    if $had_previous && [[ -d "$previous_app" ]]; then
+      mv "$previous_app" "$installed_app"
+      echo "install: restored previous app" >&2
+    fi
+    if launchctl print "gui/$(id -u)/$tunnel_label" >/dev/null 2>&1; then
+      if launchctl kickstart -k "gui/$(id -u)/$tunnel_label"; then
+        echo "tunnel: restarted against restored app" >&2
+      else
+        echo "warning: could not restart tunnel against restored app" >&2
+      fi
+    fi
+  fi
+  rm -rf "$stage_app"
+  rm -f "$profile_plist"
+}
+trap cleanup EXIT
+ditto "$build_app" "$stage_app"
+if [[ -d "$installed_app" ]]; then
+  mv "$installed_app" "$previous_app"
+  had_previous=true
+fi
+swapped=true
+mv "$stage_app" "$installed_app"
+
+uid="$(id -u)"
+if launchctl print "gui/$uid/$tunnel_label" >/dev/null 2>&1; then
+  launchctl kickstart -k "gui/$uid/$tunnel_label"
+  port_file="$HOME/.config/mcp-tunnel/vinyl-fever.health-port"
+  [[ -r "$port_file" ]] || { echo "error: tunnel agent is loaded but its health port is missing" >&2; exit 1; }
+  health_port="$(<"$port_file")"
+  ready=false
+  for _ in {1..60}; do
+    if curl --fail --silent "http://127.0.0.1:$health_port/readyz" >/dev/null; then ready=true; break; fi
+    sleep 1
+  done
+  $ready || { echo "error: tunnel did not become ready at /readyz" >&2; exit 1; }
+  echo "tunnel: ready"
+else
+  echo "tunnel: agent not loaded; restart skipped"
+fi
+
+smoke_report="$(python3 -I "$repo_root/scripts/mcp-smoke" "$helper")"
+printf '%s\n' "$smoke_report"
+recent_summary="$(printf '%s\n' "$smoke_report" | awk -F ' — ' '/^recent_listening:/ {print $2}')"
+[[ -n "$recent_summary" ]] || recent_summary="passed; coverage unavailable"
+status_summary="not configured"
+if command -v mcp-tunnel >/dev/null 2>&1; then
+  status_summary="$(mcp-tunnel status vinyl-fever 2>&1)" || status_summary="unavailable: $status_summary"
+elif [[ -x "$platform_root/scripts/mcp-tunnel" ]]; then
+  status_summary="$("$platform_root/scripts/mcp-tunnel" status vinyl-fever 2>&1)" || status_summary="unavailable: $status_summary"
+fi
+printf '\n%-24s %s\n' "Check" "Result"
+printf '%-24s %s\n' "Build and signature" "passed"
+printf '%-24s %s\n' "Provisioning profile" "passed — $profile_name includes this Mac"
+printf '%-24s %s\n' "Bundled vf-mcp" "passed"
+printf '%-24s %s\n' "MCP smoke" "passed"
+printf '%-24s %s\n' "Listening coverage" "$recent_summary"
+printf '%-24s %s\n' "mcp-tunnel status" "$(printf '%s' "$status_summary" | tr '\n' ';' | sed 's/; *$//')"
+
+rm -rf "$previous_app"
+swapped=false
+had_previous=false
+echo "install: passed ($configuration) — $installed_app"
