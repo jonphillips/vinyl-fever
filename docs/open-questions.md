@@ -87,6 +87,8 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
     rule.
   - **Decision 5 is superseded by [M15](milestones/M15-artist-identity.md)** (2026-10-20), which
     gives every artist comparison one `ArtistIdentity`.
+  - **S1 merged as #97, and its device gate passed (2026-10-20). M14 is complete.** The gate's
+    Tunnel of Love mix led to the library duplicates report below.
 - **Artist identity** — planned as [M15](milestones/M15-artist-identity.md) (2026-10-20), after
   Jon asked why artist matching kept coming back. A probe of his 87,115-track library found
   three kinds of mismatch: band and live suffixes (34,909 tracks across 293 keys), spelling

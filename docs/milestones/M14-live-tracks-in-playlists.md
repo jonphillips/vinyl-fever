@@ -67,7 +67,8 @@ Create: one call; each ID goes in as `songs` or `library-songs`, in row order
 
 ## Slices
 
-**Dispatch 1: S0. Dispatch 2: S1.** Each owes a device gate.
+**Dispatch 1: S0. Dispatch 2: S1.** Each owed a device gate. **Both passed; M14 is complete
+(2026-10-20).**
 
 - [x] **S0 — The library route (core + app).** Device gate passed 2026-10-20. Merged as #89.
   - **`AppleMusicCatalogClient` gains three endpoints:**
@@ -125,7 +126,8 @@ Create: one call; each ID goes in as `songs` or `library-songs`, in row order
     - The review changed the brief: library-route artists match by whole-word prefix
       (Decision 5).
 
-- [ ] **S1 — Let the chat ask for uploads (`vf-mcp` + contract).** Device gate owed.
+- [x] **S1 — Let the chat ask for uploads (`vf-mcp` + contract).** Device gate passed
+  2026-10-20. Merged as #97.
   - **The instructions head** replaces "Tracks with availability "uploaded" are library-only
     and can't be added to a catalog playlist; leave them out." with a sentence telling the
     model it can use one of Jon's own uploads, such as a live show, by giving its exact album
@@ -161,9 +163,17 @@ Create: one call; each ID goes in as `songs` or `library-songs`, in row order
     - `Bruce SpringsteenX` lists none, and `Elvis Costello` lists no `Elvis`-tagged upload;
     - five qualifying shows return all five (the clamp is lifted), and the picker still gets 3.
   - The contract pin is updated with `PLAYLIST-CONTRACT.md`.
-  - **Device gate:** in ChatGPT on the iPad, ask for "a 1988 Tunnel of Love tour mix from my
-    shows plus a few studio cuts". It calls `check_tracks`, then stages; the list appears under
-    From chat with upload badges; Create; it plays on the iPhone.
+  - **Device gate (passed 2026-10-20, no longer owed):** in ChatGPT on the iPad, ask for "a 1988
+    Tunnel of Love tour mix from my shows plus a few studio cuts". It calls `check_tracks`, then
+    stages; the list appears under From chat with upload badges; Create; it plays on the iPhone.
+    - **Result:** Jon reported it passed. ChatGPT staged 20 tracks: 16 from shows in Worcester,
+      Los Angeles, Madison Square Garden, and Stockholm, each with the exact album from
+      `uploadedAlbums`, and 4 studio cuts from *Tunnel of Love*.
+      - 18 rows resolved on their own. Roulette and Chimes of Freedom went to the picker, because
+        Jon's library holds the 1988-07-03 Stockholm show twice, under names that differ only in
+        punctuation. Jon chose to keep that behavior, because it shows him the duplicates; see the
+        library duplicates report in `open-questions.md`.
+      - Preparing the gate found that incremental builds embedded a stale `vf-mcp`. #98 fixed it.
 
 ## Prerequisites (Jon)
 

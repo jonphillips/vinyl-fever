@@ -1,7 +1,7 @@
-# Next Up — M14 · Dispatch 2: Let the chat ask for uploads
+# Next Up — M15 · Dispatch 2: Artist aliases Jon approves
 
-**Slices:** M14 · S1 (branch `m14/s1-vf-mcp-uploaded-albums`)
-**Briefs:** docs/milestones/M14-live-tracks-in-playlists.md § S1
+**Slices:** M15 · S1 (branch `m15/s1-artist-aliases`)
+**Briefs:** docs/milestones/M15-artist-identity.md § S1
 **Done when:** S1's DoD, except its device gate; Core and app tests green; PR opened in `jonphillips/vinyl-fever`.
-**Owed:** M13 S1's Intel mini gate; M13 S2's iPad device gate; M14 S1's device gate.
-**Notes:** M15 S0 is complete. M14 S1 uses its `ArtistIdentity.matches` rule.
+**Owed:** M13 S1's Intel mini gate; M13 S2's iPad device gate; M15 S1's device gate.
+**Notes:** M14 is complete (S1's device gate passed 2026-10-20). S1 adds a migration, so the PR escalates to Jon (ADR-0005 D9).
