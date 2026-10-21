@@ -118,13 +118,17 @@ public struct LibraryIndex: Sendable {
     }
   }
 
-  public func uploadedCandidates(_ request: TrackRequest, limit: Int = 3)
+  public func uploadedCandidates(
+    _ request: TrackRequest, limit: Int = LibraryUploadMatcher.uploadPickerLimit,
+    requiringNamedAlbum: Bool = false
+  )
     -> [CatalogSongCandidate]
   {
     let artist = request.artist
     var albums: Set<String> = []
     return (uploadedByTitle[SongTextNormalizer.title(request.title)] ?? [])
       .filter { artistIdentity.matches(request: artist, track: $0.normalizedArtist) }
+      .filter { !requiringNamedAlbum || !$0.normalizedAlbum.isEmpty }
       .sorted { lhs, rhs in
         lhs.track.playCount == rhs.track.playCount
           ? lhs.normalizedAlbum.localizedStandardCompare(rhs.normalizedAlbum) == .orderedAscending
@@ -222,7 +226,8 @@ public struct LibraryIndex: Sendable {
         lastPlayed: matches.compactMap(\.lastPlayed).max(),
         availability: Array(Set(matches.map(\.availability))).sorted { $0.rawValue < $1.rawValue },
         uploadedAlbums: uploadedCandidates(
-          TrackRequest(index: 1, artist: request.artist, title: request.title), limit: 5
+          TrackRequest(index: 1, artist: request.artist, title: request.title), limit: 5,
+          requiringNamedAlbum: true
         ).compactMap(\.albumTitle))
     }
   }

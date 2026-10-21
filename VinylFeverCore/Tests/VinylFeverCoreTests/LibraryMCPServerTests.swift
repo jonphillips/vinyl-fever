@@ -65,10 +65,15 @@ struct LibraryMCPServerTests {
         artist: "Bruce Springsteen & The E Street Band (Live)", album: "Show \(number)",
         playCount: 6 - number, availability: .uploaded)
     }
+    let unnamedUpload = LibraryTrack(
+      persistentID: "private-unnamed-upload-id", name: "Thunder Road",
+      artist: "Bruce Springsteen & The E Street Band (Live)", album: " \n ",
+      playCount: 99, availability: .uploaded)
     let almostMatch = LibraryTrack(
       persistentID: "private-unrelated-id", name: "Alison", artist: "Elvis", album: "Show",
       availability: .uploaded)
-    try LibrarySnapshotCodec.encode(LibrarySnapshot(generatedAt: .now, tracks: uploads + [almostMatch]))
+    try LibrarySnapshotCodec.encode(
+      LibrarySnapshot(generatedAt: .now, tracks: [unnamedUpload] + uploads + [almostMatch]))
       .write(to: snapshotURL)
     let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"))
 
