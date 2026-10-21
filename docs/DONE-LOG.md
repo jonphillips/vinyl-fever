@@ -3,6 +3,13 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-21 — M13 · Dispatch 4 S3 (`m13/s3-in-app-poller`)
+
+Added Vinyl Fever's headless listening poller and hourly agent, with confirmed takeover in both
+settings surfaces. A takeover clears the new holder's saved diff baseline so its first fetch is
+`baseline`. Listening, Core, and macOS app tests pass; the poller app builds; `check-handoff`
+passes. The M13 S1 Intel mini, S2 iPad, and S3 laptop↔mini device gates remain owed.
+
 ## 2026-10-20 — M15 · Dispatch 2 S1 (`m15/s1-artist-aliases`)
 
 Added a pure alias candidate finder, local `artistAliases` decisions in SQLiteData, the Settings

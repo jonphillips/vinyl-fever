@@ -32,6 +32,7 @@ extension ListeningStore {
       },
       readLastList: { try ListeningLocalState(folder: localFolder).lastList() },
       writeLastList: { items in try ListeningLocalState(folder: localFolder).writeLastList(items) },
+      clearLastList: { try ListeningLocalState(folder: localFolder).clearLastList() },
       appendFetch: { fetch in
         let stream = iCloudFolder
           .appendingPathComponent("fetches", isDirectory: true)
@@ -94,6 +95,12 @@ private struct ListeningLocalState {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
     try encoder.encode(items).write(to: folder.appendingPathComponent("last-list.json"), options: .atomic)
+  }
+
+  func clearLastList() throws {
+    let url = folder.appendingPathComponent("last-list.json")
+    guard FileManager.default.fileExists(atPath: url.path) else { return }
+    try FileManager.default.removeItem(at: url)
   }
 
   func lastPollError() throws -> String? {

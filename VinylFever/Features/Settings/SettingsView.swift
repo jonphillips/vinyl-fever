@@ -70,6 +70,7 @@ struct SettingsView: View {
         }
 
         Section {
+          Text(listeningModel.statusLine)
           Toggle("Poll listening on this Mac", isOn: Binding(
             get: { listeningModel.pollingEnabled },
             set: { enabled in
@@ -80,7 +81,9 @@ struct SettingsView: View {
             }
           ))
           LabeledContent("Poller", value: listeningModel.leaseLabel)
-          LabeledContent("Last fetch", value: listeningModel.lastFetchLabel)
+          if let idleMessage = listeningModel.idleAgentMessage {
+            Text(idleMessage).foregroundStyle(.secondary)
+          }
           if listeningModel.requiresApproval {
             Text("Approve Vinyl Fever in Login Items to let it poll in the background.")
               .foregroundStyle(.secondary)
@@ -247,52 +250,68 @@ struct SettingsView: View {
 }
 
 struct ListeningAgentClient {
-  var isEnabled: () -> Bool
-  var requiresApproval: () -> Bool
-  var register: () throws -> Void
-  var unregister: () async throws -> Void
+  var isEnabled: @Sendable () -> Bool
+  var requiresApproval: @Sendable () -> Bool
+  var register: @Sendable () throws -> Void
+  var unregister: @Sendable () async throws -> Void
 
   static var liveValue: Self {
-    let service = SMAppService.agent(plistName: "VinylFeverListeningAgent.plist")
     return Self(
-      isEnabled: { service.status == .enabled },
-      requiresApproval: { service.status == .requiresApproval },
-      register: { try service.register() },
-      unregister: { try await service.unregister() }
+      isEnabled: { SMAppService.agent(plistName: "VinylFeverListeningAgent.plist").status == .enabled },
+      requiresApproval: { SMAppService.agent(plistName: "VinylFeverListeningAgent.plist").status == .requiresApproval },
+      register: { try SMAppService.agent(plistName: "VinylFeverListeningAgent.plist").register() },
+      unregister: { try await SMAppService.agent(plistName: "VinylFeverListeningAgent.plist").unregister() }
     )
+  }
+}
+
+extension ListeningAgentClient: TestDependencyKey, DependencyKey {
+  static var testValue: Self {
+    Self(
+      isEnabled: { fatalError("Override listeningAgentClient in tests before reading its status.") },
+      requiresApproval: { fatalError("Override listeningAgentClient in tests before reading its status.") },
+      register: { fatalError("Override listeningAgentClient in tests before registering the agent.") },
+      unregister: { fatalError("Override listeningAgentClient in tests before unregistering the agent.") }
+    )
+  }
+}
+
+extension DependencyValues {
+  var listeningAgentClient: ListeningAgentClient {
+    get { self[ListeningAgentClient.self] }
+    set { self[ListeningAgentClient.self] = newValue }
   }
 }
 
 @MainActor
 @Observable
 final class ListeningPollingSettingsModel {
-  private let store: ListeningStore
-  private let agent: ListeningAgentClient
-  private let now: () -> Date
+  @ObservationIgnored @Dependency(\.listeningStore) private var store
+  @ObservationIgnored @Dependency(\.listeningAgentClient) private var agent
+  @ObservationIgnored @Dependency(\.date) private var date
   private var pendingTakeoverPoller: UUID?
   private var leaseHost: String?
 
-  private(set) var lastFetch: ListeningFetch?
+  private(set) var statusLine = ListeningStatusLine.setupPointer
   private(set) var holdsLease = false
   private(set) var leaseExists = false
   private(set) var errorMessage: String?
   var isConfirmingTakeover = false
 
-  init(
-    store: ListeningStore = .liveValue,
-    agent: ListeningAgentClient = .liveValue,
-    now: @escaping () -> Date = Date.init
-  ) {
-    self.store = store
-    self.agent = agent
-    self.now = now
-  }
+  init() {}
 
-  var pollingEnabled: Bool { agent.isEnabled() || agent.requiresApproval() }
+  var hasRegisteredAgent: Bool { agent.isEnabled() || agent.requiresApproval() }
+  var pollingEnabled: Bool { hasRegisteredAgent && !isAnotherMacPolling }
   var requiresApproval: Bool { agent.requiresApproval() }
+  private var isAnotherMacPolling: Bool { leaseExists && !holdsLease }
 
   var takeoverMessage: String {
-    "The \(leaseHost ?? "other Mac") is polling now. Make this Mac the poller?"
+    "\(leaseHost ?? "Another Mac") is polling now. Make this Mac the poller?"
+  }
+
+  var idleAgentMessage: String? {
+    guard hasRegisteredAgent, isAnotherMacPolling else { return nil }
+    return "\(leaseHost ?? "Another Mac") is polling. This Mac's agent is idle until you turn polling back on here."
   }
 
   var leaseLabel: String {
@@ -302,11 +321,6 @@ final class ListeningPollingSettingsModel {
     else { "No lease yet" }
   }
 
-  var lastFetchLabel: String {
-    guard let lastFetch else { return "None yet" }
-    return "\(lastFetch.fetchedAt.formatted(date: .abbreviated, time: .shortened)) · \(lastFetch.outcome.rawValue)"
-  }
-
   func refresh() async {
     do {
       let poller = try store.pollerID()
@@ -314,9 +328,10 @@ final class ListeningPollingSettingsModel {
       leaseExists = lease != nil
       holdsLease = lease?.poller == poller
       leaseHost = lease?.host
-      lastFetch = try store.readFetches().last
+      let fetches = try store.readFetches()
+      statusLine = ListeningStatusLine.make(fetches: fetches, now: date())
       errorMessage = try store.readLastPollError()
-        ?? (lastFetch?.outcome == .failed ? lastFetch?.error : nil)
+        ?? (fetches.last?.outcome == .failed ? fetches.last?.error : nil)
     } catch {
       errorMessage = error.localizedDescription
     }
@@ -341,7 +356,15 @@ final class ListeningPollingSettingsModel {
   func confirmTakeover() async {
     guard let poller = pendingTakeoverPoller else { return }
     do {
-      try await activate(poller: poller, oldLease: try store.readLease())
+      let oldLease = try store.readLease()
+      try ListeningLeaseRules.takeOver(store: store, poller: poller, host: store.hostName(), now: date())
+      do {
+        try registerAgentIfNeeded()
+        errorMessage = nil
+      } catch {
+        if let oldLease { try? store.writeLease(oldLease) }
+        throw error
+      }
     } catch {
       errorMessage = error.localizedDescription
     }
@@ -366,16 +389,16 @@ final class ListeningPollingSettingsModel {
   }
 
   private func activate(poller: UUID, oldLease: ListeningLease?) async throws {
-    let newLease = ListeningLease(poller: poller, host: store.hostName(), takenAt: now())
-    if oldLease?.poller != poller { try store.writeLease(newLease) }
-    do {
-      try agent.register()
-      errorMessage = nil
-    } catch {
-      if oldLease?.poller != poller, let oldLease { try? store.writeLease(oldLease) }
-      throw error
+    if let oldLease, oldLease.poller != poller {
+      try ListeningLeaseRules.takeOver(store: store, poller: poller, host: store.hostName(), now: date())
     }
+    try registerAgentIfNeeded()
+    errorMessage = nil
     await refresh()
+  }
+
+  private func registerAgentIfNeeded() throws {
+    if !agent.isEnabled() { try agent.register() }
   }
 }
 

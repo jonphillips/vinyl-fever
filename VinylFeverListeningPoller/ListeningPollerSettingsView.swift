@@ -29,6 +29,9 @@ struct ListeningPollerSettingsView: View {
             }
           }
         ))
+        if let idleMessage = model.idleAgentMessage {
+          Text(idleMessage).foregroundStyle(.secondary)
+        }
         if model.serviceStatus == .requiresApproval {
           Text("Approve VF Listening Poller in Login Items to let it run in the background.")
             .foregroundStyle(.secondary)
@@ -76,9 +79,17 @@ private final class ListeningPollerSettingsModel {
   var isConfirmingTakeover = false
   private var pendingTakeoverPoller: UUID?
   private var pendingLease: ListeningLease?
+  private var leaseHost: String?
 
   var pollingEnabled: Bool {
-    serviceStatus == .enabled || serviceStatus == .requiresApproval
+    (serviceStatus == .enabled || serviceStatus == .requiresApproval)
+      && !(leaseExists && !holdsLease)
+  }
+
+  var idleAgentMessage: String? {
+    let agentRegistered = serviceStatus == .enabled || serviceStatus == .requiresApproval
+    guard agentRegistered, leaseExists, !holdsLease else { return nil }
+    return "\(leaseHost ?? "Another Mac") is polling. This Mac's agent is idle until you turn polling back on here."
   }
 
   var authorizationLabel: String {
@@ -112,7 +123,7 @@ private final class ListeningPollerSettingsModel {
   }
 
   var takeoverMessage: String {
-    "The \(pendingLease?.host ?? "other Mac") is polling now. Make this Mac the poller?"
+    "\(pendingLease?.host ?? "Another Mac") is polling now. Make this Mac the poller?"
   }
 
   func enablePolling() async {
@@ -126,7 +137,7 @@ private final class ListeningPollerSettingsModel {
         isConfirmingTakeover = true
         return
       }
-      try registerAgent()
+      try registerAgentIfNeeded()
       errorMessage = nil
     } catch {
       errorMessage = error.localizedDescription
@@ -138,9 +149,9 @@ private final class ListeningPollerSettingsModel {
     guard let poller = pendingTakeoverPoller, let oldLease = pendingLease else { return }
     do {
       let store = ListeningStore.liveValue
-      try store.writeLease(ListeningLease(poller: poller, host: store.hostName(), takenAt: Date()))
+      try ListeningLeaseRules.takeOver(store: store, poller: poller, host: store.hostName(), now: Date())
       do {
-        try registerAgent()
+        try registerAgentIfNeeded()
       } catch {
         try? store.writeLease(oldLease)
         throw error
@@ -172,9 +183,9 @@ private final class ListeningPollerSettingsModel {
     await refresh()
   }
 
-  private func registerAgent() throws {
+  private func registerAgentIfNeeded() throws {
     let service = SMAppService.agent(plistName: agentPlistName)
-    try service.register()
+    if service.status != .enabled { try service.register() }
     serviceStatus = service.status
   }
 
@@ -188,6 +199,7 @@ private final class ListeningPollerSettingsModel {
       let lease = try store.readLease()
       leaseExists = lease != nil
       holdsLease = lease?.poller == poller
+      leaseHost = lease?.host
       let fetches = try store.readFetches()
       lastFetch = fetches.last
       let startOfDay = Calendar.current.startOfDay(for: Date())
