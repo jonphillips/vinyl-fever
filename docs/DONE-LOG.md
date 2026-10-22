@@ -3,6 +3,19 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-22 — M16 · Dispatch 4 S3 (`m16/s3-hardening`)
+
+Hardened install process detection and rollback/reopen behavior, moved fresh-Mac setup checks
+after prerequisite installation, and made stale-build relaunch await the installed app launch.
+Added focused stale-build bundle-date tests and kept timing checks opt-in. ShellCheck, Core and
+Listening suites (normal and perf), macOS app tests, the full install/MCP smoke run, and
+`build-listening-poller` passed. The generated-project checks passed with XcodeGen available;
+the stripped-PATH run reached its final report and correctly reported missing prerequisites.
+The stale-copy alert interactions (including with the installed copy already running) remain owed
+to Jon on the laptop; LaunchServices would not open the temporary copied bundle (`-10827`). The
+temporary test copy and process were removed. Existing M13 S2, M13 S3, and M16 S2 device gates also
+remain owed. `NEXT_UP.md` has no queued dispatch.
+
 ## 2026-10-21 — M16 · Dispatch 3 S2 (`m16/s2-setup-mac`)
 
 Added the role-based `scripts/setup-mac` checker and idempotent repairs, centralized machine

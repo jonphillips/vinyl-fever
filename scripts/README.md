@@ -23,6 +23,9 @@ Do not assume `--dry-run` means no writes; verify per script (for example
 pass `--apply` to install or restore the steps the script can automate. Shared,
 non-secret machine constants live in [`machine.conf`](machine.conf).
 
+The Xcode project is generated from `project.yml` and is not committed. After cloning, enable
+the checkout hook with `git config core.hooksPath .githooks` and run `xcodegen generate` once.
+
 ## Setup
 
 ```sh

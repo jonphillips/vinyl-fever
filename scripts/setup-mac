@@ -20,6 +20,7 @@ while (($#)); do
     -h|--help)
       echo "Usage: scripts/setup-mac [--role build,chat,poll] [--apply]"
       echo "Without --role, checks all roles: build, chat, and poll."
+      echo "The build role may trigger macOS's one-time System Events Automation prompt."
       exit 0
       ;;
     *) echo "error: unknown argument: $1" >&2; exit 2 ;;
@@ -111,6 +112,45 @@ if has_role build; then
     result passed "jon-platform sibling checkout" build-mac "cloned"
   else
     result failed "jon-platform sibling checkout" build-mac "expected at $platform_root"
+  fi
+
+  hooks_path="$(git -C "$repo_root" config --get core.hooksPath || true)"
+  if [[ "$hooks_path" == .githooks ]]; then
+    result passed "Git hooks path" build-mac
+  elif $apply; then
+    git -C "$repo_root" config core.hooksPath .githooks
+    result passed "Git hooks path" build-mac "set to .githooks"
+  else
+    result failed "Git hooks path" build-mac "run git config core.hooksPath .githooks"
+  fi
+
+  project_file="$repo_root/VinylFever.xcodeproj/project.pbxproj"
+  if [[ -f "$project_file" ]]; then
+    result passed "Generated Xcode project" build-mac
+  elif ! command -v xcodegen >/dev/null 2>&1; then
+    result failed "Generated Xcode project" build-mac "install xcodegen (Homebrew step)"
+  elif $apply; then
+    if (cd "$repo_root" && xcodegen generate); then
+      result passed "Generated Xcode project" build-mac "generated"
+    else
+      result failed "Generated Xcode project" build-mac "xcodegen generate failed"
+    fi
+  else
+    result failed "Generated Xcode project" build-mac "run xcodegen generate"
+  fi
+
+  automation_message="Vinyl Fever can't check whether it's running. Allow your terminal to control System Events (System Settings → Privacy & Security → Automation), or quit Vinyl Fever, then run this again."
+  if automation_output="$(/usr/bin/osascript -e 'tell application "System Events" to count (every process whose bundle identifier is "com.jonphillips.vinylfever" and background only is false)' 2>&1)"; then
+    automation_status=0
+  else
+    automation_status=$?
+  fi
+  if ((automation_status == 0)) && [[ "$automation_output" =~ ^[0-9]+$ ]]; then
+    result passed "System Events automation access" build-mac
+  elif [[ "$automation_output" == *"-1743"* || "$automation_output" == *"not authorized to send Apple events"* ]]; then
+    result failed "System Events automation access" build-mac "$automation_message"
+  else
+    result manual "System Events automation access" build-mac "could not classify osascript error: ${automation_output:-no output}"
   fi
 
   identity_names="$(security find-identity -v -p codesigning 2>/dev/null \

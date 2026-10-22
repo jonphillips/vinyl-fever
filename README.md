@@ -24,8 +24,9 @@ chat host (ChatGPT through the Secure MCP Tunnel), and the Mac that polls listen
 | `docs/` | Product and architecture brief, milestones, setup and ops guides. Start with [docs/README.md](docs/README.md) |
 | `scripts/` | `build-listening-poller`, plus the legacy Python and shell tools. See [scripts/README.md](scripts/README.md) |
 
-`project.yml` is the source of truth for the Xcode project. Run `xcodegen generate` after
-changing it. Tests are in [docs/verification.md](docs/verification.md).
+`project.yml` is the source of truth for the generated Xcode project; the project files are not
+committed. After cloning, run `xcodegen generate`. The Git hooks regenerate it after checkout,
+pull, and rebase. Tests are in [docs/verification.md](docs/verification.md).
 
 ## Guides
 

@@ -15,3 +15,6 @@ xcuserdata/
 .swiftpm/
 *.xcodeproj/project.xcworkspace/xcuserdata/
 *.xcuserdata/
+VinylFever.xcodeproj/project.pbxproj
+VinylFever.xcodeproj/xcshareddata/xcschemes/
+VinylFever.xcodeproj/project.xcworkspace/contents.xcworkspacedata

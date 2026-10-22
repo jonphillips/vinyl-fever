@@ -28,6 +28,7 @@ enum VinylFeverMain {
       }
       return
     }
+    if context == .live, await openInstalledCopyIfRunningBuildIsStale() { return }
     let legacyPath = VinylFeverDatabase.legacyDatabaseURL.path(percentEncoded: false)
     let databasePath = VinylFeverDatabase.liveDatabaseURL.path(percentEncoded: false)
     if context == .live,
@@ -44,6 +45,58 @@ enum VinylFeverMain {
       return
     }
     VinylFeverWindow.main()
+  }
+}
+
+@MainActor
+private func openInstalledCopyIfRunningBuildIsStale() async -> Bool {
+  let runningURL = Bundle.main.bundleURL
+  let installedURL = URL(fileURLWithPath: "/Applications/VinylFever.app", isDirectory: true)
+  let installedExists = FileManager.default.fileExists(atPath: installedURL.path)
+  let runningDate = InstalledBuildCheck.buildDate(in: runningURL)
+  let installedDate = installedExists ? InstalledBuildCheck.buildDate(in: installedURL) : nil
+  guard case let .olderThanInstalled(installedDate) = InstalledBuildCheck.result(
+    runningBundleURL: runningURL,
+    runningBuildDate: runningDate,
+    installedBundleURL: installedExists ? installedURL : nil,
+    installedBuildDate: installedDate
+  ) else { return false }
+
+  let formatter = DateFormatter()
+  formatter.dateStyle = .medium
+  formatter.timeStyle = .short
+  let application = NSApplication.shared
+  application.setActivationPolicy(.regular)
+  application.activate(ignoringOtherApps: true)
+  let alert = NSAlert()
+  alert.alertStyle = .warning
+  alert.messageText = "This copy of Vinyl Fever was built \(formatter.string(from: runningDate ?? .distantPast)), and the one in Applications was built \(formatter.string(from: installedDate)). Open the installed copy?"
+  alert.addButton(withTitle: "Open Installed Copy")
+  alert.addButton(withTitle: "Keep This Copy")
+  alert.buttons.first?.keyEquivalent = "\r"
+  guard alert.runModal() == .alertFirstButtonReturn else { return false }
+
+  let installedPath = installedURL.resolvingSymlinksInPath().standardizedFileURL
+  let bundleIdentifier = Bundle.main.bundleIdentifier ?? "com.jonphillips.vinylfever"
+  let currentApplication = NSRunningApplication.current
+  if let installedApplication = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
+    .first(where: {
+      !$0.isEqual(currentApplication)
+        && $0.bundleURL?.resolvingSymlinksInPath().standardizedFileURL == installedPath
+    })
+  {
+    _ = installedApplication.activate(options: [])
+    return true
+  }
+
+  let configuration = NSWorkspace.OpenConfiguration()
+  configuration.createsNewApplicationInstance = true
+  do {
+    _ = try await NSWorkspace.shared.openApplication(at: installedURL, configuration: configuration)
+    return true
+  } catch {
+    listeningLogger.error("Could not open installed Vinyl Fever: \(error.localizedDescription, privacy: .public)")
+    return false
   }
 }
 
