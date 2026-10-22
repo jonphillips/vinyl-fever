@@ -287,15 +287,17 @@ and AppleScript against Music.app.
     songs, and Selections.
   - A heart belongs to one catalog release. "Painkillers" (a favorite) showed no rating on any
     of its three search results.
-- **Apple's recommendations are noisy; similar artists is useful.**
+- **Apple's recommendations are broad; similar artists is useful.**
   - `/v1/me/recommendations` returns 20 groups of albums, playlists, and stations, and no
-    songs.
-  - Some groups reflect other listeners on the account: "More Like Sunday Best" gives Justin
-    Bieber and Jason Derulo. Don't use them as evidence. "New Releases for You" is at most a
-    candidate source.
+    songs. The groups range widely (Americana, Power Pop, Hair Metal, 2000s Country, and "More
+    Like Sunday Best" with Justin Bieber and Jason Derulo).
+  - **Don't judge a group by its genre.** The architect first called the pop row noise. Jon
+    corrected that: he likes some of that music, and his taste isn't only Americana. Whether a
+    group is a good source is for the outcomes (kept versus passed) to show, not for Vinyl Fever
+    to assume. Groups are album- and playlist-level, so they're candidate sources, not evidence.
   - The catalog artist view `?views=similar-artists,top-songs` returns 10 per page, with more,
     and the results make sense: John Prine → Guy Clark, Todd Snider, Townes Van Zandt, Steve
-    Earle. It's a candidate source for the outcomes milestone.
+    Earle. It's a candidate source for the outcomes milestone too.
 - **More playlists exist than the doc listed.** Selections exists for **2020–2026**, not
   2021–2026. Replay 2015–2017 and Replay All Time exist too, and the 2018 rule excludes them.
 
