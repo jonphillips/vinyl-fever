@@ -12,7 +12,7 @@ iCloud Drive. The poller runs on Jon's always-on **Intel Mac mini** as a separat
 because the main app targets macOS 27 and the mini stops at macOS 15 Sequoia. Vinyl Fever can run the
 **same poller code** itself, for the laptop as a backup today and for an Apple-silicon mini
 later; a lease makes sure only one Mac polls at a time. `vf-mcp` reads the log, so ChatGPT,
-Claude Code, and Codex can answer "what have I been into lately?". Five slices in five dispatches (S4 added 2026-10-22).
+Claude Code, and Codex can answer "what have I been into lately?". Six slices in six dispatches (S4 and S5 added 2026-10-22).
 No schema.
 
 ## The milestone in one sentence
@@ -145,7 +145,7 @@ Given the previous full list `P` and the current list `C`, both newest first, fi
   catalog play and a library play of the same song count together.
 - Streams from different pollers are merged by time. If two streams' windows overlap (a lease
   race), plays of the same song in overlapping windows count once, and the result says how
-  many were collapsed.
+  many were collapsed. (S5 extends this to any two lines whose windows strictly overlap.)
 
 ## Tool surface (S2, added to `vf-mcp`)
 
@@ -183,6 +183,9 @@ to this week?") a week of log to answer from.
 **Dispatch 5: S4** (added 2026-10-22 from the S3 gate). It touches `VinylFeverListening`, the
 poller app, and both takeover paths, but not `vf-mcp`'s tool surface. So it doesn't collide with
 Taste Intelligence S1 and S2, and Jon picks the order.
+
+**Dispatch 6: S5** (added 2026-10-22 from the S4 gate). It fixes a double count S4's recovery
+can produce on handback, and adds **Poll now**. Same files as S4, so it goes next.
 
 - [x] **S0 — Listening engine (Core, pure; no MusicKit calls, no UI).**
   - A new library target, `VinylFeverListening`, in the `VinylFeverCore` package, so the poller
@@ -466,6 +469,97 @@ Taste Intelligence S1 and S2, and Jon picks the order.
     mini's last fetch, and hand back with a few more. On both Macs, a fetch line appears within a
     minute of the toggle. `recent_listening` shows every song played in both holes, dated to the
     handover window, with no duplicates and no gap.
+  - **Gate, first half (2026-10-22; times ET).** Merged as #119.
+    - **Mini → laptop.** Jon installed the merged app at 6:42 pm and took over at 6:43:40 pm.
+      The laptop's first fetch landed 0.2 s later. It was `none`, `version` 2, with `since` at the
+      mini's 5:35 pm `plays` line. It walked back past the mini's 6:35 pm `none` correctly. No
+      plays were in this hole. `recent_listening` showed the mini's 33 Discover Station plays from
+      4:35–5:35 pm once each, with no gaps.
+    - **A defect, found before the handback.** At that point the laptop's only line in its own
+      tenure was that `none`, which carries no `items`. So the mini's handback would have walked
+      back past it, to the laptop's 11:15 am `baseline` from its *previous* tenure. Replaying the
+      merged poller on copies of Jon's streams, with 4 songs played after the switch, gave
+      `plays` with `newCount` 37. That's the 4 new songs plus all 33 Discover Station plays again.
+      The mini had already logged those 33, and the reader only collapses across pollers, so the
+      log would have counted 66. Fixed in S5.
+    - The architect kickstarted the laptop's agent at 7:27 pm. It logged Jon's 4 Tom Petty plays
+      as an ordinary `plays` line. That gives the laptop an `items` line in its own tenure, so
+      the handback can run safely on S4's code. **Laptop → mini half: owed.**
+
+- [ ] **S5 — Recover from the right list, and Poll now (`VinylFeverListening` + both apps).**
+  *Added 2026-10-22 from the S4 gate.* S4 takes `P` from the old holder's newest line that
+  carries `items`. That's only right if the line is in the old holder's *current* tenure. A
+  recovery that came out `none` writes no `items`. So does a holder that never fetched
+  successfully before handing back. In both cases the walk crosses into an older tenure, and
+  the recovery recounts plays that another line already logged.
+  - **Resolve the last known list.** On the first successful fetch after a takeover (the marker
+    is unchanged from S4):
+    1. Take the newest non-`failed` line in **any** stream, current month and the one before.
+       Normally that's the old holder's. One Mac holds the lease at a time, so that line is the
+       newest known state of the feed. Its `poller` and `fetchedAt` become `since`.
+    2. Walk back through that line's stream, starting at the line itself:
+       - a line with `items` gives `P`;
+       - a line with `since` and no `items` (a recovery that came out `none`) continues the walk
+         in `fetches/<since.poller>/`, at `since.fetchedAt`;
+       - `none` without `since`, and `failed`, are skipped.
+
+       A tenure always starts with a `baseline` or a line carrying `since`, so the walk never
+       crosses into an older tenure. Follow at most 4 hops.
+    3. No `P` (no lines at all, a missing or unreadable target, or more than 4 hops) gives a
+       `baseline` with `since`, as in S4. Its gap starts at `since.fetchedAt`. When there are no
+       lines at all, it starts at the marker's `fallbackSince`.
+    - So `since.fetchedAt` is now the old holder's **newest successful fetch**, not the time of
+      its `items` line. Trailing `none` lines mean the list didn't change. The tighter window
+      also stops a replay just after a handover from colliding with the old holder's earlier
+      window. The format is unchanged: same fields, still `version` 2. Update S4's bullet and the
+      format section to say what `since` means now.
+  - **Reader guard.** Two plays of the same song collapse when they come from **different lines**
+    and their windows **strictly overlap**: one starts before the other ends. That applies
+    whatever the poller. Windows that only touch, like a stream's consecutive fetches, don't
+    collapse. That keeps a song replayed in back-to-back windows at two plays. This catches any
+    future same-Mac overlap, such as a recovery window or a stray double poll, and today's log
+    has none to repair. Update *Reading the log* above.
+  - **Poll now** (Jon, 2026-10-22). It's a button in Settings → Listening History in Vinyl Fever,
+    and in the poller app, shown when this Mac holds the lease and its agent is enabled.
+    - It kickstarts the agent with the existing `ListeningLaunchAgentKickstarter`, never an
+      in-process `pollOnce()`. launchd won't start a second copy of a running job. The
+      architect probed this on 2026-10-22: `kickstart` without `-k` exits 0 and starts nothing
+      new while the job runs. So Poll now can't race the hourly run or a takeover's kickstart.
+    - After the kickstart, refresh the status line when a new fetch line appears, or after 30
+      seconds, whichever is first.
+    - A kickstart failure goes to the existing error line.
+
+  **DoD:**
+  - Poller tests, with synthetic songs shaped like the 2026-10-22 gate:
+    - **Tonight's shape:** the old stream has an 11-item `plays` line, then `none`. The new
+      holder takes over, and its recovery is `none` with `since`. The first Mac takes back with
+      4 songs played since. That gives `plays` with `newCount` 4. `since` is the `none` recovery
+      line, and `ListeningLog` counts the old plays once.
+    - The old holder never fetched in its tenure. `P` comes from the newest line overall, here
+      the new holder's own pre-takeover line, and nothing counts twice.
+    - A two-hop chain of `none` recoveries resolves to the right `P`. A missing target gives a
+      `baseline` and a gap that starts at `since.fetchedAt`.
+    - `since.fetchedAt` is the old holder's newest successful line when its `items` line is
+      older (the mini → laptop shape: `plays`, then `none`).
+  - Reader tests:
+    - two lines from one poller with strictly overlapping windows count a song once and report
+      it as collapsed;
+    - a song in two consecutive windows of one stream still counts twice;
+    - the existing collapse tests pass unchanged. If one relied on touching windows collapsing,
+      the PR says so.
+  - A Vinyl Fever model test: Poll now shows only while this Mac holds the lease, and calls
+    `kickstart` once per press. The poller app's button is checked at the device gate, since that
+    app has no test target.
+  - Replay, read-only, against Jon's streams cut off before the laptop's 7:27 pm `plays` line
+    (23:27:29Z): a mini takeover with 4 synthetic songs above the laptop's list gives 4 plays,
+    and the 33 Discover Station plays count once. The PR reports the counts.
+  - **Device gate (Jon):** install Vinyl Fever, then rebuild and copy the poller to the mini.
+    1. Take over on the laptop with nothing played, so the recovery is `none`.
+    2. Play 2–3 songs, then hand back to the mini.
+    3. The mini's first fetch is `plays` with just those songs, and `recent_listening` shows no
+       duplicates.
+    4. Press **Poll now** on each Mac while it holds the lease. A fetch line appears within a
+       minute.
 
 ## Prerequisites (Jon, not the executor's)
 
