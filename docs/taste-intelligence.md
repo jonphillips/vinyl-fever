@@ -324,13 +324,25 @@ Jon built **VF Note** in Shortcuts. It writes one JSON object per line to
 | `source` | `current-song`, or `shazam` once the Recognize Music fallback exists. |
 | `device` | Shortcuts' device name. |
 
-**Shortcuts details the S2 brief must respect:**
-- **Append a Text action that contains the Dictionary, not the Dictionary itself.** Given a
-  Dictionary, "Append to Text File" saves a new file each time (`notes.jsonl.json`,
-  `notes.jsonl-2.json`, …) instead of appending.
+**Shortcuts details the S2 brief must respect** (worked out 2026-10-22):
+- **The shortcut:** Dictionary → **Get text from Dictionary** → **Append to Text File**
+  (`notes.jsonl` in the Taste Intelligence folder, "Make New Line" on).
+- **`notes.jsonl` must already exist.** Shortcuts doesn't know the `.jsonl` extension. When
+  Append has to *create* the file and the text looks like JSON, it saves `notes.jsonl.json`
+  instead. The next run can't find `notes.jsonl` either, so it saves `notes.jsonl-2.json`, and so
+  on, one file per note. Once `notes.jsonl` exists, Append adds to it. Setup must create the file:
+  an empty file is fine, since the reader skips blank lines. S2's setup steps, and `setup-mac`'s
+  chat role, create it if it's missing.
+- A Text action that holds only the Dictionary variable passes the dictionary through
+  unchanged. Use Get Text from Input instead.
 - Shortcuts writes dates as ISO 8601 in a Dictionary on its own. Format Date isn't needed.
-- "Make New Line" separates entries, but the file has no trailing newline. As with the listening
-  log, the reader tolerates a missing final newline and ignores a partial last line.
+- "Make New Line" puts the newline *before* each appended entry, so the file has no trailing
+  newline. As with the listening log, the reader tolerates a missing final newline, skips blank
+  lines, and ignores a partial last line.
+- Verified 2026-10-22: a note recorded on the iPhone appended as the third line of a
+  Mac-created `notes.jsonl` (Shack, "Natalie's Party", `playCount` 1).
+- Jon switched the reason prompt from Ask for Input to **Dictate Text**. Whether it runs
+  hands-free from CarPlay Siri and the Action button is one of the open probes.
 - iCloud can make conflict copies (`notes 2.jsonl`) when two devices append offline. The reader
   reads every `notes*.jsonl` in the folder and de-duplicates on (`notedAt`, `title`, `artist`).
 - Device names use a curly apostrophe (`Jon’s`), so readers must handle UTF-8.
