@@ -257,6 +257,53 @@ added.
 S1 and S2 both edit `vf-mcp`, so they run one after the other. Where M13 S3 falls relative to
 this is Jon's call.
 
+### S0 results: API and snapshot (architect, 2026-10-22)
+
+Probed with a scratch build of Vinyl Fever (`--probe-get`, the app's own MusicKit authorization)
+and AppleScript against Music.app.
+
+- **New Music is reachable, and its ID is stable.**
+  - The library playlist `p.5pvKi0GQXD` has existed since 2019-02-22, so the ID survives every
+    weekly refresh. Its library `lastModifiedDate` never changes, though.
+  - The catalog form, `GET /v1/catalog/us/playlists/pl.pm-20e9f373919da0805771c118dd5266b7?include=tracks`
+    (`playlistType: personal-mix`, curator "Apple Music for Jon"), carries the real
+    `lastModifiedDate` (2026-10-16T10:04Z, a Friday) and all 25 songs, with catalog IDs and
+    release dates.
+  - **The weekly save uses the catalog route, keyed by that date.**
+- **New Music songs never enter the library; keeps are separate copies.**
+  - Members found in the library snapshot: New Music 0 of 25, Replay 2025 96 of 100, Replay
+    2018 61 of 98, 2025 Selections 130 of 130.
+  - So snapshot v2 stores artist, title, and album text for members that aren't library tracks.
+  - Kept-versus-passed matches on **catalog ID**: 97 of 99 songs in 2026 Selections carry
+    `playParams.catalogId`. `ArtistIdentity` + title text is the fallback.
+  - None of this week's 25 New Music songs are in 2026 Selections yet, so the catalog-ID link is
+    **unverified until Jon keeps one** (see below).
+- **Reading playlist members is cheap.** AppleScript reads the persistent IDs of every member
+  of 65 user playlists and 77 subscription playlists (about 20,090 entries) in **2 s**.
+- **Ratings are readable for songs outside the library, by ID only.**
+  - `GET /v1/me/ratings/songs?ids=…` returned `value: 1` for two favorites found through
+    catalog search. `/v1/me/ratings/library-songs` works the same way.
+  - There's no list endpoint, so Vinyl Fever asks about known IDs: each week's 25 New Music
+    songs, and Selections.
+  - A heart belongs to one catalog release. "Painkillers" (a favorite) showed no rating on any
+    of its three search results.
+- **Apple's recommendations are noisy; similar artists is useful.**
+  - `/v1/me/recommendations` returns 20 groups of albums, playlists, and stations, and no
+    songs.
+  - Some groups reflect other listeners on the account: "More Like Sunday Best" gives Justin
+    Bieber and Jason Derulo. Don't use them as evidence. "New Releases for You" is at most a
+    candidate source.
+  - The catalog artist view `?views=similar-artists,top-songs` returns 10 per page, with more,
+    and the results make sense: John Prine → Guy Clark, Todd Snider, Townes Van Zandt, Steve
+    Earle. It's a candidate source for the outcomes milestone.
+- **More playlists exist than the doc listed.** Selections exists for **2020–2026**, not
+  2021–2026. Replay 2015–2017 and Replay All Time exist too, and the 2018 rule excludes them.
+
+**Still owed to S0 (Jon):**
+- the Shortcuts probes above;
+- **keep one song from this week's New Music into 2026 Selections**, so the architect can
+  confirm the catalog-ID link.
+
 ## Out of scope — with destinations
 
 - **Scores** (affinity, confidence, current interest). → No: examples and evidence instead.
