@@ -3,6 +3,15 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-22 — M13 · Dispatch 5 S4 (`m13/s4-handover-recovery`)
+
+Recover recent plays across poller handovers from the previous holder's stream, record handover
+windows as v2, and show a coverage gap when the old stream cannot be recovered. Both takeover
+surfaces now ask launchd to start the agent after registration, avoiding concurrent in-process
+polls. Listening (35), Core (233), and macOS app (68) tests pass; both performance suites and the
+macOS 15 poller build pass. A read-only replay of the saved 2026-10-22 streams resolves 19 plays
+mini → laptop, then 0 laptop → mini. Jon's S4 device gate remains owed.
+
 ## 2026-10-22 — M16 · Dispatch 4 S3 (`m16/s3-hardening`)
 
 Hardened install process detection and rollback/reopen behavior, moved fresh-Mac setup checks

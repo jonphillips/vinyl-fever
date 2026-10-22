@@ -242,6 +242,44 @@ struct ListeningPollerTests {
     #expect(recovered.since == ListeningSince(poller: oldPoller, fetchedAt: oldFetch.fetchedAt))
   }
 
+  @Test("shared takeover kickstarts after writing the lease and skips registration when enabled")
+  func takeoverKickstartsAfterLeaseWrite() throws {
+    let previous = ListeningLease(poller: UUID(), host: "Mini", takenAt: Date())
+    let poller = UUID()
+    let state = ListeningTakeoverFixture(lease: previous)
+    let store = state.store(poller: poller)
+    var registered = false
+
+    try ListeningTakeover.perform(
+      store: store, poller: poller, host: "Laptop", now: Date(),
+      isAgentEnabled: { true }, register: { registered = true },
+      kickstart: {
+        #expect(state.lease?.poller == poller)
+        #expect(state.marker != nil)
+        state.events.append("kickstart")
+      })
+
+    #expect(!registered)
+    #expect(state.events == ["marker", "lease", "clear-list", "kickstart"])
+  }
+
+  @Test("shared takeover restores the lease and clears the marker when registration fails")
+  func takeoverRegistrationFailureRollsBack() throws {
+    let previous = ListeningLease(poller: UUID(), host: "Mini", takenAt: Date())
+    let poller = UUID()
+    let state = ListeningTakeoverFixture(lease: previous)
+    let store = state.store(poller: poller)
+
+    #expect(throws: ListeningTakeoverFixtureError.registration) {
+      try ListeningTakeover.perform(
+        store: store, poller: poller, host: "Laptop", now: Date(),
+        isAgentEnabled: { false }, register: { throw ListeningTakeoverFixtureError.registration },
+        kickstart: { Issue.record("A failed registration must not kickstart") })
+    }
+    #expect(state.lease == previous)
+    #expect(state.marker == nil)
+  }
+
   @Test("unauthorized and failed fetches are logged without replacing last-list")
   func failedFetchesPreservePreviousList() async throws {
     let folders = try TemporaryListeningFolders()
@@ -301,6 +339,34 @@ struct ListeningPollerTests {
     let formatter = ISO8601DateFormatter()
     return formatter.date(from: value)!
   }
+}
+
+private final class ListeningTakeoverFixture: @unchecked Sendable {
+  var lease: ListeningLease?
+  var marker: ListeningHandoverMarker?
+  var lastList: [ListeningItem]? = [ListeningItem(kind: .song, id: "old", title: "Old", artist: "Artist")]
+  var events: [String] = []
+
+  init(lease: ListeningLease?) {
+    self.lease = lease
+  }
+
+  func store(poller: UUID) -> ListeningStore {
+    ListeningStore(
+      pollerID: { poller }, readLease: { self.lease },
+      writeLease: { self.lease = $0; self.events.append("lease") },
+      readLastList: { self.lastList }, writeLastList: { self.lastList = $0 },
+      clearLastList: { self.lastList = nil; self.events.append("clear-list") },
+      readHandoverMarker: { self.marker },
+      writeHandoverMarker: { self.marker = $0; self.events.append("marker") },
+      clearHandoverMarker: { self.marker = nil },
+      appendFetch: { _ in },
+      listeningFolder: { URL(fileURLWithPath: "/tmp/Listening") })
+  }
+}
+
+private enum ListeningTakeoverFixtureError: Error, Equatable {
+  case registration
 }
 
 private struct TemporaryListeningFolders {

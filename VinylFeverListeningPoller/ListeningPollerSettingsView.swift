@@ -146,22 +146,20 @@ private final class ListeningPollerSettingsModel {
   }
 
   func confirmTakeover() async {
-    guard let poller = pendingTakeoverPoller, let oldLease = pendingLease else { return }
+    guard let poller = pendingTakeoverPoller, pendingLease != nil else { return }
     do {
       let store = ListeningStore.liveValue
-      try ListeningLeaseRules.takeOver(store: store, poller: poller, host: store.hostName(), now: Date())
-      do {
-        try registerAgentIfNeeded()
-      } catch {
-        try? store.writeLease(oldLease)
-        throw error
-      }
-      do {
-        _ = try await ListeningPoller().pollOnce()
-        errorMessage = nil
-      } catch {
-        errorMessage = error.localizedDescription
-      }
+      let service = SMAppService.agent(plistName: agentPlistName)
+      try ListeningTakeover.perform(
+        store: store, poller: poller, host: store.hostName(), now: Date(),
+        isAgentEnabled: { service.status == .enabled || service.status == .requiresApproval },
+        register: { try registerAgentIfNeeded() },
+        kickstart: {
+          try ListeningLaunchAgentKickstarter.kickstart(
+            label: "com.jonphillips.vinylfever.listeningpoller.agent")
+        })
+      serviceStatus = service.status
+      errorMessage = nil
     } catch {
       errorMessage = error.localizedDescription
     }

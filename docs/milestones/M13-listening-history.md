@@ -466,9 +466,6 @@ Taste Intelligence S1 and S2, and Jon picks the order.
     mini's last fetch, and hand back with a few more. On both Macs, a fetch line appears within a
     minute of the toggle. `recent_listening` shows every song played in both holes, dated to the
     handover window, with no duplicates and no gap.
-  - **Implementation status:** executor implementation and synthetic tests pass. A read-only
-    replay against Jon's saved 2026-10-22 streams resolves 19 plays mini → laptop and 0 plays
-    laptop → mini. Jon's device gate remains required before this slice is complete.
 
 ## Prerequisites (Jon, not the executor's)
 

@@ -260,13 +260,17 @@ struct ListeningAgentClient {
   var requiresApproval: @Sendable () -> Bool
   var register: @Sendable () throws -> Void
   var unregister: @Sendable () async throws -> Void
+  var kickstart: @Sendable () throws -> Void
 
   static var liveValue: Self {
     return Self(
       isEnabled: { SMAppService.agent(plistName: "VinylFeverListeningAgent.plist").status == .enabled },
       requiresApproval: { SMAppService.agent(plistName: "VinylFeverListeningAgent.plist").status == .requiresApproval },
       register: { try SMAppService.agent(plistName: "VinylFeverListeningAgent.plist").register() },
-      unregister: { try await SMAppService.agent(plistName: "VinylFeverListeningAgent.plist").unregister() }
+      unregister: { try await SMAppService.agent(plistName: "VinylFeverListeningAgent.plist").unregister() },
+      kickstart: {
+        try ListeningLaunchAgentKickstarter.kickstart(label: "com.jonphillips.vinylfever.listening.agent")
+      }
     )
   }
 }
@@ -277,7 +281,8 @@ extension ListeningAgentClient: TestDependencyKey, DependencyKey {
       isEnabled: { fatalError("Override listeningAgentClient in tests before reading its status.") },
       requiresApproval: { fatalError("Override listeningAgentClient in tests before reading its status.") },
       register: { fatalError("Override listeningAgentClient in tests before registering the agent.") },
-      unregister: { fatalError("Override listeningAgentClient in tests before unregistering the agent.") }
+      unregister: { fatalError("Override listeningAgentClient in tests before unregistering the agent.") },
+      kickstart: { fatalError("Override listeningAgentClient in tests before starting the agent.") }
     )
   }
 }
@@ -295,8 +300,6 @@ final class ListeningPollingSettingsModel {
   @ObservationIgnored @Dependency(\.listeningStore) private var store
   @ObservationIgnored @Dependency(\.listeningAgentClient) private var agent
   @ObservationIgnored @Dependency(\.date) private var date
-  @ObservationIgnored @Dependency(\.recentlyPlayedClient) private var recentlyPlayed
-  @ObservationIgnored @Dependency(\.listeningAuthorizationClient) private var authorization
   private var pendingTakeoverPoller: UUID?
   private var leaseHost: String?
 
@@ -355,7 +358,7 @@ final class ListeningPollingSettingsModel {
         isConfirmingTakeover = true
         return
       }
-      try await activate(poller: poller, oldLease: lease)
+      try await activate()
     } catch {
       errorMessage = error.localizedDescription
     }
@@ -364,27 +367,12 @@ final class ListeningPollingSettingsModel {
   func confirmTakeover() async {
     guard let poller = pendingTakeoverPoller else { return }
     do {
-      let oldLease = try store.readLease()
-      try ListeningLeaseRules.takeOver(store: store, poller: poller, host: store.hostName(), now: date())
-      do {
-        try registerAgentIfNeeded()
-      } catch {
-        if let oldLease { try? store.writeLease(oldLease) }
-        throw error
-      }
-      do {
-        _ = try await withDependencies {
-          $0.listeningStore = store
-          $0.recentlyPlayedClient = recentlyPlayed
-          $0.listeningAuthorizationClient = authorization
-          $0.date = .constant(date())
-        } operation: {
-          try await ListeningPoller().pollOnce()
-        }
-        errorMessage = nil
-      } catch {
-        errorMessage = error.localizedDescription
-      }
+      try ListeningTakeover.perform(
+        store: store, poller: poller, host: store.hostName(), now: date(),
+        isAgentEnabled: { agent.isEnabled() || agent.requiresApproval() },
+        register: { try agent.register() },
+        kickstart: { try agent.kickstart() })
+      errorMessage = nil
     } catch {
       errorMessage = error.localizedDescription
     }
@@ -408,21 +396,7 @@ final class ListeningPollingSettingsModel {
     await refresh()
   }
 
-  private func activate(poller: UUID, oldLease: ListeningLease?) async throws {
-    if let oldLease, oldLease.poller != poller {
-      try ListeningLeaseRules.takeOver(store: store, poller: poller, host: store.hostName(), now: date())
-      try registerAgentIfNeeded()
-      _ = try await withDependencies {
-        $0.listeningStore = store
-        $0.recentlyPlayedClient = recentlyPlayed
-        $0.listeningAuthorizationClient = authorization
-      } operation: {
-        try await ListeningPoller().pollOnce()
-      }
-      errorMessage = nil
-      await refresh()
-      return
-    }
+  private func activate() async throws {
     try registerAgentIfNeeded()
     errorMessage = nil
     await refresh()
