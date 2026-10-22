@@ -382,8 +382,8 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				FDD826AD9DE28A7B0EDD2334 /* VinylFever */,
 				AF45468BFA922AE0119CCC1A /* VinylFeverListeningPoller */,
+				FDD826AD9DE28A7B0EDD2334 /* VinylFever */,
 				D61F076DD1B7CD15209A3DED /* VinylFeverTests */,
 			);
 		};

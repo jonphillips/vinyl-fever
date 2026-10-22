@@ -276,8 +276,9 @@ and AppleScript against Music.app.
   - So snapshot v2 stores artist, title, and album text for members that aren't library tracks.
   - Kept-versus-passed matches on **catalog ID**: 97 of 99 songs in 2026 Selections carry
     `playParams.catalogId`. `ArtistIdentity` + title text is the fallback.
-  - None of this week's 25 New Music songs are in 2026 Selections yet, so the catalog-ID link is
-    **unverified until Jon keeps one** (see below).
+  - **The catalog-ID link is confirmed (2026-10-22).** Jon kept "White Knight" (Cats in Space)
+    from New Music. It's catalog `6815778888` in the personal mix, and its 2026 Selections copy
+    (`i.vg51ZSZaW83`) carries `playParams.catalogId` `6815778888`.
 - **Reading playlist members is cheap.** AppleScript reads the persistent IDs of every member
   of 65 user playlists and 77 subscription playlists (about 20,090 entries) in **2 s**.
 - **Ratings are readable for songs outside the library, by ID only.**
@@ -301,10 +302,57 @@ and AppleScript against Music.app.
 - **More playlists exist than the doc listed.** Selections exists for **2020–2026**, not
   2021–2026. Replay 2015–2017 and Replay All Time exist too, and the 2018 rule excludes them.
 
+### S0 results: VF Note (Jon and the architect, 2026-10-22)
+
+Jon built **VF Note** in Shortcuts. It writes one JSON object per line to
+`iCloud Drive/Vinyl Fever/Taste Intelligence/notes.jsonl`, next to `Listening/`.
+
+**Format `vf-taste-note` v1** (one line; key order isn't fixed):
+
+```json
+{"format":"vf-taste-note","version":1,"notedAt":"2026-10-22T10:30:35-04:00","title":"White Knight","artist":"Cats in Space","album":"White Knight - Single","playCount":0,"releaseDate":"2026-10-16T08:00:00-04:00","duration":"4:42","note":"Has a rock opera vibe","source":"current-song","device":"Jon’s iPhone 17 Pro"}
+```
+
+| Key | Meaning |
+| --- | --- |
+| `notedAt` | When Jon made the note (ISO 8601 with offset). It orders notes and matches a note to a play window. |
+| `title`, `artist`, `album` | Current Song's text. Notes match songs by `ArtistIdentity` + title, and `album` picks the release. |
+| `playCount` | The count when the note was made. 0 means a first hearing: the count only rises after a song finishes. |
+| `releaseDate` | Full ISO date-time from Shortcuts; readers use the date part. |
+| `duration` | `m:ss` text, as Shortcuts displays it. |
+| `note` | Jon's spoken or typed reason ("Ask for Input"). May be empty. |
+| `source` | `current-song`, or `shazam` once the Recognize Music fallback exists. |
+| `device` | Shortcuts' device name. |
+
+**Shortcuts details the S2 brief must respect** (worked out 2026-10-22):
+- **The shortcut:** Dictionary → **Get text from Dictionary** → **Append to Text File**
+  (`notes.jsonl` in the Taste Intelligence folder, "Make New Line" on).
+- **`notes.jsonl` must already exist.** Shortcuts doesn't know the `.jsonl` extension. When
+  Append has to *create* the file and the text looks like JSON, it saves `notes.jsonl.json`
+  instead. The next run can't find `notes.jsonl` either, so it saves `notes.jsonl-2.json`, and so
+  on, one file per note. Once `notes.jsonl` exists, Append adds to it. Setup must create the file:
+  an empty file is fine, since the reader skips blank lines. S2's setup steps, and `setup-mac`'s
+  chat role, create it if it's missing.
+- A Text action that holds only the Dictionary variable passes the dictionary through
+  unchanged. Use Get Text from Input instead.
+- Shortcuts writes dates as ISO 8601 in a Dictionary on its own. Format Date isn't needed.
+- "Make New Line" puts the newline *before* each appended entry, so the file has no trailing
+  newline. As with the listening log, the reader tolerates a missing final newline, skips blank
+  lines, and ignores a partial last line.
+- Verified 2026-10-22: a note recorded on the iPhone appended as the third line of a
+  Mac-created `notes.jsonl` (Shack, "Natalie's Party", `playCount` 1).
+- Jon switched the reason prompt from Ask for Input to **Dictate Text**. Whether it runs
+  hands-free from CarPlay Siri and the Action button is one of the open probes.
+- iCloud can make conflict copies (`notes 2.jsonl`) when two devices append offline. The reader
+  reads every `notes*.jsonl` in the folder and de-duplicates on (`notedAt`, `title`, `artist`).
+- Device names use a curly apostrophe (`Jon’s`), so readers must handle UTF-8.
+
 **Still owed to S0 (Jon):**
-- the Shortcuts probes above;
-- **keep one song from this week's New Music into 2026 Selections**, so the architect can
-  confirm the catalog-ID link.
+- the remaining Shortcuts probes above (Recognize Music at home and in the car; VF Note from
+  CarPlay Siri and the Action button while locked; "add this to my 2026 Selections" on a first
+  hearing).
+- Discovery Station's Current Song behaves differently from playlists. Jon is working that out
+  in the shortcut.
 
 ## Out of scope — with destinations
 
