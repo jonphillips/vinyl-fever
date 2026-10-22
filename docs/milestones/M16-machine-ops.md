@@ -185,7 +185,10 @@ laptop).
   (scripts + app + tests).** *Amended 2026-10-22, before dispatch: the stale-build items below.
   Right after `install-vinyl-fever` succeeded, Jon opened "Vinyl Fever" from Spotlight or the
   Dock and got the Oct 21 Xcode build in DerivedData, from before S3 and S0. It had no polling
-  toggle, and it created an empty `SQLiteData.db`.*
+  toggle, and it created an empty `SQLiteData.db`. Also amended 2026-10-22: stop tracking the
+  generated Xcode project. Every `xcodegen generate` (the installer runs it twice) left a
+  target-order diff in `project.pbxproj`, which stopped the executor's "go" on an unclean
+  tree.*
   - **The installer refuses when it can't tell whether Vinyl Fever is running.**
     - Today, `running_count` in `scripts/install-vinyl-fever` prints nothing when Automation
       access to System Events is denied. `[[ "" -gt 0 ]]` is false, so the install goes ahead
@@ -217,6 +220,37 @@ laptop).
     - after a passing smoke test, the new build;
     - after a rollback, the restored build.
     The report gains a "Reopened" row. If nothing was running, it opens nothing.
+  - **Stop tracking the generated Xcode project; keep the dependency pins.**
+    - **Why:** `xcodegen` 2.46 writes the targets in `project.yml` order (poller first), but every
+      committed `project.pbxproj` from #85 to #105 had VinylFever first, almost certainly saved by
+      Xcode. So any regeneration dirtied the checkout. #114 committed `xcodegen`'s order by
+      accident; that fixed this one direction but not the cause. #100's scheme flips were the
+      same problem.
+    - **Untrack** with `git rm --cached`, and add to `.gitignore`:
+      - `VinylFever.xcodeproj/project.pbxproj`
+      - `VinylFever.xcodeproj/xcshareddata/xcschemes/`
+      - `VinylFever.xcodeproj/project.xcworkspace/contents.xcworkspacedata`
+    - **Keep tracking `VinylFever.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`.**
+      It pins the Swift package versions; losing it would make builds resolve new versions
+      silently. Verify that `xcodegen generate` leaves it in place and unchanged, including on a
+      fresh clone where the project folder holds only that file.
+    - **`.githooks/xcodegen-sync`:** if `VinylFever.xcodeproj/project.pbxproj` is missing, run
+      `xcodegen generate` *without* `--use-cache`, since the cache could skip it. Remove the
+      "tracked project changed" warning, which no longer applies. Keep `--use-cache`
+      otherwise.
+    - **`setup-mac`, build role:** check `git config core.hooksPath` equals `.githooks`;
+      `--apply` sets it. Also check that `VinylFever.xcodeproj/project.pbxproj` exists;
+      `--apply` runs `xcodegen generate`.
+    - **Docs:**
+      - `README.md` and `docs/verification.md`: the project is generated and never committed, so
+        run `xcodegen generate` after cloning (the hooks do it after checkout, pull, and rebase).
+      - Setup guide, Build Mac: add `git config core.hooksPath .githooks` before the first
+        `xcodegen generate`.
+      - `scripts/README.md` notes the same.
+    - **The PR description warns** that pulling it deletes the tracked project files from every
+      existing checkout. The post-merge hook regenerates them where hooks are enabled. Elsewhere,
+      run `xcodegen generate` once. That includes the jon-platform workspace, which opens
+      `vinyl-fever/VinylFever.xcodeproj`.
   - **Vinyl Fever warns when it's an older copy than the installed one.**
     - **When:** at launch, before the window opens and before the database. Only in the `.live`
       context: never under tests or previews, and never on the `--poll-listening` path.
@@ -247,6 +281,13 @@ laptop).
       the Automation message, and `/Applications/VinylFever.app` is unchanged.
     - A normal install still passes.
     - `setup-mac --role build` reports System Events access as `passed`.
+    - **Untracked project:**
+      - After `xcodegen generate`, `scripts/install-vinyl-fever`, and `scripts/build-listening-poller`,
+        `git status` is clean.
+      - A fresh clone (`git clone` into a scratch folder with hooks enabled, plus the jon-platform
+        sibling) generates the project on checkout and builds.
+      - `Package.resolved` is unchanged in both.
+      - `setup-mac --role build` reports the hooks path and the project as `passed`.
     - With Vinyl Fever open, `install-vinyl-fever` quits it, installs, and reopens the
       `/Applications` copy (`ps` shows the `/Applications` path).
   - **Stale-build check tests:** same path → `.current`; installed app missing → `.current`;
