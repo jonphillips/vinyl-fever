@@ -201,6 +201,16 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   **S0 merged as #108, and its laptop gate passed (2026-10-21).** Jon moved the empty
   post-gate `SQLiteData.db` to the Trash and kept `SQLiteData.db.moved-to-VinylFever` for now.
   There's no new Mac mini on order, so S2's gate is the laptop plus the Intel mini.
+  **S1 (#110) and S2 (#111) merged 2026-10-21, and their laptop gates passed.** M16 closes when
+  Jon's Intel mini poll-role gate passes.
+- **The installer assumes nothing is running when System Events access is denied** (from the
+  #110 review, 2026-10-21). `install-vinyl-fever` asks System Events how many Vinyl Fever
+  processes are running. If Automation access to System Events is denied (a fresh Mac's first
+  run, with the prompt declined), `osascript` prints nothing, `[[ "" -gt 0 ]]` is false, and the
+  install proceeds as if nothing were running. It then swaps out an open app's bundle and deletes
+  it. **Recommendation:** have the installer treat non-numeric output as an error ("allow
+  Automation for System Events, or quit Vinyl Fever first"), and have `setup-mac` report the
+  grant. A small fix for the next dispatch that touches `scripts/`.
 - **Listening handover hole** (from the #105 review, 2026-10-21). On a lease handover, plays
   between the old holder's last fetch and the new holder's baseline are absorbed by the baseline.
   `coverage` doesn't report that window as a gap, which conflicts with M13's "gaps and failures
