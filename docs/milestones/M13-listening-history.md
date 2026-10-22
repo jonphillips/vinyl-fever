@@ -12,7 +12,7 @@ iCloud Drive. The poller runs on Jon's always-on **Intel Mac mini** as a separat
 because the main app targets macOS 27 and the mini stops at macOS 15 Sequoia. Vinyl Fever can run the
 **same poller code** itself, for the laptop as a backup today and for an Apple-silicon mini
 later; a lease makes sure only one Mac polls at a time. `vf-mcp` reads the log, so ChatGPT,
-Claude Code, and Codex can answer "what have I been into lately?". Four slices in four dispatches.
+Claude Code, and Codex can answer "what have I been into lately?". Five slices in five dispatches (S4 added 2026-10-22).
 No schema.
 
 ## The milestone in one sentence
@@ -176,6 +176,10 @@ between S1 and S2**, and **M14 S1 between S2 and S3** (M14 Decision 3, amended 2
 [M15](M15-artist-identity.md) S0 and S1 also run between S2 and S3, around M14 S1. So
 the dispatch after S1 is M14 S0, not S2. That gives S2's iPad gate ("what have I been listening
 to this week?") a week of log to answer from.
+
+**Dispatch 5: S4** (added 2026-10-22 from the S3 gate). It touches `VinylFeverListening`, the
+poller app, and both takeover paths, but not `vf-mcp`'s tool surface. So it doesn't collide with
+Taste Intelligence S1 and S2, and Jon picks the order.
 
 - [x] **S0 — Listening engine (Core, pure; no MusicKit calls, no UI).**
   - A new library target, `VinylFeverListening`, in the `VinylFeverCore` package, so the poller
@@ -402,6 +406,63 @@ to this week?") a week of log to answer from.
       plays, and the newest play is the mini's 10:35 am one. Coverage reads continuous, as the DoD
       asks, but that's the problem: it hides the 19 lost plays.
     - The previous holder wrote nothing while it didn't hold the lease, in both directions.
+
+- [ ] **S4 — Handover recovery (`VinylFeverListening` + both apps).** *Added 2026-10-22 from the
+  S3 gate.* Today a takeover clears the new holder's last list, so its first fetch is a
+  `baseline` that absorbs every play since the old holder's last fetch. Nothing reports the loss.
+  The mini → laptop handover lost 19 plays that way. Also, a takeover on a Mac whose agent is
+  already registered (the mini's poller app) waits for the next hourly run, so the hole stretched
+  to 80 minutes. S4 recovers those plays and shortens the wait. It stays at macOS 15, like the
+  rest of the package (Decision 2).
+  - **Remember who held the lease.** `ListeningLeaseRules.takeOver` still clears `last-list.json`.
+    It also saves the previous lease's `poller` locally, next to it, as a one-time handover
+    marker. The marker is local state, never synced.
+  - **Diff against the old holder's newest list.** On the first fetch after a takeover, read the
+    previous holder's stream (`fetches/<old poller>/`, the current month, then the one before).
+    Take its newest line that carries `items` (`baseline`, `plays`, or `gap`). Those items are
+    the head of the old holder's list when it last fetched: the full list for a `baseline`, and
+    the new plays plus up to 10 items of overlap evidence for `plays`. Run the existing
+    `ListeningDiff` with that head as `P`. Comparing over up to 10 items is all the diff needs.
+    - Overlap found: write a `plays` line (or `none` when `k == 0`) carrying
+      `"since":{"poller":"<old uuid>","fetchedAt":"<that line's fetchedAt>"}`. Its plays are
+      dated to the window (`since.fetchedAt`, `fetchedAt`].
+    - No overlap within the page cap: a `gap` line with `since`, as for any other `gap`.
+    - No usable old line (no stream, unreadable, or no `items` line in two months): a `baseline`,
+      as today. `coverage` reports the window from the old holder's last fetch to this baseline
+      as a gap, so the loss is loud.
+    - Either way, the full list fetched becomes the new `last-list.json`, and the marker is
+      deleted.
+    - If iCloud hasn't synced the old holder's newest line yet, the diff starts from an older
+      one. Its window then overlaps the old holder's, and the reader's existing collapse rule
+      counts those plays once.
+  - **Format:** `since` is new. A line that carries it has `"version":2`; every other line stays
+    at 1, so an older reader keeps working until a handover happens. Readers accept 1 and 2.
+    Update the format section above in the same PR.
+  - **Fetch right after a takeover.** Both takeover paths (Vinyl Fever's Settings toggle and
+    the poller app's) run one poll right after writing the lease, rather than waiting for the
+    agent's next run. The executor chooses how: the in-process `pollOnce()` or a
+    `launchctl kickstart` of the agent.
+
+  **DoD:**
+  - Model tests, with fixtures shaped like the 2026-10-22 gate but using synthetic songs:
+    - an 11-item `plays` head (1 new + 10 evidence) and a 173-item current list, with 19 songs
+      above the old head, 12 of them replays from deeper in the list → 19 plays, dated from the
+      old line's `fetchedAt`;
+    - an old `baseline` head equal to the current list → `none` with `since`;
+    - the old holder's newest line is `none` → walk back to its last `items` line;
+    - no old stream → `baseline` and a reported gap;
+    - a stale old head (the newest old line not yet synced) → the overlap collapses and nothing
+      counts twice;
+    - the marker is used once and cleared; a v2 line round-trips; a version 3 line is still rejected loudly.
+  - A takeover test shows a poll runs right after the lease is written, in both apps' models.
+  - Replaying the diff against the real 2026-10-22 streams gave 19 and then 0 (architect,
+    2026-10-22). The executor reruns that against Jon's log, read-only, and reports the counts.
+  - **Device gate (Jon):** install Vinyl Fever first, then rebuild the poller with
+    `scripts/build-listening-poller` and copy it to the mini, so the reader understands v2
+    before the mini writes it. Then take over on the laptop with a few songs played since the
+    mini's last fetch, and hand back with a few more. On both Macs, a fetch line appears within a
+    minute of the toggle. `recent_listening` shows every song played in both holes, dated to the
+    handover window, with no duplicates and no gap.
 
 ## Prerequisites (Jon, not the executor's)
 

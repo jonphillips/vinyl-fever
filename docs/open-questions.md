@@ -224,7 +224,8 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   not one. **Recommendation:** have the new holder diff its first fetch against the old holder's
   last list, and log what it finds as plays. That's exact and recovers all 19; reporting the
   window as a gap would only flag the loss. Fetching right at takeover would shorten the hole
-  too, but it doesn't close it. A small slice for whenever M13 next gets work.
+  too, but it doesn't close it. **Planned as M13 S4** (handover recovery), which does both, with
+  the gap report as the fallback when the old list can't be read.
 - **An idle listening agent can't be stopped on its own** (from the #105 review). While another
   Mac holds the lease, Settings shows this Mac's toggle as off, so the only way to unregister its
   idle agent is to take the lease and then turn polling off. The idle agent's hourly run skips
