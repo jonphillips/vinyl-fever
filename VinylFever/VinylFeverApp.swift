@@ -76,6 +76,19 @@ private func openInstalledCopyIfRunningBuildIsStale() async -> Bool {
   alert.buttons.first?.keyEquivalent = "\r"
   guard alert.runModal() == .alertFirstButtonReturn else { return false }
 
+  let installedPath = installedURL.resolvingSymlinksInPath().standardizedFileURL
+  let bundleIdentifier = Bundle.main.bundleIdentifier ?? "com.jonphillips.vinylfever"
+  let currentApplication = NSRunningApplication.current
+  if let installedApplication = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
+    .first(where: {
+      !$0.isEqual(currentApplication)
+        && $0.bundleURL?.resolvingSymlinksInPath().standardizedFileURL == installedPath
+    })
+  {
+    _ = installedApplication.activate(options: [])
+    return true
+  }
+
   let configuration = NSWorkspace.OpenConfiguration()
   configuration.createsNewApplicationInstance = true
   do {

@@ -11,9 +11,10 @@ Added focused stale-build bundle-date tests and kept timing checks opt-in. Shell
 Listening suites (normal and perf), macOS app tests, the full install/MCP smoke run, and
 `build-listening-poller` passed. The generated-project checks passed with XcodeGen available;
 the stripped-PATH run reached its final report and correctly reported missing prerequisites.
-The stale-copy alert interaction remains owed to Jon on the laptop; LaunchServices would not
-open the temporary copied bundle (`-10827`). Existing M13 S2, M13 S3, and M16 S2 device gates
-also remain owed. `NEXT_UP.md` has no queued dispatch.
+The stale-copy alert interactions (including with the installed copy already running) remain owed
+to Jon on the laptop; LaunchServices would not open the temporary copied bundle (`-10827`). The
+temporary test copy and process were removed. Existing M13 S2, M13 S3, and M16 S2 device gates also
+remain owed. `NEXT_UP.md` has no queued dispatch.
 
 ## 2026-10-21 — M16 · Dispatch 3 S2 (`m16/s2-setup-mac`)
 

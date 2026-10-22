@@ -266,7 +266,8 @@ laptop).
     - **If it's older**, show an alert: "This copy of Vinyl Fever was built <date>, and the one in
       Applications was built <date>. Open the installed copy?" The buttons are **Open Installed
       Copy** (the default) and **Keep This Copy**.
-      - **Open Installed Copy** starts `/Applications/VinylFever.app` as a new instance
+      - **Open Installed Copy** activates the already-running `/Applications/VinylFever.app` copy
+        and exits, if one is running. Otherwise it starts the installed copy as a new instance
         (`NSWorkspace.openApplication`, `createsNewApplicationInstance`), then exits. If S0's
         duplicate-copy guard is relevant, the new instance applies it.
       - **Keep This Copy** continues as today. A newer Xcode build never sees the alert, so
@@ -294,9 +295,12 @@ laptop).
     running copy newer, or older by 60 s or less → `.current`; older by more than 60 s →
     `.olderThanInstalled` with the installed date.
   - **Jon's check (laptop):** copy the installed app somewhere else and set its `Contents/MacOS`
-    dates back a day with `touch -t`. Open the copy: the alert appears, and **Open Installed
-    Copy** leaves only the `/Applications` copy running. Open it again and choose **Keep This
-    Copy**: it runs normally.
+    dates back a day with `touch -t`. Open the copy: the alert appears. With no installed copy
+    already running, choose **Open Installed Copy** and confirm the installed copy starts. Then
+    open the stale copy again while `/Applications/VinylFever.app` is already running and choose
+    **Open Installed Copy**. Confirm the same `/Applications` PID is frontmost, no second
+    installed instance starts, and the stale copy exits. Finally, open the stale copy again and
+    choose **Keep This Copy**; it runs normally.
 
 ## Constants register (starting values)
 
