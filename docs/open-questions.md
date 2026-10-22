@@ -217,9 +217,14 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
 - **Listening handover hole** (from the #105 review, 2026-10-21). On a lease handover, plays
   between the old holder's last fetch and the new holder's baseline are absorbed by the baseline.
   `coverage` doesn't report that window as a gap, which conflicts with M13's "gaps and failures
-  are loud". It's up to one poll interval (an hour) per handover. **Recommendation:** measure it
-  at the M13 S3 gate. Then either report the window as a gap in `coverage` (cheap), or have the
-  new holder diff against the old holder's last list (exact, but it reads another Mac's stream).
+  are loud". **Measured at the M13 S3 gate (2026-10-22):** the mini → laptop hole was 40 minutes
+  and absorbed 19 real plays (Jon was listening and skipping); `coverage` showed no gap. The
+  laptop → mini hole was 80 minutes with no plays lost. The poller app doesn't fetch when it
+  takes the lease; it waits for its next hourly run. So a hole can approach two poll intervals,
+  not one. **Recommendation:** have the new holder diff its first fetch against the old holder's
+  last list, and log what it finds as plays. That's exact and recovers all 19; reporting the
+  window as a gap would only flag the loss. Fetching right at takeover would shorten the hole
+  too, but it doesn't close it. A small slice for whenever M13 next gets work.
 - **An idle listening agent can't be stopped on its own** (from the #105 review). While another
   Mac holds the lease, Settings shows this Mac's toggle as off, so the only way to unregister its
   idle agent is to take the lease and then turn polling off. The idle agent's hourly run skips

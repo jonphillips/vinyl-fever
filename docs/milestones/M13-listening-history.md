@@ -369,7 +369,8 @@ to this week?") a week of log to answer from.
   - **Device gate:** ChatGPT on the iPad answers "what have I been listening to this week?" and
     Jon agrees it's right.
 
-- [x] **S3 — The same poller inside Vinyl Fever (app; Apple silicon, macOS 27).** Implementation complete; the laptop↔mini device gate remains owed.
+- [x] **S3 — The same poller inside Vinyl Fever (app; Apple silicon, macOS 27).** Implementation complete; the laptop↔mini device gate passed 2026-10-22, and it measured
+  a real handover hole (see below).
   - `VinylFever --poll-listening` runs the S1 headless path. A small custom entry point checks
     the argument before starting the SwiftUI app.
   - The app bundles its own agent plist and registers it with `SMAppService`, as in S1. It uses
@@ -389,6 +390,18 @@ to this week?") a week of log to answer from.
     `recent_listening` shows continuous coverage across both handovers, with no duplicate
     plays. Note how long each handover's hole was (`open-questions.md`, *Listening handover
     hole*).
+  - **Gate result (2026-10-22; times ET):**
+    - **Mini → laptop.** The mini's last fetch was 10:35 am. The laptop took over and fetched its
+      `baseline` at 11:15 am (173 items, 6 pages), then `none` at 12:15 pm. Hole: 40 minutes.
+      Jon was playing (and skipping) through it, so 19 plays sat above the mini's last-seen
+      song, and the baseline absorbed all of them. Seven were songs the log had never seen.
+    - **Laptop → mini.** The mini took the lease back at 12:43 pm but didn't fetch until its next
+      hourly run, a `baseline` at 1:35 pm. Hole: 80 minutes, from the laptop's last fetch. No
+      plays were lost: the mini's baseline started with the same song as the laptop's.
+    - `recent_listening` afterward: polling Mac "Jon’s Mac mini (2)", `gaps` empty, no duplicate
+      plays, and the newest play is the mini's 10:35 am one. Coverage reads continuous, as the DoD
+      asks, but that's the problem: it hides the 19 lost plays.
+    - The previous holder wrote nothing while it didn't hold the lease, in both directions.
 
 ## Prerequisites (Jon, not the executor's)
 
