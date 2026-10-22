@@ -146,10 +146,16 @@ public struct ListeningLog: Sendable {
       for fetch in ordered {
         switch fetch.outcome {
         case .baseline, .none:
+          if fetch.outcome == .baseline, let since = fetch.since, since.fetchedAt < fetch.fetchedAt {
+            gaps.append(ListeningCoverageGap(
+              poller: fetch.poller, host: fetch.host, outcome: .gap,
+              windowStart: since.fetchedAt, windowEnd: fetch.fetchedAt,
+              detail: "The previous poller's feed could not be recovered after handover."))
+          }
           lastSuccessfulFetch = fetch.fetchedAt
           hasSuccessfulFetch = true
         case .plays:
-          let start = lastSuccessfulFetch ?? fetch.fetchedAt
+          let start = fetch.since?.fetchedAt ?? lastSuccessfulFetch ?? fetch.fetchedAt
           for item in fetch.items.prefix(max(0, fetch.newCount)) {
             allPlays.append(ListeningPlay(
               item: item, windowStart: start, windowEnd: fetch.fetchedAt, poller: fetch.poller))
@@ -157,14 +163,14 @@ public struct ListeningLog: Sendable {
           lastSuccessfulFetch = fetch.fetchedAt
           hasSuccessfulFetch = true
         case .gap:
-          let start = lastSuccessfulFetch ?? fetch.fetchedAt
+          let start = fetch.since?.fetchedAt ?? lastSuccessfulFetch ?? fetch.fetchedAt
           for item in fetch.items {
             allPlays.append(ListeningPlay(
               item: item, windowStart: start, windowEnd: fetch.fetchedAt, poller: fetch.poller))
           }
           gaps.append(ListeningCoverageGap(
             poller: fetch.poller, host: fetch.host, outcome: .gap,
-            windowStart: lastSuccessfulFetch, windowEnd: fetch.fetchedAt,
+            windowStart: fetch.since?.fetchedAt ?? lastSuccessfulFetch, windowEnd: fetch.fetchedAt,
             detail: "The previous feed did not overlap within the page cap."))
           lastSuccessfulFetch = fetch.fetchedAt
           hasSuccessfulFetch = true

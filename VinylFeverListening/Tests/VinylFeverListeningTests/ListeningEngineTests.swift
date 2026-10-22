@@ -10,7 +10,7 @@ struct ListeningEngineTests {
   private let secondPoller = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
   private var t0: Date { date("2026-10-17T10:00:00Z") }
 
-  @Test("JSONL codec round-trips records, ignores a trailing partial line, and rejects newer versions")
+  @Test("JSONL codec round-trips v1 and handover v2 records, ignores partial lines, and rejects v3")
   func codec() throws {
     let fetch = ListeningFetch(
       poller: poller, host: "Mini", fetchedAt: date("2026-10-17T11:00:00.125Z"),
@@ -27,13 +27,63 @@ struct ListeningEngineTests {
     let partial = Data(#"{"format":"vf-listening-fetch","version":1"#.utf8)
     #expect(try ListeningLogCodec.decodeJSONL(encoded + partial) == [fetch])
 
-    let future = Data(#"{"format":"vf-listening-fetch","version":2}"#.utf8)
+    let since = ListeningSince(poller: secondPoller, fetchedAt: t0)
+    let handover = ListeningFetch(
+      poller: poller, host: "Laptop", fetchedAt: t0.addingTimeInterval(60), outcome: .plays,
+      newCount: 1, pagesRead: 1, items: [item("handover")], since: since)
+    let handoverData = try ListeningLogCodec.encode(handover)
+    #expect(String(decoding: handoverData, as: UTF8.self).contains("\"version\":2"))
+    #expect(try ListeningLogCodec.decodeJSONL(handoverData) == [handover])
+
+    let future = Data(#"{"format":"vf-listening-fetch","version":3}"#.utf8)
     do {
       _ = try ListeningLogCodec.decodeJSONL(future + Data("\n".utf8))
       Issue.record("Expected newer-version error")
     } catch let error as ListeningLogCodecError {
-      #expect(error == .newerVersion(2))
+      #expect(error == .newerVersion(3))
     }
+  }
+
+  @Test("handover plays use the old fetch window and an unrecoverable baseline reports a gap")
+  func handoverWindowsAndGap() {
+    let oldFetchAt = t0.addingTimeInterval(-900)
+    let handoverAt = t0
+    let handoverPoller = UUID()
+    let recovered = ListeningFetch(
+      poller: secondPoller, host: "Laptop", fetchedAt: handoverAt, outcome: .plays,
+      newCount: 1, pagesRead: 1, items: [item("recovered")],
+      since: ListeningSince(poller: poller, fetchedAt: oldFetchAt))
+    let recoveredLog = ListeningLog(
+      streams: [[recovered]], now: handoverAt, identity: .empty)
+    #expect(recoveredLog.plays.first?.windowStart == oldFetchAt)
+
+    let baseline = ListeningFetch(
+      poller: handoverPoller, host: "Laptop", fetchedAt: handoverAt, outcome: .baseline,
+      pagesRead: 1, items: [item("baseline")],
+      since: ListeningSince(poller: poller, fetchedAt: oldFetchAt))
+    let baselineLog = ListeningLog(streams: [[baseline]], now: handoverAt)
+    #expect(baselineLog.coverage.gaps.count == 1)
+    #expect(baselineLog.coverage.gaps.first?.windowStart == oldFetchAt)
+    #expect(baselineLog.coverage.gaps.first?.outcome == .gap)
+  }
+
+  @Test("a stale handover head collapses an overlap when the old stream arrives later")
+  func staleHandoverHeadCollapsesOverlap() {
+    let oldBaseline = ListeningFetch(
+      poller: poller, host: "Mini", fetchedAt: t0, outcome: .baseline,
+      pagesRead: 1, items: [item("anchor")])
+    let replay = item("same-song")
+    let oldPlay = ListeningFetch(
+      poller: poller, host: "Mini", fetchedAt: t0.addingTimeInterval(60), outcome: .plays,
+      newCount: 1, pagesRead: 1, items: [replay, item("anchor")])
+    let handoverPlay = ListeningFetch(
+      poller: secondPoller, host: "Laptop", fetchedAt: t0.addingTimeInterval(120), outcome: .plays,
+      newCount: 1, pagesRead: 1, items: [replay],
+      since: ListeningSince(poller: poller, fetchedAt: oldBaseline.fetchedAt))
+
+    let log = ListeningLog(streams: [[oldBaseline, oldPlay], [handoverPlay]], now: t0.addingTimeInterval(120))
+    #expect(log.plays.filter { $0.item.id == "same-song" }.count == 1)
+    #expect(log.coverage.collapsedOverlappingPlays == 1)
   }
 
   @Test("diff recognizes front additions, moved replays, and unchanged feeds")

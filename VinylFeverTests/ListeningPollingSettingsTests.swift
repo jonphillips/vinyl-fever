@@ -51,6 +51,8 @@ struct ListeningPollingSettingsTests {
     #expect(state.clearLastListCount == 1)
     #expect(agentState.registerCount == 0)
     #expect(model.pollingEnabled)
+    #expect(agentState.kickstartCount == 1)
+    #expect(state.fetches.count == 1)
 
     await model.disablePolling()
 
@@ -97,6 +99,7 @@ private final class ListeningAgentState: @unchecked Sendable {
   var isEnabled: Bool
   var requiresApproval = false
   var registerCount = 0
+  var kickstartCount = 0
   var didUnregister = false
 
   init(isEnabled: Bool) {
@@ -108,7 +111,8 @@ private final class ListeningAgentState: @unchecked Sendable {
       isEnabled: { self.isEnabled },
       requiresApproval: { self.requiresApproval },
       register: { self.registerCount += 1; self.isEnabled = true },
-      unregister: { self.didUnregister = true; self.isEnabled = false }
+      unregister: { self.didUnregister = true; self.isEnabled = false },
+      kickstart: { self.kickstartCount += 1 }
     )
   }
 }

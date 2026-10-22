@@ -40,7 +40,7 @@ public struct ListeningIdentity: Codable, Equatable, Hashable, Sendable {
 
 public struct ListeningFetch: Codable, Equatable, Sendable {
   public static let formatName = "vf-listening-fetch"
-  public static let currentVersion = 1
+  public static let currentVersion = 2
 
   public enum Outcome: String, Codable, Sendable {
     case baseline
@@ -59,14 +59,16 @@ public struct ListeningFetch: Codable, Equatable, Sendable {
   public var newCount: Int
   public var pagesRead: Int
   public var items: [ListeningItem]
+  public var since: ListeningSince?
   public var error: String?
 
   public init(
     poller: UUID, host: String, fetchedAt: Date, outcome: Outcome, newCount: Int = 0,
-    pagesRead: Int, items: [ListeningItem] = [], error: String? = nil
+    pagesRead: Int, items: [ListeningItem] = [], since: ListeningSince? = nil,
+    error: String? = nil
   ) {
     self.format = Self.formatName
-    self.version = Self.currentVersion
+    self.version = since == nil ? 1 : 2
     self.poller = poller
     self.host = host
     self.fetchedAt = fetchedAt
@@ -74,11 +76,12 @@ public struct ListeningFetch: Codable, Equatable, Sendable {
     self.newCount = newCount
     self.pagesRead = pagesRead
     self.items = items
+    self.since = since
     self.error = error
   }
 
   private enum CodingKeys: String, CodingKey {
-    case format, version, poller, host, fetchedAt, outcome, newCount, pagesRead, items, error
+    case format, version, poller, host, fetchedAt, outcome, newCount, pagesRead, items, since, error
   }
 
   public init(from decoder: Decoder) throws {
@@ -92,6 +95,7 @@ public struct ListeningFetch: Codable, Equatable, Sendable {
     newCount = try values.decodeIfPresent(Int.self, forKey: .newCount) ?? 0
     pagesRead = try values.decodeIfPresent(Int.self, forKey: .pagesRead) ?? 0
     items = try values.decodeIfPresent([ListeningItem].self, forKey: .items) ?? []
+    since = try values.decodeIfPresent(ListeningSince.self, forKey: .since)
     error = try values.decodeIfPresent(String.self, forKey: .error)
   }
 
@@ -105,6 +109,7 @@ public struct ListeningFetch: Codable, Equatable, Sendable {
     try values.encode(outcome, forKey: .outcome)
     try values.encode(newCount, forKey: .newCount)
     try values.encode(pagesRead, forKey: .pagesRead)
+    try values.encodeIfPresent(since, forKey: .since)
     switch outcome {
     case .baseline, .plays, .gap:
       try values.encode(items, forKey: .items)
@@ -114,6 +119,26 @@ public struct ListeningFetch: Codable, Equatable, Sendable {
     if outcome == .failed {
       try values.encodeIfPresent(error, forKey: .error)
     }
+  }
+}
+
+public struct ListeningSince: Codable, Equatable, Sendable {
+  public var poller: UUID
+  public var fetchedAt: Date
+
+  public init(poller: UUID, fetchedAt: Date) {
+    self.poller = poller
+    self.fetchedAt = fetchedAt
+  }
+}
+
+public struct ListeningHandoverMarker: Codable, Equatable, Sendable {
+  public var previousPoller: UUID
+  public var fallbackSince: Date
+
+  public init(previousPoller: UUID, fallbackSince: Date) {
+    self.previousPoller = previousPoller
+    self.fallbackSince = fallbackSince
   }
 }
 

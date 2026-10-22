@@ -33,6 +33,21 @@ extension ListeningStore {
       readLastList: { try ListeningLocalState(folder: localFolder).lastList() },
       writeLastList: { items in try ListeningLocalState(folder: localFolder).writeLastList(items) },
       clearLastList: { try ListeningLocalState(folder: localFolder).clearLastList() },
+      readHandoverMarker: { try ListeningLocalState(folder: localFolder).handoverMarker() },
+      writeHandoverMarker: { marker in try ListeningLocalState(folder: localFolder).writeHandoverMarker(marker) },
+      clearHandoverMarker: { try ListeningLocalState(folder: localFolder).clearHandoverMarker() },
+      readHandoverFetches: { poller, now in
+        let stream = iCloudFolder
+          .appendingPathComponent("fetches", isDirectory: true)
+          .appendingPathComponent(poller.uuidString, isDirectory: true)
+        var records: [ListeningFetch] = []
+        for month in Self.months(around: now) {
+          let file = stream.appendingPathComponent(month + ".jsonl")
+          guard let data = try ListeningCoordinatedFiles.readData(file) else { continue }
+          records.append(contentsOf: try ListeningLogCodec.decodeJSONL(data))
+        }
+        return records.sorted { $0.fetchedAt < $1.fetchedAt }
+      },
       appendFetch: { fetch in
         let stream = iCloudFolder
           .appendingPathComponent("fetches", isDirectory: true)
@@ -65,6 +80,14 @@ extension ListeningStore {
     calendar.timeZone = TimeZone(secondsFromGMT: 0)!
     let components = calendar.dateComponents([.year, .month], from: date)
     return String(format: "%04d-%02d", components.year ?? 0, components.month ?? 0)
+  }
+
+  private static func months(around date: Date) -> [String] {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    let current = calendar.date(from: calendar.dateComponents([.year, .month], from: date))!
+    let previous = calendar.date(byAdding: .month, value: -1, to: current)!
+    return [month(for: current), month(for: previous)]
   }
 }
 
@@ -99,6 +122,25 @@ private struct ListeningLocalState {
 
   func clearLastList() throws {
     let url = folder.appendingPathComponent("last-list.json")
+    guard FileManager.default.fileExists(atPath: url.path) else { return }
+    try FileManager.default.removeItem(at: url)
+  }
+
+  func handoverMarker() throws -> ListeningHandoverMarker? {
+    let url = folder.appendingPathComponent("handover.json")
+    guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+    return try JSONDecoder().decode(ListeningHandoverMarker.self, from: Data(contentsOf: url))
+  }
+
+  func writeHandoverMarker(_ marker: ListeningHandoverMarker) throws {
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    try encoder.encode(marker).write(to: folder.appendingPathComponent("handover.json"), options: .atomic)
+  }
+
+  func clearHandoverMarker() throws {
+    let url = folder.appendingPathComponent("handover.json")
     guard FileManager.default.fileExists(atPath: url.path) else { return }
     try FileManager.default.removeItem(at: url)
   }

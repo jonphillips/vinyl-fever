@@ -23,6 +23,7 @@ struct ListeningPollerMain {
       }
       return
     }
+    preparePollerDependencies()
     ListeningPollerWindow.main()
   }
 }

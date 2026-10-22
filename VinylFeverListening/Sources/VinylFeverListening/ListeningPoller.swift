@@ -50,6 +50,10 @@ public struct ListeningStore: Sendable {
   public var readLastList: @Sendable () throws -> [ListeningItem]?
   public var writeLastList: @Sendable ([ListeningItem]) throws -> Void
   public var clearLastList: @Sendable () throws -> Void
+  public var readHandoverMarker: @Sendable () throws -> ListeningHandoverMarker?
+  public var writeHandoverMarker: @Sendable (ListeningHandoverMarker) throws -> Void
+  public var clearHandoverMarker: @Sendable () throws -> Void
+  public var readHandoverFetches: @Sendable (UUID, Date) throws -> [ListeningFetch]
   public var appendFetch: @Sendable (ListeningFetch) throws -> Void
   public var readFetches: @Sendable () throws -> [ListeningFetch]
   public var readLastPollError: @Sendable () throws -> String?
@@ -64,6 +68,10 @@ public struct ListeningStore: Sendable {
     readLastList: @escaping @Sendable () throws -> [ListeningItem]?,
     writeLastList: @escaping @Sendable ([ListeningItem]) throws -> Void,
     clearLastList: @escaping @Sendable () throws -> Void = {},
+    readHandoverMarker: @escaping @Sendable () throws -> ListeningHandoverMarker? = { nil },
+    writeHandoverMarker: @escaping @Sendable (ListeningHandoverMarker) throws -> Void = { _ in },
+    clearHandoverMarker: @escaping @Sendable () throws -> Void = {},
+    readHandoverFetches: @escaping @Sendable (UUID, Date) throws -> [ListeningFetch] = { _, _ in [] },
     appendFetch: @escaping @Sendable (ListeningFetch) throws -> Void,
     readFetches: @escaping @Sendable () throws -> [ListeningFetch] = { [] },
     readLastPollError: @escaping @Sendable () throws -> String? = { nil },
@@ -77,6 +85,10 @@ public struct ListeningStore: Sendable {
     self.readLastList = readLastList
     self.writeLastList = writeLastList
     self.clearLastList = clearLastList
+    self.readHandoverMarker = readHandoverMarker
+    self.writeHandoverMarker = writeHandoverMarker
+    self.clearHandoverMarker = clearHandoverMarker
+    self.readHandoverFetches = readHandoverFetches
     self.appendFetch = appendFetch
     self.readFetches = readFetches
     self.readLastPollError = readLastPollError
@@ -90,7 +102,9 @@ extension ListeningStore: TestDependencyKey, DependencyKey {
   public static var testValue: Self {
     Self(
       pollerID: { UUID() }, readLease: { nil }, writeLease: { _ in },
-      readLastList: { nil }, writeLastList: { _ in }, clearLastList: {}, appendFetch: { _ in }, readFetches: { [] },
+      readLastList: { nil }, writeLastList: { _ in }, clearLastList: {},
+      readHandoverMarker: { nil }, writeHandoverMarker: { _ in }, clearHandoverMarker: {},
+      readHandoverFetches: { _, _ in [] }, appendFetch: { _ in }, readFetches: { [] },
       readLastPollError: { nil }, writeLastPollError: { _ in },
       listeningFolder: { URL(fileURLWithPath: "/tmp/Listening") }, hostName: { "Test Mac" }
     )
@@ -152,7 +166,28 @@ public struct ListeningPoller {
       return .fetched(failed)
     }
 
-    let previous = try store.readLastList()
+    let marker = try store.readHandoverMarker()
+    let handoverFetches: [ListeningFetch]
+    if let marker {
+      do {
+        handoverFetches = try store.readHandoverFetches(marker.previousPoller, now)
+      } catch {
+        // An unreadable old stream is a loud baseline gap, not a failed takeover that can never
+        // recover. The marker's timestamp gives coverage a conservative lower bound.
+        handoverFetches = []
+      }
+    } else {
+      handoverFetches = []
+    }
+    let previousHandoverFetch = handoverFetches.last
+    let previousItemsFetch = handoverFetches.last {
+      [.baseline, .plays, .gap].contains($0.outcome) && !$0.items.isEmpty
+    }
+    let previous = marker == nil ? try store.readLastList() : previousItemsFetch?.items
+    let since = marker.map {
+      ListeningSince(poller: $0.previousPoller, fetchedAt: previousItemsFetch?.fetchedAt
+        ?? previousHandoverFetch?.fetchedAt ?? $0.fallbackSince)
+    }
     let diff: ListeningDiffResult
     do {
       diff = try await withDependencies({ $0.recentlyPlayedClient = recentlyPlayed }) {
@@ -170,11 +205,13 @@ public struct ListeningPoller {
     let fetch = ListeningFetch(
       poller: poller, host: host, fetchedAt: now, outcome: diff.outcome,
       newCount: diff.newCount, pagesRead: diff.pagesRead, items: diff.items,
+      since: diff.outcome == .failed ? nil : since,
       error: diff.error
     )
     try store.appendFetch(fetch)
     if fetch.outcome != .failed {
       try store.writeLastList(diff.currentList)
+      if marker != nil { try store.clearHandoverMarker() }
     }
     return .fetched(fetch)
   }
