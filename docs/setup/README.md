@@ -59,10 +59,12 @@ must be a Mac where Vinyl Fever runs and has built a snapshot.
 5. Download and open **Vinyl Fever Dev Profile** and **VF Listening Poller Dev Profile** from the
    developer portal. Opening the file installs it into
    `~/Library/Developer/Xcode/UserData/Provisioning Profiles/`.
-6. Generate the project and run the tests ([verification](../verification.md)):
+6. Enable the checkout hook, then generate the project and run the tests
+   ([verification](../verification.md)):
 
    ```bash
    cd ~/code/vinyl-fever
+   git config core.hooksPath .githooks
    xcodegen generate
    ```
 

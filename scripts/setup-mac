@@ -87,6 +87,44 @@ if has_role build; then
     result failed "Xcode installed and first launch complete" build-mac "run Xcode once and finish component setup"
   fi
 
+  hooks_path="$(git -C "$repo_root" config --get core.hooksPath || true)"
+  if [[ "$hooks_path" == .githooks ]]; then
+    result passed "Git hooks path" build-mac
+  elif $apply; then
+    git -C "$repo_root" config core.hooksPath .githooks
+    result passed "Git hooks path" build-mac "set to .githooks"
+  else
+    result failed "Git hooks path" build-mac "run git config core.hooksPath .githooks"
+  fi
+
+  project_file="$repo_root/VinylFever.xcodeproj/project.pbxproj"
+  if [[ -f "$project_file" ]]; then
+    result passed "Generated Xcode project" build-mac
+  elif $apply; then
+    (cd "$repo_root" && xcodegen generate)
+    if [[ -f "$project_file" ]]; then
+      result passed "Generated Xcode project" build-mac "generated"
+    else
+      result failed "Generated Xcode project" build-mac "xcodegen did not create project.pbxproj"
+    fi
+  else
+    result failed "Generated Xcode project" build-mac "run xcodegen generate"
+  fi
+
+  automation_message="Vinyl Fever can't check whether it's running. Allow your terminal to control System Events (System Settings → Privacy & Security → Automation), or quit Vinyl Fever, then run this again."
+  if automation_output="$(/usr/bin/osascript -e 'tell application "System Events" to count (every process whose bundle identifier is "com.jonphillips.vinylfever" and background only is false)' 2>&1)"; then
+    automation_status=0
+  else
+    automation_status=$?
+  fi
+  if ((automation_status == 0)) && [[ "$automation_output" =~ ^[0-9]+$ ]]; then
+    result passed "System Events automation access" build-mac
+  elif [[ "$automation_output" == *"-1743"* || "$automation_output" == *"not authorized to send Apple events"* ]]; then
+    result failed "System Events automation access" build-mac "$automation_message"
+  else
+    result manual "System Events automation access" build-mac "could not classify osascript error: ${automation_output:-no output}"
+  fi
+
   brew_missing=()
   if command -v brew >/dev/null 2>&1; then
     for package in "${VF_BREW_PACKAGES[@]}"; do

@@ -51,6 +51,7 @@ Stage $build_app beside $installed_app, swap it in while retaining the previous 
 If $tunnel_label is loaded, kickstart it and wait for /readyz
 python3 -I scripts/mcp-smoke $helper
 On smoke failure, restore the previous app; on success, remove the backup and report mcp-tunnel status
+If installation quit Vinyl Fever, reopen the installed app after success or rollback
 EOF
   exit 0
 fi
@@ -99,17 +100,37 @@ if ! /usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices' "$profile_plist" 2>/
 fi
 echo "provisioning: $profile_name includes this Mac"
 
+automation_message="Vinyl Fever can't check whether it's running. Allow your terminal to control System Events (System Settings → Privacy & Security → Automation), or quit Vinyl Fever, then run this again."
 running_count() {
-  /usr/bin/osascript -e 'tell application "System Events" to count (every process whose bundle identifier is "com.jonphillips.vinylfever" and background only is false)'
+  local output
+  if [[ "${VF_INSTALL_RUNNING_COUNT:-}" == denied ]]; then
+    echo "$automation_message" >&2
+    return 1
+  elif [[ -n "${VF_INSTALL_RUNNING_COUNT:-}" ]]; then
+    output="$VF_INSTALL_RUNNING_COUNT"
+  elif ! output="$(/usr/bin/osascript -e 'tell application "System Events" to count (every process whose bundle identifier is "com.jonphillips.vinylfever" and background only is false)' 2>/dev/null)"; then
+    echo "$automation_message" >&2
+    return 1
+  fi
+  if [[ ! "$output" =~ ^[0-9]+$ ]]; then
+    echo "$automation_message" >&2
+    return 1
+  fi
+  printf '%s\n' "$output"
 }
-if [[ "$(running_count)" -gt 0 ]]; then
+count="$(running_count)" || exit 1
+quit_for_install=false
+if ((count > 0)); then
   /usr/bin/osascript -e 'display dialog "Vinyl Fever is running. Quit it to install the verified build?" buttons {"Cancel", "Quit Vinyl Fever"} default button "Quit Vinyl Fever" with title "Install Vinyl Fever"' >/dev/null
   /usr/bin/osascript -e 'tell application id "com.jonphillips.vinylfever" to quit'
+  quit_for_install=true
   for _ in {1..30}; do
-    if [[ "$(running_count)" -eq 0 ]]; then break; fi
+    count="$(running_count)" || exit 1
+    if ((count == 0)); then break; fi
     sleep 1
   done
-  [[ "$(running_count)" -eq 0 ]] || {
+  count="$(running_count)" || exit 1
+  [[ "$count" -eq 0 ]] || {
     echo "error: Vinyl Fever is still running after 30 seconds; quit it before installing" >&2
     exit 1
   }
@@ -120,11 +141,13 @@ previous_app="/Applications/.VinylFever.app.install-previous.$$"
 swapped=false
 had_previous=false
 cleanup() {
+  local reopen_app=false
   if $swapped; then
     rm -rf "$installed_app"
     if $had_previous && [[ -d "$previous_app" ]]; then
       mv "$previous_app" "$installed_app"
       echo "install: restored previous app" >&2
+      $quit_for_install && reopen_app=true
     fi
     if launchctl print "gui/$(id -u)/$tunnel_label" >/dev/null 2>&1; then
       if launchctl kickstart -k "gui/$(id -u)/$tunnel_label"; then
@@ -132,6 +155,13 @@ cleanup() {
       else
         echo "warning: could not restart tunnel against restored app" >&2
       fi
+    fi
+  fi
+  if $reopen_app; then
+    if open "$installed_app"; then
+      printf '%-24s %s\n' "Reopened" "passed — restored $installed_app" >&2
+    else
+      printf '%-24s %s\n' "Reopened" "failed — could not open restored $installed_app" >&2
     fi
   fi
   rm -rf "$stage_app"
@@ -181,6 +211,16 @@ printf '%-24s %s\n' "MCP smoke" "passed"
 printf '%-24s %s\n' "Listening coverage" "$recent_summary"
 printf '%-24s %s\n' "mcp-tunnel status" "$(printf '%s' "$status_summary" | tr '\n' ';' | sed 's/; *$//')"
 
+reopened="not needed"
+if $quit_for_install; then
+  if open "$installed_app"; then
+    reopened="passed — $installed_app"
+  else
+    reopened="failed — could not open $installed_app"
+  fi
+  quit_for_install=false
+fi
+printf '%-24s %s\n' "Reopened" "$reopened"
 rm -rf "$previous_app"
 swapped=false
 had_previous=false

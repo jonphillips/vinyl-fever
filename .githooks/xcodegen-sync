@@ -14,14 +14,17 @@ if ! command -v xcodegen >/dev/null 2>&1; then
   exit 0
 fi
 
-if ! xcodegen generate --use-cache --quiet; then
-  echo "xcodegen-sync: 'xcodegen generate' failed — fix project.yml and run it by hand." >&2
-  exit 0
+if [ -f VinylFever.xcodeproj/project.pbxproj ]; then
+  if ! xcodegen generate --use-cache --quiet; then
+    echo "xcodegen-sync: 'xcodegen generate' failed — fix project.yml and run it by hand." >&2
+    exit 0
+  fi
+else
+  if ! xcodegen generate --quiet; then
+    echo "xcodegen-sync: 'xcodegen generate' failed — fix project.yml and run it by hand." >&2
+    exit 0
+  fi
 fi
 
-# A tracked project that changes on regeneration was edited by hand or not regenerated
-# before commit. Say so rather than leave an unexplained diff.
-if [ -n "$(git status --porcelain -- '*.xcodeproj')" ]; then
-  echo "xcodegen-sync: regenerating changed the committed Xcode project — project.yml and the checked-in project disagree. Review and commit the regenerated project." >&2
-fi
+# The generated project is intentionally untracked; regenerate it after a clone or checkout.
 exit 0
