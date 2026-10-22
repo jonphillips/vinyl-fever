@@ -44,7 +44,9 @@ serving ChatGPT, and a new Mac is one command from "what's missing?"
 ## Slices
 
 **Dispatch 1: S0** (Core + app; device gate). **Dispatch 2: S1** (scripts; device gate).
-**Dispatch 3: S2** (scripts; device gate on the laptop and the Intel mini).
+**Dispatch 3: S2** (scripts; device gate on the laptop and the Intel mini). **Dispatch 4: S3**
+(scripts + tests; added 2026-10-22 from the #108 and #110 reviews; no device gate beyond the
+laptop).
 
 - [x] **S0 — The database's own home (Core + app).** Merged as #108; the laptop device gate passed 2026-10-21.
   - The live path is `~/Library/Application Support/VinylFever/VinylFever.sqlite`, next to the
@@ -178,6 +180,43 @@ serving ChatGPT, and a new Mac is one command from "what's missing?"
       automatic login, `pmset`, and lease/freshness checks to pass with the lease held by the mini's
       ComputerName. Record FileVault status; when enabled, it blocks automatic login. Build and
       Chat checks are skipped on this Poll-only run.
+
+- [ ] **S3 — Hardening: System Events access and load-proof timing tests (scripts + tests).**
+  - **The installer refuses when it can't tell whether Vinyl Fever is running.**
+    - Today, `running_count` in `scripts/install-vinyl-fever` prints nothing when Automation
+      access to System Events is denied. `[[ "" -gt 0 ]]` is false, so the install goes ahead
+      and swaps out an open app's bundle.
+    - Make `running_count` print only an integer. If `osascript` fails or prints anything else,
+      exit before staging: "Vinyl Fever can't check whether it's running. Allow your terminal
+      to control System Events (System Settings → Privacy & Security → Automation), or quit
+      Vinyl Fever, then run this again." Do the same in the 30 s wait loop.
+    - For the gate, honor `VF_INSTALL_RUNNING_COUNT` as a test override of the count (like
+      `VF_MCP_SMOKE_FAIL`): `denied` simulates a failed `osascript`.
+  - **`setup-mac` reports the grant.** In the build role, run the same System Events count:
+    - `passed` when it returns an integer;
+    - `failed` with the same Automation instructions when access is denied;
+    - `manual` when the error can't be classified.
+    It may trigger macOS's one-time Automation prompt; `--help` says so.
+  - **Timing tests become opt-in perf checks.** Two tests assert absolute or relative wall-clock
+    timings and failed at load average 60–116 while passing on re-runs and on `main`:
+    - `LibrarySnapshotTests` "artist identity index build stays within 1.25x…";
+    - `ListeningEngineTests` "a year of JSONL log files loads quickly with one or two pollers".
+    - Keep every correctness `#expect` in both tests, always on. Move only the timing
+      `#expect`s behind a shared `.enabled(if: ProcessInfo.processInfo.environment["VF_PERF_TESTS"] == "1")`
+      condition. The cleanest way is to split each into a correctness test and a perf test.
+    - Perf tests take the best of 3 runs for each measured side, to cut noise when they do run.
+    - `docs/verification.md` adds `VF_PERF_TESTS=1 swift test --package-path …` as the perf
+      check to run before a PR that touches `LibraryIndex`, `ArtistIdentity`, or the listening
+      log reader.
+
+  **DoD:**
+  - `shellcheck` passes on both scripts. The Listening and Core suites pass with and without
+    `VF_PERF_TESTS=1` on an idle laptop.
+  - **Laptop checks (the executor can run them):**
+    - `VF_INSTALL_RUNNING_COUNT=denied scripts/install-vinyl-fever` stops before staging, with
+      the Automation message, and `/Applications/VinylFever.app` is unchanged.
+    - A normal install still passes.
+    - `setup-mac --role build` reports System Events access as `passed`.
 
 ## Constants register (starting values)
 

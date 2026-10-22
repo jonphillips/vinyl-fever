@@ -48,7 +48,8 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   or the precision before a use exists. Revisit when an analysis needs listens rather than
   starts.
 
-  The analytical strategy is now the *Taste Intelligence* candidate below.
+  The analytical strategy is now the *Taste Intelligence* candidate below. **Jon chose it as the
+  next milestone (2026-10-22).** S0's probes are under way, and M17's brief follows from them.
 - **Taste Intelligence** — candidate v1 design in [taste-intelligence.md](taste-intelligence.md)
   (Jon and the architect, 2026-10-20, from a Codex brief). Vinyl Fever learns Jon's taste from
   evidence he already produces and lets the chat do the reasoning, aiming at "15 songs I
@@ -203,6 +204,8 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   There's no new Mac mini on order, so S2's gate is the laptop plus the Intel mini.
   **S1 (#110) and S2 (#111) merged 2026-10-21, and their laptop gates passed.** M16 closes when
   Jon's Intel mini poll-role gate passes.
+- **The installer's System Events gap and the flaky timing tests** are dispatched as M16 S3
+  (2026-10-22). The two entries below stay for history until S3 merges.
 - **The installer assumes nothing is running when System Events access is denied** (from the
   #110 review, 2026-10-21). `install-vinyl-fever` asks System Events how many Vinyl Fever
   processes are running. If Automation access to System Events is denied (a fresh Mac's first

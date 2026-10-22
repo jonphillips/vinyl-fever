@@ -229,7 +229,9 @@ doesn't imitate it; it **collects what Apple's recommenders produce**:
 **Now, no code (Jon):** keep doing Selections; use Favorite and Suggest Less; Replay is already
 added.
 
-1. **S0 — Probes (architect).**
+1. **S0 — Probes (architect).** *Started 2026-10-22 (Jon chose Taste Intelligence next). The
+   architect runs the API and snapshot probes on the laptop; Jon runs the Shortcuts probes on
+   the iPhone. The results go into this doc and decide the M17 brief for S1.*
    - Does `/v1/me/library/playlists` show New Music, and does its ID survive the weekly refresh?
    - What do `/v1/me/recommendations` and a catalog similar-artists view return?
    - Can `/v1/me/ratings/songs` read hearts and dislikes on catalog songs outside the library?
