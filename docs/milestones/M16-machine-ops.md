@@ -181,7 +181,7 @@ laptop).
       ComputerName. Record FileVault status; when enabled, it blocks automatic login. Build and
       Chat checks are skipped on this Poll-only run.
 
-- [ ] **S3 — Hardening: System Events access, stale builds, and load-proof timing tests
+- [x] **S3 — Hardening: System Events access, stale builds, and load-proof timing tests
   (scripts + app + tests).** *Amended 2026-10-22, before dispatch: the stale-build items below.
   Right after `install-vinyl-fever` succeeded, Jon opened "Vinyl Fever" from Spotlight or the
   Dock and got the Oct 21 Xcode build in DerivedData, from before S3 and S0. It had no polling

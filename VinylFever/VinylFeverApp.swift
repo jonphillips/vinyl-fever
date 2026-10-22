@@ -28,7 +28,7 @@ enum VinylFeverMain {
       }
       return
     }
-    if context == .live, openInstalledCopyIfRunningBuildIsStale() { return }
+    if context == .live, await openInstalledCopyIfRunningBuildIsStale() { return }
     let legacyPath = VinylFeverDatabase.legacyDatabaseURL.path(percentEncoded: false)
     let databasePath = VinylFeverDatabase.liveDatabaseURL.path(percentEncoded: false)
     if context == .live,
@@ -49,7 +49,7 @@ enum VinylFeverMain {
 }
 
 @MainActor
-private func openInstalledCopyIfRunningBuildIsStale() -> Bool {
+private func openInstalledCopyIfRunningBuildIsStale() async -> Bool {
   let runningURL = Bundle.main.bundleURL
   let installedURL = URL(fileURLWithPath: "/Applications/VinylFever.app", isDirectory: true)
   let installedExists = FileManager.default.fileExists(atPath: installedURL.path)
@@ -78,11 +78,13 @@ private func openInstalledCopyIfRunningBuildIsStale() -> Bool {
 
   let configuration = NSWorkspace.OpenConfiguration()
   configuration.createsNewApplicationInstance = true
-  NSWorkspace.shared.openApplication(at: installedURL, configuration: configuration) { _, error in
-    if let error { listeningLogger.error("Could not open installed Vinyl Fever: \(error.localizedDescription, privacy: .public)") }
-    Task { @MainActor in NSApp.terminate(nil) }
+  do {
+    _ = try await NSWorkspace.shared.openApplication(at: installedURL, configuration: configuration)
+    return true
+  } catch {
+    listeningLogger.error("Could not open installed Vinyl Fever: \(error.localizedDescription, privacy: .public)")
+    return false
   }
-  return true
 }
 
 private struct VinylFeverWindow: App {

@@ -118,12 +118,45 @@ running_count() {
   fi
   printf '%s\n' "$output"
 }
-count="$(running_count)" || exit 1
+
+stage_app="/Applications/.VinylFever.app.install-new.$$"
+previous_app="/Applications/.VinylFever.app.install-previous.$$"
+swapped=false
+had_previous=false
 quit_for_install=false
+cleanup() {
+  if $swapped; then
+    rm -rf "$installed_app"
+    if $had_previous && [[ -d "$previous_app" ]]; then
+      mv "$previous_app" "$installed_app"
+      echo "install: restored previous app" >&2
+    fi
+    if launchctl print "gui/$(id -u)/$tunnel_label" >/dev/null 2>&1; then
+      if launchctl kickstart -k "gui/$(id -u)/$tunnel_label"; then
+        echo "tunnel: restarted against restored app" >&2
+      else
+        echo "warning: could not restart tunnel against restored app" >&2
+      fi
+    fi
+  fi
+  if $quit_for_install; then
+    if [[ -d "$installed_app" ]] && open "$installed_app"; then
+      printf '%-24s %s\n' "Reopened" "passed — $installed_app" >&2
+    else
+      printf '%-24s %s\n' "Reopened" "failed — could not open $installed_app" >&2
+    fi
+    quit_for_install=false
+  fi
+  rm -rf "$stage_app"
+  rm -f "$profile_plist"
+}
+trap cleanup EXIT
+
+count="$(running_count)" || exit 1
 if ((count > 0)); then
   /usr/bin/osascript -e 'display dialog "Vinyl Fever is running. Quit it to install the verified build?" buttons {"Cancel", "Quit Vinyl Fever"} default button "Quit Vinyl Fever" with title "Install Vinyl Fever"' >/dev/null
-  /usr/bin/osascript -e 'tell application id "com.jonphillips.vinylfever" to quit'
   quit_for_install=true
+  /usr/bin/osascript -e 'tell application id "com.jonphillips.vinylfever" to quit'
   for _ in {1..30}; do
     count="$(running_count)" || exit 1
     if ((count == 0)); then break; fi
@@ -136,38 +169,11 @@ if ((count > 0)); then
   }
 fi
 
-stage_app="/Applications/.VinylFever.app.install-new.$$"
-previous_app="/Applications/.VinylFever.app.install-previous.$$"
-swapped=false
-had_previous=false
-cleanup() {
-  local reopen_app=false
-  if $swapped; then
-    rm -rf "$installed_app"
-    if $had_previous && [[ -d "$previous_app" ]]; then
-      mv "$previous_app" "$installed_app"
-      echo "install: restored previous app" >&2
-      $quit_for_install && reopen_app=true
-    fi
-    if launchctl print "gui/$(id -u)/$tunnel_label" >/dev/null 2>&1; then
-      if launchctl kickstart -k "gui/$(id -u)/$tunnel_label"; then
-        echo "tunnel: restarted against restored app" >&2
-      else
-        echo "warning: could not restart tunnel against restored app" >&2
-      fi
-    fi
-  fi
-  if $reopen_app; then
-    if open "$installed_app"; then
-      printf '%-24s %s\n' "Reopened" "passed — restored $installed_app" >&2
-    else
-      printf '%-24s %s\n' "Reopened" "failed — could not open restored $installed_app" >&2
-    fi
-  fi
-  rm -rf "$stage_app"
-  rm -f "$profile_plist"
-}
-trap cleanup EXIT
+if [[ "${VF_INSTALL_FAIL_BEFORE_SWAP:-0}" == 1 ]]; then
+  echo "error: forced failure before app staging" >&2
+  exit 1
+fi
+
 ditto "$build_app" "$stage_app"
 if [[ -d "$installed_app" ]]; then
   mv "$installed_app" "$previous_app"

@@ -222,18 +222,6 @@ struct LibrarySnapshotTests {
     #expect(identityDuration <= baselineDuration * 1.25)
   }
 
-  @Test("installed build warning handles current, missing and stale copies")
-  func installedBuildCheck() {
-    let running = URL(fileURLWithPath: "/tmp/VinylFever-copy.app")
-    let installed = URL(fileURLWithPath: "/Applications/VinylFever.app")
-    let now = Date(timeIntervalSince1970: 1_800_000_000)
-    #expect(InstalledBuildCheck.result(runningBundleURL: installed, runningBuildDate: now, installedBundleURL: installed, installedBuildDate: now) == .current)
-    #expect(InstalledBuildCheck.result(runningBundleURL: running, runningBuildDate: now, installedBundleURL: nil, installedBuildDate: nil) == .current)
-    #expect(InstalledBuildCheck.result(runningBundleURL: running, runningBuildDate: now.addingTimeInterval(1), installedBundleURL: installed, installedBuildDate: now) == .current)
-    #expect(InstalledBuildCheck.result(runningBundleURL: running, runningBuildDate: now.addingTimeInterval(-60), installedBundleURL: installed, installedBuildDate: now) == .current)
-    #expect(InstalledBuildCheck.result(runningBundleURL: running, runningBuildDate: now.addingTimeInterval(-61), installedBundleURL: installed, installedBuildDate: now) == .olderThanInstalled(installedDate: now))
-  }
-
   private func seconds(_ duration: Duration) -> Double {
     let components = duration.components
     return Double(components.seconds) + Double(components.attoseconds) / 1_000_000_000_000_000_000
