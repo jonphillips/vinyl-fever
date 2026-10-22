@@ -63,7 +63,7 @@ Intel Mac mini (macOS 15)                             laptop (macOS 27)
   VinylFever.app --poll-listening (S3; the laptop now, an Apple-silicon mini later)
 ```
 
-## Listening log (format v1)
+## Listening log (formats v1 and v2)
 
 The folder is `~/Library/Mobile Documents/com~apple~CloudDocs/Vinyl Fever/Listening/`, which
 Finder shows as iCloud Drive → Vinyl Fever → Listening. Neither app is sandboxed, so both
@@ -96,7 +96,9 @@ reach it directly. Writes go through `NSFileCoordinator`.
     window starts at the last good fetch.
 - **Versioning:** ordinary records use `version: 1`. Handover recovery records carry
   `"since":{"poller":"<old uuid>","fetchedAt":"…"}` and use `version: 2`; readers accept
-  versions 1 and 2, and reject a newer version loudly, like the snapshot. A baseline with `since`
+  versions 1 and 2, and reject a newer version loudly, like the snapshot. `since` names the
+  newest successful fetch known when the recovery starts, even when the recovered `items` come
+  from an earlier line. A baseline with `since`
   means the old stream could not be recovered, so coverage reports a handover gap. The reader
   ignores a trailing partial line, since iCloud may sync a file mid-append.
 - **What's in the log:** song identity and text only. No library file locations, no account
@@ -138,14 +140,14 @@ Given the previous full list `P` and the current list `C`, both newest first, fi
   `P` handles that.
 - `k == 0` with a match is `none`.
 
-**Reading the log (S2):**
+**Reading the log (S2; reader guard added in S5):**
 - Each `plays` line gives `newCount` plays, dated to the window (previous successful fetch,
   this fetch].
 - Songs are keyed by `SongTextNormalizer` artist + title, the same key as `check_tracks`, so a
   catalog play and a library play of the same song count together.
-- Streams from different pollers are merged by time. If two streams' windows overlap (a lease
-  race), plays of the same song in overlapping windows count once, and the result says how
-  many were collapsed. (S5 extends this to any two lines whose windows strictly overlap.)
+- Streams are merged by time. If two different fetch lines have windows that strictly overlap,
+  plays of the same song count once, whatever the poller. Windows that only touch still count as
+  separate plays. The result says how many overlapping plays were collapsed.
 
 ## Tool surface (S2, added to `vf-mcp`)
 

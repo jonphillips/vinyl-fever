@@ -71,6 +71,10 @@ struct SettingsView: View {
 
         Section {
           Text(listeningModel.statusLine)
+          if listeningModel.canPollNow {
+            Button("Poll now") { Task { await listeningModel.pollNow() } }
+              .disabled(listeningModel.isPollingNow)
+          }
           Toggle("Poll listening on this Mac", isOn: Binding(
             get: { listeningModel.pollingEnabled },
             set: { enabled in
@@ -315,6 +319,8 @@ final class ListeningPollingSettingsModel {
   var pollingEnabled: Bool { hasRegisteredAgent && !isAnotherMacPolling }
   var requiresApproval: Bool { agent.requiresApproval() }
   private var isAnotherMacPolling: Bool { leaseExists && !holdsLease }
+  var canPollNow: Bool { holdsLease && agent.isEnabled() }
+  private(set) var isPollingNow = false
 
   var takeoverMessage: String {
     "\(leaseHost ?? "Another Mac") is polling now. Make this Mac the poller?"
@@ -394,6 +400,28 @@ final class ListeningPollingSettingsModel {
       errorMessage = error.localizedDescription
     }
     await refresh()
+  }
+
+  func pollNow() async {
+    guard canPollNow, !isPollingNow else { return }
+    isPollingNow = true
+    defer { isPollingNow = false }
+    do {
+      let previousFetchAt = try store.readFetches().last?.fetchedAt
+      try agent.kickstart()
+      for attempt in 0...30 {
+        try Task.checkCancellation()
+        let newestFetchAt = try store.readFetches().last?.fetchedAt
+        if let newestFetchAt, newestFetchAt != previousFetchAt { break }
+        if attempt < 30 { try await Task.sleep(for: .seconds(1)) }
+      }
+      await refresh()
+    } catch is CancellationError {
+      await refresh()
+    } catch {
+      await refresh()
+      errorMessage = error.localizedDescription
+    }
   }
 
   private func activate() async throws {

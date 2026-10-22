@@ -316,16 +316,43 @@ struct ListeningEngineTests {
     let log = ListeningLog(
       streams: [[baselineOne, firstPlay, repeatedAgain, late], [baselineTwo, duplicatePlay]],
       now: late.fetchedAt)
-    #expect(log.coverage.collapsedOverlappingPlays == 1)
+    // The second poller's window overlaps both local plays, so S5 collapses the connected
+    // overlap chain. The separate test below covers windows that only touch.
+    #expect(log.coverage.collapsedOverlappingPlays == 2)
     #expect(log.recentPlays(period: .month, now: late.fetchedAt, limit: 1).map { $0.item.id } == ["late"])
     let topTracks = log.topTracks(period: .quarter, now: late.fetchedAt)
-    #expect(topTracks.map(\.plays) == [2, 2, 1])
-    #expect(topTracks.prefix(2).map(\.artist) == ["Beyoncé", "The Records"])
+    #expect(topTracks.map(\.plays) == [2, 1, 1])
+    #expect(topTracks.prefix(2).map(\.artist) == ["Beyoncé", "New Artist"])
     let topArtists = log.topArtists(period: .quarter, now: late.fetchedAt, limit: 2)
-    #expect(topArtists.map(\.plays) == [2, 2])
+    #expect(topArtists.map(\.plays) == [2, 1])
     #expect(ListeningQueryLimit.cap(999) == ListeningQueryLimit.maximum)
     #expect(ListeningTextNormalizer.title("Starry Eyes (2005 Remaster)") == "starry eyes")
     #expect(ListeningTextNormalizer.artist("Beyoncé") == ListeningTextNormalizer.artist("Beyonce"))
+  }
+
+  @Test("strictly overlapping windows from one poller collapse but touching windows count twice")
+  func samePollerOverlapAndTouchingWindows() {
+    let song = item("same", title: "Same Song")
+    let baseline = ListeningFetch(
+      poller: poller, host: "Mini", fetchedAt: t0, outcome: .baseline, pagesRead: 1)
+    let first = ListeningFetch(
+      poller: poller, host: "Mini", fetchedAt: t0.addingTimeInterval(60),
+      outcome: .plays, newCount: 1, pagesRead: 1, items: [song])
+    let recovery = ListeningFetch(
+      poller: poller, host: "Mini", fetchedAt: t0.addingTimeInterval(120),
+      outcome: .plays, newCount: 1, pagesRead: 1, items: [song],
+      since: ListeningSince(poller: secondPoller, fetchedAt: t0))
+    let log = ListeningLog(streams: [[baseline, first, recovery]], now: recovery.fetchedAt)
+    #expect(log.plays.count == 1)
+    #expect(log.coverage.collapsedOverlappingPlays == 1)
+
+    let consecutive = ListeningFetch(
+      poller: poller, host: "Mini", fetchedAt: t0.addingTimeInterval(180),
+      outcome: .plays, newCount: 1, pagesRead: 1, items: [song])
+    let touchingLog = ListeningLog(
+      streams: [[baseline, first, consecutive]], now: consecutive.fetchedAt)
+    #expect(touchingLog.plays.count == 2)
+    #expect(touchingLog.coverage.collapsedOverlappingPlays == 0)
   }
 
   @Test("top counts include every play even when recent plays are capped")

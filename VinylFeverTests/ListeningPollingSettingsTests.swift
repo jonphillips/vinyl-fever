@@ -32,6 +32,7 @@ struct ListeningPollingSettingsTests {
     await model.refresh()
 
     #expect(!model.pollingEnabled)
+    #expect(!model.canPollNow)
     #expect(model.idleAgentMessage == "Mac mini is polling. This Mac's agent is idle until you turn polling back on here.")
     #expect(model.statusLine.contains("Polling Mac: Mac mini · Last fetch 2 minutes ago"))
     #expect(model.statusLine.contains("0 gaps in 30 days"))
@@ -51,6 +52,7 @@ struct ListeningPollingSettingsTests {
     #expect(state.clearLastListCount == 1)
     #expect(agentState.registerCount == 0)
     #expect(model.pollingEnabled)
+    #expect(model.canPollNow)
     #expect(agentState.kickstartCount == 1)
     #expect(state.fetches.count == 1)
 
@@ -58,6 +60,37 @@ struct ListeningPollingSettingsTests {
 
     #expect(agentState.didUnregister)
     #expect(state.lease?.poller == localPoller)
+    #expect(!model.canPollNow)
+  }
+
+  @Test
+  func pollNowIsAvailableToTheLeaseholderAndKickstartsOnce() async {
+    let now = date("2026-10-22T12:00:00Z")
+    let poller = UUID()
+    let state = ListeningSettingsState(
+      poller: poller, lease: ListeningLease(poller: poller, host: "This Mac", takenAt: now))
+    let agentState = ListeningAgentState(isEnabled: true)
+    agentState.kickstartAction = {
+      state.fetches.append(ListeningFetch(
+        poller: poller, host: "This Mac", fetchedAt: now,
+        outcome: .baseline, pagesRead: 1))
+    }
+    let model = withDependencies {
+      $0.listeningStore = Self.store(state)
+      $0.listeningAgentClient = agentState.client
+      $0.date = .constant(now)
+    } operation: {
+      ListeningPollingSettingsModel()
+    }
+
+    await model.refresh()
+    #expect(model.canPollNow)
+    await model.pollNow()
+
+    #expect(agentState.kickstartCount == 1)
+    #expect(state.fetches.count == 1)
+    #expect(model.statusLine.contains("Last fetch"))
+    #expect(!model.isPollingNow)
   }
 
   private static func store(_ state: ListeningSettingsState) -> ListeningStore {
@@ -101,6 +134,7 @@ private final class ListeningAgentState: @unchecked Sendable {
   var registerCount = 0
   var kickstartCount = 0
   var didUnregister = false
+  var kickstartAction: (() -> Void)?
 
   init(isEnabled: Bool) {
     self.isEnabled = isEnabled
@@ -112,7 +146,7 @@ private final class ListeningAgentState: @unchecked Sendable {
       requiresApproval: { self.requiresApproval },
       register: { self.registerCount += 1; self.isEnabled = true },
       unregister: { self.didUnregister = true; self.isEnabled = false },
-      kickstart: { self.kickstartCount += 1 }
+      kickstart: { self.kickstartCount += 1; self.kickstartAction?() }
     )
   }
 }

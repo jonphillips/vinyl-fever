@@ -36,15 +36,19 @@ extension ListeningStore {
       readHandoverMarker: { try ListeningLocalState(folder: localFolder).handoverMarker() },
       writeHandoverMarker: { marker in try ListeningLocalState(folder: localFolder).writeHandoverMarker(marker) },
       clearHandoverMarker: { try ListeningLocalState(folder: localFolder).clearHandoverMarker() },
-      readHandoverFetches: { poller, now in
-        let stream = iCloudFolder
-          .appendingPathComponent("fetches", isDirectory: true)
-          .appendingPathComponent(poller.uuidString, isDirectory: true)
+      readRecentFetches: { now in
+        let fetchesFolder = iCloudFolder.appendingPathComponent("fetches", isDirectory: true)
+        let streams = try FileManager.default.contentsOfDirectory(
+          at: fetchesFolder, includingPropertiesForKeys: [.isDirectoryKey]
+        )
+        let months = Self.months(around: now)
         var records: [ListeningFetch] = []
-        for month in Self.months(around: now) {
-          let file = stream.appendingPathComponent(month + ".jsonl")
-          guard let data = try ListeningCoordinatedFiles.readData(file) else { continue }
-          records.append(contentsOf: try ListeningLogCodec.decodeJSONL(data))
+        for stream in streams {
+          for month in months {
+            let file = stream.appendingPathComponent(month + ".jsonl")
+            guard let data = try ListeningCoordinatedFiles.readData(file) else { continue }
+            records.append(contentsOf: try ListeningLogCodec.decodeJSONL(data))
+          }
         }
         return records.sorted { $0.fetchedAt < $1.fetchedAt }
       },

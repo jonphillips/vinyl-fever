@@ -168,16 +168,42 @@ public struct ListeningPlay: Codable, Equatable, Sendable, Identifiable {
   public var windowStart: Date
   public var windowEnd: Date
   public var poller: UUID
+  var sourceLineID: String
 
-  public init(item: ListeningItem, windowStart: Date, windowEnd: Date, poller: UUID) {
+  private enum CodingKeys: String, CodingKey {
+    case item, windowStart, windowEnd, poller
+  }
+
+  public init(
+    item: ListeningItem, windowStart: Date, windowEnd: Date, poller: UUID,
+    sourceLineID: String? = nil
+  ) {
     self.item = item
     self.windowStart = windowStart
     self.windowEnd = windowEnd
     self.poller = poller
+    self.sourceLineID = sourceLineID ?? "\(poller.uuidString)|\(windowEnd.timeIntervalSince1970)"
+  }
+
+  public init(from decoder: Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    item = try values.decode(ListeningItem.self, forKey: .item)
+    windowStart = try values.decode(Date.self, forKey: .windowStart)
+    windowEnd = try values.decode(Date.self, forKey: .windowEnd)
+    poller = try values.decode(UUID.self, forKey: .poller)
+    sourceLineID = "\(poller.uuidString)|\(windowEnd.timeIntervalSince1970)"
+  }
+
+  public func encode(to encoder: Encoder) throws {
+    var values = encoder.container(keyedBy: CodingKeys.self)
+    try values.encode(item, forKey: .item)
+    try values.encode(windowStart, forKey: .windowStart)
+    try values.encode(windowEnd, forKey: .windowEnd)
+    try values.encode(poller, forKey: .poller)
   }
 
   public var id: String {
-    "\(poller.uuidString)|\(windowEnd.timeIntervalSince1970)|\(item.kind.rawValue)|\(item.id)"
+    "\(sourceLineID)|\(item.kind.rawValue)|\(item.id)"
   }
 }
 
