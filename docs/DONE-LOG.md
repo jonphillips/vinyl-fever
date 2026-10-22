@@ -14,7 +14,8 @@ the stripped-PATH run reached its final report and correctly reported missing pr
 The stale-copy alert interactions (including with the installed copy already running) remain owed
 to Jon on the laptop; LaunchServices would not open the temporary copied bundle (`-10827`). The
 temporary test copy and process were removed. Existing M13 S2, M13 S3, and M16 S2 device gates also
-remain owed. `NEXT_UP.md` has no queued dispatch.
+remain owed. `NEXT_UP.md` has no queued dispatch. Jon passed the stale-copy alert check on the laptop
+on 2026-10-22, on the merged #117 build, in all three cases.
 
 ## 2026-10-21 — M16 · Dispatch 3 S2 (`m16/s2-setup-mac`)
 
@@ -24,7 +25,8 @@ reports had no failures; removing `xcodegen` and unloading the tunnel agent were
 repaired. Repeating Build and Chat `--apply` with the installed app and setup intact made no
 changes. The music-chat scratch-home check preserved customized files and added only the missing
 `CLAUDE.md`. Jon's Intel mini Poll-role gate remains owed after merge; its exact steps are in M16
-S2. `NEXT_UP.md` has no queued dispatch.
+S2. `NEXT_UP.md` has no queued dispatch. Jon passed the Intel mini Poll-role gate on 2026-10-22.
+FileVault is on there, which blocks automatic login, so the mini needs a manual login after a restart.
 
 ## 2026-10-21 — M16 · Dispatch 2 S1 (`m16/s1-install-vinyl-fever`)
 
@@ -55,7 +57,9 @@ pre-S0 build started on an empty `SQLiteData.db` without touching the new file.
 Added Vinyl Fever's headless listening poller and hourly agent, with confirmed takeover in both
 settings surfaces. A takeover clears the new holder's saved diff baseline so its first fetch is
 `baseline`. Listening, Core, and macOS app tests pass; the poller app builds; `check-handoff`
-passes. The M13 S1 Intel mini, S2 iPad, and S3 laptop↔mini device gates remain owed.
+passes. The M13 S1 Intel mini, S2 iPad, and S3 laptop↔mini device gates remain owed. Jon passed
+the laptop↔mini gate on 2026-10-22: both handovers were clean, but the mini → laptop baseline
+silently absorbed 19 plays from its 40-minute hole (see M13 S3 and `open-questions.md`).
 
 ## 2026-10-20 — M15 · Dispatch 2 S1 (`m15/s1-artist-aliases`)
 

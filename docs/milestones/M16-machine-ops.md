@@ -129,7 +129,8 @@ laptop).
     forced smoke failure restored the prior app and restarted the tunnel. `lsof` showed the
     running helper and installed helper share inode `538835276`.
 
-- [x] **S2 — `scripts/setup-mac` (check, then apply what can be automated).**
+- [x] **S2 — `scripts/setup-mac` (check, then apply what can be automated).** Both device gates
+  passed (laptop 2026-10-21, Intel mini 2026-10-22).
   - `setup-mac [--role build,chat,poll] [--apply]`. The default is a read-only report: one line
     per step from [the setup guide](../setup/README.md), marked passed, failed, or manual, with
     the guide's anchor for each one that isn't passed.
@@ -175,11 +176,16 @@ laptop).
       `xcodegen` and unloading the tunnel agent were both detected; `--apply` restored each role,
       and the follow-up reports passed. With the app already installed, repeating Build and Chat
       `--apply` made no changes.
-    - **Intel mini (macOS 15, no Xcode) — owed to Jon after merge:** copy `scripts/setup-mac` and
+    - **Intel mini (macOS 15, no Xcode) — passed 2026-10-22:** copy `scripts/setup-mac` and
       `scripts/machine.conf` to any folder on the mini, then run `./setup-mac --role poll`. Expect
       automatic login, `pmset`, and lease/freshness checks to pass with the lease held by the mini's
       ComputerName. Record FileVault status; when enabled, it blocks automatic login. Build and
       Chat checks are skipped on this Poll-only run.
+      - **Result:** Jon ran it on the mini and it checked out. The lease is held as
+        "Jon’s Mac mini (2)", the mini's ComputerName. **FileVault is on**, so macOS won't log in
+        automatically: after a restart or power cut, the mini waits at the FileVault unlock screen
+        and polling stops until Jon logs in. The signal is the last fetch's age, in
+        `coverage` and in Settings.
 
 - [x] **S3 — Hardening: System Events access, stale builds, and load-proof timing tests
   (scripts + app + tests).** *Amended 2026-10-22, before dispatch: the stale-build items below.
@@ -294,13 +300,19 @@ laptop).
   - **Stale-build check tests:** same path → `.current`; installed app missing → `.current`;
     running copy newer, or older by 60 s or less → `.current`; older by more than 60 s →
     `.olderThanInstalled` with the installed date.
-  - **Jon's check (laptop):** copy the installed app somewhere else and set its `Contents/MacOS`
+  - **Jon's check (laptop) — passed 2026-10-22:** copy the installed app somewhere else and set its `Contents/MacOS`
     dates back a day with `touch -t`. Open the copy: the alert appears. With no installed copy
     already running, choose **Open Installed Copy** and confirm the installed copy starts. Then
     open the stale copy again while `/Applications/VinylFever.app` is already running and choose
     **Open Installed Copy**. Confirm the same `/Applications` PID is frontmost, no second
     installed instance starts, and the stale copy exits. Finally, open the stale copy again and
     choose **Keep This Copy**; it runs normally.
+    - **Result:** all three cases passed on the merged #117 build (`6568a91`). With the installed
+      copy not running, **Open Installed Copy** started it and the stale copy exited. With it
+      already running, **Open Installed Copy** brought the same `/Applications` PID to the front
+      and started no second instance. **Keep This Copy** ran normally.
+    - The second case needs `open -n` on the stale copy. While the installed copy runs, a Finder
+      double-click on a copy with the same bundle ID just activates the running one.
 
 ## Constants register (starting values)
 
