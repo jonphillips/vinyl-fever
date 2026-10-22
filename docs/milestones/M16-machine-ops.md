@@ -181,7 +181,11 @@ laptop).
       ComputerName. Record FileVault status; when enabled, it blocks automatic login. Build and
       Chat checks are skipped on this Poll-only run.
 
-- [ ] **S3 — Hardening: System Events access and load-proof timing tests (scripts + tests).**
+- [ ] **S3 — Hardening: System Events access, stale builds, and load-proof timing tests
+  (scripts + app + tests).** *Amended 2026-10-22, before dispatch: the stale-build items below.
+  Right after `install-vinyl-fever` succeeded, Jon opened "Vinyl Fever" from Spotlight or the
+  Dock and got the Oct 21 Xcode build in DerivedData, from before S3 and S0. It had no polling
+  toggle, and it created an empty `SQLiteData.db`.*
   - **The installer refuses when it can't tell whether Vinyl Fever is running.**
     - Today, `running_count` in `scripts/install-vinyl-fever` prints nothing when Automation
       access to System Events is denied. `[[ "" -gt 0 ]]` is false, so the install goes ahead
@@ -208,6 +212,32 @@ laptop).
     - `docs/verification.md` adds `VF_PERF_TESTS=1 swift test --package-path …` as the perf
       check to run before a PR that touches `LibraryIndex`, `ArtistIdentity`, or the listening
       log reader.
+  - **The installer reopens what it quit.** If `install-vinyl-fever` quit Vinyl Fever to install,
+    it reopens the app afterwards with `open /Applications/VinylFever.app`:
+    - after a passing smoke test, the new build;
+    - after a rollback, the restored build.
+    The report gains a "Reopened" row. If nothing was running, it opens nothing.
+  - **Vinyl Fever warns when it's an older copy than the installed one.**
+    - **When:** at launch, before the window opens and before the database. Only in the `.live`
+      context: never under tests or previews, and never on the `--poll-listening` path.
+    - **The check** is a pure function in Core, so it can be tested. Given the running bundle's
+      URL and build date, and `/Applications/VinylFever.app`'s URL and build date if that app
+      exists, it returns `.current` or `.olderThanInstalled(installedDate)`.
+      - A bundle's **build date** is the newest modification date in its `Contents/MacOS/`.
+        That covers both `VinylFever` and Debug's `VinylFever.debug.dylib`, and `ditto` keeps the
+        build's dates when it installs.
+      - It's `.current` when the running bundle *is* `/Applications/VinylFever.app` (compare
+        resolved paths), when that app doesn't exist, or when the running copy is no more than 60 s
+        older than it.
+    - **If it's older**, show an alert: "This copy of Vinyl Fever was built <date>, and the one in
+      Applications was built <date>. Open the installed copy?" The buttons are **Open Installed
+      Copy** (the default) and **Keep This Copy**.
+      - **Open Installed Copy** starts `/Applications/VinylFever.app` as a new instance
+        (`NSWorkspace.openApplication`, `createsNewApplicationInstance`), then exits. If S0's
+        duplicate-copy guard is relevant, the new instance applies it.
+      - **Keep This Copy** continues as today. A newer Xcode build never sees the alert, so
+        development runs are undisturbed.
+    - Reuse S0's `showStartupAlert` style, so the alert comes to the front.
 
   **DoD:**
   - `shellcheck` passes on both scripts. The Listening and Core suites pass with and without
@@ -217,6 +247,15 @@ laptop).
       the Automation message, and `/Applications/VinylFever.app` is unchanged.
     - A normal install still passes.
     - `setup-mac --role build` reports System Events access as `passed`.
+    - With Vinyl Fever open, `install-vinyl-fever` quits it, installs, and reopens the
+      `/Applications` copy (`ps` shows the `/Applications` path).
+  - **Stale-build check tests:** same path → `.current`; installed app missing → `.current`;
+    running copy newer, or older by 60 s or less → `.current`; older by more than 60 s →
+    `.olderThanInstalled` with the installed date.
+  - **Jon's check (laptop):** copy the installed app somewhere else and set its `Contents/MacOS`
+    dates back a day with `touch -t`. Open the copy: the alert appears, and **Open Installed
+    Copy** leaves only the `/Applications` copy running. Open it again and choose **Keep This
+    Copy**: it runs normally.
 
 ## Constants register (starting values)
 
