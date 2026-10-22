@@ -68,8 +68,8 @@ struct ListeningPollerTests {
     #expect(try store.readFetches().isEmpty)
   }
 
-  @Test("taking over and handing back starts a baseline for each holder")
-  func takeoverAndHandbackBaseline() async throws {
+  @Test("taking over and handing back recovers each holder's handover window")
+  func takeoverAndHandbackRecovery() async throws {
     let folders = try TemporaryListeningFolders()
     defer { folders.remove() }
     let mini = ListeningStore.live(
@@ -110,7 +110,8 @@ struct ListeningPollerTests {
     let laptopBaseline = try await poll(store: laptop, now: t0.addingTimeInterval(240)) { _ in
       RecentlyPlayedPage(items: [c, a, b], hasNext: false)
     }
-    #expect(fetch(laptopBaseline)?.outcome == .baseline)
+    #expect(fetch(laptopBaseline)?.outcome == ListeningFetch.Outcome.none)
+    #expect(fetch(laptopBaseline)?.since?.fetchedAt == fetch(miniPlay)?.fetchedAt)
     let laptopPlay = try await poll(store: laptop, now: t0.addingTimeInterval(300)) { _ in
       RecentlyPlayedPage(items: [d, c, a, b], hasNext: false)
     }
@@ -128,10 +129,117 @@ struct ListeningPollerTests {
     let miniHandback = try await poll(store: mini, now: t0.addingTimeInterval(480)) { _ in
       RecentlyPlayedPage(items: [e, d, c, a, b], hasNext: false)
     }
-    #expect(fetch(miniHandback)?.outcome == .baseline)
+    #expect(fetch(miniHandback)?.outcome == .plays)
+    #expect(fetch(miniHandback)?.newCount == 1)
     let fetches = try mini.readFetches()
     let streams = Dictionary(grouping: fetches, by: \.poller).values.map { $0 }
     #expect(ListeningLog(streams: streams, now: t0.addingTimeInterval(480)).coverage.collapsedOverlappingPlays == 0)
+  }
+
+  @Test("takeover recovers plays from the old stream's item head and consumes the marker once")
+  func takeoverRecoversHandoverPlays() async throws {
+    let folders = try TemporaryListeningFolders()
+    defer { folders.remove() }
+    let mini = ListeningStore.live(
+      iCloudFolder: folders.cloud,
+      localFolder: folders.root.appendingPathComponent("mini", isDirectory: true), hostName: { "Mini" })
+    let laptop = ListeningStore.live(
+      iCloudFolder: folders.cloud,
+      localFolder: folders.root.appendingPathComponent("laptop", isDirectory: true), hostName: { "Laptop" })
+    let oldPoller = try mini.pollerID()
+    let newPoller = try laptop.pollerID()
+    let baseline = (0..<173).map { item("song-\($0)") }
+    let t0 = date("2026-10-22T14:00:00Z")
+
+    _ = try await poll(store: mini, now: t0) { offset in
+      let page = Array(baseline.dropFirst(offset).prefix(ListeningDiff.pageSize))
+      return RecentlyPlayedPage(items: page, hasNext: offset + page.count < baseline.count)
+    }
+
+    let oldHeadPlay = item("old-head-play")
+    let oldPlays = [oldHeadPlay] + Array(baseline.prefix(10))
+    _ = try await poll(store: mini, now: t0.addingTimeInterval(3_600)) { _ in
+      RecentlyPlayedPage(items: oldPlays, hasNext: false)
+    }
+    let oldPlaysFetch = try #require(try mini.readFetches().last(where: { $0.outcome == .plays }))
+    #expect(oldPlaysFetch.items.count == 11)
+
+    // The newest old-stream heartbeat has no items; recovery walks back to the item-bearing line.
+    try mini.appendFetch(ListeningFetch(
+      poller: oldPoller, host: "Mini", fetchedAt: t0.addingTimeInterval(5_400),
+      outcome: .none, pagesRead: 1))
+    try ListeningLeaseRules.takeOver(
+      store: laptop, poller: newPoller, host: "Laptop", now: t0.addingTimeInterval(5_500))
+
+    let replays = (50..<62).map { baseline[$0] }
+    let newPrefix = (0..<7).map { item("new-\($0)") } + replays
+    let current = newPrefix + oldPlays + Array(baseline.dropFirst(10).prefix(143))
+    #expect(current.count == 173)
+    let handover = try await poll(store: laptop, now: t0.addingTimeInterval(5_600)) { offset in
+      let page = Array(current.dropFirst(offset).prefix(ListeningDiff.pageSize))
+      return RecentlyPlayedPage(items: page, hasNext: offset + page.count < current.count)
+    }
+
+    guard case let .fetched(fetch) = handover else { Issue.record("Expected handover fetch"); return }
+    #expect(fetch.outcome == .plays)
+    #expect(fetch.newCount == 19)
+    #expect(fetch.since == ListeningSince(poller: oldPoller, fetchedAt: oldPlaysFetch.fetchedAt))
+    #expect(fetch.version == 2)
+    #expect(try laptop.readHandoverMarker() == nil)
+    #expect(try laptop.readLastList() == Array(current.prefix(30)))
+  }
+
+  @Test("missing old stream writes a baseline with a visible handover gap")
+  func missingOldStreamIsLoud() async throws {
+    let folders = try TemporaryListeningFolders()
+    defer { folders.remove() }
+    let laptop = ListeningStore.live(iCloudFolder: folders.cloud, localFolder: folders.local)
+    let oldPoller = UUID()
+    let poller = try laptop.pollerID()
+    let takenAt = date("2026-10-22T10:00:00Z")
+    try laptop.writeLease(ListeningLease(poller: oldPoller, host: "Mini", takenAt: takenAt))
+    try ListeningLeaseRules.takeOver(
+      store: laptop, poller: poller, host: "Laptop", now: takenAt.addingTimeInterval(1))
+
+    let result = try await poll(store: laptop, now: takenAt.addingTimeInterval(60)) { _ in
+      RecentlyPlayedPage(items: [item("one")], hasNext: false)
+    }
+    guard case let .fetched(fetch) = result else { Issue.record("Expected baseline"); return }
+    #expect(fetch.outcome == .baseline)
+    #expect(fetch.since == ListeningSince(poller: oldPoller, fetchedAt: takenAt))
+    #expect(try laptop.readHandoverMarker() == nil)
+    let log = ListeningLog(streams: [[fetch]], now: fetch.fetchedAt)
+    #expect(log.coverage.gaps.count == 1)
+    #expect(log.coverage.gaps.first?.windowStart == takenAt)
+  }
+
+  @Test("an old baseline equal to the new feed becomes none with a since window")
+  func matchingOldBaselineIsNone() async throws {
+    let folders = try TemporaryListeningFolders()
+    defer { folders.remove() }
+    let mini = ListeningStore.live(
+      iCloudFolder: folders.cloud,
+      localFolder: folders.root.appendingPathComponent("mini", isDirectory: true), hostName: { "Mini" })
+    let laptop = ListeningStore.live(
+      iCloudFolder: folders.cloud,
+      localFolder: folders.root.appendingPathComponent("laptop", isDirectory: true), hostName: { "Laptop" })
+    let oldPoller = try mini.pollerID()
+    let poller = try laptop.pollerID()
+    let list = [item("a"), item("b"), item("c")]
+    let now = date("2026-10-22T10:00:00Z")
+    let baseline = try await poll(store: mini, now: now) { _ in
+      RecentlyPlayedPage(items: list, hasNext: false)
+    }
+    let oldFetch = try #require(fetch(baseline))
+    try ListeningLeaseRules.takeOver(
+      store: laptop, poller: poller, host: "Laptop", now: now.addingTimeInterval(60))
+
+    let result = try await poll(store: laptop, now: now.addingTimeInterval(120)) { _ in
+      RecentlyPlayedPage(items: list, hasNext: false)
+    }
+    let recovered = try #require(fetch(result))
+    #expect(recovered.outcome == ListeningFetch.Outcome.none)
+    #expect(recovered.since == ListeningSince(poller: oldPoller, fetchedAt: oldFetch.fetchedAt))
   }
 
   @Test("unauthorized and failed fetches are logged without replacing last-list")

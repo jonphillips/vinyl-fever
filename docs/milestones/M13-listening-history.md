@@ -94,8 +94,11 @@ reach it directly. Writes go through `NSFileCoordinator`.
     fetched, and they're logged as played at some point since the previous fetch.
   - `failed`: carries `error` (authorization, network, HTTP status). The next good fetch's
     window starts at the last good fetch.
-- **Versioning:** the reader rejects a newer `version` loudly, like the snapshot. It ignores a
-  trailing partial line, since iCloud may sync a file mid-append.
+- **Versioning:** ordinary records use `version: 1`. Handover recovery records carry
+  `"since":{"poller":"<old uuid>","fetchedAt":"…"}` and use `version: 2`; readers accept
+  versions 1 and 2, and reject a newer version loudly, like the snapshot. A baseline with `since`
+  means the old stream could not be recovered, so coverage reports a handover gap. The reader
+  ignores a trailing partial line, since iCloud may sync a file mid-append.
 - **What's in the log:** song identity and text only. No library file locations, no account
   data, and no Apple Music user token.
 - **Fidelity** (jon-platform `semantic-fidelity.md`):
@@ -463,6 +466,9 @@ Taste Intelligence S1 and S2, and Jon picks the order.
     mini's last fetch, and hand back with a few more. On both Macs, a fetch line appears within a
     minute of the toggle. `recent_listening` shows every song played in both holes, dated to the
     handover window, with no duplicates and no gap.
+  - **Implementation status:** executor implementation and synthetic tests pass. A read-only
+    replay against Jon's saved 2026-10-22 streams resolves 19 plays mini → laptop and 0 plays
+    laptop → mini. Jon's device gate remains required before this slice is complete.
 
 ## Prerequisites (Jon, not the executor's)
 

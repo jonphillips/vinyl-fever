@@ -295,6 +295,8 @@ final class ListeningPollingSettingsModel {
   @ObservationIgnored @Dependency(\.listeningStore) private var store
   @ObservationIgnored @Dependency(\.listeningAgentClient) private var agent
   @ObservationIgnored @Dependency(\.date) private var date
+  @ObservationIgnored @Dependency(\.recentlyPlayedClient) private var recentlyPlayed
+  @ObservationIgnored @Dependency(\.listeningAuthorizationClient) private var authorization
   private var pendingTakeoverPoller: UUID?
   private var leaseHost: String?
 
@@ -366,10 +368,22 @@ final class ListeningPollingSettingsModel {
       try ListeningLeaseRules.takeOver(store: store, poller: poller, host: store.hostName(), now: date())
       do {
         try registerAgentIfNeeded()
-        errorMessage = nil
       } catch {
         if let oldLease { try? store.writeLease(oldLease) }
         throw error
+      }
+      do {
+        _ = try await withDependencies {
+          $0.listeningStore = store
+          $0.recentlyPlayedClient = recentlyPlayed
+          $0.listeningAuthorizationClient = authorization
+          $0.date = .constant(date())
+        } operation: {
+          try await ListeningPoller().pollOnce()
+        }
+        errorMessage = nil
+      } catch {
+        errorMessage = error.localizedDescription
       }
     } catch {
       errorMessage = error.localizedDescription
@@ -397,6 +411,17 @@ final class ListeningPollingSettingsModel {
   private func activate(poller: UUID, oldLease: ListeningLease?) async throws {
     if let oldLease, oldLease.poller != poller {
       try ListeningLeaseRules.takeOver(store: store, poller: poller, host: store.hostName(), now: date())
+      try registerAgentIfNeeded()
+      _ = try await withDependencies {
+        $0.listeningStore = store
+        $0.recentlyPlayedClient = recentlyPlayed
+        $0.listeningAuthorizationClient = authorization
+      } operation: {
+        try await ListeningPoller().pollOnce()
+      }
+      errorMessage = nil
+      await refresh()
+      return
     }
     try registerAgentIfNeeded()
     errorMessage = nil

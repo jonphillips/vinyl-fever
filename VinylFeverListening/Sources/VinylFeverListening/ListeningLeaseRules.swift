@@ -14,8 +14,7 @@ public enum ListeningLeaseRules {
     return current.permitsWrites(by: poller) ? .write : .skip
   }
 
-  /// Transfers polling to a Mac and clears its previous diff baseline so its first fetch starts
-  /// a new stream instead of replaying plays from its last time as leaseholder.
+  /// Transfers polling to a Mac and preserves the old holder as a one-time recovery baseline.
   public static func takeOver(
     store: ListeningStore,
     poller: UUID,
@@ -26,12 +25,15 @@ public enum ListeningLeaseRules {
     guard let previousLease, previousLease.poller != poller else {
       throw ListeningLeaseTakeoverError.noOtherLeaseholder
     }
+    try store.writeHandoverMarker(ListeningHandoverMarker(
+      previousPoller: previousLease.poller, fallbackSince: previousLease.takenAt))
     let lease = ListeningLease(poller: poller, host: host, takenAt: now)
-    try store.writeLease(lease)
     do {
+      try store.writeLease(lease)
       try store.clearLastList()
     } catch {
       try? store.writeLease(previousLease)
+      try? store.clearHandoverMarker()
       throw error
     }
   }

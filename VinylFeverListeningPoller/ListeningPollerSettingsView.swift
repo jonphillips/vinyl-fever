@@ -156,7 +156,12 @@ private final class ListeningPollerSettingsModel {
         try? store.writeLease(oldLease)
         throw error
       }
-      errorMessage = nil
+      do {
+        _ = try await ListeningPoller().pollOnce()
+        errorMessage = nil
+      } catch {
+        errorMessage = error.localizedDescription
+      }
     } catch {
       errorMessage = error.localizedDescription
     }

@@ -24,6 +24,10 @@ struct ListeningPollingSettingsTests {
     let model = withDependencies {
       $0.listeningStore = Self.store(state)
       $0.listeningAgentClient = agentState.client
+      $0.listeningAuthorizationClient = ListeningAuthorizationClient(status: { .authorized })
+      $0.recentlyPlayedClient.page = { _ in
+        RecentlyPlayedPage(items: [ListeningItem(kind: .song, id: "takeover", title: "Takeover", artist: "Artist")], hasNext: false)
+      }
       $0.date = .constant(now)
     } operation: {
       ListeningPollingSettingsModel()
@@ -51,6 +55,8 @@ struct ListeningPollingSettingsTests {
     #expect(state.clearLastListCount == 1)
     #expect(agentState.registerCount == 0)
     #expect(model.pollingEnabled)
+    #expect(state.fetches.last?.poller == localPoller)
+    #expect(state.fetches.last?.outcome == .baseline)
 
     await model.disablePolling()
 
