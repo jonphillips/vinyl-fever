@@ -12,7 +12,7 @@ iCloud Drive. The poller runs on Jon's always-on **Intel Mac mini** as a separat
 because the main app targets macOS 27 and the mini stops at macOS 15 Sequoia. Vinyl Fever can run the
 **same poller code** itself, for the laptop as a backup today and for an Apple-silicon mini
 later; a lease makes sure only one Mac polls at a time. `vf-mcp` reads the log, so ChatGPT,
-Claude Code, and Codex can answer "what have I been into lately?". Six slices in six dispatches (S4 and S5 added 2026-10-22).
+Claude Code, and Codex can answer "what have I been into lately?". Six slices in six dispatches (S4 and S5 added 2026-10-22). All six are done; only S2's iPad gate is still owed.
 No schema.
 
 ## The milestone in one sentence
@@ -565,7 +565,28 @@ can produce on handback, and adds **Poll now**. Same files as S4, so it goes nex
        duplicates.
     4. Press **Poll now** on each Mac while it holds the lease. A fetch line appears within a
        minute.
-  - **Device gate owed.**
+  - **Gate result (2026-10-22, evening; times ET). Passed** on the merged #121 build: Vinyl
+    Fever installed at 8:42 pm, and the poller rebuilt and copied to the mini.
+    - **Laptop → mini, nothing played.** The mini took over at 8:51:38 pm and fetched 65 ms later:
+      `none`, `version` 2, with `since` at the laptop's 7:27 pm `plays` line.
+    - **Mini → laptop, nothing played.** The laptop took over at 8:52:53 pm and fetched 0.3 s
+      later: `none`, with `since` at the mini's 8:52:37 pm Poll now line.
+    - **Poll now on the laptop.** Two presses: `none` at 8:54:14 pm, then `plays` with exactly
+      the 3 songs Jon had just played, at 8:57:25 pm.
+    - **Laptop → mini, with 2 songs played after the laptop's last fetch.** The mini took over at
+      8:59:52 pm. Its first fetch was `plays`, `newCount` 2, with exactly those 2 songs and
+      `since` at the laptop's 8:57:25 pm line. This is S5's case: the laptop's tenure started
+      with a `none` recovery.
+    - **Poll now on the mini** wrote a fetch line at 8:52:37 pm.
+    - `recent_listening` afterward showed 55 plays in 24 h, no gaps, no repeated songs, 0
+      collapsed, and the mini as the polling Mac. Every Tom Petty play landed once, in its own
+      window.
+    - **Found at the gate, and dispatched as an effort**
+      ([listening-settings-refresh](../efforts/listening-settings-refresh.md)):
+      - Vinyl Fever's Settings kept saying "This Mac holds the lease" after the mini took over,
+        even after closing and reopening Settings.
+      - The laptop's hourly run at 8:27 pm (still the S4 build) failed with "The file couldn't be
+        saved." It wrote no fetch line.
 
 ## Prerequisites (Jon, not the executor's)
 
