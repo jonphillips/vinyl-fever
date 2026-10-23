@@ -9,6 +9,7 @@ import VinylFeverListening
 
 struct SettingsView: View {
   @Bindable var model: AppModel
+  @Environment(\.appearsActive) private var appearsActive
 
   @FetchAll(AppSetting.all)
   private var persistedSettings: [AppSetting]
@@ -176,6 +177,10 @@ struct SettingsView: View {
         await refreshLibrarySnapshotStatus()
         await listeningModel.refresh()
       }
+      .onChange(of: appearsActive) { _, isActive in
+        guard isActive else { return }
+        Task { await listeningModel.refresh() }
+      }
       .toolbar {
         ToolbarItem {
           Button {
@@ -201,6 +206,7 @@ struct SettingsView: View {
 
   private func refreshButtonTapped() async {
     await model.refreshToolStatuses(settings: settings)
+    await listeningModel.refresh()
   }
 
   private var artistAliasesSection: some View {

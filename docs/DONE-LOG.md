@@ -3,6 +3,14 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-22 — Effort: Listening settings refresh, and full poll errors (`effort/listening-settings-refresh`)
+
+Both Settings windows refresh listening state when activated, and Vinyl Fever's Re-probe refreshes
+the lease too. Poll failures now retain the Foundation domain, code, file path, and underlying
+errors in saved error text and public logs. Listening (44) and Core (233) tests pass with and
+without `VF_PERF_TESTS=1`; macOS app tests (71) and the `VF Listening Poller` build pass. Jon's
+two-Mac device check remains owed in #123.
+
 ## 2026-10-22 — M13 · Dispatch 6 S5 (`m13/s5-handover-chain`)
 
 Resolved the newest known listening list through up to four handover links, added strict

@@ -119,6 +119,31 @@ struct ListeningPollingSettingsTests {
     #expect(!model.isPollingNow)
   }
 
+  @Test
+  func refreshReflectsLeaseTakenByAnotherMac() async {
+    let now = date("2026-10-22T12:00:00Z")
+    let poller = UUID()
+    let state = ListeningSettingsState(
+      poller: poller, lease: ListeningLease(poller: poller, host: "This Mac", takenAt: now))
+    let agentState = ListeningAgentState(isEnabled: true)
+    let model = withDependencies {
+      $0.listeningStore = Self.store(state)
+      $0.listeningAgentClient = agentState.client
+      $0.date = .constant(now)
+    } operation: {
+      ListeningPollingSettingsModel()
+    }
+
+    await model.refresh()
+    #expect(model.canPollNow)
+
+    state.lease = ListeningLease(poller: UUID(), host: "Mac mini", takenAt: now.addingTimeInterval(60))
+    await model.refresh()
+
+    #expect(model.leaseLabel == "Mac mini holds the lease")
+    #expect(!model.canPollNow)
+  }
+
   private static func store(_ state: ListeningSettingsState) -> ListeningStore {
     ListeningStore(
       pollerID: { state.poller },

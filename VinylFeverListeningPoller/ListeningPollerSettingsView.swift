@@ -9,6 +9,7 @@ private let agentPlistName = "VFListeningPollerAgent.plist"
 
 struct ListeningPollerSettingsView: View {
   @State private var model = ListeningPollerSettingsModel()
+  @Environment(\.appearsActive) private var appearsActive
 
   var body: some View {
     Form {
@@ -61,6 +62,10 @@ struct ListeningPollerSettingsView: View {
     }
     .formStyle(.grouped)
     .task { await model.refresh() }
+    .onChange(of: appearsActive) { _, isActive in
+      guard isActive else { return }
+      Task { await model.refresh() }
+    }
     .alert("Make this Mac the poller?", isPresented: $model.isConfirmingTakeover) {
       Button("Make This Mac the Poller") { Task { await model.confirmTakeover() } }
       Button("Cancel", role: .cancel) { model.cancelTakeover() }
