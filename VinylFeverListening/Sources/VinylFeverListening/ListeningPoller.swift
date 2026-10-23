@@ -139,7 +139,7 @@ public struct ListeningPoller {
       try store.writeLastPollError(nil)
       return result
     } catch {
-      try? store.writeLastPollError(error.localizedDescription)
+      try? store.writeLastPollError(ListeningErrorDescription.describe(error))
       throw error
     }
   }
@@ -188,7 +188,7 @@ public struct ListeningPoller {
     } catch {
       let failed = ListeningFetch(
         poller: poller, host: host, fetchedAt: now, outcome: .failed,
-        pagesRead: 0, error: error.localizedDescription
+        pagesRead: 0, error: ListeningErrorDescription.describe(error)
       )
       try store.appendFetch(failed)
       return .fetched(failed)

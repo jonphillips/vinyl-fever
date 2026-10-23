@@ -18,7 +18,7 @@ struct ListeningPollerMain {
           logger.error("Listening poll recorded failure: \(fetch.error ?? "Unknown error", privacy: .public)")
         }
       } catch {
-        logger.error("Listening poll could not write to iCloud: \(error.localizedDescription, privacy: .public)")
+        logger.error("Listening poll could not write to iCloud: \(ListeningErrorDescription.describe(error), privacy: .public)")
         exit(EXIT_FAILURE)
       }
       return

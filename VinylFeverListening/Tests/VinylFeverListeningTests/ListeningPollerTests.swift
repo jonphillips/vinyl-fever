@@ -457,6 +457,38 @@ struct ListeningPollerTests {
     #expect(try store.readFetches().filter { $0.outcome == .failed }.count == 3)
   }
 
+  @Test("a failed fetch write preserves the full error in the last-poll error")
+  func failedFetchWritePreservesFullError() async {
+    let path = "/Users/test/Library/Listening/fetches.jsonl"
+    let error = CocoaError(.fileWriteUnknown, userInfo: [
+      NSFilePathErrorKey: path,
+      NSUnderlyingErrorKey: POSIXError(.EPERM),
+    ])
+    let state = PollerErrorState()
+    let store = ListeningStore(
+      pollerID: { UUID(uuidString: "00000000-0000-0000-0000-000000000001")! },
+      readLease: { nil }, writeLease: { _ in }, readLastList: { nil }, writeLastList: { _ in },
+      appendFetch: { _ in throw error },
+      writeLastPollError: { state.lastPollError = $0 },
+      listeningFolder: { URL(fileURLWithPath: "/tmp/Listening") }
+    )
+
+    await #expect(throws: CocoaError.self) {
+      try await withDependencies {
+        $0.listeningStore = store
+        $0.listeningAuthorizationClient = ListeningAuthorizationClient(status: { .authorized })
+        $0.recentlyPlayedClient.page = { _ in RecentlyPlayedPage(items: [self.item("one")], hasNext: false) }
+        $0.date = .constant(self.date("2026-10-18T12:00:00Z"))
+      } operation: {
+        try await ListeningPoller().pollOnce()
+      }
+    }
+
+    #expect(state.lastPollError?.contains("NSCocoaErrorDomain 512") == true)
+    #expect(state.lastPollError?.contains(path) == true)
+    #expect(state.lastPollError?.contains("NSPOSIXErrorDomain 1") == true)
+  }
+
   private func poll(
     store: ListeningStore,
     now: Date,
@@ -530,4 +562,8 @@ private struct TemporaryListeningFolders {
 
 private enum PollerFixtureError: Error {
   case network
+}
+
+private final class PollerErrorState: @unchecked Sendable {
+  var lastPollError: String?
 }

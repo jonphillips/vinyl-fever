@@ -23,7 +23,7 @@ enum VinylFeverMain {
           listeningLogger.error("Listening poll recorded failure: \(fetch.error ?? "Unknown error", privacy: .public)")
         }
       } catch {
-        listeningLogger.error("Listening poll could not write to iCloud: \(error.localizedDescription, privacy: .public)")
+        listeningLogger.error("Listening poll could not write to iCloud: \(ListeningErrorDescription.describe(error), privacy: .public)")
         exit(EXIT_FAILURE)
       }
       return
