@@ -32,7 +32,7 @@ Details are in the design doc's *S0 results*. The facts this plan depends on:
   - 65 regular user playlists, 7 smart playlists, and 76 subscription playlists.
   - The Library playlist is the smart playlist "Music" with special kind `Music`, and it has
     87,042 tracks.
-  - The only folder is "aJon Selections". It holds "2020: Jon's Selections" (empty) through
+  - The folder "aJon Selections" holds "2020: Jon's Selections" (empty) through
     "2026: Jon's Selections" (79, 77, 77, 59, 130, 101 songs from 2021 to 2026).
   - Replay 2015 through Replay 2026 and Replay All Time are subscription playlists.
   - "New Music" (25 songs) and "New Music Daily" (103) are both subscription playlists, and
@@ -78,7 +78,8 @@ Details are in the design doc's *S0 results*. The facts this plan depends on:
 `setup-mac`; Jon's gate). Each slice is a dispatch of its own, because each gate can redirect the
 next. S2 and S3 both edit `vf-mcp`, so they can't run side by side.
 
-- [ ] **S1 — Playlists in the snapshot, with roles (Core + `vf-mcp` + app).**
+- [x] **S1 — Playlists in the snapshot, with roles (Core + `vf-mcp` + app).** Done in #125;
+  Jon's gate is owed.
   - **Snapshot v2** (`LibrarySnapshot.currentVersion = 2`):
     - `LibraryTrack` gains `disliked: Bool`, read in bulk like `favorited`
       (`LibraryBulkProperty` `pHat`, boolean). A v1 file decodes with `disliked` false.
@@ -219,6 +220,17 @@ next. S2 and S3 both edit `vf-mcp`, so they can't run side by side.
        songs.
     4. Jon judges the 15 and records the result here: how many he didn't know, how many he'd
        keep, and anything that redirects S2 or S3.
+  - **Laptop read — passed 2026-10-23** (read-only, written to a scratch path, at the #125 head):
+    - 87,042 tracks, 148 playlists (65 user, 7 smart, 76 subscription), and 8,220 outside-library
+      tracks;
+    - 15.2 s in total; Codex measured the playlist phase at 8.0 s;
+    - the Selections sizes and New Music (25, 23 outside) match, Replay 2025's order matches
+      Music.app, and there are 4 disliked tracks;
+    - the helper: 144 non-ignore playlists, 130 songs for 2025 Selections in 0.18 s, and a warm
+      `check_tracks` in 0.01 s.
+
+    An empty playlist ("2020: Jon's Selections") made Music answer -1728. The reader skips
+    member reads when the track count is 0.
 
 - [ ] **S2 — Exposure and curation logs, kept and passed, baselines (Listening + Core + `vf-mcp` +
   both apps).** *It goes before feedback (Decision 3): a New Music week that isn't saved is gone,
