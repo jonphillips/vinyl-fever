@@ -1,6 +1,6 @@
 # Effort — Listening settings refresh, and full poll errors
 
-**Status:** Planned 2026-10-22, from M13 S5's device gate.
+**Status:** Done 2026-10-22 as #123.
 **Summary:** Vinyl Fever's Settings shows a stale lease after another Mac takes over. Refresh the
 listening section when the window comes forward and on Re-probe, in both apps. Also record a
 failed poll's full error, with its domain, code, file path, and underlying error, so the next
