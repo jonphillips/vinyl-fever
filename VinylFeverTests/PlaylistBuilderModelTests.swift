@@ -1272,7 +1272,8 @@ private final class InboxStub: @unchecked Sendable {
     PlaylistInboxClient(
       list: { self.list() },
       read: { try self.read($0) },
-      markProcessed: { self.markProcessed($0) })
+      markProcessed: { self.markProcessed($0) },
+      processedNames: { [] })
   }
 
   private func list() -> [StagedPlaylistSummary] {

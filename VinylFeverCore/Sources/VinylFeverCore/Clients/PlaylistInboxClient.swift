@@ -21,6 +21,7 @@ public struct PlaylistInboxClient: Sendable {
   public var list: @Sendable () throws -> [StagedPlaylistSummary]
   public var read: @Sendable (_ item: StagedHandoff) throws -> String
   public var markProcessed: @Sendable (_ item: StagedHandoff) throws -> StagedHandoff
+  public var processedNames: @Sendable () throws -> Set<String>
 }
 
 extension PlaylistInboxClient: TestDependencyKey {
@@ -48,7 +49,17 @@ extension PlaylistInboxClient {
         }
       },
       read: { try inbox.read($0) },
-      markProcessed: { try inbox.markProcessed($0) }
+      markProcessed: { try inbox.markProcessed($0) },
+      processedNames: {
+        let processedRoot = root.appending(path: "Processed", directoryHint: .isDirectory)
+        guard let urls = FileManager.default.enumerator(at: processedRoot, includingPropertiesForKeys: nil)?
+          .compactMap({ $0 as? URL }).filter({ $0.pathExtension == "vfplaylist" }) else { return [] }
+        return Set(urls.compactMap { url in
+          guard let text = try? String(contentsOf: url, encoding: .utf8),
+            let decoded = try? PlaylistContract.decode(text) else { return nil }
+          return decoded.request.name
+        })
+      }
     )
   }
 }

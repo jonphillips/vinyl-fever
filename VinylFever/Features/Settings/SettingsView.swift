@@ -20,7 +20,11 @@ struct SettingsView: View {
   @State private var librarySnapshotStatus = "Checking…"
   @State private var listeningModel = ListeningPollingSettingsModel()
   @State private var isShowingArtistAliases = false
+  @State private var isShowingPlaylistRoles = false
+  @State private var tasteStatus = "Checking…"
+  @State private var tasteError: String?
   @Dependency(\.librarySnapshotStore) private var librarySnapshotStore
+  @Dependency(\.playlistRolesStore) private var playlistRolesStore
   @Dependency(\.listeningStore) private var listeningStore
 
   private var settings: AppSetting {
@@ -50,25 +54,7 @@ struct SettingsView: View {
             .foregroundStyle(.red)
         }
 
-        Section {
-          MusicWatchFolderRow(
-            folderPath: settings.musicWatchFolderPath ?? "",
-            errorMessage: model.musicWatchFolderErrorMessage,
-            save: { path in model.saveMusicWatchFolder(path, settings: settings) }
-          )
-        } header: {
-          Text("Apple Music Import")
-        } footer: {
-          Text(
-            "Vinyl Fever imports by copying files into Music's “Automatically Add” folder "
-              + "instead of scripting Music directly, which avoids the “Music did not respond "
-              + "in time” errors. Point this at "
-              + "…/Media.localized/Automatically Add to Music.localized inside your Music library "
-              + "(on its external drive)."
-          )
-          .font(.callout)
-          .foregroundStyle(.secondary)
-        }
+        appleMusicImportSection
 
         Section {
           Text(listeningModel.statusLine)
@@ -150,13 +136,15 @@ struct SettingsView: View {
           copyButton("tunnel-client init command", key: "tunnel", value: tunnelCommand)
           Text("Use the plugin name Vinyl Fever. The tunnel command needs the tunnel ID from the Platform Tunnels page.")
             .font(.callout).foregroundStyle(.secondary)
-          Text("Tools: library_overview, top_artists, top_tracks, search_library, artist_profile, check_tracks, recent_listening, stage_playlist")
+          Text("Tools: library_overview, top_artists, top_tracks, search_library, artist_profile, check_tracks, list_playlists, playlist_tracks, recent_listening, stage_playlist")
             .font(.callout).foregroundStyle(.secondary)
         } header: {
           Text("Chat Access (MCP)")
         } footer: {
           Text("The helper reads the last library snapshot Vinyl Fever built. Chat can stage a playlist for review, but only Create in Vinyl Fever changes Apple Music.")
         }
+
+        tasteSection
 
         artistAliasesSection
 
@@ -175,6 +163,7 @@ struct SettingsView: View {
       .task {
         model.loadFrontierKeyPreview()
         await refreshLibrarySnapshotStatus()
+        await refreshTasteStatus()
         await listeningModel.refresh()
       }
       .onChange(of: appearsActive) { _, isActive in
@@ -199,6 +188,7 @@ struct SettingsView: View {
     }
     .frame(minWidth: 620, minHeight: 420)
     .sheet(isPresented: $isShowingArtistAliases) { ArtistAliasesView() }
+    .sheet(isPresented: $isShowingPlaylistRoles, onDismiss: { Task { await refreshTasteStatus() } }) { PlaylistRolesView() }
     .task(id: settings) {
       await model.refreshToolStatuses(settings: settings)
     }
@@ -215,6 +205,34 @@ struct SettingsView: View {
     }
   }
 
+  private var appleMusicImportSection: some View {
+    Section {
+      MusicWatchFolderRow(
+        folderPath: settings.musicWatchFolderPath ?? "",
+        errorMessage: model.musicWatchFolderErrorMessage,
+        save: { path in model.saveMusicWatchFolder(path, settings: settings) }
+      )
+    } header: {
+      Text("Apple Music Import")
+    } footer: {
+      Text("Vinyl Fever imports by copying files into Music's “Automatically Add” folder instead of scripting Music directly, which avoids the “Music did not respond in time” errors. Point this at …/Media.localized/Automatically Add to Music.localized inside your Music library (on its external drive).")
+        .font(.callout)
+        .foregroundStyle(.secondary)
+    }
+  }
+
+  private var tasteSection: some View {
+    Section("Taste") {
+      Text(tasteStatus)
+      LabeledContent("Roles file", value: playlistRolesStore.fileURL().path(percentEncoded: false))
+        .textSelection(.enabled)
+      if let tasteError {
+        Label(tasteError, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
+      }
+      Button("Playlist Roles…") { isShowingPlaylistRoles = true }
+    }
+  }
+
   private func refreshLibrarySnapshotStatus() async {
     do {
       guard let snapshot = try await librarySnapshotStore.read() else {
@@ -225,6 +243,24 @@ struct SettingsView: View {
       librarySnapshotStatus = "\(snapshot.trackCount.formatted()) tracks · \(modifiedAt.formatted(.relative(presentation: .numeric)))"
     } catch {
       librarySnapshotStatus = "Unavailable · \(error.localizedDescription)"
+    }
+  }
+
+  private func refreshTasteStatus() async {
+    do {
+      let snapshot = try await librarySnapshotStore.read()
+      let roles = try await playlistRolesStore.read()
+      guard let snapshot else { tasteStatus = "Build the library snapshot first"; return }
+      let unlabeled = roles.map { saved in
+        let resolved = PlaylistRoleMatcher.resolve(snapshot: snapshot, roles: saved)
+        return resolved.filter { $0.role == nil }.count
+      } ?? snapshot.playlists.count
+      let savedText = roles.map { " · roles saved \($0.updatedAt.formatted(.relative(presentation: .numeric)))" } ?? " · roles not saved"
+      tasteStatus = "\(snapshot.playlists.count) playlists · \(unlabeled) unlabeled\(savedText)"
+      tasteError = nil
+    } catch {
+      tasteStatus = "Playlist snapshot unavailable"
+      tasteError = error.localizedDescription
     }
   }
 

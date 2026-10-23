@@ -30,6 +30,8 @@ private struct SearchPayload: Decodable, Sendable {
 private struct RankingPayload: Decodable, Sendable { var by: String?; var period: String?; var limit: Int? }
 private struct ListeningPayload: Decodable, Sendable { var period: String?; var limit: Int?; var by: String? }
 private struct ArtistPayload: Decodable, Sendable { var artist: String }
+private struct PlaylistListPayload: Decodable, Sendable { var role: String?; var limit: Int? }
+private struct PlaylistTracksPayload: Decodable, Sendable { var name: String; var limit: Int? }
 
 private struct MCPListeningCoverage: Encodable {
   struct Gap: Encodable { var host: String; var outcome: String; var windowStart: Date?; var windowEnd: Date; var detail: String? }
@@ -86,15 +88,22 @@ private actor LibraryMCPContext {
   private var cachedAliasesModifiedAt: Date?
   private var cachedGeneratedAt: Date?
   private var cachedOverview: LibraryOverview?
+  private var cachedPlaylistIndex: PlaylistIndex?
+  private var cachedPlaylistIndexSnapshotModifiedAt: Date?
+  private var cachedPlaylistIndexRolesModifiedAt: Date?
+  private var cachedPlaylistRolesModifiedAt: Date?
+  private var cachedPlaylistRoles: PlaylistRoles?
   private let listeningRootURL: URL
+  private let tasteRootURL: URL
   private var cachedListeningLog: ListeningLog?
   private var cachedListeningFiles: [URL: Date] = [:]
   private var cachedListeningIdentity: ArtistIdentity = .empty
 
-  init(snapshotURL: URL?, inboxRoot: URL?, listeningRootURL: URL?) {
+  init(snapshotURL: URL?, inboxRoot: URL?, listeningRootURL: URL?, tasteRootURL: URL?) {
     self.snapshotURL = snapshotURL ?? Self.defaultSnapshotURL
     self.inbox = HandoffInbox(root: inboxRoot ?? Self.defaultInbox.root, fileExtension: "vfplaylist")
     self.listeningRootURL = listeningRootURL ?? Self.defaultListeningRootURL
+    self.tasteRootURL = tasteRootURL ?? Self.defaultTasteRootURL
   }
 
   static var defaultSnapshotURL: URL {
@@ -111,6 +120,41 @@ private actor LibraryMCPContext {
   static var defaultListeningRootURL: URL {
     URL(fileURLWithPath: NSHomeDirectory())
       .appending(path: "Library/Mobile Documents/com~apple~CloudDocs/Vinyl Fever/Listening", directoryHint: .isDirectory)
+  }
+
+  static var defaultTasteRootURL: URL {
+    FileManager.default.homeDirectoryForCurrentUser
+      .appending(path: "Library/Mobile Documents/com~apple~CloudDocs/Vinyl Fever/Taste Intelligence", directoryHint: .isDirectory)
+  }
+
+  func playlistData() throws -> (LibrarySnapshot, PlaylistRoles, PlaylistIndex, Date, ArtistIdentity) {
+    let (libraryIndex, generatedAt) = try index()
+    let snapshotModified = cachedModifiedAt
+    let rolesURL = tasteRootURL.appending(path: "playlist-roles.json")
+    let modified = (try? FileManager.default.attributesOfItem(atPath: rolesURL.path)[.modificationDate]) as? Date
+    let roles: PlaylistRoles
+    if let cachedPlaylistRoles, cachedPlaylistRolesModifiedAt == modified {
+      roles = cachedPlaylistRoles
+    } else if let data = try? Self.readCoordinated(rolesURL), !data.isEmpty {
+      roles = try PlaylistRolesCodec.decode(data)
+      cachedPlaylistRoles = roles
+      cachedPlaylistRolesModifiedAt = modified
+    } else {
+      roles = PlaylistRoles(updatedAt: .distantPast, playlists: [])
+      cachedPlaylistRoles = roles
+      cachedPlaylistRolesModifiedAt = modified
+    }
+    if let cachedPlaylistIndex, cachedPlaylistIndexRolesModifiedAt == modified,
+      cachedPlaylistIndexSnapshotModifiedAt == snapshotModified {
+      let snapshot = try LibrarySnapshotCodec.decode(Data(contentsOf: snapshotURL))
+      return (snapshot, roles, cachedPlaylistIndex, generatedAt, libraryIndex.artistIdentity)
+    }
+    let snapshot = try LibrarySnapshotCodec.decode(Data(contentsOf: snapshotURL))
+    let playlistIndex = PlaylistIndex(snapshot: snapshot, roles: roles, identity: libraryIndex.artistIdentity)
+    cachedPlaylistIndex = playlistIndex
+    cachedPlaylistIndexSnapshotModifiedAt = snapshotModified
+    cachedPlaylistIndexRolesModifiedAt = modified
+    return (snapshot, roles, playlistIndex, generatedAt, libraryIndex.artistIdentity)
   }
 
   func listeningLog(now: Date = Date()) throws -> ListeningLog {
@@ -200,16 +244,17 @@ public enum LibraryMCPServer {
   Vinyl Fever exposes Jon's Apple Music library and listening stats. Use these tools for any claim about what Jon owns, has played, or has loved — never guess. Before proposing a final list, call check_tracks on it. For Jon's uploads, use an exact album from uploadedAlbums as the album hint. When Jon asks for the playlist, call stage_playlist with the final list instead of printing it; Jon reviews and creates it in Vinyl Fever. Snapshot age is in library_overview.
   """
   public static let instructions: String = {
-    instructionHead + "\n\n" + PlaylistContract.trackRules
+    instructionHead + "\n\nFor taste questions, start with list_playlists. keepers are the strongest evidence and replay positions are ranks. Report evidence by role, not by counting playlists; don't infer taste from genre. sharedAccountEra play counts aren't Jon's alone. Before proposing songs Jon probably doesn't know, call check_tracks and remove anything owned, heard, or in a playlist.\n\n" + PlaylistContract.trackRules
   }()
 
   public static func make(
     snapshotURL: URL? = nil,
     inboxRoot: URL? = nil,
     listeningRootURL: URL? = nil,
+    tasteRootURL: URL? = nil,
     now: @escaping @Sendable () -> Date = { Date() }
   ) -> MCPServer {
-    let context = LibraryMCPContext(snapshotURL: snapshotURL, inboxRoot: inboxRoot, listeningRootURL: listeningRootURL)
+    let context = LibraryMCPContext(snapshotURL: snapshotURL, inboxRoot: inboxRoot, listeningRootURL: listeningRootURL, tasteRootURL: tasteRootURL)
     let readOnly = MCPToolAnnotations(readOnly: true, openWorld: false)
     let overviewSchema = schema([:])
     let topArtistsSchema = schema(["by": enumField(["plays", "favorites", "recently_added"]), "period": enumField(["all_time", "7d", "30d", "90d"]), "limit": integerField])
@@ -217,6 +262,8 @@ public enum LibraryMCPServer {
     let recentListeningSchema = schema(["period": enumField(["24h", "7d", "30d", "90d"]), "limit": integerField], required: ["period"])
     let searchSchema = schema(["artist": stringField, "title": stringField, "album": stringField, "genre": stringField, "year_from": integerField, "year_to": integerField, "min_plays": integerField, "max_plays": integerField, "favorited": boolField, "availability": enumField(LibraryAvailability.allCases.map(\.rawValue)), "sort": enumField(["plays", "favorites", "recently_added", "recently_played", "title", "artist"]), "limit": integerField])
     let artistSchema = schema(["artist": stringField], required: ["artist"])
+    let playlistListSchema = schema(["role": enumField(PlaylistRole.allCases.map(\.rawValue) + ["unlabeled"]), "limit": integerField])
+    let playlistTracksSchema = schema(["name": stringField, "limit": integerField], required: ["name"])
     let checksSchema = schema(["tracks": .object(["type": .string("array"), "maxItems": .integer(LibraryIndex.maximumCheckTracks), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField]), "required": .array([.string("artist"), .string("title")])])])], required: ["tracks"])
     let stageSchema = schema(["name": stringField, "description": .object(["type": .string("string"), "description": .string(stageDescriptionGuidance)]), "tracks": .object(["type": .string("array"), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField, "album": stringField, "year": integerField]), "required": .array([.string("artist"), .string("title")])])])], required: ["name", "tracks"])
     return MCPServer(name: "Vinyl Fever", version: "1.0.0", instructions: instructions, tools: [
@@ -265,7 +312,70 @@ public enum LibraryMCPServer {
       MCPTool(name: "check_tracks", description: "Check which requested songs are in the library and return summed plays across versions.", inputSchema: checksSchema, annotations: readOnly) { input in
         let p = try decode(CheckTracksPayload.self, from: input, schema: checksSchema)
         let (index, _) = try await context.index()
-        return .json(index.checkTracks(p.tracks.map { (artist: $0.artist, title: $0.title) }))
+        let (_, _, playlistIndex, _, _) = try await context.playlistData()
+        let log = try? await context.listeningLog()
+        let calendar = Calendar.current
+        let rows = p.tracks.prefix(LibraryIndex.maximumCheckTracks).map { request in
+          let heard = log?.plays.filter {
+            index.artistIdentity.key($0.item.artist) == index.artistIdentity.key(request.artist) &&
+              SongTextNormalizer.libraryTitle($0.item.title) == SongTextNormalizer.libraryTitle(request.title)
+          }
+          let days = Set(heard?.map { calendar.startOfDay(for: $0.windowEnd) } ?? [])
+          let evidence = playlistIndex.evidence(artist: request.artist, title: request.title, identity: index.artistIdentity,
+            tracks: index.matchingTracks(artist: request.artist, title: request.title))
+          let check = index.checkTracks([(artist: request.artist, title: request.title)]).first!
+          return MCPCheckedTrack(check, evidence: evidence, heardDays: heard == nil ? nil : days.count,
+            heardLast: heard?.map(\.windowEnd).max())
+        }
+        return .json(rows)
+      },
+      MCPTool(name: "list_playlists", description: "List Jon's playlists and their taste roles. Unlabeled playlists are visible but are not evidence.", inputSchema: playlistListSchema, annotations: readOnly) { input in
+        let p = try decode(PlaylistListPayload.self, from: input, schema: playlistListSchema)
+        let (snapshot, roles, _, generatedAt, _) = try await context.playlistData()
+        let resolved = PlaylistRoleMatcher.resolve(snapshot: snapshot, roles: roles)
+        let unlabeledCount = resolved.filter { $0.role == nil }.count
+        let filtered = resolved.filter { row in
+          if let role = p.role {
+            return role == "unlabeled" ? row.role == nil : row.role?.rawValue == role
+          }
+          return row.role != .ignore
+        }
+        let limit = max(1, min(p.limit ?? LibraryIndex.defaultLimit, LibraryIndex.maximumLimit))
+        let inLibrary = Set(snapshot.tracks.map(\.persistentID))
+        let rows = filtered.prefix(limit).map { row in
+          MCPPlaylistSummary(name: row.playlist.name, role: row.role?.rawValue, folder: row.playlist.folder,
+            kind: row.playlist.kind.rawValue, songCount: row.playlist.members.count,
+            inLibraryCount: row.playlist.members.filter { inLibrary.contains($0) }.count)
+        }
+        return .json(MCPPlaylistList(playlists: Array(rows), unlabeledCount: unlabeledCount, snapshotGeneratedAt: generatedAt))
+      },
+      MCPTool(name: "playlist_tracks", description: "List tracks in a playlist in order; Replay positions are ranks.", inputSchema: playlistTracksSchema, annotations: readOnly) { input in
+        let p = try decode(PlaylistTracksPayload.self, from: input, schema: playlistTracksSchema)
+        let (snapshot, roles, playlistIndex, generatedAt, identity) = try await context.playlistData()
+        let match = snapshot.playlists.first(where: { $0.name == p.name }) ?? snapshot.playlists.first(where: { $0.name.localizedCaseInsensitiveCompare(p.name) == .orderedSame })
+        guard let match else { throw ArgumentError.unknown(p.name) }
+        let tracksByID = Dictionary(uniqueKeysWithValues: snapshot.tracks.map { ($0.persistentID, $0) })
+        let (libraryIndex, _) = try await context.index()
+        let log = try? await context.listeningLog()
+        let rows = match.members.enumerated().compactMap { position, id -> MCPPlaylistTrack? in
+          let track = tracksByID[id]
+          let outside = snapshot.outsideTracks[id]
+          guard let title = track?.name ?? outside?.name, let artist = track?.artist ?? outside?.artist else { return nil }
+          let evidence = playlistIndex.evidence(artist: artist, title: title, identity: identity,
+            tracks: libraryIndex.matchingTracks(artist: artist, title: title))
+          let heard = log?.plays.filter {
+            identity.key($0.item.artist) == identity.key(artist) &&
+              SongTextNormalizer.libraryTitle($0.item.title) == SongTextNormalizer.libraryTitle(title)
+          }
+          let heardDays = heard.map { Set($0.map { Calendar.current.startOfDay(for: $0.windowEnd) }).count }
+          let check = libraryIndex.checkTracks([(artist: artist, title: title)]).first!
+          return MCPPlaylistTrack(position: position + 1, artist: artist, title: title,
+            album: track?.album ?? outside?.album ?? "", year: track?.year ?? outside?.year,
+            evidence: MCPPlaylistSongEvidence(evidence, check: check, heardDays: heardDays, heardLast: heard?.map(\.windowEnd).max()))
+        }
+        let limit = max(1, min(p.limit ?? 100, 200))
+        return .json(MCPPlaylistTracks(name: match.name, role: PlaylistRoleMatcher.resolve(snapshot: snapshot, roles: roles).first(where: { $0.playlist.persistentID == match.persistentID })?.role?.rawValue,
+          tracks: Array(rows.prefix(limit)), snapshotGeneratedAt: generatedAt))
       },
       MCPTool(name: "recent_listening", description: "Show songs started in Jon's listening log, newest first. Skips and brief autoplay count as plays, not full listens. Coverage begins when polling started.", inputSchema: recentListeningSchema, annotations: readOnly) { input in
         let p = try decode(ListeningPayload.self, from: input, schema: recentListeningSchema)
@@ -330,6 +440,74 @@ public enum LibraryMCPServer {
     case "90d": .quarter
     default: throw ArgumentError.invalidEnum(value)
     }
+  }
+}
+
+private struct MCPPlaylistSummary: Encodable {
+  var name: String; var role: String?; var folder: String?; var kind: String
+  var songCount: Int; var inLibraryCount: Int
+}
+private struct MCPPlaylistList: Encodable {
+  var playlists: [MCPPlaylistSummary]; var unlabeledCount: Int; var snapshotGeneratedAt: Date
+}
+private struct MCPPlaylistTrack: Encodable {
+  var position: Int; var artist: String; var title: String; var album: String; var year: Int?
+  var evidence: MCPPlaylistSongEvidence
+}
+private struct MCPPlaylistTracks: Encodable {
+  var name: String; var role: String?; var tracks: [MCPPlaylistTrack]; var snapshotGeneratedAt: Date
+}
+private struct MCPCheckedTrack: Encodable {
+  var artist: String; var title: String; var owned: Bool; var plays: Int; var versionCount: Int
+  var favorited: Bool; var lastPlayed: Date?; var availability: [LibraryAvailability]
+  var uploadedAlbums: [String]; var playlists: [String: [String]]; var playlistCounts: [String: Int]
+  var disliked: Bool; var sharedAccountEra: Bool; var heardDays: Int?; var heardLast: Date?
+
+  init(_ check: LibraryTrackCheck, evidence: PlaylistSongEvidence, heardDays: Int?, heardLast: Date?) {
+    artist = check.artist; title = check.title; owned = check.owned; plays = check.plays
+    versionCount = check.versionCount; favorited = check.favorited; lastPlayed = check.lastPlayed
+    availability = check.availability; uploadedAlbums = check.uploadedAlbums
+    playlists = evidence.playlists; playlistCounts = evidence.playlistCounts
+    disliked = evidence.disliked; sharedAccountEra = evidence.sharedAccountEra
+    self.heardDays = heardDays; self.heardLast = heardLast
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case artist, title, owned, plays, versionCount, favorited, lastPlayed, availability, uploadedAlbums
+    case playlists, playlistCounts, disliked, sharedAccountEra, heardDays, heardLast
+  }
+  func encode(to encoder: Encoder) throws {
+    var values = encoder.container(keyedBy: CodingKeys.self)
+    try values.encode(artist, forKey: .artist); try values.encode(title, forKey: .title)
+    try values.encode(owned, forKey: .owned); try values.encode(plays, forKey: .plays)
+    try values.encode(versionCount, forKey: .versionCount); try values.encode(favorited, forKey: .favorited)
+    try values.encodeIfPresent(lastPlayed, forKey: .lastPlayed); try values.encode(availability, forKey: .availability)
+    try values.encode(uploadedAlbums, forKey: .uploadedAlbums); try values.encode(playlists, forKey: .playlists)
+    try values.encode(playlistCounts, forKey: .playlistCounts); try values.encode(disliked, forKey: .disliked)
+    try values.encode(sharedAccountEra, forKey: .sharedAccountEra)
+    try values.encodeIfPresent(heardDays, forKey: .heardDays); try values.encodeIfPresent(heardLast, forKey: .heardLast)
+  }
+}
+private struct MCPPlaylistSongEvidence: Encodable {
+  var playlists: [String: [String]]; var playlistCounts: [String: Int]
+  var disliked: Bool; var sharedAccountEra: Bool; var heardDays: Int?; var heardLast: Date?
+  var owned: Bool; var plays: Int; var favorited: Bool; var lastPlayed: Date?
+  var availability: [LibraryAvailability]
+  init(_ value: PlaylistSongEvidence, check: LibraryTrackCheck, heardDays: Int?, heardLast: Date?) {
+    playlists = value.playlists; playlistCounts = value.playlistCounts; disliked = value.disliked
+    sharedAccountEra = value.sharedAccountEra; self.heardDays = heardDays; self.heardLast = heardLast
+    owned = check.owned; plays = check.plays; favorited = check.favorited
+    lastPlayed = check.lastPlayed; availability = check.availability
+  }
+  private enum CodingKeys: String, CodingKey { case playlists, playlistCounts, disliked, sharedAccountEra, heardDays, heardLast, owned, plays, favorited, lastPlayed, availability }
+  func encode(to encoder: Encoder) throws {
+    var values = encoder.container(keyedBy: CodingKeys.self)
+    try values.encode(playlists, forKey: .playlists); try values.encode(playlistCounts, forKey: .playlistCounts)
+    try values.encode(disliked, forKey: .disliked); try values.encode(sharedAccountEra, forKey: .sharedAccountEra)
+    try values.encodeIfPresent(heardDays, forKey: .heardDays); try values.encodeIfPresent(heardLast, forKey: .heardLast)
+    try values.encode(owned, forKey: .owned); try values.encode(plays, forKey: .plays)
+    try values.encode(favorited, forKey: .favorited); try values.encodeIfPresent(lastPlayed, forKey: .lastPlayed)
+    try values.encode(availability, forKey: .availability)
   }
 }
 

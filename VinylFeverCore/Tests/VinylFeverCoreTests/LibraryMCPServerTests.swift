@@ -16,6 +16,8 @@ struct LibraryMCPServerTests {
       "search_library": ["artist", "title", "album", "genre", "year_from", "year_to", "min_plays", "max_plays", "favorited", "availability", "sort", "limit"],
       "artist_profile": ["artist"],
       "check_tracks": ["tracks"],
+      "list_playlists": ["role", "limit"],
+      "playlist_tracks": ["name", "limit"],
       "recent_listening": ["period", "limit"],
       "stage_playlist": ["name", "description", "tracks"],
     ]
@@ -53,6 +55,31 @@ struct LibraryMCPServerTests {
     let response = try #require(await call(server, id: 9, name: "recent_listening", arguments: #"{"period":"7d"}"#))
     #expect(response.contains("Listening history isn't set up yet"))
     #expect(response.contains("\"isError\":true"))
+  }
+
+  @Test("playlist tools return ordered tracks and omit persistent IDs")
+  func playlistTools() async throws {
+    let generatedAt = Date(timeIntervalSince1970: 1_700_000_000)
+    let snapshot = LibrarySnapshot(generatedAt: generatedAt, tracks: [
+      LibraryTrack(persistentID: "private-id", name: "First Song", artist: "The Records", album: "Album"),
+    ], playlists: [
+      LibraryPlaylist(persistentID: "playlist-private-id", name: "2025: Jon's Selections", kind: .user, members: ["private-id", "outside-id"]),
+    ], outsideTracks: [
+      "outside-id": LibraryOutsideTrack(name: "Second Song", artist: "The Records", album: "Other Album"),
+    ])
+    let (server, _) = try makeServer(snapshot: snapshot)
+    let listed = try #require(await call(server, id: 1, name: "list_playlists", arguments: #"{"limit":10}"#))
+    #expect(listed.contains("2025: Jon's Selections"))
+    #expect(listed.contains("\"unlabeledCount\":1"))
+    let tracks = try #require(await call(server, id: 2, name: "playlist_tracks", arguments: #"{"name":"2025: Jon's Selections"}"#))
+    #expect(tracks.contains("First Song"))
+    #expect(tracks.contains("Second Song"))
+    #expect(tracks.contains("\"position\":2"))
+    #expect(!tracks.contains("private-id"))
+    let checked = try #require(await call(server, id: 3, name: "check_tracks", arguments: #"{"tracks":[{"artist":"The Records","title":"First Song"}]}"#))
+    #expect(checked.contains("\"playlists\":{}"))
+    #expect(checked.contains("\"sharedAccountEra\":false"))
+    #expect(!checked.contains("private-id"))
   }
 
   @Test("check_tracks returns up to five matching upload album names without IDs")
@@ -294,6 +321,7 @@ struct LibraryMCPServerTests {
     #expect(LibraryMCPServer.instructionHead == briefParagraph)
     #expect(LibraryMCPServer.instructionHead.count <= 512)
     #expect(MCPServer.instructionsHeadStandsAlone(LibraryMCPServer.instructions))
+    #expect(LibraryMCPServer.instructions.contains("For taste questions, start with list_playlists"))
     #expect(LibraryMCPServer.instructions.contains(PlaylistContract.trackRules))
     #expect(!LibraryMCPServer.instructions.contains("VF-PLAYLIST: v1"))
   }
@@ -311,7 +339,7 @@ struct LibraryMCPServerTests {
     let root = temporaryDirectory()
     let snapshotURL = root.appending(path: "library-snapshot.json")
     try LibrarySnapshotCodec.encode(snapshot).write(to: snapshotURL)
-    return (LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: inbox ?? root.appending(path: "inbox"), listeningRootURL: listeningRootURL ?? root.appending(path: "Listening")), snapshotURL)
+    return (LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: inbox ?? root.appending(path: "inbox"), listeningRootURL: listeningRootURL ?? root.appending(path: "Listening"), tasteRootURL: root.appending(path: "Taste Intelligence")), snapshotURL)
   }
 
   private func listedTools(_ server: MCPServer) async throws -> [[String: Any]] {
