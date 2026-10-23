@@ -1,9 +1,9 @@
-# Taste Intelligence — candidate design (v1)
+# Taste Intelligence — design (v1)
 
-*A candidate, not a milestone. Nothing here is dispatchable until a plan PR moves it into a
-milestone and sets `docs/NEXT_UP.md`. It follows M13 and M14 and builds on M11, M12, and M13.
-Written 2026-10-20 from a conversation between Jon and the architect, starting from a Codex
-brief. Every number below was measured from Jon's library that day.*
+*The design behind [M17](milestones/M17-taste-intelligence.md), which holds the build order and
+the decisions that amend this doc. It builds on M11, M12, and M13. Written 2026-10-20 from a
+conversation between Jon and the architect, starting from a Codex brief. Every number below was
+measured from Jon's library that day unless it carries another date.*
 
 Summary: Vinyl Fever learns Jon's taste from evidence he already produces: his yearly
 **Jon's Selections** playlists, his other playlists, **Replay**, the weekly **New Music** mix he
@@ -226,10 +226,14 @@ doesn't imitate it; it **collects what Apple's recommenders produce**:
 
 ## Phasing (candidate)
 
+*Planned as [M17](milestones/M17-taste-intelligence.md) on 2026-10-23. M17 runs exposure and
+curation before feedback, and lets the chat resolve time-only notes instead of a Mac screen; its
+Decisions list every change. This section is kept as the candidate it was.*
+
 **Now, no code (Jon):** keep doing Selections; use Favorite and Suggest Less; Replay is already
 added.
 
-1. **S0 — Probes (architect).** *Started 2026-10-22 (Jon chose Taste Intelligence next). The
+1. **S0 — Probes (architect).** *Done 2026-10-23. Started 2026-10-22 (Jon chose Taste Intelligence next). The
    architect runs the API and snapshot probes on the laptop; Jon runs the Shortcuts probes on
    the iPhone. The results go into this doc and decide the M17 brief for S1.*
    - Does `/v1/me/library/playlists` show New Music, and does its ID survive the weekly refresh?
@@ -254,8 +258,7 @@ added.
 5. **Later milestone — outcomes.** The ledger's familiarity field, discovery yield, Apple's
    candidates, `taste_evidence`, `neglected_keepers`. An iOS app only if Shortcuts run out.
 
-S1 and S2 both edit `vf-mcp`, so they run one after the other. Where M13 S3 falls relative to
-this is Jon's call.
+S1 and S2 both edit `vf-mcp`, so they run one after the other. M13 finished before M17 began.
 
 ### S0 results: API and snapshot (architect, 2026-10-22)
 
@@ -341,18 +344,19 @@ Jon built **VF Note** in Shortcuts. It writes one JSON object per line to
   lines, and ignores a partial last line.
 - Verified 2026-10-22: a note recorded on the iPhone appended as the third line of a
   Mac-created `notes.jsonl` (Shack, "Natalie's Party", `playCount` 1).
-- Jon switched the reason prompt from Ask for Input to **Dictate Text**. Whether it runs
-  hands-free from CarPlay Siri and the Action button is one of the open probes.
+- Jon switched the reason prompt from Ask for Input to **Dictate Text**. VF Note runs from
+  CarPlay Siri by name (2026-10-23) and from the Action button while locked (2026-10-22).
 - iCloud can make conflict copies (`notes 2.jsonl`) when two devices append offline. The reader
   reads every `notes*.jsonl` in the folder and de-duplicates on (`notedAt`, `title`, `artist`).
 - Device names use a curly apostrophe (`Jon’s`), so readers must handle UTF-8.
 
-**Still owed to S0 (Jon):**
-- the remaining Shortcuts probes above (Recognize Music at home and in the car; VF Note from
-  CarPlay Siri and the Action button while locked; "add this to my 2026 Selections" on a first
-  hearing).
-- Discovery Station's Current Song behaves differently from playlists. Jon is working that out
-  in the shortcut.
+**The Shortcuts probes' answers (Jon, 2026-10-22 and 2026-10-23).** S0 is complete.
+- Siri's "add this to my 2026 Selections" works on a first hearing, so Keep needs no shortcut.
+- The Action button runs VF Note while the phone is locked.
+- VF Note runs from CarPlay through Siri, by the shortcut's name.
+- Recognize Music identifies songs on normal playlists.
+- On Discovery Station, Current Song stays blank until Jon skips forward and back. That's his
+  habit now, so nothing is built around it.
 
 ## Out of scope — with destinations
 
