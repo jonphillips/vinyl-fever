@@ -84,6 +84,8 @@ struct LibraryMCPServerTests {
     #expect(checked.contains("\"playlists\":{}"))
     #expect(checked.contains("\"sharedAccountEra\":false"))
     #expect(checked.contains("\"unlabeledPlaylistCount\":1"))
+    #expect(checked.contains("\"listening\":\"not_set_up\""))
+    #expect(!checked.contains("\"heardDays\""))
     #expect(!checked.contains("private-id"))
     let modifiedAt = try #require(FileManager.default.attributesOfItem(atPath: snapshotURL.path)[.modificationDate] as? Date)
     try Data("invalid snapshot".utf8).write(to: snapshotURL)
@@ -106,6 +108,86 @@ struct LibraryMCPServerTests {
     let limited = try #require(await resultJSON(server, id: 2, name: "list_playlists", arguments: #"{"limit":10}"#) as? [String: Any])
     #expect((limited["playlists"] as? [[String: Any]])?.count == 10)
     #expect(limited["matchingCount"] as? Int == 60)
+  }
+
+  @Test("heard index matches duet credits and retains local play days")
+  func heardIndexCredits() async throws {
+    let root = temporaryDirectory()
+    let listening = root.appending(path: "Listening", directoryHint: .isDirectory)
+    let stream = listening.appending(path: "fetches/fixture/2026-10.jsonl")
+    try FileManager.default.createDirectory(at: stream.deletingLastPathComponent(), withIntermediateDirectories: true)
+    let poller = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+    func instant(_ day: Int) -> Date { Calendar(identifier: .gregorian).date(from: DateComponents(timeZone: TimeZone(secondsFromGMT: 0), year: 2026, month: 10, day: day, hour: 12))! }
+    let duet = ListeningItem(kind: .song, id: "heard-song", title: "Song", artist: "A & B")
+    let fetches = [
+      ListeningFetch(poller: poller, host: "Mac", fetchedAt: instant(20), outcome: .baseline, pagesRead: 1),
+      ListeningFetch(poller: poller, host: "Mac", fetchedAt: instant(20) + 60, outcome: .plays, newCount: 1, pagesRead: 1, items: [duet]),
+      ListeningFetch(poller: poller, host: "Mac", fetchedAt: instant(21), outcome: .plays, newCount: 1, pagesRead: 1, items: [duet]),
+    ]
+    let bytes = try fetches.map { try ListeningLogCodec.encode($0) + Data([10]) }.reduce(into: Data()) { $0.append($1) }
+    try bytes.write(to: stream)
+    let decodedLog = try ListeningLog(jsonlStreams: [bytes], now: instant(22))
+    #expect(decodedLog.plays.count == 2)
+    let snapshot = LibrarySnapshot(generatedAt: .now, tracks: [
+      LibraryTrack(persistentID: "private", name: "Song", artist: "A & B"),
+      LibraryTrack(persistentID: "artist-a", name: "Another Song", artist: "A"),
+      LibraryTrack(persistentID: "artist-b", name: "One More Song", artist: "B"),
+    ])
+    let (server, _) = try makeServer(snapshot: snapshot, listeningRootURL: listening)
+    let result = try #require(await resultJSON(server, id: 1, name: "check_tracks", arguments: #"{"tracks":[{"artist":"A","title":"Song"}]}"#) as? [String: Any])
+    let row = try #require((result["tracks"] as? [[String: Any]])?.first)
+    #expect(row["heardDays"] as? Int == 2)
+    #expect(row["heardLast"] != nil)
+  }
+
+  @Test("playlist tools match their full JSON contract")
+  func playlistToolsGolden() async throws {
+    let root = temporaryDirectory()
+    let listening = root.appending(path: "Listening", directoryHint: .isDirectory)
+    let stream = listening.appending(path: "fetches/fixture/2026-10.jsonl")
+    try FileManager.default.createDirectory(at: stream.deletingLastPathComponent(), withIntermediateDirectories: true)
+    func instant(_ day: Int) -> Date { Calendar(identifier: .gregorian).date(from: DateComponents(timeZone: TimeZone(secondsFromGMT: 0), year: 2026, month: 10, day: day, hour: 12))! }
+    let poller = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+    let item = ListeningItem(kind: .song, id: "logged-song", title: "Song", artist: "A & B")
+    let log = [
+      ListeningFetch(poller: poller, host: "Mac", fetchedAt: instant(20), outcome: .baseline, pagesRead: 1),
+      ListeningFetch(poller: poller, host: "Mac", fetchedAt: instant(20) + 60, outcome: .plays, newCount: 1, pagesRead: 1, items: [item]),
+    ]
+    try log.map { try ListeningLogCodec.encode($0) + Data([10]) }.reduce(into: Data()) { $0.append($1) }.write(to: stream)
+    let playlists = [
+      LibraryPlaylist(persistentID: "id-keepers", name: "Selections 2025", folder: "aJon Selections", kind: .user, members: ["song-id", "song-id", "outside-id"]),
+      LibraryPlaylist(persistentID: "id-replay-old", name: "Replay 2017", kind: .subscription, members: ["song-id"]),
+      LibraryPlaylist(persistentID: "id-replay-new", name: "Replay 2025", kind: .subscription, members: ["song-id"]),
+      LibraryPlaylist(persistentID: "id-followed", name: "Followed Queue", kind: .user, members: ["song-id"]),
+      LibraryPlaylist(persistentID: "id-ignore", name: "Ignored Set", kind: .user, members: ["song-id"]),
+      LibraryPlaylist(persistentID: "id-unlabeled", name: "Unlabeled Set", kind: .user, members: ["song-id"]),
+    ]
+    let snapshot = LibrarySnapshot(generatedAt: instant(23), tracks: [
+      LibraryTrack(persistentID: "song-id", name: "Song", artist: "A & B", album: "Library Album", year: 2020, playCount: 3, favorited: true),
+      LibraryTrack(persistentID: "artist-a", name: "Other A", artist: "A"),
+      LibraryTrack(persistentID: "artist-b", name: "Other B", artist: "B"),
+    ], playlists: playlists, outsideTracks: [
+      "outside-id": LibraryOutsideTrack(name: "Outside Song", artist: "B", album: "Outside Album", year: 2021, durationSeconds: 180),
+    ])
+    let roles = PlaylistRoles(updatedAt: instant(23), playlists: [
+      PlaylistRoleEntry(persistentID: "id-keepers", name: "Selections 2025", role: .keepers),
+      PlaylistRoleEntry(persistentID: "id-replay-old", name: "Replay 2017", role: .replay),
+      PlaylistRoleEntry(persistentID: "id-replay-new", name: "Replay 2025", role: .replay),
+      PlaylistRoleEntry(persistentID: "id-followed", name: "Followed Queue", role: .followed),
+      PlaylistRoleEntry(persistentID: "id-ignore", name: "Ignored Set", role: .ignore),
+    ])
+    let rolesURL = root.appending(path: "Taste Intelligence/playlist-roles.json")
+    try FileManager.default.createDirectory(at: rolesURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try PlaylistRolesCodec.encode(roles).write(to: rolesURL)
+    let (server, _) = try makeServer(snapshot: snapshot, listeningRootURL: listening, tasteRootURL: root.appending(path: "Taste Intelligence"))
+    let list = try #require(await resultJSON(server, id: 1, name: "list_playlists", arguments: "{}"))
+    let tracks = try #require(await resultJSON(server, id: 2, name: "playlist_tracks", arguments: #"{"name":"Selections 2025"}"#))
+    let check = try #require(await resultJSON(server, id: 3, name: "check_tracks", arguments: #"{"tracks":[{"artist":"A","title":"Song"}]}"#))
+    #expect(try canonicalJSON(list) == #"{"matchingCount":4,"playlists":[{"folder":"aJon Selections","inLibraryCount":2,"kind":"user","name":"Selections 2025","role":"keepers","songCount":3},{"inLibraryCount":1,"kind":"subscription","name":"Replay 2025","role":"replay","songCount":1},{"inLibraryCount":1,"kind":"user","name":"Followed Queue","role":"followed","songCount":1},{"inLibraryCount":1,"kind":"user","name":"Unlabeled Set","songCount":1}],"snapshotGeneratedAt":"2026-10-23T12:00:00Z","unlabeledCount":1}"#)
+    #expect(try canonicalJSON(tracks) == #"{"name":"Selections 2025","role":"keepers","snapshotGeneratedAt":"2026-10-23T12:00:00Z","tracks":[{"album":"Library Album","artist":"A & B","evidence":{"availability":["other"],"disliked":false,"favorited":true,"heardDays":1,"heardLast":"2026-10-20T12:01:00Z","owned":true,"playlistCounts":{"keepers":1,"replay":1},"playlists":{"keepers":["Selections 2025"],"replay":["Replay 2025"]},"plays":3,"sharedAccountEra":false},"position":1,"title":"Song","year":2020},{"album":"Library Album","artist":"A & B","evidence":{"availability":["other"],"disliked":false,"favorited":true,"heardDays":1,"heardLast":"2026-10-20T12:01:00Z","owned":true,"playlistCounts":{"keepers":1,"replay":1},"playlists":{"keepers":["Selections 2025"],"replay":["Replay 2025"]},"plays":3,"sharedAccountEra":false},"position":2,"title":"Song","year":2020},{"album":"Outside Album","artist":"B","evidence":{"availability":[],"disliked":false,"favorited":false,"heardDays":0,"owned":false,"playlistCounts":{"keepers":1},"playlists":{"keepers":["Selections 2025"]},"plays":0,"sharedAccountEra":false},"position":3,"title":"Outside Song","year":2021}],"unlabeledPlaylistCount":1}"#)
+    #expect(try canonicalJSON(check) == #"{"tracks":[{"artist":"A","availability":["other"],"disliked":false,"favorited":true,"heardDays":1,"heardLast":"2026-10-20T12:01:00Z","owned":true,"playlistCounts":{"keepers":1,"replay":1},"playlists":{"keepers":["Selections 2025"],"replay":["Replay 2025"]},"plays":3,"sharedAccountEra":false,"title":"Song","uploadedAlbums":[],"versionCount":1}],"unlabeledPlaylistCount":1}"#)
+    #expect(!String(describing: [list, tracks, check]).contains("persistentID"))
+    #expect(!String(describing: [list, tracks, check]).contains("song-id"))
   }
 
   @Test("check_tracks returns up to five matching upload album names without IDs")
@@ -363,11 +445,11 @@ struct LibraryMCPServerTests {
     return LibrarySnapshot(generatedAt: generatedAt, tracks: tracks)
   }
 
-  private func makeServer(snapshot: LibrarySnapshot, inbox: URL? = nil, listeningRootURL: URL? = nil) throws -> (MCPServer, URL) {
+  private func makeServer(snapshot: LibrarySnapshot, inbox: URL? = nil, listeningRootURL: URL? = nil, tasteRootURL: URL? = nil) throws -> (MCPServer, URL) {
     let root = temporaryDirectory()
     let snapshotURL = root.appending(path: "library-snapshot.json")
     try LibrarySnapshotCodec.encode(snapshot).write(to: snapshotURL)
-    return (LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: inbox ?? root.appending(path: "inbox"), listeningRootURL: listeningRootURL ?? root.appending(path: "Listening"), tasteRootURL: root.appending(path: "Taste Intelligence")), snapshotURL)
+    return (LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: inbox ?? root.appending(path: "inbox"), listeningRootURL: listeningRootURL ?? root.appending(path: "Listening"), tasteRootURL: tasteRootURL ?? root.appending(path: "Taste Intelligence")), snapshotURL)
   }
 
   private func listedTools(_ server: MCPServer) async throws -> [[String: Any]] {
@@ -414,6 +496,11 @@ struct LibraryMCPServerTests {
       let content = result["content"] as? [[String: Any]]
     else { return "" }
     return content.compactMap { $0["text"] as? String }.joined(separator: "\n")
+  }
+
+  private func canonicalJSON(_ value: Any) throws -> String {
+    let data = try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .fragmentsAllowed])
+    return String(decoding: data, as: UTF8.self)
   }
 
   private func temporaryDirectory() -> URL {

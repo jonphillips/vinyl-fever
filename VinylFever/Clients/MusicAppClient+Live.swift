@@ -178,20 +178,37 @@ private struct LiveMusicAppBridge: Sendable {
     var rows: [LibraryPlaylist] = []
     var outside: [String: LibraryOutsideTrack] = [:]
     for (sourceOffset, source) in try objects(named: "sources", on: application).enumerated() {
+      let sourceDescriptor = try objectSpecifier("cSrc", form: "indx", data: NSAppleEventDescriptor(int32: Int32(sourceOffset + 1)), from: .null())
       for (property, kind, playlistClass) in [("userPlaylists", LibraryPlaylistKind.user, "cUsP"), ("subscriptionPlaylists", .subscription, "cSuP")] {
-        for (offset, playlist) in try objects(named: property, on: source).enumerated() {
-          guard playlist.value(forKey: "tracks") is SBElementArray else { continue }
-          let sourceDescriptor = try objectSpecifier("cSrc", form: "indx", data: NSAppleEventDescriptor(int32: Int32(sourceOffset + 1)), from: .null())
+        let playlistArray = try elementArray(named: property, on: source)
+        let scriptingPlaylists = try objects(named: property, on: source)
+        let persistentIDs = playlistArray.value(forKey: "persistentID") as? [Any] ?? []
+        let names = playlistArray.value(forKey: "name") as? [Any] ?? []
+        let specialKinds = playlistArray.value(forKey: "specialKind") as? [Any] ?? []
+        let smartFlags = kind == .user ? (playlistArray.value(forKey: "smart") as? [Any] ?? []) : []
+        let expectedCount = scriptingPlaylists.count
+        let columns = [persistentIDs, names, specialKinds] + (kind == .user ? [smartFlags] : [])
+        guard columns.allSatisfy({ $0.count == expectedCount }) else {
+          throw MusicAppLiveError.scriptingBridgeReadFailed("playlist columns (expected=\(expectedCount), got=\(columns.map(\.count))); try again")
+        }
+        for (offset, playlist) in scriptingPlaylists.enumerated() {
+          guard let tracks = playlist.value(forKey: "tracks") as? SBElementArray else { continue }
           let playlistDescriptor = try objectSpecifier(playlistClass, form: "indx", data: NSAppleEventDescriptor(int32: Int32(offset + 1)), from: sourceDescriptor)
-          let name = (playlist.value(forKey: "name") as? String) ?? ""
-          let persistentID = (playlist.value(forKey: "persistentID") as? String) ?? ""
-          guard !name.isEmpty, !persistentID.isEmpty, Self.hasNoSpecialKind(playlist) else { continue }
-          let memberColumn = try Self.readEveryTrackProperty(.init(key: "persistentID", code: "pPIS", kind: .text), from: playlistDescriptor)
-          guard memberColumn.allSatisfy({ $0 is String }) else {
-            throw MusicAppLiveError.scriptingBridgeReadFailed("playlist member persistentID")
+          let name = Self.stringValue(names[offset]) ?? ""
+          let persistentID = Self.stringValue(persistentIDs[offset]) ?? ""
+          guard !name.isEmpty, !persistentID.isEmpty, Self.hasNoSpecialKind(specialKinds[offset]) else { continue }
+          // Music reports -1728 for `persistent ID of every track` on an empty playlist.
+          // Ask the existing SBElementArray for its count first, and avoid that event entirely.
+          let memberIDs: [String]
+          if tracks.count == 0 { memberIDs = [] }
+          else {
+            let memberColumn = try Self.readEveryTrackProperty(.init(key: "persistentID", code: "pPIS", kind: .text), from: playlistDescriptor)
+            guard memberColumn.count == tracks.count, memberColumn.allSatisfy({ $0 is String }) else {
+              throw MusicAppLiveError.scriptingBridgeReadFailed("playlist member persistentID count changed; try again")
+            }
+            memberIDs = memberColumn.compactMap { $0 as? String }
           }
-          let memberIDs = memberColumn.compactMap { $0 as? String }
-          let smart = (playlist.value(forKey: "smart") as? NSNumber)?.boolValue ?? false
+          let smart = smartFlags.indices.contains(offset) ? Self.booleanValue(smartFlags[offset]) : false
           let playlistKind: LibraryPlaylistKind = kind == .user && smart ? .smart : kind
           let parentName = (playlist.value(forKey: "parent") as? SBObject)?.value(forKey: "name") as? String
           rows.append(LibraryPlaylist(persistentID: persistentID, name: name,
@@ -207,6 +224,9 @@ private struct LiveMusicAppBridge: Sendable {
             LibraryBulkProperty(key: "year", code: "pYr ", kind: .integer),
             LibraryBulkProperty(key: "duration", code: "pDur", kind: .real),
           ] { columns[item.key] = try readEveryTrackProperty(item, from: playlistDescriptor) }
+          guard columns.values.allSatisfy({ $0.count == memberIDs.count }) else {
+            throw MusicAppLiveError.scriptingBridgeReadFailed("playlist outside columns count changed; try again")
+          }
           for (index, id) in memberIDs.enumerated() where !libraryTrackIDs.contains(id) {
             func value(_ key: String) -> Any? {
               guard let column = columns[key], column.indices.contains(index) else { return nil }
@@ -218,16 +238,30 @@ private struct LiveMusicAppBridge: Sendable {
             outside[id] = LibraryOutsideTrack(name: text("name"), artist: text("artist"), album: text("album"), year: year, durationSeconds: number("duration"))
           }
         }
+        let idsAfter = playlistArray.value(forKey: "persistentID") as? [Any] ?? []
+        guard idsAfter.count == expectedCount, idsAfter.compactMap(Self.stringValue) == persistentIDs.compactMap(Self.stringValue) else {
+          throw MusicAppLiveError.scriptingBridgeReadFailed("playlist IDs changed during read; try again")
+        }
       }
     }
     return (rows, outside)
   }
 
-  private static func hasNoSpecialKind(_ playlist: SBObject) -> Bool {
-    guard let kind = playlist.value(forKey: "specialKind") else { return true }
+  private static func hasNoSpecialKind(_ kind: Any) -> Bool {
+    if let descriptor = kind as? NSAppleEventDescriptor { return descriptor.enumCodeValue == fourCharCode("kNon") }
     if let string = kind as? String { return string == "none" || string == "kNon" }
     guard let number = kind as? NSNumber else { return false }
     return number.uint32Value == fourCharCode("kNon")
+  }
+
+  private static func stringValue(_ value: Any) -> String? {
+    if let value = value as? String { return value }
+    return (value as? NSAppleEventDescriptor)?.stringValue
+  }
+
+  private static func booleanValue(_ value: Any) -> Bool {
+    if let value = value as? NSNumber { return value.boolValue }
+    return (value as? NSAppleEventDescriptor)?.booleanValue ?? false
   }
 
   private static func readEveryTrackProperty(_ property: LibraryBulkProperty, from playlist: NSAppleEventDescriptor) throws -> [Any] {
@@ -455,10 +489,15 @@ private struct LiveMusicAppBridge: Sendable {
   }
 
   private static func objects(named key: String, on object: NSObject) throws -> [SBObject] {
+    let elementArray = try elementArray(named: key, on: object)
+    return elementArray.get() as? [SBObject] ?? []
+  }
+
+  private static func elementArray(named key: String, on object: NSObject) throws -> SBElementArray {
     guard let elementArray = object.value(forKey: key) as? SBElementArray else {
       throw MusicAppLiveError.scriptingBridgeReadFailed(key)
     }
-    return elementArray.get() as? [SBObject] ?? []
+    return elementArray
   }
 
   /// Reads only the library file tracks that could plausibly belong to the requested
