@@ -27,9 +27,9 @@ final class PlaylistRolesModel {
       savedRoles = try await rolesStore.read()
       guard let snapshot else { return }
       let resolved = savedRoles.map { PlaylistRoleMatcher.resolve(snapshot: snapshot, roles: $0) } ?? []
-      selections = Dictionary(uniqueKeysWithValues: resolved.compactMap { item in
+      selections = Dictionary(resolved.compactMap { item in
         item.role.map { (item.playlist.persistentID, $0) }
-      })
+      }, uniquingKeysWith: { first, _ in first })
     } catch { errorMessage = error.localizedDescription }
   }
 

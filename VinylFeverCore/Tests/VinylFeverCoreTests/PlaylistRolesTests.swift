@@ -23,6 +23,18 @@ struct PlaylistRolesTests {
     #expect(PlaylistRoleMatcher.missing(snapshot: snapshot, roles: roles).count == 1)
   }
 
+  @Test("roles with a repeated persistent ID resolve with the first entry")
+  func repeatedPersistentID() {
+    let snapshot = LibrarySnapshot(generatedAt: .now, tracks: [], playlists: [
+      LibraryPlaylist(persistentID: "same", name: "One", kind: .user, members: []),
+    ])
+    let roles = PlaylistRoles(updatedAt: .now, playlists: [
+      PlaylistRoleEntry(persistentID: "same", name: "One", role: .keepers),
+      PlaylistRoleEntry(persistentID: "same", name: "One", role: .ignore),
+    ])
+    #expect(PlaylistRoleMatcher.resolve(snapshot: snapshot, roles: roles).first?.role == .keepers)
+  }
+
   @Test("suggestions include the 2018 cutoff and exact New Music name")
   func suggestions() {
     #expect(PlaylistRoleSuggestion.suggest(name: "2025: Jon's Selections", kind: .user, folder: nil) == .keepers)

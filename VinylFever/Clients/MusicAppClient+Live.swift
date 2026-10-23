@@ -177,13 +177,12 @@ private struct LiveMusicAppBridge: Sendable {
   {
     var rows: [LibraryPlaylist] = []
     var outside: [String: LibraryOutsideTrack] = [:]
-    for source in try objects(named: "sources", on: application) {
-      for (property, kind) in [("userPlaylists", LibraryPlaylistKind.user), ("subscriptionPlaylists", .subscription)] {
-        for playlist in try objects(named: property, on: source) {
+    for (sourceOffset, source) in try objects(named: "sources", on: application).enumerated() {
+      for (property, kind, playlistClass) in [("userPlaylists", LibraryPlaylistKind.user, "cUsP"), ("subscriptionPlaylists", .subscription, "cSuP")] {
+        for (offset, playlist) in try objects(named: property, on: source).enumerated() {
           guard playlist.value(forKey: "tracks") is SBElementArray else { continue }
-          guard let playlistDescriptor = playlist.get() as? NSAppleEventDescriptor else {
-            throw MusicAppLiveError.scriptingBridgeReadFailed("playlist descriptor")
-          }
+          let sourceDescriptor = try objectSpecifier("cSrc", form: "indx", data: NSAppleEventDescriptor(int32: Int32(sourceOffset + 1)), from: .null())
+          let playlistDescriptor = try objectSpecifier(playlistClass, form: "indx", data: NSAppleEventDescriptor(int32: Int32(offset + 1)), from: sourceDescriptor)
           let name = (playlist.value(forKey: "name") as? String) ?? ""
           let persistentID = (playlist.value(forKey: "persistentID") as? String) ?? ""
           guard !name.isEmpty, !persistentID.isEmpty, Self.hasNoSpecialKind(playlist) else { continue }

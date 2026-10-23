@@ -67,7 +67,7 @@ public struct ResolvedPlaylistRole: Equatable, Sendable {
 
 public enum PlaylistRoleMatcher {
   public static func resolve(snapshot: LibrarySnapshot, roles: PlaylistRoles) -> [ResolvedPlaylistRole] {
-    let byID = Dictionary(uniqueKeysWithValues: roles.playlists.map { ($0.persistentID, $0.role) })
+    let byID = Dictionary(roles.playlists.map { ($0.persistentID, $0.role) }, uniquingKeysWith: { first, _ in first })
     let counts = Dictionary(grouping: snapshot.playlists, by: \.name).mapValues(\.count)
     let byName = Dictionary(grouping: roles.playlists, by: \.name)
     return snapshot.playlists.map { playlist in

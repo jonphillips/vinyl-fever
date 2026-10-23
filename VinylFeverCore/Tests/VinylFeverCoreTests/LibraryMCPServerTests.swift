@@ -107,15 +107,16 @@ struct LibraryMCPServerTests {
     let springsteen = try #require(await resultJSON(
       server, id: 40, name: "check_tracks",
       arguments: #"{"tracks":[{"artist":"Bruce Springsteen","title":"Thunder Road"}]}"#
-    ) as? [[String: Any]])
-    #expect(springsteen.first?["uploadedAlbums"] as? [String] == (1...5).map { "Show \($0)" })
+    ) as? [String: Any])
+    let springsteenRows = try #require(springsteen["tracks"] as? [[String: Any]])
+    #expect(springsteenRows.first?["uploadedAlbums"] as? [String] == (1...5).map { "Show \($0)" })
     #expect(!String(describing: springsteen).contains("private-upload-id"))
 
     let falsePositives = try #require(await resultJSON(
       server, id: 41, name: "check_tracks",
       arguments: #"{"tracks":[{"artist":"Bruce SpringsteenX","title":"Thunder Road"},{"artist":"Elvis Costello","title":"Alison"}]}"#
-    ) as? [[String: Any]])
-    #expect(falsePositives.allSatisfy { ($0["uploadedAlbums"] as? [String]) == [] })
+    ) as? [String: Any])
+    #expect((falsePositives["tracks"] as? [[String: Any]] ?? []).allSatisfy { ($0["uploadedAlbums"] as? [String]) == [] })
   }
 
   @Test("MCP applies the exported alias map to library checks and artist grouping")
@@ -137,8 +138,8 @@ struct LibraryMCPServerTests {
     let check = try #require(await resultJSON(
       server, id: 81, name: "check_tracks",
       arguments: #"{"tracks":[{"artist":"John Cougar Mellencamp","title":"Ain't Even Done With the Night"}]}"#
-    ) as? [[String: Any]])
-    #expect(check.first?["owned"] as? Bool == true)
+    ) as? [String: Any])
+    #expect((check["tracks"] as? [[String: Any]])?.first?["owned"] as? Bool == true)
     let artists = try #require(await resultJSON(
       server, id: 82, name: "top_artists", arguments: #"{"period":"all_time"}"#
     ) as? [[String: Any]])
@@ -151,8 +152,8 @@ struct LibraryMCPServerTests {
     let unchanged = try #require(await resultJSON(
       noFileServer, id: 83, name: "check_tracks",
       arguments: #"{"tracks":[{"artist":"John Cougar Mellencamp","title":"Ain't Even Done With the Night"}]}"#
-    ) as? [[String: Any]])
-    #expect(unchanged.first?["owned"] as? Bool == false)
+    ) as? [String: Any])
+    #expect((unchanged["tracks"] as? [[String: Any]])?.first?["owned"] as? Bool == false)
   }
 
   @Test("listening tools cover periods, gaps, library joins, validation, and omit IDs")
@@ -254,9 +255,10 @@ struct LibraryMCPServerTests {
     let profile = try #require(await resultJSON(server, id: 4, name: "artist_profile", arguments: #"{"artist":"Beyoncé"}"#) as? [String: Any])
     #expect(profile["uploadedTrackCount"] as? Int == 1)
 
-    let checks = try #require(await resultJSON(server, id: 5, name: "check_tracks", arguments: #"{"tracks":[{"artist":"Version Artist","title":"Version Song"}]}"#) as? [[String: Any]])
-    #expect(checks.first?["plays"] as? Int == 12)
-    #expect(checks.first?["versionCount"] as? Int == 2)
+    let checks = try #require(await resultJSON(server, id: 5, name: "check_tracks", arguments: #"{"tracks":[{"artist":"Version Artist","title":"Version Song"}]}"#) as? [String: Any])
+    let checkedRows = try #require(checks["tracks"] as? [[String: Any]])
+    #expect(checkedRows.first?["plays"] as? Int == 12)
+    #expect(checkedRows.first?["versionCount"] as? Int == 2)
 
     let missing = try #require(await call(server, id: 6, name: "artist_profile", arguments: #"{"artist":"No Such Artist"}"#))
     #expect(missing.contains("No tracks by \"No Such Artist\" in Jon's library."))
