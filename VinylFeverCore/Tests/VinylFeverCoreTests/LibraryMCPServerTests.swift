@@ -67,10 +67,14 @@ struct LibraryMCPServerTests {
     ], outsideTracks: [
       "outside-id": LibraryOutsideTrack(name: "Second Song", artist: "The Records", album: "Other Album"),
     ])
-    let (server, _) = try makeServer(snapshot: snapshot)
+    let (server, snapshotURL) = try makeServer(snapshot: snapshot)
+    let initialModified = try #require(FileManager.default.attributesOfItem(atPath: snapshotURL.path)[.modificationDate] as? Date)
+    let stableModified = Date(timeIntervalSince1970: floor(initialModified.timeIntervalSince1970))
+    try FileManager.default.setAttributes([.modificationDate: stableModified], ofItemAtPath: snapshotURL.path)
     let listed = try #require(await call(server, id: 1, name: "list_playlists", arguments: #"{"limit":10}"#))
     #expect(listed.contains("2025: Jon's Selections"))
     #expect(listed.contains("\"unlabeledCount\":1"))
+    #expect(listed.contains("\"matchingCount\":1"))
     let tracks = try #require(await call(server, id: 2, name: "playlist_tracks", arguments: #"{"name":"2025: Jon's Selections"}"#))
     #expect(tracks.contains("First Song"))
     #expect(tracks.contains("Second Song"))
@@ -79,7 +83,29 @@ struct LibraryMCPServerTests {
     let checked = try #require(await call(server, id: 3, name: "check_tracks", arguments: #"{"tracks":[{"artist":"The Records","title":"First Song"}]}"#))
     #expect(checked.contains("\"playlists\":{}"))
     #expect(checked.contains("\"sharedAccountEra\":false"))
+    #expect(checked.contains("\"unlabeledPlaylistCount\":1"))
     #expect(!checked.contains("private-id"))
+    let modifiedAt = try #require(FileManager.default.attributesOfItem(atPath: snapshotURL.path)[.modificationDate] as? Date)
+    try Data("invalid snapshot".utf8).write(to: snapshotURL)
+    try FileManager.default.setAttributes([.modificationDate: modifiedAt], ofItemAtPath: snapshotURL.path)
+    let cachedTracks = await call(server, id: 4, name: "playlist_tracks", arguments: #"{"name":"2025: Jon's Selections"}"#)
+    #expect(cachedTracks?.contains("Second Song") == true, "Unexpected response: \(cachedTracks ?? "nil")")
+    let cachedChecks = await call(server, id: 5, name: "check_tracks", arguments: #"{"tracks":[{"artist":"The Records","title":"First Song"}]}"#)
+    #expect(cachedChecks?.contains("First Song") == true, "Unexpected response: \(cachedChecks ?? "nil")")
+  }
+
+  @Test("list_playlists defaults to 200 and reports the pre-limit matching count")
+  func playlistListDefaultLimit() async throws {
+    let playlists = (0..<60).map { index in
+      LibraryPlaylist(persistentID: "id-\(index)", name: "Playlist \(index)", kind: .user, members: [])
+    }
+    let (server, _) = try makeServer(snapshot: LibrarySnapshot(generatedAt: .now, tracks: [], playlists: playlists))
+    let all = try #require(await resultJSON(server, id: 1, name: "list_playlists", arguments: "{}") as? [String: Any])
+    #expect((all["playlists"] as? [[String: Any]])?.count == 60)
+    #expect(all["matchingCount"] as? Int == 60)
+    let limited = try #require(await resultJSON(server, id: 2, name: "list_playlists", arguments: #"{"limit":10}"#) as? [String: Any])
+    #expect((limited["playlists"] as? [[String: Any]])?.count == 10)
+    #expect(limited["matchingCount"] as? Int == 60)
   }
 
   @Test("check_tracks returns up to five matching upload album names without IDs")
