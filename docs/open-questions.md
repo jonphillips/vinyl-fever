@@ -48,9 +48,10 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   or the precision before a use exists. Revisit when an analysis needs listens rather than
   starts.
 
-  The analytical strategy is now the *Taste Intelligence* candidate below. **Jon chose it as the
-  next milestone (2026-10-22).** S0's probes are under way, and M17's brief follows from them.
-- **Taste Intelligence** — candidate v1 design in [taste-intelligence.md](taste-intelligence.md)
+  The analytical strategy is now *Taste Intelligence*, planned as
+  [M17](milestones/M17-taste-intelligence.md) (2026-10-23).
+- **Taste Intelligence** — **planned as [M17](milestones/M17-taste-intelligence.md)
+  (2026-10-23)** from the v1 design in [taste-intelligence.md](taste-intelligence.md)
   (Jon and the architect, 2026-10-20, from a Codex brief). Vinyl Fever learns Jon's taste from
   evidence he already produces and lets the chat do the reasoning, aiming at "15 songs I
   probably don't know but will love, explained, and learn which stick." Key findings:
@@ -67,9 +68,8 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
     hearing (it fills in only after the queue moves on), so the shortcut falls back to Shazam's
     `Recognize Music`, then to the time alone.
 
-  Candidate phasing: S0 probes, S1 playlists in the snapshot with roles, S2 feedback (VF Note
-  and chat notes), S3 exposure and curation logs, then an outcomes milestone. It follows M14 S1; where
-  M13 S3 falls is Jon's call.
+  S0's probes finished 2026-10-23. M17: S1 playlists in the snapshot with roles, S2 exposure
+  and curation logs, S3 feedback (VF Note and chat notes); then an outcomes milestone.
 - **Live tracks in playlists** — planned as [M14](milestones/M14-live-tracks-in-playlists.md)
   (2026-10-18). It interleaves with M13: S0 after M13 S1, S1 after M15 S0 (order amended
   2026-10-20, M14 Decision 3). Probes on 2026-10-18 showed:
