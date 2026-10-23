@@ -143,7 +143,8 @@ public struct ListeningLog: Sendable {
       let ordered = stream.sorted { $0.fetchedAt < $1.fetchedAt }
       var lastSuccessfulFetch: Date?
       var hasSuccessfulFetch = false
-      for fetch in ordered {
+      for (lineIndex, fetch) in ordered.enumerated() {
+        let sourceLineID = "\(fetch.poller.uuidString)|\(lineIndex)"
         switch fetch.outcome {
         case .baseline, .none:
           if fetch.outcome == .baseline, let since = fetch.since, since.fetchedAt < fetch.fetchedAt {
@@ -158,7 +159,8 @@ public struct ListeningLog: Sendable {
           let start = fetch.since?.fetchedAt ?? lastSuccessfulFetch ?? fetch.fetchedAt
           for item in fetch.items.prefix(max(0, fetch.newCount)) {
             allPlays.append(ListeningPlay(
-              item: item, windowStart: start, windowEnd: fetch.fetchedAt, poller: fetch.poller))
+              item: item, windowStart: start, windowEnd: fetch.fetchedAt, poller: fetch.poller,
+              sourceLineID: sourceLineID))
           }
           lastSuccessfulFetch = fetch.fetchedAt
           hasSuccessfulFetch = true
@@ -166,7 +168,8 @@ public struct ListeningLog: Sendable {
           let start = fetch.since?.fetchedAt ?? lastSuccessfulFetch ?? fetch.fetchedAt
           for item in fetch.items {
             allPlays.append(ListeningPlay(
-              item: item, windowStart: start, windowEnd: fetch.fetchedAt, poller: fetch.poller))
+              item: item, windowStart: start, windowEnd: fetch.fetchedAt, poller: fetch.poller,
+              sourceLineID: sourceLineID))
           }
           gaps.append(ListeningCoverageGap(
             poller: fetch.poller, host: fetch.host, outcome: .gap,
@@ -266,22 +269,23 @@ public struct ListeningLog: Sendable {
         }
         return $0.play.windowEnd < $1.play.windowEnd
       }
-      var latestEndByPoller: [UUID: Date] = [:]
+      var latestEndByLine: [String: Date] = [:]
       for entry in ordered {
         let play = entry.play
-        for (poller, end) in Array(latestEndByPoller) where end < play.windowStart {
-          latestEndByPoller.removeValue(forKey: poller)
+        for (lineID, end) in Array(latestEndByLine) where end <= play.windowStart {
+          latestEndByLine.removeValue(forKey: lineID)
         }
-        let overlapsAnotherPoller = latestEndByPoller.contains { entry in
-          entry.key != play.poller && entry.value >= play.windowStart
+        let overlapsAnotherLine = latestEndByLine.contains { entry in
+          entry.key != play.sourceLineID && entry.value > play.windowStart
         }
-        if overlapsAnotherPoller {
+        if overlapsAnotherLine {
           collapsed += 1
           continue
+        } else {
+          kept.append(play)
         }
-        kept.append(play)
-        latestEndByPoller[play.poller] = max(
-          latestEndByPoller[play.poller] ?? play.windowEnd, play.windowEnd)
+        latestEndByLine[play.sourceLineID] = max(
+          latestEndByLine[play.sourceLineID] ?? play.windowEnd, play.windowEnd)
       }
     }
     return (kept, collapsed)

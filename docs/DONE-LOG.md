@@ -3,6 +3,15 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-22 — M13 · Dispatch 6 S5 (`m13/s5-handover-chain`)
+
+Resolved the newest known listening list through up to four handover links, added strict
+same-poller overlap collapse, and added **Poll now** to both Settings surfaces. Listening (41),
+Core (233), and macOS app (70) tests pass; both performance suites and the macOS 15 poller build
+pass. Read-only replay of Jon's streams counted the 33 Discover Station plays once with 4 synthetic
+songs at the 7:27 pm cut, and once with 2 synthetic songs against the current streams. The S5
+laptop ↔ mini handover and Poll now device gate remains owed to Jon.
+
 ## 2026-10-22 — M13 · Dispatch 5 S4 (`m13/s4-handover-recovery`)
 
 Recover recent plays across poller handovers from the previous holder's stream, record handover

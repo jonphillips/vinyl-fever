@@ -37,6 +37,10 @@ struct ListeningPollerSettingsView: View {
             .foregroundStyle(.secondary)
           Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
         }
+        if model.canPollNow {
+          Button("Poll now") { Task { await model.pollNow() } }
+            .disabled(model.isPollingNow)
+        }
         LabeledContent("Last fetch", value: model.lastFetchLabel)
         LabeledContent("Plays logged today", value: String(model.playsToday))
       }
@@ -76,6 +80,7 @@ private final class ListeningPollerSettingsModel {
   private(set) var holdsLease = false
   private(set) var leaseExists = false
   private(set) var errorMessage: String?
+  private(set) var isPollingNow = false
   var isConfirmingTakeover = false
   private var pendingTakeoverPoller: UUID?
   private var pendingLease: ListeningLease?
@@ -85,6 +90,8 @@ private final class ListeningPollerSettingsModel {
     (serviceStatus == .enabled || serviceStatus == .requiresApproval)
       && !(leaseExists && !holdsLease)
   }
+
+  var canPollNow: Bool { holdsLease && serviceStatus == .enabled }
 
   var idleAgentMessage: String? {
     let agentRegistered = serviceStatus == .enabled || serviceStatus == .requiresApproval
@@ -184,6 +191,30 @@ private final class ListeningPollerSettingsModel {
       errorMessage = error.localizedDescription
     }
     await refresh()
+  }
+
+  func pollNow() async {
+    guard canPollNow, !isPollingNow else { return }
+    isPollingNow = true
+    defer { isPollingNow = false }
+    do {
+      let store = ListeningStore.liveValue
+      let previousFetchAt = try store.readFetches().last?.fetchedAt
+      try ListeningLaunchAgentKickstarter.kickstart(
+        label: "com.jonphillips.vinylfever.listeningpoller.agent")
+      for attempt in 0...30 {
+        try Task.checkCancellation()
+        let newestFetchAt = try store.readFetches().last?.fetchedAt
+        if let newestFetchAt, newestFetchAt != previousFetchAt { break }
+        if attempt < 30 { try await Task.sleep(for: .seconds(1)) }
+      }
+      await refresh()
+    } catch is CancellationError {
+      await refresh()
+    } catch {
+      await refresh()
+      errorMessage = error.localizedDescription
+    }
   }
 
   private func registerAgentIfNeeded() throws {
