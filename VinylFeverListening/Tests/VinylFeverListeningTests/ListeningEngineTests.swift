@@ -86,6 +86,29 @@ struct ListeningEngineTests {
     #expect(log.coverage.collapsedOverlappingPlays == 1)
   }
 
+  @Test("a stale recovery collapse does not swallow a later genuine replay")
+  func staleRecoveryDoesNotSwallowLaterReplay() {
+    let song = item("same-song")
+    let baseline = ListeningFetch(
+      poller: poller, host: "Mini", fetchedAt: t0, outcome: .baseline, pagesRead: 1)
+    let firstPlay = ListeningFetch(
+      poller: poller, host: "Mini", fetchedAt: t0.addingTimeInterval(3_600),
+      outcome: .plays, newCount: 1, pagesRead: 1, items: [song])
+    let secondPlay = ListeningFetch(
+      poller: poller, host: "Mini", fetchedAt: t0.addingTimeInterval(7_200),
+      outcome: .plays, newCount: 1, pagesRead: 1, items: [song])
+    let staleRecovery = ListeningFetch(
+      poller: secondPoller, host: "Laptop", fetchedAt: t0.addingTimeInterval(9_000),
+      outcome: .plays, newCount: 1, pagesRead: 1, items: [song],
+      since: ListeningSince(poller: poller, fetchedAt: t0))
+
+    let log = ListeningLog(
+      streams: [[baseline, firstPlay, secondPlay], [staleRecovery]],
+      now: staleRecovery.fetchedAt)
+    #expect(log.plays.filter { $0.item.id == "same-song" }.count == 2)
+    #expect(log.coverage.collapsedOverlappingPlays == 1)
+  }
+
   @Test("diff recognizes front additions, moved replays, and unchanged feeds")
   func simpleDiffs() throws {
     let a = item("a")
@@ -316,15 +339,14 @@ struct ListeningEngineTests {
     let log = ListeningLog(
       streams: [[baselineOne, firstPlay, repeatedAgain, late], [baselineTwo, duplicatePlay]],
       now: late.fetchedAt)
-    // The second poller's window overlaps both local plays, so S5 collapses the connected
-    // overlap chain. The separate test below covers windows that only touch.
-    #expect(log.coverage.collapsedOverlappingPlays == 2)
+    // The recovery collapses against the first play, but it cannot swallow the later replay.
+    #expect(log.coverage.collapsedOverlappingPlays == 1)
     #expect(log.recentPlays(period: .month, now: late.fetchedAt, limit: 1).map { $0.item.id } == ["late"])
     let topTracks = log.topTracks(period: .quarter, now: late.fetchedAt)
-    #expect(topTracks.map(\.plays) == [2, 1, 1])
-    #expect(topTracks.prefix(2).map(\.artist) == ["Beyoncé", "New Artist"])
+    #expect(topTracks.map(\.plays) == [2, 2, 1])
+    #expect(topTracks.prefix(2).map(\.artist) == ["Beyoncé", "The Records"])
     let topArtists = log.topArtists(period: .quarter, now: late.fetchedAt, limit: 2)
-    #expect(topArtists.map(\.plays) == [2, 1])
+    #expect(topArtists.map(\.plays) == [2, 2])
     #expect(ListeningQueryLimit.cap(999) == ListeningQueryLimit.maximum)
     #expect(ListeningTextNormalizer.title("Starry Eyes (2005 Remaster)") == "starry eyes")
     #expect(ListeningTextNormalizer.artist("Beyoncé") == ListeningTextNormalizer.artist("Beyonce"))

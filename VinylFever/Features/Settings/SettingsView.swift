@@ -304,6 +304,7 @@ final class ListeningPollingSettingsModel {
   @ObservationIgnored @Dependency(\.listeningStore) private var store
   @ObservationIgnored @Dependency(\.listeningAgentClient) private var agent
   @ObservationIgnored @Dependency(\.date) private var date
+  @ObservationIgnored @Dependency(\.continuousClock) private var clock
   private var pendingTakeoverPoller: UUID?
   private var leaseHost: String?
 
@@ -413,7 +414,7 @@ final class ListeningPollingSettingsModel {
         try Task.checkCancellation()
         let newestFetchAt = try store.readFetches().last?.fetchedAt
         if let newestFetchAt, newestFetchAt != previousFetchAt { break }
-        if attempt < 30 { try await Task.sleep(for: .seconds(1)) }
+        if attempt < 30 { try await clock.sleep(for: .seconds(1)) }
       }
       await refresh()
     } catch is CancellationError {

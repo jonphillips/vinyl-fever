@@ -147,7 +147,9 @@ Given the previous full list `P` and the current list `C`, both newest first, fi
   catalog play and a library play of the same song count together.
 - Streams are merged by time. If two different fetch lines have windows that strictly overlap,
   plays of the same song count once, whatever the poller. Windows that only touch still count as
-  separate plays. The result says how many overlapping plays were collapsed.
+  separate plays. A collapsed play does not extend its line's overlap window for later
+  comparisons, so it cannot swallow a later genuine replay. The result says how many overlapping
+  plays were collapsed.
 
 ## Tool surface (S2, added to `vf-mcp`)
 
@@ -415,7 +417,7 @@ can produce on handback, and adds **Poll now**. Same files as S4, so it goes nex
       asks, but that's the problem: it hides the 19 lost plays.
     - The previous holder wrote nothing while it didn't hold the lease, in both directions.
 
-- [ ] **S4 — Handover recovery (`VinylFeverListening` + both apps).** *Added 2026-10-22 from the
+- [x] **S4 — Handover recovery (`VinylFeverListening` + both apps).** *Added 2026-10-22 from the
   S3 gate.* Today a takeover clears the new holder's last list, so its first fetch is a
   `baseline` that absorbs every play since the old holder's last fetch. Nothing reports the loss.
   The mini → laptop handover lost 19 plays that way. Also, a takeover on a Mac whose agent is
@@ -485,10 +487,10 @@ can produce on handback, and adds **Poll now**. Same files as S4, so it goes nex
       The mini had already logged those 33, and the reader only collapses across pollers, so the
       log would have counted 66. Fixed in S5.
     - The architect kickstarted the laptop's agent at 7:27 pm. It logged Jon's 4 Tom Petty plays
-      as an ordinary `plays` line. That gives the laptop an `items` line in its own tenure, so
-      the handback can run safely on S4's code. **Laptop → mini half: owed.**
+      as an ordinary `plays` line. That gives the laptop an `items` line in its own tenure.
+      **Device gate folded into S5's.**
 
-- [ ] **S5 — Recover from the right list, and Poll now (`VinylFeverListening` + both apps).**
+- [x] **S5 — Recover from the right list, and Poll now (`VinylFeverListening` + both apps).**
   *Added 2026-10-22 from the S4 gate.* S4 takes `P` from the old holder's newest line that
   carries `items`. That's only right if the line is in the old holder's *current* tenure. A
   recovery that came out `none` writes no `items`. So does a holder that never fetched
@@ -518,9 +520,10 @@ can produce on handback, and adds **Poll now**. Same files as S4, so it goes nex
   - **Reader guard.** Two plays of the same song collapse when they come from **different lines**
     and their windows **strictly overlap**: one starts before the other ends. That applies
     whatever the poller. Windows that only touch, like a stream's consecutive fetches, don't
-    collapse. That keeps a song replayed in back-to-back windows at two plays. This catches any
-    future same-Mac overlap, such as a recovery window or a stray double poll, and today's log
-    has none to repair. Update *Reading the log* above.
+    collapse. A collapsed play doesn't extend the overlap window for later comparisons. That
+    keeps a song replayed in back-to-back windows at two plays. This catches any future same-Mac
+    overlap, such as a recovery window or a stray double poll, and today's log has none to repair.
+    Update *Reading the log* above.
   - **Poll now** (Jon, 2026-10-22). It's a button in Settings → Listening History in Vinyl Fever,
     and in the poller app, shown when this Mac holds the lease and its agent is enabled.
     - It kickstarts the agent with the existing `ListeningLaunchAgentKickstarter`, never an
@@ -562,6 +565,7 @@ can produce on handback, and adds **Poll now**. Same files as S4, so it goes nex
        duplicates.
     4. Press **Poll now** on each Mac while it holds the lease. A fetch line appears within a
        minute.
+  - **Device gate owed.**
 
 ## Prerequisites (Jon, not the executor's)
 

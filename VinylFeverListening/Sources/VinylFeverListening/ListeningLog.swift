@@ -280,6 +280,7 @@ public struct ListeningLog: Sendable {
         }
         if overlapsAnotherLine {
           collapsed += 1
+          continue
         } else {
           kept.append(play)
         }

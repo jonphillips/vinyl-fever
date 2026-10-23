@@ -93,6 +93,32 @@ struct ListeningPollingSettingsTests {
     #expect(!model.isPollingNow)
   }
 
+  @Test
+  func pollNowTimesOutAndRefreshesWhenKickstartWritesNoFetch() async {
+    let now = date("2026-10-22T12:00:00Z")
+    let poller = UUID()
+    let state = ListeningSettingsState(
+      poller: poller, lease: ListeningLease(poller: poller, host: "This Mac", takenAt: now))
+    let agentState = ListeningAgentState(isEnabled: true)
+    let model = withDependencies {
+      $0.listeningStore = Self.store(state)
+      $0.listeningAgentClient = agentState.client
+      $0.date = .constant(now)
+      $0.continuousClock = ImmediateClock()
+    } operation: {
+      ListeningPollingSettingsModel()
+    }
+
+    await model.refresh()
+    #expect(model.canPollNow)
+    await model.pollNow()
+
+    #expect(agentState.kickstartCount == 1)
+    #expect(state.fetches.isEmpty)
+    #expect(model.statusLine == ListeningStatusLine.make(fetches: [], now: now))
+    #expect(!model.isPollingNow)
+  }
+
   private static func store(_ state: ListeningSettingsState) -> ListeningStore {
     ListeningStore(
       pollerID: { state.poller },
