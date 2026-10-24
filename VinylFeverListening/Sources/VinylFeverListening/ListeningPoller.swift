@@ -60,6 +60,9 @@ public struct ListeningStore: Sendable {
   public var writeLastPollError: @Sendable (String?) throws -> Void
   public var listeningFolder: @Sendable () -> URL
   public var hostName: @Sendable () -> String
+  public var readNewMusicExposure: @Sendable () throws -> [NewMusicExposureRecord]
+  public var appendNewMusicWeek: @Sendable (NewMusicWeek) throws -> Void
+  public var appendNewMusicGap: @Sendable (NewMusicExposureGap) throws -> Void
 
   public init(
     pollerID: @escaping @Sendable () throws -> UUID,
@@ -77,6 +80,9 @@ public struct ListeningStore: Sendable {
     readLastPollError: @escaping @Sendable () throws -> String? = { nil },
     writeLastPollError: @escaping @Sendable (String?) throws -> Void = { _ in },
     listeningFolder: @escaping @Sendable () -> URL,
+    readNewMusicExposure: @escaping @Sendable () throws -> [NewMusicExposureRecord] = { [] },
+    appendNewMusicWeek: @escaping @Sendable (NewMusicWeek) throws -> Void = { _ in },
+    appendNewMusicGap: @escaping @Sendable (NewMusicExposureGap) throws -> Void = { _ in },
     hostName: @escaping @Sendable () -> String = { "Mac" }
   ) {
     self.pollerID = pollerID
@@ -95,6 +101,9 @@ public struct ListeningStore: Sendable {
     self.writeLastPollError = writeLastPollError
     self.listeningFolder = listeningFolder
     self.hostName = hostName
+    self.readNewMusicExposure = readNewMusicExposure
+    self.appendNewMusicWeek = appendNewMusicWeek
+    self.appendNewMusicGap = appendNewMusicGap
   }
 }
 
@@ -129,6 +138,7 @@ public struct ListeningPoller {
   @Dependency(\.listeningStore) private var store
   @Dependency(\.listeningAuthorizationClient) private var authorization
   @Dependency(\.recentlyPlayedClient) private var recentlyPlayed
+  @Dependency(\.newMusicCatalogClient) private var newMusic
   @Dependency(\.date) private var date
 
   public init() {}
@@ -204,8 +214,25 @@ public struct ListeningPoller {
     if fetch.outcome != .failed {
       try store.writeLastList(diff.currentList)
       if marker != nil { try store.clearHandoverMarker() }
+      await recordNewMusicExposure(at: now, host: host)
     }
     return .fetched(fetch)
+  }
+
+  private func recordNewMusicExposure(at now: Date, host: String) async {
+    let existing = (try? store.readNewMusicExposure()) ?? []
+    if let latestAttempt = existing.map(\.fetchedAt).max(), now.timeIntervalSince(latestAttempt) < 6 * 60 * 60 {
+      return
+    }
+    do {
+      let week = try await newMusic.fetch()
+      guard !existing.contains(where: { $0.lastModifiedDate == week.lastModifiedDate }) else { return }
+      try store.appendNewMusicWeek(NewMusicWeek(
+        lastModifiedDate: week.lastModifiedDate, fetchedAt: now, host: host, tracks: week.tracks))
+    } catch {
+      try? store.appendNewMusicGap(NewMusicExposureGap(
+        fetchedAt: now, host: host, detail: ListeningErrorDescription.describe(error)))
+    }
   }
 
   private static func resolveHandover(
