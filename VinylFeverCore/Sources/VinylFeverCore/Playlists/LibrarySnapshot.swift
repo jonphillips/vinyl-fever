@@ -31,6 +31,7 @@ public struct LibraryTrack: Codable, Equatable, Sendable, Identifiable {
   public var playCount: Int
   public var skipCount: Int
   public var favorited: Bool
+  public var disliked: Bool
   public var rating: Int?
   public var dateAdded: Date?
   public var lastPlayed: Date?
@@ -40,7 +41,7 @@ public struct LibraryTrack: Codable, Equatable, Sendable, Identifiable {
   public init(
     persistentID: String, name: String, artist: String, albumArtist: String = "",
     album: String = "", genre: String? = nil, year: Int? = nil, durationSeconds: Double? = nil,
-    playCount: Int = 0, skipCount: Int = 0, favorited: Bool = false, rating: Int? = nil,
+    playCount: Int = 0, skipCount: Int = 0, favorited: Bool = false, disliked: Bool = false, rating: Int? = nil,
     dateAdded: Date? = nil, lastPlayed: Date? = nil, availability: LibraryAvailability = .other
   ) {
     self.persistentID = persistentID
@@ -54,6 +55,7 @@ public struct LibraryTrack: Codable, Equatable, Sendable, Identifiable {
     self.playCount = playCount
     self.skipCount = skipCount
     self.favorited = favorited
+    self.disliked = disliked
     self.rating = rating
     self.dateAdded = dateAdded
     self.lastPlayed = lastPlayed
@@ -100,6 +102,8 @@ public struct LibraryTrack: Codable, Equatable, Sendable, Identifiable {
       skipCount: integer("skippedCount") ?? 0,
       favorited: (value("favorited") as? NSNumber)?.boolValue
         ?? (value("favorited") as? Bool ?? false),
+      disliked: (value("disliked") as? NSNumber)?.boolValue
+        ?? (value("disliked") as? Bool ?? false),
       rating: integer("rating"),
       dateAdded: value("dateAdded") as? Date,
       lastPlayed: value("playedDate") as? Date,
@@ -129,14 +133,76 @@ public struct LibraryTrack: Codable, Equatable, Sendable, Identifiable {
   private static func fourCC(_ value: String) -> UInt32 {
     value.utf8.reduce(UInt32.zero) { ($0 << 8) | UInt32($1) }
   }
+
+  private enum CodingKeys: String, CodingKey {
+    case persistentID, name, artist, albumArtist, album, genre, year, durationSeconds
+    case playCount, skipCount, favorited, disliked, rating, dateAdded, lastPlayed, availability
+  }
+
+  public init(from decoder: Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    persistentID = try values.decode(String.self, forKey: .persistentID)
+    name = try values.decode(String.self, forKey: .name)
+    artist = try values.decode(String.self, forKey: .artist)
+    albumArtist = try values.decodeIfPresent(String.self, forKey: .albumArtist) ?? ""
+    album = try values.decodeIfPresent(String.self, forKey: .album) ?? ""
+    genre = try values.decodeIfPresent(String.self, forKey: .genre)
+    year = try values.decodeIfPresent(Int.self, forKey: .year)
+    durationSeconds = try values.decodeIfPresent(Double.self, forKey: .durationSeconds)
+    playCount = try values.decodeIfPresent(Int.self, forKey: .playCount) ?? 0
+    skipCount = try values.decodeIfPresent(Int.self, forKey: .skipCount) ?? 0
+    favorited = try values.decodeIfPresent(Bool.self, forKey: .favorited) ?? false
+    disliked = try values.decodeIfPresent(Bool.self, forKey: .disliked) ?? false
+    rating = try values.decodeIfPresent(Int.self, forKey: .rating)
+    dateAdded = try values.decodeIfPresent(Date.self, forKey: .dateAdded)
+    lastPlayed = try values.decodeIfPresent(Date.self, forKey: .lastPlayed)
+    availability = try values.decodeIfPresent(LibraryAvailability.self, forKey: .availability) ?? .other
+  }
+}
+
+public enum LibraryPlaylistKind: String, Codable, CaseIterable, Sendable {
+  case user, smart, subscription
+}
+
+public struct LibraryPlaylist: Codable, Equatable, Sendable, Identifiable {
+  public var persistentID: String
+  public var name: String
+  public var folder: String?
+  public var kind: LibraryPlaylistKind
+  public var members: [String]
+  public var id: String { persistentID }
+
+  public init(persistentID: String, name: String, folder: String? = nil, kind: LibraryPlaylistKind, members: [String]) {
+    self.persistentID = persistentID
+    self.name = name
+    self.folder = folder
+    self.kind = kind
+    self.members = members
+  }
+}
+
+public struct LibraryOutsideTrack: Codable, Equatable, Sendable {
+  public var name: String
+  public var artist: String
+  public var album: String
+  public var year: Int?
+  public var durationSeconds: Double?
+
+  public init(name: String, artist: String, album: String, year: Int? = nil, durationSeconds: Double? = nil) {
+    self.name = name
+    self.artist = artist
+    self.album = album
+    self.year = year
+    self.durationSeconds = durationSeconds
+  }
 }
 
 public struct LibrarySnapshot: Codable, Equatable, Sendable {
   private enum CodingKeys: String, CodingKey {
-    case format, version, generatedAt, trackCount, tracks, lastfm
+    case format, version, generatedAt, trackCount, tracks, lastfm, playlists, outsideTracks
   }
   public static let formatName = "vf-library-snapshot"
-  public static let currentVersion = 1
+  public static let currentVersion = 2
   public static let heavilyPlayedThreshold = 20
   public var format: String
   public var version: Int
@@ -144,9 +210,12 @@ public struct LibrarySnapshot: Codable, Equatable, Sendable {
   public var trackCount: Int
   public var tracks: [LibraryTrack]
   public var lastfm: Data?
+  public var playlists: [LibraryPlaylist]
+  public var outsideTracks: [String: LibraryOutsideTrack]
 
   public init(
-    generatedAt: Date, tracks: [LibraryTrack], lastfm: Data? = nil, version: Int = currentVersion
+    generatedAt: Date, tracks: [LibraryTrack], lastfm: Data? = nil, version: Int = currentVersion,
+    playlists: [LibraryPlaylist] = [], outsideTracks: [String: LibraryOutsideTrack] = [:]
   ) {
     self.format = Self.formatName
     self.version = version
@@ -154,6 +223,20 @@ public struct LibrarySnapshot: Codable, Equatable, Sendable {
     self.trackCount = tracks.count
     self.tracks = tracks
     self.lastfm = lastfm
+    self.playlists = playlists
+    self.outsideTracks = outsideTracks
+  }
+
+  public init(from decoder: Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    format = try values.decode(String.self, forKey: .format)
+    version = try values.decode(Int.self, forKey: .version)
+    generatedAt = try values.decode(Date.self, forKey: .generatedAt)
+    trackCount = try values.decodeIfPresent(Int.self, forKey: .trackCount) ?? 0
+    tracks = try values.decodeIfPresent([LibraryTrack].self, forKey: .tracks) ?? []
+    lastfm = try values.decodeIfPresent(Data.self, forKey: .lastfm)
+    playlists = try values.decodeIfPresent([LibraryPlaylist].self, forKey: .playlists) ?? []
+    outsideTracks = try values.decodeIfPresent([String: LibraryOutsideTrack].self, forKey: .outsideTracks) ?? [:]
   }
 
   public func encode(to encoder: Encoder) throws {
@@ -164,6 +247,8 @@ public struct LibrarySnapshot: Codable, Equatable, Sendable {
     try container.encode(trackCount, forKey: .trackCount)
     try container.encode(tracks, forKey: .tracks)
     try container.encode(lastfm, forKey: .lastfm)
+    try container.encode(playlists, forKey: .playlists)
+    try container.encode(outsideTracks, forKey: .outsideTracks)
   }
 }
 

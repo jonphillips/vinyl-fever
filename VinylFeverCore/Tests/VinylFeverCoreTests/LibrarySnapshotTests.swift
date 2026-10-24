@@ -20,6 +20,22 @@ struct LibrarySnapshotTests {
     #expect(try LibrarySnapshotCodec.decode(whole).generatedAt == date)
   }
 
+  @Test("v1 snapshots default disliked and playlists while v2 round trips playlist members")
+  func snapshotVersionMigration() throws {
+    let v1 = Data(#"{"format":"vf-library-snapshot","version":1,"generatedAt":"2026-10-15T21:40:00Z","trackCount":1,"tracks":[{"persistentID":"old","name":"Old","artist":"Artist"}],"lastfm":null}"#.utf8)
+    let decodedV1 = try LibrarySnapshotCodec.decode(v1)
+    #expect(decodedV1.playlists.isEmpty)
+    #expect(decodedV1.tracks[0].disliked == false)
+
+    let snapshot = LibrarySnapshot(generatedAt: date, tracks: fixture, playlists: [
+      LibraryPlaylist(persistentID: "p", name: "Replay 2025", kind: .subscription, members: ["v1", "outside", "v1"]),
+    ], outsideTracks: ["outside": LibraryOutsideTrack(name: "Elsewhere", artist: "Artist", album: "Album")])
+    let decoded = try LibrarySnapshotCodec.decode(LibrarySnapshotCodec.encode(snapshot))
+    #expect(decoded.version == 2)
+    #expect(decoded.playlists[0].members == ["v1", "outside", "v1"])
+    #expect(decoded.outsideTracks["outside"]?.name == "Elsewhere")
+  }
+
   @Test("codec preserves fields and reports newer versions with a typed error")
   func codec() throws {
     let snapshot = LibrarySnapshot(generatedAt: date, tracks: fixture)
@@ -29,13 +45,13 @@ struct LibrarySnapshotTests {
     let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
     #expect(object["lastfm"] is NSNull)
     let future = try JSONSerialization.data(withJSONObject: [
-      "format": LibrarySnapshot.formatName, "version": 2,
+      "format": LibrarySnapshot.formatName, "version": 3,
     ])
     do {
       _ = try LibrarySnapshotCodec.decode(future)
       Issue.record("Expected newer-version error")
     } catch let error as LibrarySnapshotCodecError {
-      #expect(error == .newerVersion(2))
+      #expect(error == .newerVersion(3))
     }
   }
 
@@ -220,6 +236,33 @@ struct LibrarySnapshotTests {
     let identityDuration = identityDurations.min()!
     print("LibraryIndex build best of 3: baseline \(baselineDuration)s, ArtistIdentity \(identityDuration)s")
     #expect(identityDuration <= baselineDuration * 1.25)
+  }
+
+  @Test("PlaylistIndex builds under one second at Jon's library scale", .enabled(if: ProcessInfo.processInfo.environment["VF_PERF_TESTS"] == "1"))
+  func playlistIndexPerformance() {
+    let tracks = (0..<87_000).map { index in
+      LibraryTrack(persistentID: "load-\(index)", name: "Track \(index)", artist: "Artist \(index % 8_000)")
+    }
+    let playlists = (0..<150).map { playlistIndex in
+      LibraryPlaylist(persistentID: "playlist-\(playlistIndex)", name: "Playlist \(playlistIndex)", kind: .user,
+        members: (0..<134).map { "load-\((playlistIndex * 134 + $0) % tracks.count)" })
+    }
+    let roles = PlaylistRoles(updatedAt: date, playlists: playlists.map {
+      PlaylistRoleEntry(persistentID: $0.persistentID, name: $0.name, role: .curated)
+    })
+    let snapshot = LibrarySnapshot(generatedAt: date, tracks: tracks, playlists: playlists)
+    let identity = ArtistIdentity(aliases: [:], knownArtists: Set(tracks.map(\.artist)))
+    let clock = ContinuousClock()
+    var timings: [Double] = []
+    for _ in 0..<3 {
+      let start = clock.now
+      let index = PlaylistIndex(snapshot: snapshot, roles: roles, identity: identity)
+      timings.append(seconds(start.duration(to: clock.now)))
+      #expect(index.membershipsBySong.count == 20_100)
+    }
+    let best = timings.min()!
+    print("PlaylistIndex build best of 3: \(best)s")
+    #expect(best < 1)
   }
 
   private func seconds(_ duration: Duration) -> Double {

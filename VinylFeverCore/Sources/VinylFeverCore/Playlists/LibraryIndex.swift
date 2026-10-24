@@ -232,6 +232,10 @@ public struct LibraryIndex: Sendable {
     }
   }
 
+  public func matchingTracks(artist: String, title: String) -> [LibraryTrack] {
+    bySong[songKey(artist: artist, title: title)] ?? []
+  }
+
   public func annotation(
     artist: String, title: String, candidateArtist: String? = nil, candidateTitle: String? = nil,
     snapshotAvailable: Bool = true

@@ -3,6 +3,17 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-23 — M17 · Dispatch 1 S1 (`m17/s1-playlists-snapshot`)
+
+Snapshot v2 carries every user and subscription playlist with ordered members, outside-library
+track text, and `disliked`. `playlist-roles.json` in iCloud Drive's Taste Intelligence folder holds
+Jon's roles: the Settings → Taste editor writes it, with suggestions and the 2018 rule. `vf-mcp`
+adds `list_playlists` and `playlist_tracks`, and `check_tracks` gains evidence by role, `heard`
+days, and `unlabeledPlaylistCount`. Core (245) and Listening (44) pass with and without
+`VF_PERF_TESTS=1`, and the macOS app's 73 tests pass. The read-only read of Jon's library took
+15.2 s: 148 playlists and 8,220 outside-library tracks. Jon's gate (labeling roles, then the
+15-song ask in ChatGPT) passed 2026-10-24. The architect added this bookkeeping at Jon's direction.
+
 ## 2026-10-22 — Effort: Listening settings refresh, and full poll errors (`effort/listening-settings-refresh`)
 
 Both Settings windows refresh listening state when activated, and Vinyl Fever's Re-probe refreshes
