@@ -43,6 +43,7 @@ public struct CurationChange: Codable, Equatable, Sendable {
   public var tracks: [CurationTrackChange]
   public var appeared: [CurationPlaylistPresence]
   public var disappeared: [CurationPlaylistPresence]
+  public var isEmpty: Bool { !baseline && playlists.isEmpty && tracks.isEmpty && appeared.isEmpty && disappeared.isEmpty }
   public init(observedAt: Date, previousSnapshotAt: Date?, baseline: Bool = false,
     playlists: [CurationPlaylistChange] = [], tracks: [CurationTrackChange] = [],
     appeared: [CurationPlaylistPresence] = [], disappeared: [CurationPlaylistPresence] = []) {
@@ -123,6 +124,7 @@ public struct TasteBaselines: Codable, Equatable, Sendable {
   public var weeklyYield: [String: Yield]
   public var overallYield: Yield
   public var stickRates: [StickRate]
+  public var pendingWeeks: Int
 }
 
 public enum TasteIntelligence {
@@ -146,15 +148,14 @@ public enum TasteIntelligence {
         return songKey(artist: artist, title: title, identity: identity)
       }
     })
+    let keyedPlays = log.plays.map { (windowEnd: $0.windowEnd, key: songKey(artist: $0.item.artist, title: $0.item.title, identity: identity)) }
     return Array(weeks.sorted { $0.lastModifiedDate > $1.lastModifiedDate }.prefix(max(1, limit))).map { week in
       let windowEnd = week.lastModifiedDate.addingTimeInterval(14 * 86_400)
       let completed = now >= windowEnd && snapshot.generatedAt >= windowEnd
+      let heardKeys = Set(keyedPlays.lazy.filter { $0.windowEnd >= week.lastModifiedDate && $0.windowEnd <= windowEnd }.map(\.key))
       var rows = week.tracks.map { track -> ClassifiedNewMusicTrack in
         let key = songKey(artist: track.artist, title: track.title, identity: identity)
-        let heard = log.plays.contains { play in
-          play.windowEnd >= week.lastModifiedDate && play.windowEnd <= windowEnd
-            && songKey(artist: play.item.artist, title: play.item.title, identity: identity) == key
-        }
+        let heard = heardKeys.contains(key)
         let status: NewMusicClassification = keepKeys.contains(key) ? .kept : (completed ? (heard ? .passed : .unheard) : .pending)
         return ClassifiedNewMusicTrack(track: track, classification: status)
       }
@@ -167,12 +168,15 @@ public enum TasteIntelligence {
   }
 
   public static func baselines(weeks: [NewMusicWeekResult], snapshot: LibrarySnapshot) -> TasteBaselines {
-    let weekly = Dictionary(uniqueKeysWithValues: weeks.map { week in
+    let finished = weeks.filter { $0.counts[NewMusicClassification.pending.rawValue, default: 0] == 0 }
+    let weekly = Dictionary(uniqueKeysWithValues: finished.map { week in
       (week.lastModifiedDate.ISO8601Format(), TasteBaselines.Yield(kept: week.counts["kept", default: 0], passed: week.counts["passed", default: 0]))
     })
-    let total = TasteBaselines.Yield(kept: weeks.reduce(0) { $0 + $1.counts["kept", default: 0] }, passed: weeks.reduce(0) { $0 + $1.counts["passed", default: 0] })
+    let total = TasteBaselines.Yield(kept: finished.reduce(0) { $0 + $1.counts["kept", default: 0] }, passed: finished.reduce(0) { $0 + $1.counts["passed", default: 0] })
     let playlists = Dictionary(snapshot.playlists.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
     let tracks = Dictionary(snapshot.tracks.map { ($0.persistentID, $0) }, uniquingKeysWith: { first, _ in first })
+    let artists = Set(snapshot.tracks.map(\.artist) + snapshot.outsideTracks.values.map(\.artist))
+    let identity = ArtistIdentity(knownArtists: artists)
     let replayByYear = Dictionary(grouping: snapshot.playlists.compactMap { playlist -> (Int, Set<String>)? in
       guard let match = playlist.name.range(of: #"^Replay \d{4}$"#, options: .regularExpression),
         let year = Int(playlist.name[match].split(separator: " ").last ?? "0") else { return nil }
@@ -180,13 +184,13 @@ public enum TasteIntelligence {
     }, by: \.0).mapValues { values in values.reduce(into: Set<String>()) { $0.formUnion($1.1) } }
     let currentYear = Calendar.current.component(.year, from: snapshot.generatedAt)
     let rates = (2021...max(2021, currentYear)).map { year -> TasteBaselines.StickRate in
-      guard let selections = playlists["\(year): Jon's Selections"] else { return .init(year: year, selections: 0, returned: 0) }
+      guard let selections = playlists.values.first(where: { $0.name.range(of: SelectionPlaylistName.pattern, options: .regularExpression) != nil && $0.name.hasPrefix("\(year):") }) else { return .init(year: year, selections: 0, returned: 0) }
       let songs = Set(selections.members.compactMap { id -> String? in
         let track = tracks[id]
         let outside = snapshot.outsideTracks[id]
         guard let artist = track?.artist ?? outside?.artist,
           let title = track?.name ?? outside?.name else { return nil }
-        return songKey(artist: artist, title: title, identity: .empty)
+        return songKey(artist: artist, title: title, identity: identity)
       })
       let replayIDs = (replayByYear[year] ?? []).union(replayByYear[year + 1] ?? [])
       let replayKeys = Set(replayIDs.compactMap { id -> String? in
@@ -194,13 +198,14 @@ public enum TasteIntelligence {
         let outside = snapshot.outsideTracks[id]
         guard let artist = track?.artist ?? outside?.artist,
           let title = track?.name ?? outside?.name else { return nil }
-        return songKey(artist: artist, title: title, identity: .empty)
+        return songKey(artist: artist, title: title, identity: identity)
       })
       let count = songs.filter { key in
         replayKeys.contains(key)
       }.count
       return .init(year: year, selections: songs.count, returned: count)
     }
-    return TasteBaselines(weeklyYield: weekly, overallYield: total, stickRates: rates)
+    return TasteBaselines(weeklyYield: weekly, overallYield: total, stickRates: rates,
+      pendingWeeks: weeks.filter { $0.counts[NewMusicClassification.pending.rawValue, default: 0] > 0 }.count)
   }
 }

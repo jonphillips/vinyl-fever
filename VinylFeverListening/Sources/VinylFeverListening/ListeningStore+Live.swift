@@ -78,13 +78,14 @@ extension ListeningStore {
       readNewMusicExposure: {
         let folder = iCloudFolder.deletingLastPathComponent()
           .appendingPathComponent("Taste Intelligence/exposure", isDirectory: true)
-        guard let urls = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) else { return [] }
-        var records: [NewMusicExposureRecord] = []
+        guard FileManager.default.fileExists(atPath: folder.path) else { return [] }
+        let urls = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
+        var files: [Data] = []
         for url in urls where url.pathExtension == "jsonl" {
           guard let data = try ListeningCoordinatedFiles.readData(url) else { continue }
-          records.append(contentsOf: try NewMusicExposureCodec.decodeJSONL(data))
+          files.append(data)
         }
-        return records
+        return NewMusicExposureCodec.readFiles(files).records
       },
       appendNewMusicWeek: { week in
         let folder = iCloudFolder.deletingLastPathComponent()
@@ -98,6 +99,8 @@ extension ListeningStore {
         try ListeningCoordinatedFiles.append(NewMusicExposureCodec.encode(gap),
           to: folder.appendingPathComponent(Self.safeFileComponent(gap.host) + ".jsonl"))
       },
+      readNewMusicAttemptAt: { try ListeningLocalState(folder: localFolder).newMusicAttemptAt() },
+      writeNewMusicAttemptAt: { date in try ListeningLocalState(folder: localFolder).writeNewMusicAttemptAt(date) },
       hostName: hostName
     )
   }
@@ -123,14 +126,26 @@ extension ListeningStore {
   }
 }
 
+public struct NewMusicExposureReadResult: Equatable, Sendable {
+  public var records: [NewMusicExposureRecord]
+  public var skippedLines: Int
+  public init(records: [NewMusicExposureRecord], skippedLines: Int) {
+    self.records = records; self.skippedLines = skippedLines
+  }
+}
+
 public enum NewMusicExposureCodec {
   public static func encode(_ week: NewMusicWeek) throws -> Data { try line(week) }
   public static func encode(_ gap: NewMusicExposureGap) throws -> Data { try line(gap) }
 
-  public static func decodeJSONL(_ data: Data) throws -> [NewMusicExposureRecord] {
+  public static func decodeJSONL(_ data: Data) -> [NewMusicExposureRecord] {
+    decodeJSONLReport(data).records
+  }
+
+  public static func decodeJSONLReport(_ data: Data) -> NewMusicExposureReadResult {
     let bytes = [UInt8](data)
     let complete = bytes.last == 0x0A ? bytes.count : (bytes.lastIndex(of: 0x0A).map { $0 + 1 } ?? 0)
-    guard complete > 0 else { return [] }
+    guard complete > 0 else { return NewMusicExposureReadResult(records: [], skippedLines: 0) }
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .custom { decoder in
       let value = try decoder.singleValueContainer().decode(String.self)
@@ -141,17 +156,39 @@ public enum NewMusicExposureCodec {
       guard let date = iso.date(from: value) else { throw DecodingError.dataCorruptedError(in: try decoder.singleValueContainer(), debugDescription: "Invalid ISO timestamp") }
       return date
     }
-    return try String(decoding: bytes[..<complete], as: UTF8.self)
-      .split(separator: "\n", omittingEmptySubsequences: true).map { line in
-        let data = Data(line.utf8)
-        if let value = try? decoder.decode(NewMusicWeek.self, from: data), value.format == "vf-new-music-week", value.version == 1 {
-          return .week(value)
-        }
-        if let value = try? decoder.decode(NewMusicExposureGap.self, from: data), value.format == "vf-new-music-exposure-gap", value.version == 1 {
-          return .gap(value)
-        }
-        throw ListeningLogCodecError.malformedLine(1)
+    var records: [NewMusicExposureRecord] = []
+    var skippedLines = 0
+    for line in String(decoding: bytes[..<complete], as: UTF8.self).split(separator: "\n", omittingEmptySubsequences: false) {
+      guard !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+      let lineData = Data(line.utf8)
+      let header = (try? JSONSerialization.jsonObject(with: lineData)) as? [String: Any]
+      let format = header?["format"] as? String
+      let version = header?["version"] as? Int
+      if format == "vf-new-music-week", version == 1,
+        let value = try? decoder.decode(NewMusicWeek.self, from: lineData) {
+        records.append(.week(value)); continue
       }
+      if format == "vf-new-music-exposure-gap", version == 1,
+        let value = try? decoder.decode(NewMusicExposureGap.self, from: lineData) {
+        records.append(.gap(value)); continue
+      }
+      skippedLines += 1
+    }
+    return NewMusicExposureReadResult(records: records, skippedLines: skippedLines)
+  }
+
+  public static func readFiles(_ files: [Data]) -> NewMusicExposureReadResult {
+    let reports = files.map(decodeJSONLReport)
+    let records = reports.flatMap(\.records)
+    let weeks = Dictionary(grouping: records.compactMap { record -> (Date, NewMusicWeek)? in
+      guard case let .week(week) = record else { return nil }
+      return (week.lastModifiedDate, week)
+    }, by: \.0).values.compactMap { $0.max(by: { $0.1.fetchedAt < $1.1.fetchedAt })?.1 }
+    let gaps = records.compactMap { record -> NewMusicExposureRecord? in
+      if case .gap = record { return record }; return nil
+    }
+    return NewMusicExposureReadResult(records: weeks.sorted { $0.lastModifiedDate > $1.lastModifiedDate }.map(NewMusicExposureRecord.week) + gaps,
+      skippedLines: reports.reduce(0) { $0 + $1.skippedLines })
   }
 
   private static func line<T: Encodable>(_ value: T) throws -> Data {
@@ -235,9 +272,22 @@ private struct ListeningLocalState {
     try Data(error.utf8).write(to: url, options: .atomic)
   }
 
+  func newMusicAttemptAt() throws -> Date? {
+    let url = folder.appendingPathComponent("new-music-last-attempt.json")
+    guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+    return try JSONDecoder().decode(NewMusicAttempt.self, from: Data(contentsOf: url)).at
+  }
+
+  func writeNewMusicAttemptAt(_ date: Date) throws {
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+    try encoder.encode(NewMusicAttempt(at: date)).write(to: folder.appendingPathComponent("new-music-last-attempt.json"), options: .atomic)
+  }
+
   private struct PollerID: Codable {
     var poller: UUID
   }
+  private struct NewMusicAttempt: Codable { var at: Date }
 }
 
 private enum ListeningCoordinatedFiles {

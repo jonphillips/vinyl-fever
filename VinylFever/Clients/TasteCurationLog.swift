@@ -2,9 +2,7 @@ import Foundation
 import VinylFeverCore
 
 enum TasteCurationLog {
-  static func append(_ change: CurationChange, host: String) throws {
-    let folder = URL(fileURLWithPath: NSHomeDirectory())
-      .appending(path: "Library/Mobile Documents/com~apple~CloudDocs/Vinyl Fever/Taste Intelligence/curation", directoryHint: .isDirectory)
+  static func append(_ change: CurationChange, host: String, folder: URL) throws {
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     let safeHost = host.unicodeScalars.map {
       CharacterSet.alphanumerics.contains($0) || "-_".unicodeScalars.contains($0) ? String($0) : "_"

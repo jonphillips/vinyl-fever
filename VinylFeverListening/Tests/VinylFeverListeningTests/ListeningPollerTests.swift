@@ -53,24 +53,43 @@ struct ListeningPollerTests {
   }
 
   @Test("successful New Music fetch is logged and retried no more than every six hours")
-  func newMusicExposureThrottle() async throws {
+  func newMusicSameWeekRefetchStaysThrottled() async throws {
     let folders = try TemporaryListeningFolders()
     defer { folders.remove() }
     let store = ListeningStore.live(iCloudFolder: folders.cloud, localFolder: folders.local, hostName: { "Test mini" })
     let calls = ExposureCallCount()
     let modified = date("2026-10-16T10:04:00Z")
     let fetch: @Sendable () async throws -> NewMusicCatalogWeek = {
-      let count = await calls.next()
-      return NewMusicCatalogWeek(lastModifiedDate: modified.addingTimeInterval(Double(count - 1) * 86_400),
+      _ = await calls.next()
+      return NewMusicCatalogWeek(lastModifiedDate: modified,
         tracks: [NewMusicTrack(catalogID: "6815778888", title: "White Knight", artist: "Cats in Space")])
     }
     _ = try await poll(store: store, now: modified, exposure: fetch) { _ in RecentlyPlayedPage(items: [], hasNext: false) }
-    _ = try await poll(store: store, now: modified.addingTimeInterval(5 * 3_600), exposure: fetch) { _ in RecentlyPlayedPage(items: [], hasNext: false) }
     _ = try await poll(store: store, now: modified.addingTimeInterval(7 * 3_600), exposure: fetch) { _ in RecentlyPlayedPage(items: [], hasNext: false) }
+    _ = try await poll(store: store, now: modified.addingTimeInterval(8 * 3_600), exposure: fetch) { _ in RecentlyPlayedPage(items: [], hasNext: false) }
+    _ = try await poll(store: store, now: modified.addingTimeInterval(9 * 3_600), exposure: fetch) { _ in RecentlyPlayedPage(items: [], hasNext: false) }
     #expect(await calls.value == 2)
     let records = try store.readNewMusicExposure()
-    #expect(records.compactMap(\.lastModifiedDate).count == 2)
+    #expect(records.compactMap(\.lastModifiedDate).count == 1)
     #expect(records.compactMap(\.lastModifiedDate).first == modified)
+  }
+
+  @Test("unreadable exposure log skips fetch and records a gap")
+  func unreadableExposureLogSkipsFetchWithoutDuplicate() async throws {
+    let calls = ExposureCallCount()
+    let gaps = GapCallCounter()
+    let store = ListeningStore(
+      pollerID: { UUID(uuidString: "00000000-0000-0000-0000-000000000001")! },
+      readLease: { nil }, writeLease: { _ in }, readLastList: { nil }, writeLastList: { _ in },
+      appendFetch: { _ in }, listeningFolder: { URL(fileURLWithPath: "/tmp/Listening") },
+      readNewMusicExposure: { throw CocoaError(.fileReadNoPermission) },
+      appendNewMusicGap: { _ in gaps.increment() }, hostName: { "Test Mac" })
+    _ = try await poll(store: store, now: date("2026-10-16T10:04:00Z"), exposure: {
+      _ = await calls.next()
+      return NewMusicCatalogWeek(lastModifiedDate: Date(), tracks: [])
+    }) { _ in RecentlyPlayedPage(items: [], hasNext: false) }
+    #expect(await calls.value == 0)
+    #expect(gaps.value == 1)
   }
 
   @Test("failed New Music fetch records a gap without failing the listening poll")
@@ -95,13 +114,16 @@ struct ListeningPollerTests {
     let store = ListeningStore.live(iCloudFolder: folders.cloud, localFolder: folders.local)
     let owner = try store.pollerID()
     try store.writeLease(ListeningLease(poller: UUID(), host: "Other Mac", takenAt: Date()))
-    let result = try await poll(store: store, now: Date()) { _ in
+    let calls = ExposureCallCount()
+    let result = try await poll(store: store, now: Date(), exposure: { _ = await calls.next(); throw NewMusicExposureError.notConfigured }) { _ in
       RecentlyPlayedPage(items: [item("one")], hasNext: false)
     }
 
     #expect(result == .skipped)
     #expect(try store.readLease()?.poller != owner)
     #expect(try store.readFetches().isEmpty)
+    #expect(await calls.value == 0)
+    #expect(try store.readNewMusicExposure().isEmpty)
   }
 
   @Test("taking over and handing back recovers each holder's handover window")
@@ -561,6 +583,13 @@ struct ListeningPollerTests {
 private actor ExposureCallCount {
   private(set) var value = 0
   func next() -> Int { value += 1; return value }
+}
+
+private final class GapCallCounter: @unchecked Sendable {
+  private let lock = NSLock()
+  private var stored = 0
+  var value: Int { lock.withLock { stored } }
+  func increment() { lock.withLock { stored += 1 } }
 }
 
 private final class ListeningTakeoverFixture: @unchecked Sendable {

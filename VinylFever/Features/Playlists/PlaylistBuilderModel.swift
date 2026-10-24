@@ -15,6 +15,7 @@ final class PlaylistBuilderModel {
   @ObservationIgnored @Dependency(\.musicAppClient) private var musicApp
   @ObservationIgnored @Dependency(\.librarySnapshotStore) private var snapshotStore
   @ObservationIgnored @Dependency(\.tasteCurationClient) private var tasteCuration
+  @ObservationIgnored @Dependency(\.listeningStore) private var listeningStore
   @ObservationIgnored @Dependency(\.defaultDatabase) private var database
   @ObservationIgnored @Dependency(\.playlistInboxClient) private var playlistInbox
   @ObservationIgnored @Dependency(\.date.now) private var now
@@ -197,10 +198,17 @@ final class PlaylistBuilderModel {
     }
     do {
       let snapshot = try await musicApp.readLibrarySnapshot()
-      let previousSnapshot = try await snapshotStore.read()
-      try await tasteCuration.append(
-        SnapshotCurationDiff.diff(previous: previousSnapshot, current: snapshot, observedAt: Date()),
-        Host.current().localizedName ?? "Mac")
+      do {
+        let previousSnapshot = try await snapshotStore.read()
+        let change = SnapshotCurationDiff.diff(previous: previousSnapshot, current: snapshot, observedAt: now)
+        if !change.isEmpty {
+          let folder = listeningStore.listeningFolder().deletingLastPathComponent()
+            .appending(path: "Taste Intelligence/curation", directoryHint: .isDirectory)
+          try await tasteCuration.append(change, listeningStore.hostName(), folder)
+        }
+      } catch {
+        librarySnapshotError = "Library refreshed, but curation changes could not be recorded: \(error.localizedDescription)"
+      }
       do {
         try await ArtistAliasExporter.export(database: database, store: snapshotStore)
       } catch {

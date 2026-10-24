@@ -63,6 +63,8 @@ public struct ListeningStore: Sendable {
   public var readNewMusicExposure: @Sendable () throws -> [NewMusicExposureRecord]
   public var appendNewMusicWeek: @Sendable (NewMusicWeek) throws -> Void
   public var appendNewMusicGap: @Sendable (NewMusicExposureGap) throws -> Void
+  public var readNewMusicAttemptAt: @Sendable () throws -> Date?
+  public var writeNewMusicAttemptAt: @Sendable (Date) throws -> Void
 
   public init(
     pollerID: @escaping @Sendable () throws -> UUID,
@@ -83,6 +85,8 @@ public struct ListeningStore: Sendable {
     readNewMusicExposure: @escaping @Sendable () throws -> [NewMusicExposureRecord] = { [] },
     appendNewMusicWeek: @escaping @Sendable (NewMusicWeek) throws -> Void = { _ in },
     appendNewMusicGap: @escaping @Sendable (NewMusicExposureGap) throws -> Void = { _ in },
+    readNewMusicAttemptAt: @escaping @Sendable () throws -> Date? = { nil },
+    writeNewMusicAttemptAt: @escaping @Sendable (Date) throws -> Void = { _ in },
     hostName: @escaping @Sendable () -> String = { "Mac" }
   ) {
     self.pollerID = pollerID
@@ -104,6 +108,8 @@ public struct ListeningStore: Sendable {
     self.readNewMusicExposure = readNewMusicExposure
     self.appendNewMusicWeek = appendNewMusicWeek
     self.appendNewMusicGap = appendNewMusicGap
+    self.readNewMusicAttemptAt = readNewMusicAttemptAt
+    self.writeNewMusicAttemptAt = writeNewMusicAttemptAt
   }
 }
 
@@ -220,8 +226,23 @@ public struct ListeningPoller {
   }
 
   private func recordNewMusicExposure(at now: Date, host: String) async {
-    let existing = (try? store.readNewMusicExposure()) ?? []
-    if let latestAttempt = existing.map(\.fetchedAt).max(), now.timeIntervalSince(latestAttempt) < 6 * 60 * 60 {
+    let latestAttempt: Date?
+    do { latestAttempt = try store.readNewMusicAttemptAt() }
+    catch { return }
+    if let latestAttempt, now.timeIntervalSince(latestAttempt) < 6 * 60 * 60 { return }
+    let existing: [NewMusicExposureRecord]
+    do { existing = try store.readNewMusicExposure() }
+    catch {
+      try? store.writeNewMusicAttemptAt(now)
+      try? store.appendNewMusicGap(NewMusicExposureGap(
+        fetchedAt: now, host: host,
+        detail: "The existing New Music exposure log could not be read: \(ListeningErrorDescription.describe(error))"))
+      return
+    }
+    do { try store.writeNewMusicAttemptAt(now) }
+    catch {
+      try? store.appendNewMusicGap(NewMusicExposureGap(
+        fetchedAt: now, host: host, detail: "The New Music exposure throttle could not be saved."))
       return
     }
     do {

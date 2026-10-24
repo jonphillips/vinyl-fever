@@ -22,6 +22,9 @@ struct TasteIntelligenceTests {
     #expect(diff.tracks.count == 1)
     #expect(diff.tracks.first?.favoriteFrom == false)
     #expect(diff.tracks.first?.dislikeTo == true)
+    #expect(diff.isEmpty == false)
+    #expect(SnapshotCurationDiff.diff(previous: old, current: old, observedAt: t0).isEmpty)
+    #expect(SnapshotCurationDiff.diff(previous: nil, current: old, observedAt: t0).isEmpty == false)
   }
 
   @Test("New Music classification includes kept, passed, unheard and pending songs")
@@ -70,5 +73,65 @@ struct TasteIntelligenceTests {
     #expect(result.overallYield.ratio == 2.0 / 3.0)
     #expect(result.stickRates.first(where: { $0.year == 2025 })?.selections == 2)
     #expect(result.stickRates.first(where: { $0.year == 2025 })?.returned == 1)
+  }
+
+  @Test("pending weeks do not contribute to yield")
+  func baselinesExcludePendingWeeksFromYield() {
+    let date = Date(timeIntervalSince1970: 1_800_000_000)
+    let snapshot = LibrarySnapshot(generatedAt: date, tracks: [], playlists: [])
+    let finished = NewMusicWeekResult(lastModifiedDate: date, fetchedAt: date,
+      counts: ["kept": 2, "passed": 1], tracks: [])
+    let pending = NewMusicWeekResult(lastModifiedDate: date.addingTimeInterval(100), fetchedAt: date,
+      counts: ["kept": 3, "pending": 22], tracks: [])
+    let result = TasteIntelligence.baselines(weeks: [finished, pending], snapshot: snapshot)
+    #expect(result.weeklyYield.count == 1)
+    #expect(result.overallYield.kept == 2)
+    #expect(result.overallYield.passed == 1)
+    #expect(result.pendingWeeks == 1)
+  }
+
+  @Test("stick rate merges artist variants between Selections and Replay")
+  func stickRateMergesArtistVariants() {
+    let date = Date(timeIntervalSince1970: 1_800_000_000)
+    let snapshot = LibrarySnapshot(generatedAt: date, tracks: [
+      LibraryTrack(persistentID: "selection-song", name: "The Weight", artist: "The Band"),
+      LibraryTrack(persistentID: "replay-song", name: "The Weight", artist: "Band, The"),
+    ], playlists: [
+      LibraryPlaylist(persistentID: "selection", name: "2025: Jon's Selections", kind: .user, members: ["selection-song"]),
+      LibraryPlaylist(persistentID: "replay", name: "Replay 2026", kind: .subscription, members: ["replay-song"]),
+    ])
+    let result = TasteIntelligence.baselines(weeks: [], snapshot: snapshot)
+    #expect(result.stickRates.first(where: { $0.year == 2025 })?.selections == 1)
+    #expect(result.stickRates.first(where: { $0.year == 2025 })?.returned == 1)
+  }
+
+  @Test("kept and passed scales to Jon's library size", .enabled(if: ProcessInfo.processInfo.environment["VF_PERF_TESTS"] == "1"))
+  func keptAndPassedAtJonsScale() {
+    let start = Date(timeIntervalSince1970: 1_700_000_000)
+    let tracks = (0..<87_000).map { index in
+      LibraryTrack(persistentID: "track-\(index)", name: "Track \(index)", artist: "Artist \(index % 500)")
+    }
+    let playlists = (0..<150).map { index in
+      LibraryPlaylist(persistentID: "playlist-\(index)", name: "Playlist \(index)", kind: .user, members: [])
+    }
+    let snapshot = LibrarySnapshot(generatedAt: start.addingTimeInterval(60 * 86_400), tracks: tracks, playlists: playlists)
+    let roles = PlaylistRoles(updatedAt: start, playlists: [])
+    let weeks = (0..<8).map { index in
+      NewMusicWeek(lastModifiedDate: start.addingTimeInterval(Double(index) * 7 * 86_400), fetchedAt: start,
+        host: "Mini", tracks: (0..<25).map { song in NewMusicTrack(catalogID: "week-\(index)-\(song)", title: "New \(song)", artist: "Artist \(song)") })
+    }
+    let poller = UUID()
+    let plays = (0..<15_000).map { index in
+      ListeningFetch(poller: poller, host: "Mini", fetchedAt: start.addingTimeInterval(Double(index) * 20),
+        outcome: .plays, newCount: 1, pagesRead: 1,
+        items: [ListeningItem(kind: .song, id: "play-\(index)", title: "New \(index % 25)", artist: "Artist \(index % 25)")])
+    }
+    let log = ListeningLog(streams: [plays], now: start.addingTimeInterval(60 * 86_400))
+    let clock = ContinuousClock()
+    let elapsed = clock.measure {
+      _ = TasteIntelligence.keptAndPassed(weeks: weeks, snapshot: snapshot, roles: roles, log: log,
+        now: start.addingTimeInterval(60 * 86_400))
+    }
+    #expect(elapsed < .seconds(1))
   }
 }
