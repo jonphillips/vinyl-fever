@@ -78,13 +78,21 @@ struct ListeningPollerTests {
   func unreadableExposureLogSkipsFetchWithoutDuplicate() async throws {
     let calls = ExposureCallCount()
     let gaps = GapCallCounter()
+    let attempts = DateAttemptStore()
     let store = ListeningStore(
       pollerID: { UUID(uuidString: "00000000-0000-0000-0000-000000000001")! },
       readLease: { nil }, writeLease: { _ in }, readLastList: { nil }, writeLastList: { _ in },
       appendFetch: { _ in }, listeningFolder: { URL(fileURLWithPath: "/tmp/Listening") },
       readNewMusicExposure: { throw CocoaError(.fileReadNoPermission) },
-      appendNewMusicGap: { _ in gaps.increment() }, hostName: { "Test Mac" })
-    _ = try await poll(store: store, now: date("2026-10-16T10:04:00Z"), exposure: {
+      appendNewMusicGap: { _ in gaps.increment() },
+      readNewMusicAttemptAt: { attempts.value }, writeNewMusicAttemptAt: { attempts.set($0) },
+      hostName: { "Test Mac" })
+    let now = date("2026-10-16T10:04:00Z")
+    _ = try await poll(store: store, now: now, exposure: {
+      _ = await calls.next()
+      return NewMusicCatalogWeek(lastModifiedDate: Date(), tracks: [])
+    }) { _ in RecentlyPlayedPage(items: [], hasNext: false) }
+    _ = try await poll(store: store, now: now.addingTimeInterval(3_600), exposure: {
       _ = await calls.next()
       return NewMusicCatalogWeek(lastModifiedDate: Date(), tracks: [])
     }) { _ in RecentlyPlayedPage(items: [], hasNext: false) }
@@ -590,6 +598,13 @@ private final class GapCallCounter: @unchecked Sendable {
   private var stored = 0
   var value: Int { lock.withLock { stored } }
   func increment() { lock.withLock { stored += 1 } }
+}
+
+private final class DateAttemptStore: @unchecked Sendable {
+  private let lock = NSLock()
+  private var stored: Date?
+  var value: Date? { lock.withLock { stored } }
+  func set(_ date: Date) { lock.withLock { stored = date } }
 }
 
 private final class ListeningTakeoverFixture: @unchecked Sendable {
