@@ -235,7 +235,7 @@ next. S2 and S3 both edit `vf-mcp`, so they can't run side by side.
     An empty playlist ("2020: Jon's Selections") made Music answer -1728. The reader skips
     member reads when the track count is 0.
 
-- [ ] **S2 — Exposure and curation logs, kept and passed, baselines (Listening + Core + `vf-mcp` +
+- [x] **S2 — Exposure and curation logs, kept and passed, baselines (Listening + Core + `vf-mcp` +
   both apps).** *It goes before feedback (Decision 3): a New Music week that isn't saved is gone,
   and VF Note notes are already accumulating without code.*
   - **Exposure log: the poller saves New Music** (`VinylFeverListening`, so the mini's VF

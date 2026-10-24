@@ -3,6 +3,19 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-24 — M17 · Dispatch 2 S2 (`m17/s2-exposure-curation`)
+
+Fixed Apple Music playlist paging and catalog requests, cached-ID recovery, and a persisted
+six-hour local attempt throttle. Exposure reading now skips and counts malformed or newer lines,
+deduplicates weeks across host files, and never blocks a listening poll. Snapshot curation writes
+only non-empty changes, uses the injected date and listening host, and cannot prevent snapshot
+refresh. `kept_and_passed` now precomputes play keys; baselines exclude pending weeks and share
+artist identity normalization. Listening (54), Core (251), and macOS app (77) tests pass; Listening
+and Core pass with `VF_PERF_TESTS=1`; the universal macOS 15 poller build passes. A scratch-only
+live probe fetched the 2026-10-23 New Music week (25 tracks); `kept_and_passed` returned all 25 as
+pending. The JSONL line and full tool response are in PR #126. No live taste exposure file or
+lease was changed. Jon's mini-save gate remains owed until two weeks are saved there.
+
 ## 2026-10-23 — M17 · Dispatch 1 S1 (`m17/s1-playlists-snapshot`)
 
 Snapshot v2 carries every user and subscription playlist with ordered members, outside-library
