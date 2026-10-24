@@ -351,7 +351,8 @@ slice is a dispatch of its own, because each gate can redirect the next. S2, S3,
     2026-10-24) and deletes that playlist. Then `proposal_outcomes` shows the hits as kept,
     with where, and the rest as passed, pending, or unheard.
 
-- [ ] **S4 — Jon's reasons: VF Note and chat notes (Core + `vf-mcp` + `setup-mac`).**
+- [ ] **S4 — Jon's reasons: VF Note, chat notes, and the chat's questions (Core + `vf-mcp` +
+  `setup-mac`).** *Questions added 2026-10-24 (Decision 8).*
   - **Reader** (Core, pure): reads every `Taste Intelligence/notes*.jsonl`, in format
     `vf-taste-note` v1, with the rules in the design's *S0 results: VF Note*:
     - it skips blank lines and a partial last line, and tolerates no final newline;
@@ -373,6 +374,36 @@ slice is a dispatch of its own, because each gate can redirect the next. S2, S3,
     meant (Decision 5).
   - **`check_tracks` and `playlist_tracks` evidence** gain `notes`: the count, and the newest
     note's text and date.
+  - **Questions the chat wonders about** (Decision 8). A question and its answer are both notes,
+    so they use the same files and the same reader. These keys are added to `vf-taste-note` v1;
+    lines without them are ordinary notes:
+    - `kind`: `note` (the default when it's missing), `question`, or `answer`;
+    - `id`: an opaque UUID on every line `record_taste_note` writes. It's the handle the chat
+      uses to answer a question. Unlike a persistent ID it names no library item, so results
+      may include it;
+    - `answers`: on an answer, the question's `id`;
+    - `skipped: true`: on an answer, meaning Jon declined. A skipped question never comes back;
+    - `about`: on a question, the songs (`artist`, `title`) or playlist names it's about.
+  - **A question's state is derived on read, never stored:**
+    - **answered** or **skipped** when an answer line names it;
+    - **expired** 21 days after `notedAt`;
+    - **superseded** when 3 newer questions are still open. Only the 3 newest open questions
+      stay open, so a new question pushes out the oldest;
+    - **open** otherwise.
+  - **`record_taste_note`** gains `kind` (`note` by default, or `question`), `answers` (with
+    `skipped`), and `about`. It returns the line's `id`. It refuses an answer whose `answers`
+    doesn't name a known question. The description says: ask only when the answer would change
+    what you recommend next, and cite the contrast in Jon's evidence that prompted the question.
+  - **`taste_notes`** returns `openQuestions` (at most 3, each with its `id`, text, `about`, and
+    age) before the notes. A question's answer is shown with it. An answered question is
+    returned like any other note.
+  - **Instructions:** one paragraph:
+    - when Jon starts a taste conversation, ask at most one open question, and only if it bears
+      on what he's doing;
+    - record his answer verbatim with `answers`. "Skip" or "not now" is recorded as `skipped`;
+    - record a new question whenever a choice or contrast in his evidence leaves you unsure,
+      even if he isn't there to answer it;
+    - never ask what the tools can already tell you.
   - **`setup-mac`, chat role:** checks that `Taste Intelligence/notes.jsonl` exists, and
     `--apply` creates it empty when it's missing. Shortcuts can't create a `.jsonl` file (design,
     *S0 results*).
@@ -385,11 +416,20 @@ slice is a dispatch of its own, because each gate can redirect the next. S2, S3,
     from a fixture log.
   - **`vf-mcp` tests:** `record_taste_note` round-trips through `taste_notes` verbatim, and never
     touches `notes.jsonl`.
+  - **Question tests:**
+    - a recorded question shows in `openQuestions` with its `id`, and an answer closes it;
+    - a skip closes it for good;
+    - it expires at 21 days;
+    - a fourth open question supersedes the oldest;
+    - an answer naming an unknown `id` is refused;
+    - shortcut notes, with no `kind` or `id`, still read as notes.
   - **`setup-mac`:** `shellcheck` passes, and running `--apply` twice changes nothing the second
     time.
   - **Jon's gate:** in the car, VF Note on a New Music song. At home, ask the chat "what have I
     said about songs this week?" The note comes back word for word. Then tell the chat a reason
-    about a playlist, and see it in `taste_notes`.
+    about a playlist, and see it in `taste_notes`. Finally, after the chat has recorded a question
+    while building a list, open a new chat about taste: it asks that question, Jon answers, and
+    `taste_notes` shows the question answered.
 
 ## Prerequisites (Jon, not the executor's)
 
@@ -415,6 +455,8 @@ slice is a dispatch of its own, because each gate can redirect the next. S2, S3,
 | New Music fetch interval | at most every 6 h | It changes weekly. Four tries a day survive a sleeping or busy Mac. |
 | Pass window | 14 days after the week's `lastModifiedDate` | Jon hears New Music within the week; two weeks absorb late listens. |
 | Proposal pass window | 14 days after `proposedAt` | The same as New Music's; Jon files hits as he hears them. |
+| Open questions at most | 3 | Enough for the chat to wonder; few enough that nothing piles up. |
+| Question expiry | 21 days | A question about this month's listening goes stale after a few weeks. |
 | Time-only note match window | ±10 minutes | A note follows the song closely; the log's windows are coarse. |
 
 ## Out of scope — with destinations
@@ -428,6 +470,8 @@ slice is a dispatch of its own, because each gate can redirect the next. S2, S3,
   (Decision 4).
 - **The 2018 rule in `top_tracks`, `top_artists`, and `search_library`.** → After S1's gate, if
   the chat leans on all-time Mac plays.
+- **A "VF Questions" shortcut** that reads an open question aloud and takes a dictated answer. →
+  After S4's gate, if the chat's questions prove worth answering (Decision 8).
 - **A Mac screen for confirming time-only notes.** → Only if the chat's candidates prove
   unworkable (Decision 5).
 - **An iOS app, scores, embeddings, audio analysis, a stored taste profile.** → As the design's
@@ -468,3 +512,16 @@ Open — the architect's recommendation is listed first. Merging this plan appro
    - **Familiarity is inferred** from library dates and the log rather than stored at staging.
      `check_tracks` already drops familiar songs before a proposal, so an inferred field is
      enough for now.
+8. **The chat can ask Jon what it wonders about, in S4** (added 2026-10-24).
+   - **The problem:** questions come up while the chat builds a list or reads outcomes, often
+     when Jon isn't there, and today nothing carries them to the next conversation.
+   - **A question and its answer are notes**, kept verbatim like everything else Jon says, and a
+     question's state is derived on read. No new file, no new store, and Vinyl Fever still makes
+     no model calls.
+   - **Limits keep it from becoming a chore:** at most 3 open questions, gone after 21 days, one
+     asked per conversation, and a skip is final.
+   - **The test for a question:** would the answer change what the chat recommends next? The
+     useful questions come from contrasts in Jon's evidence ("you kept X but passed Y. Was it
+     the vocals or the tempo?"), not from survey questions.
+   - **Later:** a "VF Questions" shortcut could read an open question aloud and take a dictated
+     answer, like VF Note. Only if the questions prove worth answering.
