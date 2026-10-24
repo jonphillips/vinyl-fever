@@ -75,6 +75,29 @@ extension ListeningStore {
       readLastPollError: { try ListeningLocalState(folder: localFolder).lastPollError() },
       writeLastPollError: { error in try ListeningLocalState(folder: localFolder).writePollError(error) },
       listeningFolder: { iCloudFolder },
+      readNewMusicExposure: {
+        let folder = iCloudFolder.deletingLastPathComponent()
+          .appendingPathComponent("Taste Intelligence/exposure", isDirectory: true)
+        guard let urls = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) else { return [] }
+        var records: [NewMusicExposureRecord] = []
+        for url in urls where url.pathExtension == "jsonl" {
+          guard let data = try ListeningCoordinatedFiles.readData(url) else { continue }
+          records.append(contentsOf: try NewMusicExposureCodec.decodeJSONL(data))
+        }
+        return records
+      },
+      appendNewMusicWeek: { week in
+        let folder = iCloudFolder.deletingLastPathComponent()
+          .appendingPathComponent("Taste Intelligence/exposure", isDirectory: true)
+        try ListeningCoordinatedFiles.append(NewMusicExposureCodec.encode(week),
+          to: folder.appendingPathComponent(Self.safeFileComponent(week.host) + ".jsonl"))
+      },
+      appendNewMusicGap: { gap in
+        let folder = iCloudFolder.deletingLastPathComponent()
+          .appendingPathComponent("Taste Intelligence/exposure", isDirectory: true)
+        try ListeningCoordinatedFiles.append(NewMusicExposureCodec.encode(gap),
+          to: folder.appendingPathComponent(Self.safeFileComponent(gap.host) + ".jsonl"))
+      },
       hostName: hostName
     )
   }
@@ -86,12 +109,59 @@ extension ListeningStore {
     return String(format: "%04d-%02d", components.year ?? 0, components.month ?? 0)
   }
 
+  private static func safeFileComponent(_ value: String) -> String {
+    let safe = value.unicodeScalars.map { CharacterSet.alphanumerics.contains($0) || "-_".unicodeScalars.contains($0) ? String($0) : "_" }.joined()
+    return safe.isEmpty ? "Mac" : safe
+  }
+
   private static func months(around date: Date) -> [String] {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = TimeZone(secondsFromGMT: 0)!
     let current = calendar.date(from: calendar.dateComponents([.year, .month], from: date))!
     let previous = calendar.date(byAdding: .month, value: -1, to: current)!
     return [month(for: current), month(for: previous)]
+  }
+}
+
+public enum NewMusicExposureCodec {
+  public static func encode(_ week: NewMusicWeek) throws -> Data { try line(week) }
+  public static func encode(_ gap: NewMusicExposureGap) throws -> Data { try line(gap) }
+
+  public static func decodeJSONL(_ data: Data) throws -> [NewMusicExposureRecord] {
+    let bytes = [UInt8](data)
+    let complete = bytes.last == 0x0A ? bytes.count : (bytes.lastIndex(of: 0x0A).map { $0 + 1 } ?? 0)
+    guard complete > 0 else { return [] }
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .custom { decoder in
+      let value = try decoder.singleValueContainer().decode(String.self)
+      let iso = ISO8601DateFormatter()
+      iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+      if let date = iso.date(from: value) { return date }
+      iso.formatOptions = [.withInternetDateTime]
+      guard let date = iso.date(from: value) else { throw DecodingError.dataCorruptedError(in: try decoder.singleValueContainer(), debugDescription: "Invalid ISO timestamp") }
+      return date
+    }
+    return try String(decoding: bytes[..<complete], as: UTF8.self)
+      .split(separator: "\n", omittingEmptySubsequences: true).map { line in
+        let data = Data(line.utf8)
+        if let value = try? decoder.decode(NewMusicWeek.self, from: data), value.format == "vf-new-music-week", value.version == 1 {
+          return .week(value)
+        }
+        if let value = try? decoder.decode(NewMusicExposureGap.self, from: data), value.format == "vf-new-music-exposure-gap", value.version == 1 {
+          return .gap(value)
+        }
+        throw ListeningLogCodecError.malformedLine(1)
+      }
+  }
+
+  private static func line<T: Encodable>(_ value: T) throws -> Data {
+    let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+    encoder.dateEncodingStrategy = .custom { date, encoder in
+      var container = encoder.singleValueContainer()
+      let formatter = ISO8601DateFormatter(); formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+      try container.encode(formatter.string(from: date))
+    }
+    var data = try encoder.encode(value); data.append(0x0A); return data
   }
 }
 

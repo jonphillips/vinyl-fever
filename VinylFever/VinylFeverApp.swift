@@ -150,6 +150,10 @@ private func prepareDependencies(includeDatabase: Bool) throws {
   prepareDependencies {
     $0.listeningStore = .liveValue
     $0.recentlyPlayedClient = .liveValue
+    $0.newMusicCatalogClient = .liveValue
+    $0.tasteCurationClient = TasteCurationClient(append: { change, host in
+      try TasteCurationLog.append(change, host: host)
+    })
     $0.listeningAuthorizationClient = .liveValue
     if let database {
       $0.defaultDatabase = database

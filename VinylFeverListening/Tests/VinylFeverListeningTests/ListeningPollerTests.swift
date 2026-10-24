@@ -52,6 +52,42 @@ struct ListeningPollerTests {
     #expect(try store.readFetches().count == 2)
   }
 
+  @Test("successful New Music fetch is logged and retried no more than every six hours")
+  func newMusicExposureThrottle() async throws {
+    let folders = try TemporaryListeningFolders()
+    defer { folders.remove() }
+    let store = ListeningStore.live(iCloudFolder: folders.cloud, localFolder: folders.local, hostName: { "Test mini" })
+    let calls = ExposureCallCount()
+    let modified = date("2026-10-16T10:04:00Z")
+    let fetch: @Sendable () async throws -> NewMusicCatalogWeek = {
+      let count = await calls.next()
+      return NewMusicCatalogWeek(lastModifiedDate: modified.addingTimeInterval(Double(count - 1) * 86_400),
+        tracks: [NewMusicTrack(catalogID: "6815778888", title: "White Knight", artist: "Cats in Space")])
+    }
+    _ = try await poll(store: store, now: modified, exposure: fetch) { _ in RecentlyPlayedPage(items: [], hasNext: false) }
+    _ = try await poll(store: store, now: modified.addingTimeInterval(5 * 3_600), exposure: fetch) { _ in RecentlyPlayedPage(items: [], hasNext: false) }
+    _ = try await poll(store: store, now: modified.addingTimeInterval(7 * 3_600), exposure: fetch) { _ in RecentlyPlayedPage(items: [], hasNext: false) }
+    #expect(await calls.value == 2)
+    let records = try store.readNewMusicExposure()
+    #expect(records.compactMap(\.lastModifiedDate).count == 2)
+    #expect(records.compactMap(\.lastModifiedDate).first == modified)
+  }
+
+  @Test("failed New Music fetch records a gap without failing the listening poll")
+  func newMusicFailureIsNonFatal() async throws {
+    let folders = try TemporaryListeningFolders()
+    defer { folders.remove() }
+    let store = ListeningStore.live(iCloudFolder: folders.cloud, localFolder: folders.local)
+    let result = try await poll(store: store, now: date("2026-10-16T10:04:00Z"),
+      exposure: { throw NewMusicExposureError.playlistUnresolved }) { _ in
+        RecentlyPlayedPage(items: [self.item("song")], hasNext: false)
+      }
+    #expect(fetch(result)?.outcome == .baseline)
+    let records = try store.readNewMusicExposure()
+    #expect(records.count == 1)
+    if case .gap = records.first { } else { Issue.record("Expected an exposure gap") }
+  }
+
   @Test("non-leaseholder writes nothing to iCloud")
   func skipsNonLeaseholder() async throws {
     let folders = try TemporaryListeningFolders()
@@ -493,12 +529,14 @@ struct ListeningPollerTests {
     store: ListeningStore,
     now: Date,
     authorization: ListeningAuthorizationStatus = .authorized,
+    exposure: @escaping @Sendable () async throws -> NewMusicCatalogWeek = { throw NewMusicExposureError.notConfigured },
     page: @escaping @Sendable (Int) async throws -> RecentlyPlayedPage
   ) async throws -> ListeningPollResult {
     try await withDependencies {
       $0.listeningStore = store
       $0.listeningAuthorizationClient = ListeningAuthorizationClient(status: { authorization })
       $0.recentlyPlayedClient.page = page
+      $0.newMusicCatalogClient.fetch = exposure
       $0.date = .constant(now)
     } operation: {
       try await ListeningPoller().pollOnce()
@@ -518,6 +556,11 @@ struct ListeningPollerTests {
     let formatter = ISO8601DateFormatter()
     return formatter.date(from: value)!
   }
+}
+
+private actor ExposureCallCount {
+  private(set) var value = 0
+  func next() -> Int { value += 1; return value }
 }
 
 private final class ListeningTakeoverFixture: @unchecked Sendable {

@@ -14,6 +14,7 @@ final class PlaylistBuilderModel {
   @ObservationIgnored @Dependency(\.continuousClock) private var clock
   @ObservationIgnored @Dependency(\.musicAppClient) private var musicApp
   @ObservationIgnored @Dependency(\.librarySnapshotStore) private var snapshotStore
+  @ObservationIgnored @Dependency(\.tasteCurationClient) private var tasteCuration
   @ObservationIgnored @Dependency(\.defaultDatabase) private var database
   @ObservationIgnored @Dependency(\.playlistInboxClient) private var playlistInbox
   @ObservationIgnored @Dependency(\.date.now) private var now
@@ -196,6 +197,10 @@ final class PlaylistBuilderModel {
     }
     do {
       let snapshot = try await musicApp.readLibrarySnapshot()
+      let previousSnapshot = try await snapshotStore.read()
+      try await tasteCuration.append(
+        SnapshotCurationDiff.diff(previous: previousSnapshot, current: snapshot, observedAt: Date()),
+        Host.current().localizedName ?? "Mac")
       do {
         try await ArtistAliasExporter.export(database: database, store: snapshotStore)
       } catch {
