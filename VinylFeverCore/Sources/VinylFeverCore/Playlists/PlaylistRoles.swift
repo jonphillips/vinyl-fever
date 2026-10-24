@@ -1,9 +1,9 @@
 import Foundation
+import VinylFeverListening
 
 public enum SelectionPlaylistName {
   public static let pattern = #"^\d{4}: Jon's Selections$"#
 }
-import VinylFeverListening
 
 public enum PlaylistRole: String, Codable, CaseIterable, Sendable {
   case keepers, replay, curated, situational, auditioned, discoveryInbox = "discovery-inbox"

@@ -227,8 +227,14 @@ public struct ListeningPoller {
 
   private func recordNewMusicExposure(at now: Date, host: String) async {
     let latestAttempt: Date?
-    do { latestAttempt = try store.readNewMusicAttemptAt() }
-    catch { return }
+    let attemptReadFailure: Error?
+    do {
+      latestAttempt = try store.readNewMusicAttemptAt()
+      attemptReadFailure = nil
+    } catch {
+      latestAttempt = nil
+      attemptReadFailure = error
+    }
     if let latestAttempt, now.timeIntervalSince(latestAttempt) < 6 * 60 * 60 { return }
     let existing: [NewMusicExposureRecord]
     do { existing = try store.readNewMusicExposure() }
@@ -244,6 +250,13 @@ public struct ListeningPoller {
       try? store.appendNewMusicGap(NewMusicExposureGap(
         fetchedAt: now, host: host, detail: "The New Music exposure throttle could not be saved."))
       return
+    }
+    if let attemptReadFailure {
+      let attemptFile = store.listeningFolder()
+        .appendingPathComponent("new-music-last-attempt.json").path
+      try? store.appendNewMusicGap(NewMusicExposureGap(
+        fetchedAt: now, host: host,
+        detail: "The New Music exposure attempt file could not be read and was reset: \(attemptFile): \(ListeningErrorDescription.describe(attemptReadFailure))"))
     }
     do {
       let week = try await newMusic.fetch()

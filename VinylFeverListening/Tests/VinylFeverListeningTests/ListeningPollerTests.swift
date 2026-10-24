@@ -100,6 +100,35 @@ struct ListeningPollerTests {
     #expect(gaps.value == 1)
   }
 
+  @Test("unreadable New Music attempt file is reset and exposure continues")
+  func unreadableAttemptFileDoesNotStopExposure() async throws {
+    let calls = ExposureCallCount()
+    let gaps = GapCallCounter()
+    let attempts = DateAttemptStore()
+    let folder = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let store = ListeningStore(
+      pollerID: { UUID(uuidString: "00000000-0000-0000-0000-000000000001")! },
+      readLease: { nil }, writeLease: { _ in }, readLastList: { nil }, writeLastList: { _ in },
+      appendFetch: { _ in }, listeningFolder: { folder },
+      readNewMusicExposure: { [] },
+      appendNewMusicGap: { gaps.record($0.detail) },
+      readNewMusicAttemptAt: { throw CocoaError(.fileReadNoPermission) },
+      writeNewMusicAttemptAt: { attempts.set($0) },
+      hostName: { "Test Mac" })
+    let now = date("2026-10-16T10:04:00Z")
+
+    _ = try await poll(store: store, now: now, exposure: {
+      _ = await calls.next()
+      return NewMusicCatalogWeek(lastModifiedDate: now, tracks: [])
+    }) { _ in RecentlyPlayedPage(items: [], hasNext: false) }
+
+    #expect(await calls.value == 1)
+    #expect(attempts.value == now)
+    #expect(gaps.value == 1)
+    #expect(gaps.lastDetail?.contains("new-music-last-attempt.json") == true)
+  }
+
   @Test("failed New Music fetch records a gap without failing the listening poll")
   func newMusicFailureIsNonFatal() async throws {
     let folders = try TemporaryListeningFolders()
@@ -596,8 +625,11 @@ private actor ExposureCallCount {
 private final class GapCallCounter: @unchecked Sendable {
   private let lock = NSLock()
   private var stored = 0
+  private var storedLastDetail: String?
   var value: Int { lock.withLock { stored } }
-  func increment() { lock.withLock { stored += 1 } }
+  var lastDetail: String? { lock.withLock { storedLastDetail } }
+  func increment() { record(nil) }
+  func record(_ detail: String?) { lock.withLock { stored += 1; storedLastDetail = detail } }
 }
 
 private final class DateAttemptStore: @unchecked Sendable {
