@@ -69,7 +69,8 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
     `Recognize Music`, then to the time alone.
 
   S0's probes finished 2026-10-23. M17: S1 playlists in the snapshot with roles, S2 exposure
-  and curation logs, S3 feedback (VF Note and chat notes); then an outcomes milestone.
+  and curation logs, S3 proposal outcomes (added 2026-10-24), S4 feedback (VF Note and chat notes);
+  then an outcomes milestone.
 - **Live tracks in playlists** — planned as [M14](milestones/M14-live-tracks-in-playlists.md)
   (2026-10-18). It interleaves with M13: S0 after M13 S1, S1 after M15 S0 (order amended
   2026-10-20, M14 Decision 3). Probes on 2026-10-18 showed:

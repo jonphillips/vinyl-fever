@@ -8,13 +8,15 @@ his own words about songs. The design, its evidence, and S0's probe results are 
 `/Users/jon/code/jon-platform/AGENTS.md` apply. Where this doc and those conflict, stop and flag
 it.*
 
-Summary: Three slices, one dispatch each. S1 puts every playlist into the library snapshot (v2),
+Summary: Four slices, one dispatch each. S1 puts every playlist into the library snapshot (v2),
 adds `playlist-roles.json` with a Settings editor, applies the 2018 rule, and gives `vf-mcp`
 `list_playlists`, `playlist_tracks`, and a `check_tracks` that reports playlist evidence by role.
 Its gate is the north-star question asked for the first time. S2 starts the two logs that can't
 be rebuilt later: the poller saves each week's New Music, and each snapshot refresh records what
-changed in Jon's playlists. Then `kept_and_passed` and the baselines read them. S3 reads the VF
-Note file Jon's shortcut is already writing, and adds `taste_notes` and `record_taste_note`.
+changed in Jon's playlists. Then `kept_and_passed` and the baselines read them. S3 reports how
+Vinyl Fever's own proposals did: which songs Jon kept and where, which he passed, and Vinyl
+Fever's yield next to Apple's. The temporary playlists can be deleted. S4 reads the VF Note file
+Jon's shortcut is already writing, and adds `taste_notes` and `record_taste_note`.
 Vinyl Fever makes no model calls and stores no scores: the chat is the interpreter.
 
 ## The milestone in one sentence
@@ -74,9 +76,10 @@ Details are in the design doc's *S0 results*. The facts this plan depends on:
 ## Slices
 
 **Dispatch 1: S1** (Core + `vf-mcp` + app; Jon's gate). **Dispatch 2: S2** (Listening + Core +
-`vf-mcp` + both apps; the poller and the laptop). **Dispatch 3: S3** (Core + `vf-mcp` +
-`setup-mac`; Jon's gate). Each slice is a dispatch of its own, because each gate can redirect the
-next. S2 and S3 both edit `vf-mcp`, so they can't run side by side.
+`vf-mcp` + both apps; the poller and the laptop). **Dispatch 3: S3** (Core + `vf-mcp`; Jon's
+gate; added 2026-10-24). **Dispatch 4: S4** (Core + `vf-mcp` + `setup-mac`; Jon's gate). Each
+slice is a dispatch of its own, because each gate can redirect the next. S2, S3, and S4 all edit
+`vf-mcp`, so they run one after another.
 
 - [x] **S1 — Playlists in the snapshot, with roles (Core + `vf-mcp` + app).** Done in #125;
   Jon's gate passed 2026-10-24.
@@ -296,7 +299,59 @@ next. S2 and S3 both edit `vf-mcp`, so they can't run side by side.
     open. Jon reads `kept_and_passed` for a finished week and confirms the keeps and passes match
     what he did.
 
-- [ ] **S3 — Jon's reasons: VF Note and chat notes (Core + `vf-mcp` + `setup-mac`).**
+- [ ] **S3 — How Vinyl Fever's proposals did (Core + `vf-mcp`).** *Added 2026-10-24 from S1's
+  gate. Jon listens to each proposed playlist, files the hits where they belong, and deletes the
+  temporary playlist. So the outcomes can't depend on that playlist still existing (Decision 7).*
+  - **What counts as a proposal:**
+    - every archived `.vfplaylist` in `PlaylistInbox/Processed/`, which is a playlist Jon created
+      from a chat proposal. A proposal that was staged but never created (still in the inbox
+      root) doesn't count;
+    - `proposedAt` is the timestamp in the file name, which comes in two forms: extended
+      (`2026-10-18T13:12:25Z-…`) and basic (`20261024T134238Z-…`);
+    - a proposal that repeats an earlier one's name and track list within a day is the same
+      proposal. Keep the earliest.
+  - **Each proposed song**, matched by song key, is one of:
+    - **familiar:** before `proposedAt`, a library recording of it had already been added, or
+      the listening log has a start of it. Familiar songs are listed but left out of the yield,
+      because they weren't discoveries;
+    - **kept:** it's in a `keepers`, `curated`, or `situational` playlist in the current
+      snapshot. The result names those playlists. A `vinyl-fever` playlist doesn't count, because
+      a song left in the temporary playlist hasn't been filed;
+    - **passed:** the log has a start of it after `proposedAt`, it isn't kept, and the snapshot
+      is newer than `proposedAt` + 14 days;
+    - **unheard:** the log has no start of it after `proposedAt`;
+    - **pending:** heard but not kept, and the 14-day window isn't over, or the snapshot is older
+      than the window's end.
+  - **Reuse S2's `kept_and_passed` classification.** A proposal is one more kind of exposure, next
+    to a New Music week. Don't build a second classifier.
+  - **`proposal_outcomes`** (`vf-mcp`; input `limit`, default 10 proposals, newest first):
+    - each proposal's name, `proposedAt`, and counts by class;
+    - each song with its class and, when kept, where;
+    - coverage: the snapshot's age and the log's first fetch. A proposal made before the log
+      began says so.
+  - **`taste_baselines`** gains **Vinyl Fever's yield**: kept ÷ (kept + passed) over songs that
+    weren't familiar, overall and per proposal, always with counts. The description says it's
+    noisy at 15 songs a list: report it, don't optimize against it.
+  - **Instructions:** one sentence. When Jon asks how recommendations went, or before proposing
+    new ones, call `proposal_outcomes` and learn from what he kept and passed.
+
+  **DoD:**
+  - **Core tests:**
+    - both file-name forms parse; proposals in the inbox root are ignored; a repeated proposal
+      collapses to one;
+    - every class: kept in a curated "Finds" playlist, kept in Selections, left only in the
+      temporary playlist (not kept), passed, unheard, pending (window open, and snapshot too
+      old), familiar (from the library, and from the log);
+    - deleting the temporary playlist from the snapshot changes nothing;
+    - the yield leaves out familiar songs.
+  - **`vf-mcp`:** a golden JSON test for `proposal_outcomes`.
+  - **Executor's laptop check:** through the installed helper, `proposal_outcomes` lists Jon's
+    real archive (five files on 2026-10-24), and the live-show proposals come back all familiar.
+  - **Jon's gate:** Jon files the hits from "2025 Selections: 15 New Discoveries" (proposed
+    2026-10-24) and deletes that playlist. Then `proposal_outcomes` shows the hits as kept,
+    with where, and the rest as passed, pending, or unheard.
+
+- [ ] **S4 — Jon's reasons: VF Note and chat notes (Core + `vf-mcp` + `setup-mac`).**
   - **Reader** (Core, pure): reads every `Taste Intelligence/notes*.jsonl`, in format
     `vf-taste-note` v1, with the rules in the design's *S0 results: VF Note*:
     - it skips blank lines and a partial last line, and tolerates no final newline;
@@ -341,9 +396,12 @@ next. S2 and S3 both edit `vf-mcp`, so they can't run side by side.
 - [x] VF Note built and writing `notes.jsonl` (2026-10-22). CarPlay, Siri, and the Action button
   confirmed (2026-10-23).
 - [x] Replay playlists added to the library (2026-10-20).
-- [ ] After S1: label the playlist roles, and re-copy the ChatGPT Project instructions from
-  Settings.
+- [x] After S1: label the playlist roles, and re-copy the ChatGPT Project instructions from
+  Settings (2026-10-24).
 - [ ] Keep adding to Selections, and use Favorite and Suggest Less. They feed S2.
+- [ ] Before S3's gate: make one standing playlist for hits older than this year (for example
+  "Vinyl Fever Finds"), and label it `keepers`. Most proposed songs aren't from this year, so they
+  don't belong in Selections.
 
 ## Constants register (starting values)
 
@@ -356,12 +414,13 @@ next. S2 and S3 both edit `vf-mcp`, so they can't run side by side.
 | Playlist read budget | +5 s expected; flag past +10 s | S0 read every member in 2 s; text for outside members costs more. |
 | New Music fetch interval | at most every 6 h | It changes weekly. Four tries a day survive a sleeping or busy Mac. |
 | Pass window | 14 days after the week's `lastModifiedDate` | Jon hears New Music within the week; two weeks absorb late listens. |
+| Proposal pass window | 14 days after `proposedAt` | The same as New Music's; Jon files hits as he hears them. |
 | Time-only note match window | ±10 minutes | A note follows the song closely; the log's windows are coarse. |
 
 ## Out of scope — with destinations
 
-- **The outcomes milestone:** the recommendation ledger's familiarity field, discovery yield,
-  Apple's recommendations and similar artists as candidate sources, `taste_evidence`,
+- **The outcomes milestone:** storing familiarity when a playlist is staged (S3 infers it from the
+  library and the log instead), Apple's recommendations and similar artists as candidate sources, `taste_evidence`,
   `neglected_keepers`, and reading ratings through the API. → Next milestone, once S2's logs
   have a few weeks in them.
 - **"Recommended before" in `check_tracks`.** → The outcomes milestone, with the ledger.
@@ -385,7 +444,7 @@ Open — the architect's recommendation is listed first. Merging this plan appro
 2. **Roles match by persistent ID, then by a unique name.** IDs survive renames. Names survive a
    new Mac or a rebuilt library, which change every persistent ID. An entry that matches nothing
    is kept and shown, so a relabel is never forced by accident.
-3. **Exposure and curation (S2) come before feedback (S3).** That reverses the design's order.
+3. **Exposure and curation (S2) come before feedback (now S4).** That reverses the design's order.
    A missed New Music week can never be recovered, while notes are already being written by the
    shortcut and wait safely in iCloud. S1 still goes first, because its gate is the first real
    test of the whole approach.
@@ -399,3 +458,13 @@ Open — the architect's recommendation is listed first. Merging this plan appro
 6. **No SQLite schema change in this milestone.** The roles file is the record, edited in
    Settings and read by `vf-mcp` without the app. Snapshot v2 is a rebuildable derived file, and
    the logs are append-only JSONL, as for listening (M13 Decision 1).
+7. **Proposal outcomes come forward from the outcomes milestone, as S3** (added 2026-10-24).
+   - Jon wants to listen, file the hits, and delete each temporary playlist, not keep dozens of
+     them.
+   - **Kept means filed anywhere he chooses songs.** Passed means heard and not filed. So the
+     temporary playlist is disposable, and nothing has to be evaluated at a particular moment.
+   - It reuses S2's classifier, so it's small. It goes before feedback because Jon is listening
+     to proposals now.
+   - **Familiarity is inferred** from library dates and the log rather than stored at staging.
+     `check_tracks` already drops familiar songs before a proposal, so an inferred field is
+     enough for now.
