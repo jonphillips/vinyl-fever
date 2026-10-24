@@ -12,7 +12,7 @@ adds `list_playlists` and `playlist_tracks`, and `check_tracks` gains evidence b
 days, and `unlabeledPlaylistCount`. Core (245) and Listening (44) pass with and without
 `VF_PERF_TESTS=1`, and the macOS app's 73 tests pass. The read-only read of Jon's library took
 15.2 s: 148 playlists and 8,220 outside-library tracks. Jon's gate (labeling roles, then the
-15-song ask in ChatGPT) is owed. The architect added this bookkeeping at Jon's direction.
+15-song ask in ChatGPT) passed 2026-10-24. The architect added this bookkeeping at Jon's direction.
 
 ## 2026-10-22 — Effort: Listening settings refresh, and full poll errors (`effort/listening-settings-refresh`)
 

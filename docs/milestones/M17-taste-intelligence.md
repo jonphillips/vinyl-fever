@@ -79,7 +79,7 @@ Details are in the design doc's *S0 results*. The facts this plan depends on:
 next. S2 and S3 both edit `vf-mcp`, so they can't run side by side.
 
 - [x] **S1 — Playlists in the snapshot, with roles (Core + `vf-mcp` + app).** Done in #125;
-  Jon's gate is owed.
+  Jon's gate passed 2026-10-24.
   - **Snapshot v2** (`LibrarySnapshot.currentVersion = 2`):
     - `LibraryTrack` gains `disliked: Bool`, read in bulk like `favorited`
       (`LibraryBulkProperty` `pHat`, boolean). A v1 file decodes with `disliked` false.
@@ -220,6 +220,9 @@ next. S2 and S3 both edit `vf-mcp`, so they can't run side by side.
        songs.
     4. Jon judges the 15 and records the result here: how many he didn't know, how many he'd
        keep, and anything that redirects S2 or S3.
+  - **Jon's gate — passed 2026-10-24.** Jon labeled the roles and asked ChatGPT the 15-song
+    question in the spirit of his 2025 Selections. The chat built the list, and Jon judged the gate
+    passed. Nothing redirects S2 or S3.
   - **Laptop read — passed 2026-10-23** (read-only, written to a scratch path, at the #125 head):
     - 87,042 tracks, 148 playlists (65 user, 7 smart, 76 subscription), and 8,220 outside-library
       tracks;
