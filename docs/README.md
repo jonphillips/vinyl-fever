@@ -16,6 +16,7 @@ Read in this order:
 Setup and operations:
 
 - [Setting up a Mac](setup/README.md)
+- [Feedback guide: New Music, Vinyl Fever playlists, and Music Feedback](feedback-guide.md)
 
 Related source material:
 

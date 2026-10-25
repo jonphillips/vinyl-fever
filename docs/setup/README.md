@@ -1,6 +1,7 @@
 # Setting up a Mac
 
-For the iPhone shortcut that captures song reasons, see [VF Note](vf-note.md).
+For the iPhone shortcut that captures song reasons, see [Music Feedback](music-feedback.md). For
+how to give feedback while listening, see [the feedback guide](../feedback-guide.md).
 
 What a new Mac needs to build Vinyl Fever, serve chat (MCP), or poll listening history. The
 detailed pages ([MCP setup](../chatgpt/MCP-SETUP.md), [poller setup](../listening/POLLER-SETUP.md),

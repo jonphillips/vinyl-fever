@@ -63,7 +63,8 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   - **New Music** is graded in full every week, so kept vs passed is a real contrast, and its
     keep rate is Apple's discovery yield, the baseline to beat.
   - Keep is Jon's native add to Selections, and Pass is inferred from New Music heard and not
-    added, so neither needs a tap. One shortcut, **VF Note**, captures his spoken reasons from
+    added, so neither needs a tap. One shortcut, **VF Note** (renamed **Music Feedback** on
+    2026-10-25), captures his spoken reasons from
     CarPlay, Siri, or the Action button, with no iOS app. `Get Current Song` is blank on a first
     hearing (it fills in only after the queue moves on), so the shortcut falls back to Shazam's
     `Recognize Music`, then to the time alone.

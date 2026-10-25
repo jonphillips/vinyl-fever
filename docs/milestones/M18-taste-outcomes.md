@@ -235,7 +235,7 @@ advances `NEXT_UP.md` to S4.
   which was never merged; see Decision 8. M17 S3 (#129) built the notes it extends.*
   - **A question and its answer are taste notes.** They use the same files (`notes-chat-<host>.jsonl`)
     and the same reader. These optional keys are added to `vf-taste-note` v1; a line without
-    them is an ordinary note, which covers every VF Note shortcut line:
+    them is an ordinary note, which covers every Music Feedback shortcut line:
     - `kind`: `note` (the default when it's missing), `question`, or `answer`;
     - `id`: a UUID on every line `record_taste_note` writes. It's the handle the chat uses to
       answer a question. It names no library item, so results may include it;
@@ -268,6 +268,10 @@ advances `NEXT_UP.md` to S4.
     - never ask what the tools can already tell you.
 
     The first 512 characters must still stand alone. Update the instructions snapshot test.
+  - **The shortcut's new name.** Jon renamed VF Note to **Music Feedback** (2026-10-25), because
+    Siri heard "VF Note" as a request to the Notes app. Rename it in the user-facing strings:
+    `record_taste_note`'s description, and the `setup-mac` check label ("VF Note file"). The
+    file (`notes.jsonl`), the format, and `source` values don't change. Test names can stay.
 
   **DoD:**
   - **Core tests:**
@@ -281,9 +285,10 @@ advances `NEXT_UP.md` to S4.
   - **`vf-mcp` tests:**
     - an answer naming an unknown `id` is refused, and so is an empty question;
     - golden JSON for `taste_notes` with `openQuestions`, with no paths or persistent IDs;
-    - `record_taste_note` writes to a temp root only.
+    - `record_taste_note` writes to a temp root only;
+    - no tool description or `setup-mac` label says "VF Note".
   - **Executor's laptop check** (read-only against a copy of Jon's live notes): every existing
-    VF Note line reads exactly as before, and `openQuestions` is empty.
+    Music Feedback line reads exactly as before, and `openQuestions` is empty.
   - **Jon's gate (after install, owed until done):**
     1. While building a list, the chat records a question about a contrast in his evidence.
     2. In a new taste conversation, the chat asks it. Jon answers, and `taste_notes` shows the
@@ -300,8 +305,8 @@ advances `NEXT_UP.md` to S4.
   the curation log records the 10 Selections adds and Vinyl Fever Keepers.
 - [ ] **Label "Vinyl Fever Keepers" `keepers`** in Settings → Taste → Playlist Roles… (Decision 6).
 - [ ] **After S1 merges:** re-copy the ChatGPT Project instructions from Settings.
-- [ ] M17 S3's gate is still owed: a VF Note in the car, read back word for word, then a playlist
-  note.
+- [ ] M17 S3's gate is still owed: a Music Feedback note (the VF Note shortcut, renamed) in the
+  car, read back word for word, then a playlist note.
 
 ## Constants register (starting values)
 
@@ -329,7 +334,7 @@ advances `NEXT_UP.md` to S4.
 - **Reading ratings through the API.** → When Favorite and Suggest Less are in regular use.
 - **Matching by catalog ID.** → Still only if song-key misses show up (M17 Decision 4).
 - **A "VF Questions" shortcut** that reads an open question aloud and takes a dictated answer,
-  like VF Note. → After S4's gate, if the questions prove worth answering.
+  like Music Feedback. → After S4's gate, if the questions prove worth answering.
 
 ## Decisions
 
