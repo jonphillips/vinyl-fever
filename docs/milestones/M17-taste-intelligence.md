@@ -295,8 +295,23 @@ next. S2 and S3 both edit `vf-mcp`, so they can't run side by side.
   - **Jon's gate, owed until two weeks are saved:** the mini saves a week without the laptop
     open. Jon reads `kept_and_passed` for a finished week and confirms the keeps and passes match
     what he did.
+  - **Done in #126, merged 2026-10-25.** Jon's gate is owed. What the review's read-only probes
+    settled (2026-10-24):
+    - `/v1/me/library/playlists` has no name filter: `filter[name]` returns 400. The poller
+      pages the list (139 playlists, 2 pages) and reads New Music's
+      `attributes.playParams.globalId` (`pl.pm-…`). The `/catalog` relationship gives the same
+      ID, and it's the fallback.
+    - A catalog playlist fetch rejects `limit` with a 400. `?include=tracks` alone returns all 25
+      songs, with no `next`.
+    - The week of 2026-10-23 (`lastModifiedDate 2026-10-23T09:07:10Z`, 25 songs) was fetched
+      into a scratch folder. `kept_and_passed` showed all 25 as pending. Nothing was written to
+      the live `exposure/` folder from the laptop.
+    - The first round's tests wrote 8 fixture lines into the live `curation/Jon_MBP.jsonl`.
+      They were moved to the Trash with Jon's OK, and the live taste clients are now installed
+      only in the `.live` context.
 
-- [ ] **S3 — Jon's reasons: VF Note and chat notes (Core + `vf-mcp` + `setup-mac`).**
+- [ ] **S3 — Jon's reasons: VF Note and chat notes (Core + `vf-mcp` + `setup-mac`, plus one
+  carried app fix).**
   - **Reader** (Core, pure): reads every `Taste Intelligence/notes*.jsonl`, in format
     `vf-taste-note` v1, with the rules in the design's *S0 results: VF Note*:
     - it skips blank lines and a partial last line, and tolerates no final newline;
@@ -323,6 +338,13 @@ next. S2 and S3 both edit `vf-mcp`, so they can't run side by side.
     *S0 results*).
   - **`docs/setup/vf-note.md`:** the VF Note recipe as setup steps, taken from the design doc,
     with Recognize Music as the fallback when Current Song is blank. The README links it.
+  - **Carried from the S2 review: a guard test that tests the guard** (app + poller).
+    `testHostDoesNotUseLiveTasteClients` still passes with the `context == .live` guard
+    replaced by `if true`. Values that `prepareDependencies` sets in the test host aren't
+    visible to Swift Testing's dependency scope. Extract
+    `installsLiveTasteClients(_ context: DependencyContext) -> Bool`, and use it in both
+    `prepareVinylFeverDependencies` and `preparePollerDependencies`. Replace the test with one
+    on the function: `.live` is true, and `.test` and `.preview` are false.
 
   **DoD:**
   - **Core tests:** Jon's real line shapes (the White Knight and Shack examples), conflict copies,
@@ -332,6 +354,8 @@ next. S2 and S3 both edit `vf-mcp`, so they can't run side by side.
     touches `notes.jsonl`.
   - **`setup-mac`:** `shellcheck` passes, and running `--apply` twice changes nothing the second
     time.
+  - **App test:** `installsLiveTasteClients` for `.live`, `.test`, and `.preview`. Check it by
+    mutation: make the function return `true` and confirm the test fails.
   - **Jon's gate:** in the car, VF Note on a New Music song. At home, ask the chat "what have I
     said about songs this week?" The note comes back word for word. Then tell the chat a reason
     about a playlist, and see it in `taste_notes`.
@@ -344,6 +368,10 @@ next. S2 and S3 both edit `vf-mcp`, so they can't run side by side.
 - [ ] After S1: label the playlist roles, and re-copy the ChatGPT Project instructions from
   Settings.
 - [ ] Keep adding to Selections, and use Favorite and Suggest Less. They feed S2.
+- [ ] After S2: rebuild the VF Listening Poller and install it on the mini
+  ([poller setup](../listening/POLLER-SETUP.md)) before Friday 2026-10-30, when New Music next
+  turns over. Until then, no week is saved. Then refresh the snapshot once in Vinyl Fever on the
+  laptop, so the curation log writes its baseline line.
 
 ## Constants register (starting values)
 
