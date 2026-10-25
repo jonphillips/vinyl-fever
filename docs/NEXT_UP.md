@@ -1,7 +1,7 @@
-# Next Up — M18 · S2: Outcomes by source and release age
+# Next Up — M19 · S1: The daily backup set
 
-**Slices:** M18 · S2 (branch `m18/s2-recommendation-outcomes`)
-**Briefs:** docs/milestones/M18-taste-outcomes.md §S2, plus its *Shared rules*
-**Done when:** S2's DoD; Core and macOS app tests pass from a clean checkout of the pushed head; the executor's laptop check is reported in the PR; PR opened in `jonphillips/vinyl-fever`.
-**Owed:** M13 S2's iPad device gate; listening-settings two-Mac check; M17 S2's two-mini-saved-weeks gate; M17 S3's car-note gate; M18 S1's stage/check gate.
-**Notes:** S1 and S2 both edit `vf-mcp`, so they run in order. Never write the live `Taste Intelligence/` folder or live playlist inbox from tests or dev runs: use temp roots. Ledger failures never fail `stage_playlist`. Post PR comments as `jon-codex-bot`.
+**Slices:** M19 · S1 (branch `m19/s1-daily-backup`)
+**Briefs:** docs/milestones/M19-backups.md §S1, plus its *Shared rules*
+**Done when:** S1's DoD; Core and macOS app tests pass, run from a clean checkout of the pushed head; `shellcheck scripts/setup-mac` passes; PR opened in `jonphillips/vinyl-fever`. The completing PR advances this file to M18 · S2.
+**Owed:** M13 S2's iPad device gate; the listening-settings two-Mac check; M17 S2's gate (two mini-saved weeks, then Jon checks a finished week); M17 S3's gate (VF Note in the car, read back word for word, then a playlist note); M18 S1's stage/check gate.
+**Notes:** Never touch the live database, `Backups/`, the iCloud `Vinyl Fever/` folder, or the inboxes from tests or dev runs: inject temp roots. A backup starts only in the `.live` context, never in the app-test host. Open the live database read-only for the copy. S1 doesn't touch `vf-mcp`. Post PR comments as `jon-codex-bot`.

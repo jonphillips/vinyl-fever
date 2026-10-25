@@ -657,7 +657,8 @@ recommendations and dispatches S0.
      file is the simplest correct form.
    - This is still iCloud, with no server.
    - Unlike the M12 snapshot, the log is **not** derived; it's the only copy of the history.
-     iCloud Drive keeps the cloud copy, and the laptop's Time Machine backs it up.
+     iCloud Drive keeps the cloud copy. (This said the laptop's Time Machine backs it up, but
+     Time Machine last finished on 2026-02-15. Daily backups are [M19](M19-backups.md).)
 2. **Hold the poller app and `VinylFeverListening` at macOS 15, in a package of their own.**
    - **Why there's an exception:** the house rule is the newest OS, with exceptions only for a
      named device (jon-platform `toolchain.md`). The named device is the Intel Mac mini (2018).
