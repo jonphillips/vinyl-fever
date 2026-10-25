@@ -63,7 +63,8 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   - **New Music** is graded in full every week, so kept vs passed is a real contrast, and its
     keep rate is Apple's discovery yield, the baseline to beat.
   - Keep is Jon's native add to Selections, and Pass is inferred from New Music heard and not
-    added, so neither needs a tap. One shortcut, **VF Note**, captures his spoken reasons from
+    added, so neither needs a tap. One shortcut, **VF Note** (renamed **Music Feedback** on
+    2026-10-25), captures his spoken reasons from
     CarPlay, Siri, or the Action button, with no iOS app. `Get Current Song` is blank on a first
     hearing (it fills in only after the queue moves on), so the shortcut falls back to Shazam's
     `Recognize Music`, then to the time alone.
@@ -79,7 +80,8 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   recommendation with per-song familiarity (S1), then reports outcomes by source within
   release-age bands and tests the chat on New Music's own weeks with blind picks (S2). Apple's
   candidates for new releases (S3) wait on that result. **S1 merged as #132 (2026-10-25); Jon's
-  stage/check gate is owed.**
+  stage/check gate is owed.** **The chat's questions, from the never-merged plan PR #127,
+  were added as M18 S4 after S2 (2026-10-25); #127 is closed as superseded.**
 - **Familiarity when evidence can't be read** (from the #132 review, 2026-10-25). At staging,
   M18 S1 treats an unreadable listening log or notes file as empty, so the ledger records those
   songs as unfamiliar, permanently. **Recommendation, for S2's plan:** each ledger batch records

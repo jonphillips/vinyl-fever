@@ -156,7 +156,9 @@ Music.app ──snapshot v2 (laptop)──▶ tracks + every playlist's members 
     the add. No shortcut.
   - **Pass is inferred.** Jon hears New Music in full, so a song he heard (listening log) and
     didn't add (curation log) within two weeks is a pass. No shortcut.
-  - **VF Note** captures the reason, the best feedback Jon gives and the one that disappears
+  - **VF Note** (renamed **Music Feedback** on 2026-10-25, because Siri heard "VF Note" as a
+    request to the Notes app; see [the feedback guide](feedback-guide.md)) captures the reason,
+    the best feedback Jon gives and the one that disappears
     today. It runs from Siri (including CarPlay), the Action button, Control Center, or the Lock
     Screen. It tries three ways to identify the song:
     1. `Get Current Song`. It works for songs the phone has a record of, but not on a first
@@ -310,6 +312,8 @@ and AppleScript against Music.app.
   2021–2026. Replay 2015–2017 and Replay All Time exist too, and the 2018 rule excludes them.
 
 ### S0 results: VF Note (Jon and the architect, 2026-10-22)
+
+*The shortcut is now named Music Feedback (2026-10-25). These results are kept as recorded.*
 
 Jon built **VF Note** in Shortcuts. It writes one JSON object per line to
 `iCloud Drive/Vinyl Fever/Taste Intelligence/notes.jsonl`, next to `Listening/`.

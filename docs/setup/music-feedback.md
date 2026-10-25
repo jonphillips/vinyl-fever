@@ -1,6 +1,8 @@
-# VF Note shortcut
+# Music Feedback shortcut
 
-VF Note records a song reason from Shortcuts into iCloud Drive. It never changes Apple Music.
+Music Feedback records a song reason from Shortcuts into iCloud Drive. It never changes Apple
+Music. It was called VF Note until 2026-10-25, when Siri started hearing that name as a request
+to the Notes app. How to use it day to day is in [the feedback guide](../feedback-guide.md).
 Run it by name with Siri, from the Action button, or from Control Center. It also works through
 CarPlay.
 
@@ -9,7 +11,7 @@ CarPlay.
 1. Run `scripts/setup-mac --role chat --apply` on the chat Mac. This creates the empty
    `iCloud Drive/Vinyl Fever/Taste Intelligence/notes.jsonl` file if it is missing. Shortcuts
    cannot reliably create a `.jsonl` file itself.
-2. In Shortcuts, create a shortcut named **VF Note**.
+2. In Shortcuts, create a shortcut named **Music Feedback**.
 3. Add **Get Current Song**. If its title is empty, run **Recognize Music** and use that result
    as the song. Recognize Music is the fallback for songs the phone cannot read as the current
    track yet.
