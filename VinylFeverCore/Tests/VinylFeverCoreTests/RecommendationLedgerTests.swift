@@ -43,13 +43,13 @@ struct RecommendationLedgerTests {
     let playlistIndex = PlaylistIndex(snapshot: snapshot, roles: roles, identity: index.artistIdentity)
     let empty = RecommendationLedgerReadResult(batches: [], skippedLines: 0)
 
-    let owned = RecommendationFamiliarity.evaluate(artist: "Known Artist", title: "Known Song",
+    let owned = evaluate(artist: "Known Artist", title: "Known Song",
       snapshot: snapshot, index: index, playlistIndex: playlistIndex, listeningLog: nil,
       tasteNoteKeys: [], ledger: empty, recordedAt: now)
     #expect(owned.reasons == ["owned"])
     #expect(owned.familiar)
 
-    let inPlaylist = RecommendationFamiliarity.evaluate(artist: "Known Artist", title: "Discovery",
+    let inPlaylist = evaluate(artist: "Known Artist", title: "Discovery",
       snapshot: snapshot, index: index, playlistIndex: playlistIndex, listeningLog: nil,
       tasteNoteKeys: [], ledger: empty, recordedAt: now)
     #expect(inPlaylist.reasons == ["playlist:curated", "playlist:unlabeled"])
@@ -59,20 +59,20 @@ struct RecommendationLedgerTests {
     let prior = RecommendationBatch(recordedAt: now.addingTimeInterval(-10), host: "Mac",
       playlist: "Earlier", tracks: [RecommendationTrack(artist: "Known Artist", title: "Discovery",
         familiar: false, reasons: [], artistKnown: true)])
-    let annotated = RecommendationFamiliarity.evaluate(artist: "Known Artist", title: "Discovery",
+    let annotated = evaluate(artist: "Known Artist", title: "Discovery",
       snapshot: snapshot, index: index, playlistIndex: playlistIndex, listeningLog: nil,
       tasteNoteKeys: [notedKey], ledger: RecommendationLedgerReadResult(batches: [prior], skippedLines: 0),
       recordedAt: now)
     #expect(annotated.reasons == ["playlist:curated", "playlist:unlabeled", "noted", "recommended"])
 
     let noteOnlyKey = TasteIntelligence.songKey(artist: "New Artist", title: "Noted Song", identity: index.artistIdentity)
-    let notedOnly = RecommendationFamiliarity.evaluate(artist: "New Artist", title: "Noted Song",
+    let notedOnly = evaluate(artist: "New Artist", title: "Noted Song",
       snapshot: snapshot, index: index, playlistIndex: playlistIndex, listeningLog: nil,
       tasteNoteKeys: [noteOnlyKey], ledger: empty, recordedAt: now)
     #expect(notedOnly.reasons == ["noted"])
     #expect(!notedOnly.artistKnown)
 
-    let recommendedOnly = RecommendationFamiliarity.evaluate(artist: "New Artist", title: "Prior Find",
+    let recommendedOnly = evaluate(artist: "New Artist", title: "Prior Find",
       snapshot: snapshot, index: index, playlistIndex: playlistIndex, listeningLog: nil,
       tasteNoteKeys: [], ledger: RecommendationLedgerReadResult(batches: [
         RecommendationBatch(recordedAt: now.addingTimeInterval(-10), host: "Mac", playlist: "Earlier",
@@ -81,7 +81,7 @@ struct RecommendationLedgerTests {
       ], skippedLines: 0), recordedAt: now)
     #expect(recommendedOnly.reasons == ["recommended"])
 
-    let unknownSongByKnownArtist = RecommendationFamiliarity.evaluate(artist: "Known Artist", title: "New Song",
+    let unknownSongByKnownArtist = evaluate(artist: "Known Artist", title: "New Song",
       snapshot: snapshot, index: index, playlistIndex: playlistIndex, listeningLog: nil,
       tasteNoteKeys: [], ledger: empty, recordedAt: now)
     #expect(!unknownSongByKnownArtist.familiar)
@@ -101,16 +101,40 @@ struct RecommendationLedgerTests {
     let snapshot = LibrarySnapshot(generatedAt: now, tracks: [])
     let index = LibraryIndex(snapshot: snapshot)
     let empty = RecommendationLedgerReadResult(batches: [], skippedLines: 0)
-    let before = RecommendationFamiliarity.evaluate(artist: "Heard Artist", title: "Heard Song",
+    let before = evaluate(artist: "Heard Artist", title: "Heard Song",
       snapshot: snapshot, index: index, playlistIndex: PlaylistIndex(snapshot: snapshot,
         roles: PlaylistRoles(updatedAt: now, playlists: []), identity: index.artistIdentity),
       listeningLog: log, tasteNoteKeys: [], ledger: empty, recordedAt: now)
     #expect(before.reasons == ["heard"])
-    let after = RecommendationFamiliarity.evaluate(artist: "Heard Artist", title: "Heard Song",
+    let after = evaluate(artist: "Heard Artist", title: "Heard Song",
       snapshot: snapshot, index: index, playlistIndex: PlaylistIndex(snapshot: snapshot,
         roles: PlaylistRoles(updatedAt: now, playlists: []), identity: index.artistIdentity),
       listeningLog: log, tasteNoteKeys: [], ledger: empty, recordedAt: now.addingTimeInterval(-30))
     #expect(after.reasons.isEmpty)
+  }
+
+  @Test("heard familiarity and artistKnown match collaborator credits")
+  func collaboratorPlayCredits() {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let snapshot = LibrarySnapshot(generatedAt: now, tracks: [
+      LibraryTrack(persistentID: "orville", name: "Another Song", artist: "Orville Peck"),
+      LibraryTrack(persistentID: "emmylou", name: "Another Song", artist: "Emmylou Harris"),
+    ])
+    let fetch = ListeningFetch(poller: UUID(), host: "Fixture", fetchedAt: now.addingTimeInterval(-20),
+      outcome: .plays, newCount: 1, pagesRead: 1, items: [
+        ListeningItem(kind: .song, id: "prologue", title: "Prologue (Eulogy Of A Man Turned Mule)",
+          artist: "Emmylou Harris, Noah Cyrus, Allison Russell & Orville Peck"),
+      ])
+    let log = ListeningLog(streams: [[fetch]], now: now,
+      identity: ArtistIdentity(knownArtists: ["Orville Peck", "Emmylou Harris"]))
+    let index = LibraryIndex(snapshot: snapshot)
+    let familiarity = RecommendationFamiliarityIndex(snapshot: snapshot, index: index,
+      playlistIndex: PlaylistIndex(snapshot: snapshot, roles: PlaylistRoles(updatedAt: now, playlists: []),
+        identity: index.artistIdentity), listeningLog: log, tasteNoteKeys: [],
+      ledger: RecommendationLedgerReadResult(batches: [], skippedLines: 0), recordedAt: now)
+    let result = familiarity.evaluate(artist: "Orville Peck", title: "Prologue (Eulogy Of A Man Turned Mule)")
+    #expect(result.reasons == ["heard"])
+    #expect(result.artistKnown)
   }
 
   @Test("recommended evidence counts batches with unfamiliar entries and returns the latest date")
@@ -128,9 +152,17 @@ struct RecommendationLedgerTests {
       RecommendationBatch(recordedAt: old, host: "Mac", playlist: "One", tracks: [familiar, unfamiliar]),
       RecommendationBatch(recordedAt: recent, host: "Mini", playlist: "Two", tracks: [unfamiliar, other]),
     ], skippedLines: 0)
-    #expect(RecommendationLedgerEvidence.forSong(artist: "Artist", title: "Song", identity: identity,
-      ledger: ledger) == RecommendationEvidence(count: 2, latestRecordedAt: recent))
-    #expect(RecommendationLedgerEvidence.forSong(artist: "Artist", title: "Missing", identity: identity,
-      ledger: ledger) == nil)
+    let evidenceIndex = RecommendationLedgerEvidenceIndex(ledger: ledger, identity: identity)
+    #expect(evidenceIndex.forSong(artist: "Artist", title: "Song") == RecommendationEvidence(count: 2, latestRecordedAt: recent))
+    #expect(evidenceIndex.forSong(artist: "Artist", title: "Missing") == nil)
+  }
+
+  private func evaluate(artist: String, title: String, album: String? = nil, year: Int? = nil,
+    snapshot: LibrarySnapshot, index: LibraryIndex, playlistIndex: PlaylistIndex,
+    listeningLog: ListeningLog?, tasteNoteKeys: Set<String>, ledger: RecommendationLedgerReadResult,
+    recordedAt: Date) -> RecommendationTrack {
+    RecommendationFamiliarityIndex(snapshot: snapshot, index: index, playlistIndex: playlistIndex,
+      listeningLog: listeningLog, tasteNoteKeys: tasteNoteKeys, ledger: ledger, recordedAt: recordedAt)
+      .evaluate(artist: artist, title: title, album: album, year: year)
   }
 }

@@ -131,53 +131,109 @@ public enum RecommendationLedgerCodec {
   }
 }
 
-public enum RecommendationFamiliarity {
-  public static func evaluate(artist: String, title: String, album: String? = nil, year: Int? = nil,
-    snapshot: LibrarySnapshot,
-    index: LibraryIndex, playlistIndex: PlaylistIndex, listeningLog: ListeningLog?,
-    tasteNoteKeys: Set<String>, ledger: RecommendationLedgerReadResult, recordedAt: Date
-  ) -> RecommendationTrack {
+/// One-pass index of unfamiliar songs in the recommendation ledger.
+public struct RecommendationLedgerEvidenceIndex: Sendable {
+  public let identity: ArtistIdentity
+  private let evidenceBySong: [String: RecommendationEvidence]
+
+  public init(ledger: RecommendationLedgerReadResult, identity: ArtistIdentity) {
+    self.identity = identity
+    var evidence: [String: RecommendationEvidence] = [:]
+    for batch in ledger.batches {
+      // A batch contributes at most once per song, even if its input repeats a row.
+      let keys = Set(batch.tracks.lazy.filter { !$0.familiar }.map {
+        TasteIntelligence.songKey(artist: $0.artist, title: $0.title, identity: identity)
+      })
+      for key in keys {
+        if let current = evidence[key] {
+          evidence[key] = RecommendationEvidence(count: current.count + 1,
+            latestRecordedAt: max(current.latestRecordedAt, batch.recordedAt))
+        } else {
+          evidence[key] = RecommendationEvidence(count: 1, latestRecordedAt: batch.recordedAt)
+        }
+      }
+    }
+    evidenceBySong = evidence
+  }
+
+  public func forSong(artist: String, title: String) -> RecommendationEvidence? {
+    evidenceBySong[TasteIntelligence.songKey(artist: artist, title: title, identity: identity)]
+  }
+}
+
+/// Immutable lookups shared by every row in one stage request.
+public struct RecommendationFamiliarityIndex: Sendable {
+  private let identity: ArtistIdentity
+  private let libraryIndex: LibraryIndex
+  private let playlistIndex: PlaylistIndex
+  private let tasteNoteKeys: Set<String>
+  private let recommendationEvidence: RecommendationLedgerEvidenceIndex
+  private let knownArtistKeys: Set<String>
+  private let heardArtistsByTitle: [String: Set<String>]
+  private let heardArtistKeys: Set<String>
+  private let recordedAt: Date
+
+  public init(snapshot: LibrarySnapshot, index: LibraryIndex, playlistIndex: PlaylistIndex,
+    listeningLog: ListeningLog?, tasteNoteKeys: Set<String>, ledger: RecommendationLedgerReadResult,
+    recordedAt: Date) {
+    self.init(snapshot: snapshot, index: index, playlistIndex: playlistIndex,
+      listeningLog: listeningLog, tasteNoteKeys: tasteNoteKeys,
+      recommendationEvidence: RecommendationLedgerEvidenceIndex(ledger: ledger, identity: index.artistIdentity),
+      recordedAt: recordedAt)
+  }
+
+  public init(snapshot: LibrarySnapshot, index: LibraryIndex, playlistIndex: PlaylistIndex,
+    listeningLog: ListeningLog?, tasteNoteKeys: Set<String>, recommendationEvidence: RecommendationLedgerEvidenceIndex,
+    recordedAt: Date) {
     let identity = index.artistIdentity
+    self.identity = identity
+    self.libraryIndex = index
+    self.playlistIndex = playlistIndex
+    self.tasteNoteKeys = tasteNoteKeys
+    self.recommendationEvidence = recommendationEvidence
+    self.recordedAt = recordedAt
+
+    let uniqueLibraryArtists = Set(snapshot.tracks.lazy.map(\.artist))
+    knownArtistKeys = Set(uniqueLibraryArtists.map { identity.key($0) })
+
+    var artistsByTitle: [String: Set<String>] = [:]
+    var heardArtists = Set<String>()
+    for play in listeningLog?.plays ?? [] where play.windowStart < recordedAt {
+      let credits = identity.credits(play.item.artist)
+      heardArtists.formUnion(credits)
+      let title = SongTextNormalizer.libraryTitle(play.item.title)
+      for credit in credits { artistsByTitle["\(credit)\u{0}\(title)", default: []].formUnion(credits) }
+    }
+    heardArtistsByTitle = artistsByTitle
+    heardArtistKeys = heardArtists
+  }
+
+  public func evaluate(artist: String, title: String, album: String? = nil, year: Int? = nil) -> RecommendationTrack {
+    let credits = identity.credits(artist)
+    let titleKey = SongTextNormalizer.libraryTitle(title)
     let key = TasteIntelligence.songKey(artist: artist, title: title, identity: identity)
-    let owned = index.checkTracks([(artist: artist, title: title)]).first?.owned == true
-    let heard = listeningLog?.plays.contains { play in
-      play.windowStart < recordedAt && TasteIntelligence.songKey(artist: play.item.artist,
-        title: play.item.title, identity: identity) == key
-    } == true
+    let heard = credits.contains { heardArtistsByTitle["\($0)\u{0}\(titleKey)"] != nil }
     let memberships = playlistIndex.membershipsBySong[key, default: []].filter {
       $0.role != .ignore && $0.role != .followed
     }
     let playlistReasons = Set(memberships.map { "playlist:\($0.role?.rawValue ?? "unlabeled")" }).sorted()
     let noted = tasteNoteKeys.contains(key)
-    let recommended = ledger.batches.contains { batch in
-      batch.tracks.contains {
-        !$0.familiar && TasteIntelligence.songKey(artist: $0.artist, title: $0.title, identity: identity) == key
-      }
-    }
+    let recommended = recommendationEvidence.forSong(artist: artist, title: title) != nil
     var reasons: [String] = []
-    if owned { reasons.append("owned") }
+    if libraryIndex.checkTracks([(artist: artist, title: title)]).first?.owned == true { reasons.append("owned") }
     if heard { reasons.append("heard") }
     reasons += playlistReasons
     if noted { reasons.append("noted") }
     if recommended { reasons.append("recommended") }
-    let knownArtists = Set(snapshot.tracks.map(\.artist))
-    let artistKnownInLibrary = knownArtists.contains { identity.key($0) == identity.key(artist) }
-    let artistKnownInLog = listeningLog?.plays.contains {
-      $0.windowStart < recordedAt && identity.key($0.item.artist) == identity.key(artist)
-    } == true
-    return RecommendationTrack(artist: artist, title: title, album: album, year: year, familiar: !reasons.isEmpty,
-      reasons: reasons, artistKnown: artistKnownInLibrary || artistKnownInLog)
+    let artistKnown = knownArtistKeys.contains(identity.key(artist)) || credits.contains { heardArtistKeys.contains($0) }
+    return RecommendationTrack(artist: artist, title: title, album: album, year: year,
+      familiar: !reasons.isEmpty, reasons: reasons, artistKnown: artistKnown)
   }
 }
 
 public enum RecommendationLedgerEvidence {
   public static func forSong(artist: String, title: String, identity: ArtistIdentity,
     ledger: RecommendationLedgerReadResult) -> RecommendationEvidence? {
-    let matching = ledger.batches.filter { batch in
-      batch.tracks.contains { !$0.familiar && TasteIntelligence.songKey(artist: $0.artist,
-        title: $0.title, identity: identity) == TasteIntelligence.songKey(artist: artist, title: title, identity: identity) }
-    }
-    guard !matching.isEmpty else { return nil }
-    return RecommendationEvidence(count: matching.count, latestRecordedAt: matching.map(\.recordedAt).max()!)
+    RecommendationLedgerEvidenceIndex(ledger: ledger, identity: identity).forSong(artist: artist, title: title)
   }
 }

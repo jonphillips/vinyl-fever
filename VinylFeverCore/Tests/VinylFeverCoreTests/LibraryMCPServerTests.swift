@@ -206,6 +206,79 @@ struct LibraryMCPServerTests {
     #expect(row["heardLast"] != nil)
   }
 
+  @Test("check_tracks reports a collaborator play for a credited artist")
+  func checkTracksCollaboratorCredits() async throws {
+    let root = temporaryDirectory()
+    let listening = root.appending(path: "Listening", directoryHint: .isDirectory)
+    let stream = listening.appending(path: "fetches/fixture/2026-10.jsonl")
+    try FileManager.default.createDirectory(at: stream.deletingLastPathComponent(), withIntermediateDirectories: true)
+    let instant = Date(timeIntervalSince1970: 1_798_200_000)
+    let poller = UUID()
+    let item = ListeningItem(kind: .song, id: "prologue", title: "Prologue (Eulogy Of A Man Turned Mule)",
+      artist: "Emmylou Harris, Noah Cyrus, Allison Russell & Orville Peck")
+    let fetches = [
+      ListeningFetch(poller: poller, host: "Mac", fetchedAt: instant, outcome: .baseline, pagesRead: 1),
+      ListeningFetch(poller: poller, host: "Mac", fetchedAt: instant.addingTimeInterval(60),
+        outcome: .plays, newCount: 1, pagesRead: 1, items: [item]),
+    ]
+    let bytes = try fetches.map { try ListeningLogCodec.encode($0) + Data([10]) }
+      .reduce(into: Data()) { $0.append($1) }
+    try bytes.write(to: stream)
+    let snapshot = LibrarySnapshot(generatedAt: instant.addingTimeInterval(120), tracks: [
+      LibraryTrack(persistentID: "orville", name: "Another Song", artist: "Orville Peck"),
+      LibraryTrack(persistentID: "emmylou", name: "Another Song", artist: "Emmylou Harris"),
+    ])
+    let (server, _) = try makeServer(snapshot: snapshot, listeningRootURL: listening)
+    let result = try #require(await resultJSON(server, id: 1, name: "check_tracks",
+      arguments: #"{"tracks":[{"artist":"Orville Peck","title":"Prologue (Eulogy Of A Man Turned Mule)"}]}"#) as? [String: Any])
+    let row = try #require((result["tracks"] as? [[String: Any]])?.first)
+    #expect(row["heardDays"] as? Int == 1)
+  }
+
+  @Test("recommendation lookups stay fast at library and ledger scale", .enabled(if: ProcessInfo.processInfo.environment["VF_PERF_TESTS"] == "1"))
+  func recommendationLookupsPerformance() async throws {
+    let root = temporaryDirectory()
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let tracks = (0..<87_000).map { number in
+      LibraryTrack(persistentID: "track-\(number)", name: "Track \(number)", artist: "Artist \(number % 8_000)")
+    }
+    let playlist = LibraryPlaylist(persistentID: "playlist", name: "Performance", kind: .user,
+      members: (0..<200).map { "track-\($0)" })
+    let snapshot = LibrarySnapshot(generatedAt: .now, tracks: tracks, playlists: [playlist])
+    let recommendationFolder = tasteRoot.appending(path: "recommendations", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: recommendationFolder, withIntermediateDirectories: true)
+    var ledger = Data()
+    for batchNumber in 0..<500 {
+      let batch = RecommendationBatch(recordedAt: Date(timeIntervalSince1970: 1_800_000_000 + Double(batchNumber)),
+        host: "Fixture", tracks: (0..<15).map { songNumber in
+          RecommendationTrack(artist: "Ledger Artist \((batchNumber * 15 + songNumber) % 1_000)",
+            title: "Ledger Song \(batchNumber * 15 + songNumber)", familiar: false, reasons: [], artistKnown: false)
+        })
+      ledger.append(try RecommendationLedgerCodec.encode(batch))
+    }
+    try ledger.write(to: recommendationFolder.appending(path: "fixture.jsonl"))
+    let (server, _) = try makeServer(snapshot: snapshot, tasteRootURL: tasteRoot)
+    let rows = try #require(await resultJSON(server, id: 1, name: "playlist_tracks",
+      arguments: #"{"name":"Performance","limit":200}"#))
+    #expect((rows as? [String: Any])?["tracks"] as? [[String: Any]] != nil)
+    let playlistStart = ContinuousClock.now
+    let timedRows = try #require(await resultJSON(server, id: 2, name: "playlist_tracks",
+      arguments: #"{"name":"Performance","limit":200}"#))
+    let playlistElapsed = playlistStart.duration(to: .now)
+    let timedTracks = (timedRows as? [String: Any])?["tracks"] as? [[String: Any]]
+    #expect(timedTracks?.count == 200)
+    #expect(playlistElapsed < .seconds(1))
+
+    // Warm the shared indexes and then measure the 15-track familiarity/stage pass.
+    let stageTracks = (0..<15).map { #"{"artist":"Artist \#($0)","title":"New Track \#($0)"}"# }.joined(separator: ",")
+    let stageArguments = #"{"name":"Performance Stage","tracks":[\#(stageTracks)]}"#
+    let stageStart = ContinuousClock.now
+    let staged = try #require(await resultJSON(server, id: 3, name: "stage_playlist", arguments: stageArguments) as? [String: Any])
+    let stageElapsed = stageStart.duration(to: .now)
+    #expect(staged["staged"] as? Bool == true)
+    #expect(stageElapsed < .milliseconds(500))
+  }
+
   @Test("playlist tools match their full JSON contract")
   func playlistToolsGolden() async throws {
     let root = temporaryDirectory()
