@@ -7,7 +7,7 @@ design conflict, this doc's Decisions win. Rules in
 [../technical-architecture.md](../technical-architecture.md) and
 `/Users/jon/code/jon-platform/AGENTS.md` apply.*
 
-Summary: Two slices are dispatched, and a third is decided at S2's gate.
+Summary: Three slices are dispatched, and a fourth is decided at S2's gate.
 - **S1** starts the recommendation ledger now. Every `stage_playlist` records which songs were
   new to Jon, and `check_tracks` reports "recommended before". It's a log that can't be rebuilt
   later, so it goes first.
@@ -16,6 +16,9 @@ Summary: Two slices are dispatched, and a third is decided at S2's gate.
   a fix to the Selections stick rate for Jon's new filing habit.
 - **S3**, which adds Apple's candidates for new releases, is built only if S2 shows the chat is a
   good judge of them.
+- **S4** lets the chat ask Jon what it wonders about. Questions and answers are taste notes, at
+  most 3 open at a time, and a skip is final. It comes from plan PR #127 (never merged), and it
+  runs after S2.
 
 Vinyl Fever still makes no model calls and stores no scores. [M19](M19-backups.md)'s backup
 slice runs between S1 and S2 (M19 Decision 7).
@@ -92,8 +95,9 @@ Music's own 25 songs before Jon hears them (S2).
 ## Slices
 
 **Dispatch 1: S1** (Core + `vf-mcp`; Jon's gate). **Dispatch 2: S2** (Core + `vf-mcp`; Jon's gate
-needs New Music weeks). **S3** is decided at S2's gate. S1 and S2 both edit `vf-mcp`, so they
-run one after the other.
+needs New Music weeks). **Dispatch 3: S4** (Core + `vf-mcp`; Jon's gate). **S3** is decided at
+S2's gate. Every slice edits `vf-mcp`, so they run one after another. S2's completing PR
+advances `NEXT_UP.md` to S4.
 
 - [x] **S1 — The recommendation ledger (Core + `vf-mcp`).** Done in `m18/s1-recommendation-ledger`.
   - **Ledger file:** `Taste Intelligence/recommendations/<host>.jsonl`, one line per batch:
@@ -227,6 +231,65 @@ run one after the other.
   - **If not:** the chat stays on catalog depth, and New Music stays Apple's job, unfiltered.
   - Either way, the result is recorded here before anything is built.
 
+- [ ] **S4 — The chat's questions (Core + `vf-mcp`).** *Added 2026-10-25 from plan PR #127,
+  which was never merged; see Decision 8. M17 S3 (#129) built the notes it extends.*
+  - **A question and its answer are taste notes.** They use the same files (`notes-chat-<host>.jsonl`)
+    and the same reader. These optional keys are added to `vf-taste-note` v1; a line without
+    them is an ordinary note, which covers every VF Note shortcut line:
+    - `kind`: `note` (the default when it's missing), `question`, or `answer`;
+    - `id`: a UUID on every line `record_taste_note` writes. It's the handle the chat uses to
+      answer a question. It names no library item, so results may include it;
+    - `answers`: on an answer, the question's `id`;
+    - `skipped: true`: on an answer, meaning Jon declined. A skipped question never comes back;
+    - `about`: on a question, the songs (`artist`, `title`) or playlist names it's about.
+  - **Deduplicating:** a line with an `id` is unique by its `id`. Lines without one keep M17
+    S3's key (`notedAt`, title, artist). A conflict copy must never show a question twice.
+  - **A question's state is derived on read, never stored:**
+    - **answered** or **skipped** when an answer line names it, from any host's file;
+    - **expired** 21 days after `notedAt`;
+    - **superseded** when 3 newer questions are still open. Only the 3 newest open questions
+      stay open, so a new question pushes out the oldest;
+    - **open** otherwise.
+  - **`record_taste_note`** gains `kind` (`note` by default, or `question`), `answers` (with
+    `skipped`), and `about`, and it returns the line's `id`.
+    - It refuses an answer whose `answers` doesn't name a known question, and a question with
+      empty text.
+    - Its description says: ask only when the answer would change what you recommend next, and
+      cite the contrast in Jon's evidence that prompted the question.
+  - **`taste_notes`** returns `openQuestions` before the notes: at most 3, each with its `id`,
+    text, `about`, and age. An answered question is returned like any other note, with its
+    answer beside it.
+  - **Instructions:** one paragraph in the taste section:
+    - when Jon starts a taste conversation, ask at most one open question, and only if it bears
+      on what he's doing;
+    - record his answer verbatim with `answers`. "Skip" or "not now" is recorded as `skipped`;
+    - record a new question whenever a choice or contrast in his evidence leaves you unsure,
+      even if he isn't there to answer it;
+    - never ask what the tools can already tell you.
+
+    The first 512 characters must still stand alone. Update the instructions snapshot test.
+
+  **DoD:**
+  - **Core tests:**
+    - a recorded question shows in `openQuestions` with its `id`, and an answer closes it,
+      including an answer in another host's file;
+    - a skip closes it for good;
+    - it expires at 21 days;
+    - a fourth open question supersedes the oldest;
+    - a conflict copy of a question line doesn't duplicate it;
+    - shortcut notes, with no `kind` or `id`, still read as notes, unchanged.
+  - **`vf-mcp` tests:**
+    - an answer naming an unknown `id` is refused, and so is an empty question;
+    - golden JSON for `taste_notes` with `openQuestions`, with no paths or persistent IDs;
+    - `record_taste_note` writes to a temp root only.
+  - **Executor's laptop check** (read-only against a copy of Jon's live notes): every existing
+    VF Note line reads exactly as before, and `openQuestions` is empty.
+  - **Jon's gate (after install, owed until done):**
+    1. While building a list, the chat records a question about a contrast in his evidence.
+    2. In a new taste conversation, the chat asks it. Jon answers, and `taste_notes` shows the
+       question answered, with his words verbatim.
+    3. Jon skips a second question, and it doesn't come back.
+
 ## Prerequisites (Jon, not the executor's)
 
 - [ ] **Before Friday 2026-10-30:** rebuild the VF Listening Poller from `main` and install it on
@@ -250,6 +313,8 @@ run one after the other.
 | Minimum decided songs for a ratio | 10 per cell | With batches of about 15, a smaller cell's ratio is noise. |
 | `recommendation_outcomes` default | 10 batches, at most 50 | Capped like every M12 result. |
 | Weeks of picks before S3 is decided | about 4 finished weeks | Enough for the picked group to pass the minimum. |
+| Open questions at most | 3 | Enough for the chat to wonder; few enough that nothing piles up. |
+| Question expiry | 21 days | A question about this month's listening goes stale after a few weeks. |
 
 ## Out of scope — with destinations
 
@@ -263,6 +328,8 @@ run one after the other.
   songs, so they'd be sources, not evidence.
 - **Reading ratings through the API.** → When Favorite and Suggest Less are in regular use.
 - **Matching by catalog ID.** → Still only if song-key misses show up (M17 Decision 4).
+- **A "VF Questions" shortcut** that reads an open question aloud and takes a dictated answer,
+  like VF Note. → After S4's gate, if the questions prove worth answering.
 
 ## Decisions
 
@@ -292,3 +359,25 @@ Open — the architect's recommendation is listed first. Merging this plan appro
    first batch, including the two with no Selections year. Kept means in any `keepers` playlist,
    which covers release-year Selections and Vinyl Fever Keepers.
 7. **S3 is decided by S2's gate, not now.**
+
+Added 2026-10-25 with S4. Merging that plan PR approves them.
+
+8. **The chat can ask Jon what it wonders about (S4).** This is #127's Decision 8. #127 was
+   superseded: its proposal outcomes became S1 and S2 here, and its notes shipped as M17 S3.
+   - **The problem:** questions come up while the chat builds a list or reads outcomes, often
+     when Jon isn't there, and nothing carries them to the next conversation.
+   - **A question and its answer are notes**, kept verbatim like everything else Jon says, and a
+     question's state is derived on read. There's no new file and no new store, and Vinyl Fever
+     still makes no model calls.
+   - **Limits keep it from becoming a chore:** at most 3 open questions, gone after 21 days, one
+     asked per conversation, and a skip is final.
+   - **The test for a question:** would the answer change what the chat recommends next? The
+     useful questions come from contrasts in Jon's evidence ("you kept X but passed Y. Was it
+     the vocals or the tempo?"), not survey questions.
+   - **After S2,** because S2's gate depends on the calendar (picks before Jon hears each New
+     Music week), and S4's doesn't.
+9. **Kept stays "in a `keepers` playlist", not #127's wider rule.** #127 also counted songs
+   filed in a `curated` or `situational` playlist. Every keeper from the first batch went into
+   Vinyl Fever Keepers, and widening the rule would change New Music's existing numbers (S2
+   keeps M17's classifier unchanged). Revisit only if Jon files finds straight into curated
+   playlists.
