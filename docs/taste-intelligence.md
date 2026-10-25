@@ -19,7 +19,10 @@ on the move.
 "Find me 15 songs I probably don't know but am unusually likely to love. Explain what you've
 learned about my taste that makes each one a good bet, and learn from which ones actually become
 favorites." Success means Vinyl Fever's discoveries are **kept more often than Apple's New Music
-picks** (see *Baselines*).
+picks** (see *Baselines*). *Amended by [M18](milestones/M18-taste-outcomes.md) Decision 1
+(2026-10-25): the two sources draw from different eras, so there's no head-to-head. Outcomes are
+compared within release-age bands, and the chat is tested on new releases by picking from New
+Music's own weeks.*
 
 ## Evidence (measured 2026-10-20)
 
@@ -211,7 +214,8 @@ doesn't imitate it; it **collects what Apple's recommenders produce**:
   picks come from what similar listeners play; the chat's come from what it knows about music.
   Jon's evidence decides and explains.
 - **As the baseline:** New Music is Apple's recommender aimed straight at Jon, graded in full
-  every week. Its keep rate is Apple's discovery yield.
+  every week. Its keep rate is Apple's discovery yield. *Since M18, it's reported as New Music's
+  own number, not a bar for the chat to beat.*
 
 ## Baselines (measurable before any recommendation)
 

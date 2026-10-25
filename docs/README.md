@@ -21,7 +21,7 @@ Related source material:
 
 - [Efforts](efforts/README.md)
 - [Listening](listening/README.md)
-- [Taste Intelligence (design; planned as M17)](taste-intelligence.md)
+- [Taste Intelligence (design; built in M17, outcomes in M18)](taste-intelligence.md)
 - [reference/MusicWorkbench_Codex_Handoff.md](reference/MusicWorkbench_Codex_Handoff.md)
 - [reference/apple_music_library_strategy.md](reference/apple_music_library_strategy.md)
 - [reference/duplicate-detection-strategy.md](reference/duplicate-detection-strategy.md)

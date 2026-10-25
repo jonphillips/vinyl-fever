@@ -394,9 +394,10 @@ next. S2 and S3 both edit `vf-mcp`, so they can't run side by side.
 
 - **The outcomes milestone:** the recommendation ledger's familiarity field, discovery yield,
   Apple's recommendations and similar artists as candidate sources, `taste_evidence`,
-  `neglected_keepers`, and reading ratings through the API. → Next milestone, once S2's logs
-  have a few weeks in them.
-- **"Recommended before" in `check_tracks`.** → The outcomes milestone, with the ledger.
+  `neglected_keepers`, and reading ratings through the API. → Planned as
+  [M18](M18-taste-outcomes.md) (2026-10-25). The ledger goes first, and the comparison with New
+  Music is redrawn (M18 Decision 1).
+- **"Recommended before" in `check_tracks`.** → M18 S1, with the ledger.
 - **Matching kept and passed by catalog ID.** → Only if `kept_and_passed` shows song-key misses
   (Decision 4).
 - **The 2018 rule in `top_tracks`, `top_artists`, and `search_library`.** → After S1's gate, if
