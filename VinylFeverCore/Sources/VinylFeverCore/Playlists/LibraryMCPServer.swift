@@ -308,10 +308,11 @@ private actor LibraryMCPContext {
   }
 
   func recommendationEvidenceIndex(identity: ArtistIdentity) throws -> RecommendationLedgerEvidenceIndex {
+    let ledger = try recommendationLedger()
     if let cachedRecommendationEvidence, cachedRecommendationEvidence.identity == identity {
       return cachedRecommendationEvidence
     }
-    let index = RecommendationLedgerEvidenceIndex(ledger: try recommendationLedger(), identity: identity)
+    let index = RecommendationLedgerEvidenceIndex(ledger: ledger, identity: identity)
     cachedRecommendationEvidence = index
     return index
   }

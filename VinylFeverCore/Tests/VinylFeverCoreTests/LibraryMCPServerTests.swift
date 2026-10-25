@@ -235,6 +235,32 @@ struct LibraryMCPServerTests {
     #expect(row["heardDays"] as? Int == 1)
   }
 
+  @Test("recommendation evidence cache notices batches appended by another host")
+  func recommendationEvidenceCacheRefreshesAcrossHosts() async throws {
+    let root = temporaryDirectory()
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let recommendationFolder = tasteRoot.appending(path: "recommendations", directoryHint: .isDirectory)
+    let instant = Date(timeIntervalSince1970: 1_800_000_000)
+    let track = RecommendationTrack(artist: "New Artist", title: "New Song", familiar: false,
+      reasons: [], artistKnown: false)
+    try RecommendationLedgerCodec.append(RecommendationBatch(recordedAt: instant, host: "Other",
+      tracks: [track]), host: "Other", folder: recommendationFolder)
+    let (server, _) = try makeServer(snapshot: LibrarySnapshot(generatedAt: instant, tracks: []),
+      tasteRootURL: tasteRoot)
+    let arguments = #"{"tracks":[{"artist":"New Artist","title":"New Song"}]}"#
+    let first = try #require(await resultJSON(server, id: 1, name: "check_tracks", arguments: arguments) as? [String: Any])
+    let firstRow = try #require((first["tracks"] as? [[String: Any]])?.first)
+    let firstEvidence = try #require(firstRow["recommended"] as? [String: Any])
+    #expect(firstEvidence["count"] as? Int == 1)
+
+    try RecommendationLedgerCodec.append(RecommendationBatch(recordedAt: instant.addingTimeInterval(60),
+      host: "Another", tracks: [track]), host: "Another", folder: recommendationFolder)
+    let second = try #require(await resultJSON(server, id: 2, name: "check_tracks", arguments: arguments) as? [String: Any])
+    let secondRow = try #require((second["tracks"] as? [[String: Any]])?.first)
+    let secondEvidence = try #require(secondRow["recommended"] as? [String: Any])
+    #expect(secondEvidence["count"] as? Int == 2)
+  }
+
   @Test("recommendation lookups stay fast at library and ledger scale", .enabled(if: ProcessInfo.processInfo.environment["VF_PERF_TESTS"] == "1"))
   func recommendationLookupsPerformance() async throws {
     let root = temporaryDirectory()
