@@ -223,6 +223,9 @@ next. S2 and S3 both edit `vf-mcp`, so they can't run side by side.
   - **Jon's gate — passed 2026-10-24.** Jon labeled the roles and asked ChatGPT the 15-song
     question in the spirit of his 2025 Selections. The chat built the list, and Jon judged the gate
     passed. Nothing redirects S2 or S3.
+    - **Result (Jon, 2026-10-25):** all 15 songs were new to him, and he kept 11. He knew an
+      artist or two, but not the songs. For the outcomes milestone's familiarity field, that
+      means familiarity is per song: a known artist doesn't make a song known.
   - **Laptop read — passed 2026-10-23** (read-only, written to a scratch path, at the #125 head):
     - 87,042 tracks, 148 playlists (65 user, 7 smart, 76 subscription), and 8,220 outside-library
       tracks;
