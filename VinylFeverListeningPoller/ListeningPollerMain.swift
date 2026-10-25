@@ -34,7 +34,7 @@ private func preparePollerDependencies(context: DependencyContext) {
     $0.listeningStore = .liveValue
     $0.recentlyPlayedClient = .liveValue
     $0.listeningAuthorizationClient = .liveValue
-    if context == .live { $0.newMusicCatalogClient = .liveValue }
+    if installsLiveTasteClients(context) { $0.newMusicCatalogClient = .liveValue }
   }
 }
 

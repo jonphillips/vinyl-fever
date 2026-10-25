@@ -310,7 +310,7 @@ next. S2 and S3 both edit `vf-mcp`, so they can't run side by side.
       They were moved to the Trash with Jon's OK, and the live taste clients are now installed
       only in the `.live` context.
 
-- [ ] **S3 — Jon's reasons: VF Note and chat notes (Core + `vf-mcp` + `setup-mac`, plus one
+- [x] **S3 — Jon's reasons: VF Note and chat notes (Core + `vf-mcp` + `setup-mac`, plus one
   carried app fix).**
   - **Reader** (Core, pure): reads every `Taste Intelligence/notes*.jsonl`, in format
     `vf-taste-note` v1, with the rules in the design's *S0 results: VF Note*:
