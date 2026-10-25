@@ -8,16 +8,20 @@ struct TasteNotesTests {
   func readsShortcutNotes() throws {
     let whiteKnight = #"{"format":"vf-taste-note","version":1,"notedAt":"2026-10-22T10:30:35-04:00","title":"White Knight","artist":"Cats in Space","album":"White Knight - Single","playCount":0,"releaseDate":"2026-10-16T08:00:00-04:00","duration":"4:42","note":"Has a rock opera vibe","source":"current-song","device":"Jon’s iPhone 17 Pro"}"#
     let shack = #"{"format":"vf-taste-note","version":1,"notedAt":"2026-10-22T11:30:00-04:00","title":"Natalie's Party","artist":"Shack","album":"HMS Fable","playCount":1,"note":"Great chorus","source":"current-song","device":"Jon’s iPhone 17 Pro"}"#
+    let timeOnly = #"{"format":"vf-taste-note","version":1,"notedAt":"2026-10-22T10:57:23-04:00","title":"","artist":"","playCount":0,"duration":"00:00","note":"Couldn't catch that","source":"shazam"}"#
+    let cancelled = #"{"format":"vf-taste-note","version":1,"notedAt":"2026-10-22T10:57:23-04:00","title":"","artist":"","playCount":0,"duration":"00:00","note":"","source":"shazam"}"#
     let future = #"{"format":"vf-taste-note","version":2,"notedAt":"2026-10-22T12:00:00-04:00","title":"Future","artist":"Artist","note":"skip","source":"chat"}"#
     let unknown = #"{"format":"other","version":1,"notedAt":"2026-10-22T12:00:00-04:00","title":"Unknown","artist":"Artist","note":"skip","source":"chat"}"#
-    let first = Data((whiteKnight + "\n" + shack + "\n" + future + "\n" + "{\"partial\":" ).utf8)
+    let first = Data((whiteKnight + "\n" + timeOnly + "\n" + cancelled + "\n" + shack + "\n" + future + "\n" + "{\"partial\":" ).utf8)
     let conflict = Data((whiteKnight + "\n" + unknown + "\n").utf8)
 
     let result = TasteNotesCodec.readFiles([first, conflict])
     #expect(result.filesRead == 2)
-    #expect(result.skippedLines == 2)
-    #expect(result.notes.count == 2)
-    #expect(result.notes.map(\.title) == ["Natalie's Party", "White Knight"])
+    #expect(result.skippedLines == 3)
+    #expect(result.notes.count == 3)
+    #expect(result.notes.map(\.title) == ["Natalie's Party", "", "White Knight"])
+    #expect(result.notes[1].isTimeOnly)
+    #expect(result.notes[1].firstHearing == nil)
     #expect(result.notes.last?.note == "Has a rock opera vibe")
     #expect(result.notes.last?.device == "Jon’s iPhone 17 Pro")
     #expect(result.notes.last?.firstHearing == true)

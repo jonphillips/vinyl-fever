@@ -1,5 +1,6 @@
 import Testing
 import VinylFeverCore
+import VinylFeverListening
 
 struct TasteClientContextTests {
   @Test("only live contexts install live taste clients")

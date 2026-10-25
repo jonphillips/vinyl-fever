@@ -58,13 +58,14 @@ struct LibraryMCPServerTests {
     try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
     let instant = Date(timeIntervalSince1970: 1_800_000_000)
     let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"),
-      tasteRootURL: tasteRoot, now: { instant })
+      tasteRootURL: tasteRoot, hostName: { "Test Mac" }, now: { instant })
     let original = "The melody opens up in the chorus — keep that lift."
     let recorded = try #require(await resultJSON(server, id: 60, name: "record_taste_note",
-      arguments: #"{"note":"The melody opens up in the chorus — keep that lift.","artist":"Artist","title":"Song","album":"Album"}"#) as? [String: Any])
+      arguments: #"{"note":"The melody opens up in the chorus — keep that lift.","artist":" Artist ","title":"Song","album":"Album"}"#) as? [String: Any])
     #expect(recorded["recorded"] as? Bool == true)
     #expect(recorded["source"] as? String == "chat")
     #expect(!FileManager.default.fileExists(atPath: tasteRoot.appending(path: "notes.jsonl").path))
+    #expect(FileManager.default.fileExists(atPath: tasteRoot.appending(path: "notes-chat-Test_Mac.jsonl").path))
 
     let notes = try #require(await resultJSON(server, id: 61, name: "taste_notes",
       arguments: #"{"artist":"Artist","title":"Song"}"#) as? [String: Any])
@@ -72,6 +73,7 @@ struct LibraryMCPServerTests {
     #expect(rows.count == 1)
     #expect(rows.first?["note"] as? String == original)
     #expect(rows.first?["source"] as? String == "chat")
+    #expect(rows.first?["artist"] as? String == "Artist")
     #expect(notes["coverage"] != nil)
     #expect(!String(describing: notes).contains("Taste Intelligence"))
 
@@ -85,6 +87,22 @@ struct LibraryMCPServerTests {
     #expect(playlistRows.first?["note"] as? String == "Keep the bright guitar line.")
     #expect(playlistRows.first?["candidates"] == nil)
     #expect(!FileManager.default.fileExists(atPath: tasteRoot.appending(path: "notes.jsonl").path))
+  }
+
+  @Test("check_tracks succeeds when taste notes cannot be read")
+  func checkTracksToleratesTasteNoteReadFailure() async throws {
+    let root = temporaryDirectory()
+    let snapshotURL = root.appending(path: "snapshot.json")
+    try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: tasteRoot.appending(path: "notes x.jsonl", directoryHint: .isDirectory), withIntermediateDirectories: true)
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), tasteRootURL: tasteRoot)
+
+    let result = try #require(await resultJSON(server, id: 64, name: "check_tracks",
+      arguments: #"{"tracks":[{"artist":"Version Artist","title":"Version Song"}]}"#) as? [String: Any])
+    let rows = try #require(result["tracks"] as? [[String: Any]])
+    #expect(rows.count == 1)
+    #expect(rows.first?["notes"] == nil)
   }
 
   @Test("listening calls report setup guidance when no listening log exists")
@@ -251,7 +269,7 @@ struct LibraryMCPServerTests {
     try LibrarySnapshotCodec.encode(
       LibrarySnapshot(generatedAt: .now, tracks: [unnamedUpload] + uploads + [almostMatch]))
       .write(to: snapshotURL)
-    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"))
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), tasteRootURL: root.appending(path: "Taste Intelligence"))
 
     let springsteen = try #require(await resultJSON(
       server, id: 40, name: "check_tracks",
@@ -283,7 +301,7 @@ struct LibraryMCPServerTests {
       "elvis": "elvis presley",
     ]
     try ArtistAliasesCodec.encode(aliases).write(to: root.appending(path: "artist-aliases.json"))
-    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"))
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), tasteRootURL: root.appending(path: "Taste Intelligence"))
     let check = try #require(await resultJSON(
       server, id: 81, name: "check_tracks",
       arguments: #"{"tracks":[{"artist":"John Cougar Mellencamp","title":"Ain't Even Done With the Night"}]}"#
@@ -297,7 +315,7 @@ struct LibraryMCPServerTests {
     let noFileRoot = temporaryDirectory()
     let noFileSnapshot = noFileRoot.appending(path: "snapshot.json")
     try LibrarySnapshotCodec.encode(LibrarySnapshot(generatedAt: .now, tracks: tracks)).write(to: noFileSnapshot)
-    let noFileServer = LibraryMCPServer.make(snapshotURL: noFileSnapshot, inboxRoot: noFileRoot.appending(path: "inbox"))
+    let noFileServer = LibraryMCPServer.make(snapshotURL: noFileSnapshot, inboxRoot: noFileRoot.appending(path: "inbox"), tasteRootURL: noFileRoot.appending(path: "Taste Intelligence"))
     let unchanged = try #require(await resultJSON(
       noFileServer, id: 83, name: "check_tracks",
       arguments: #"{"tracks":[{"artist":"John Cougar Mellencamp","title":"Ain't Even Done With the Night"}]}"#

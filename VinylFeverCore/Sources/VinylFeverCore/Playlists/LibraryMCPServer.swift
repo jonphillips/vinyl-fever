@@ -147,6 +147,7 @@ private actor LibraryMCPContext {
   private var cachedPlaylistRoles: PlaylistRoles?
   private let listeningRootURL: URL
   private let tasteRootURL: URL
+  private let hostName: @Sendable () -> String
   private var cachedListeningLog: ListeningLog?
   private var cachedListeningFiles: [URL: Date] = [:]
   private var cachedListeningIdentity: ArtistIdentity = .empty
@@ -154,11 +155,12 @@ private actor LibraryMCPContext {
   private var cachedTasteNotes: TasteNotesReadResult?
   private var cachedTasteNoteFiles: [URL: Date] = [:]
 
-  init(snapshotURL: URL?, inboxRoot: URL?, listeningRootURL: URL?, tasteRootURL: URL?) {
+  init(snapshotURL: URL?, inboxRoot: URL?, listeningRootURL: URL?, tasteRootURL: URL?, hostName: @escaping @Sendable () -> String) {
     self.snapshotURL = snapshotURL ?? Self.defaultSnapshotURL
     self.inbox = HandoffInbox(root: inboxRoot ?? Self.defaultInbox.root, fileExtension: "vfplaylist")
     self.listeningRootURL = listeningRootURL ?? Self.defaultListeningRootURL
     self.tasteRootURL = tasteRootURL ?? Self.defaultTasteRootURL
+    self.hostName = hostName
   }
 
   static var defaultSnapshotURL: URL {
@@ -273,16 +275,15 @@ private actor LibraryMCPContext {
   }
 
   func recordTasteNote(_ note: TasteNote) throws {
-    try TasteNotesCodec.appendChatNote(note, host: ProcessInfo.processInfo.hostName, folder: tasteRootURL)
+    try TasteNotesCodec.appendChatNote(note, host: hostName(), folder: tasteRootURL)
     cachedTasteNotes = nil
     cachedTasteNoteFiles = [:]
   }
 
-  func matchingTasteNotes(artist: String, title: String, identity: ArtistIdentity) throws -> [TasteNote] {
-    let key = TasteIntelligence.songKey(artist: artist, title: title, identity: identity)
-    return try tasteNotes().notes.filter { note in
-      guard let noteArtist = note.artist, let noteTitle = note.title, !noteTitle.isEmpty else { return false }
-      return TasteIntelligence.songKey(artist: noteArtist, title: noteTitle, identity: identity) == key
+  func tasteNotesBySong(identity: ArtistIdentity) throws -> [String: [TasteNote]] {
+    try tasteNotes().notes.reduce(into: [:]) { result, note in
+      guard let artist = note.artist, let title = note.title, !title.isEmpty else { return }
+      result[TasteIntelligence.songKey(artist: artist, title: title, identity: identity), default: []].append(note)
     }
   }
 
@@ -384,9 +385,10 @@ public enum LibraryMCPServer {
     inboxRoot: URL? = nil,
     listeningRootURL: URL? = nil,
     tasteRootURL: URL? = nil,
+    hostName: @escaping @Sendable () -> String = { ListeningStore.liveHostName() },
     now: @escaping @Sendable () -> Date = { Date() }
   ) -> MCPServer {
-    let context = LibraryMCPContext(snapshotURL: snapshotURL, inboxRoot: inboxRoot, listeningRootURL: listeningRootURL, tasteRootURL: tasteRootURL)
+    let context = LibraryMCPContext(snapshotURL: snapshotURL, inboxRoot: inboxRoot, listeningRootURL: listeningRootURL, tasteRootURL: tasteRootURL, hostName: hostName)
     let readOnly = MCPToolAnnotations(readOnly: true, openWorld: false)
     let overviewSchema = schema([:])
     let topArtistsSchema = schema(["by": enumField(["plays", "favorites", "recently_added"]), "period": enumField(["all_time", "7d", "30d", "90d"]), "limit": integerField])
@@ -453,6 +455,7 @@ public enum LibraryMCPServer {
         var listeningError: String?
         do { _ = try await context.listeningLog() }
         catch { listeningError = error is ListeningHistoryNotSetUp ? "not_set_up" : String(describing: error) }
+        let tasteNotesBySong = try? await context.tasteNotesBySong(identity: index.artistIdentity)
         let calendar = Calendar.current
         var rows: [MCPCheckedTrack] = []
         for request in p.tracks.prefix(LibraryIndex.maximumCheckTracks) {
@@ -460,10 +463,11 @@ public enum LibraryMCPServer {
           let days = Set(heard?.map { calendar.startOfDay(for: $0) } ?? [])
           let evidence = playlistIndex.evidence(artist: request.artist, title: request.title, identity: index.artistIdentity,
             tracks: index.matchingTracks(artist: request.artist, title: request.title))
-          let notes = try await context.matchingTasteNotes(artist: request.artist, title: request.title, identity: index.artistIdentity)
+          let noteKey = TasteIntelligence.songKey(artist: request.artist, title: request.title, identity: index.artistIdentity)
+          let notes = tasteNotesBySong.map { MCPNoteEvidence($0[noteKey] ?? []) }
           let check = index.checkTracks([(artist: request.artist, title: request.title)]).first!
           rows.append(MCPCheckedTrack(check, evidence: evidence, heardDays: heard == nil ? nil : days.count,
-            heardLast: heard?.max(), notes: MCPNoteEvidence(notes))
+            heardLast: heard?.max(), notes: notes)
           )
         }
         let unlabeled = PlaylistRoleMatcher.resolve(snapshot: snapshot, roles: roles).filter { $0.role == nil }.count
@@ -499,6 +503,7 @@ public enum LibraryMCPServer {
         var listeningError: String?
         do { _ = try await context.listeningLog() }
         catch { listeningError = error is ListeningHistoryNotSetUp ? "not_set_up" : String(describing: error) }
+        let tasteNotesBySong = try? await context.tasteNotesBySong(identity: identity)
         var rows: [MCPPlaylistTrack] = []
         for (position, id) in match.members.enumerated() {
           let track = tracksByID[id]
@@ -508,11 +513,12 @@ public enum LibraryMCPServer {
             tracks: libraryIndex.matchingTracks(artist: artist, title: title))
           let heard = await context.heardDates(artist: artist, title: title, identity: identity)
           let heardDays = heard.map { Set($0.map { Calendar.current.startOfDay(for: $0) }).count }
-          let notes = try await context.matchingTasteNotes(artist: artist, title: title, identity: identity)
+          let noteKey = TasteIntelligence.songKey(artist: artist, title: title, identity: identity)
+          let notes = tasteNotesBySong.map { MCPNoteEvidence($0[noteKey] ?? []) }
           let check = libraryIndex.checkTracks([(artist: artist, title: title)]).first!
           rows.append(MCPPlaylistTrack(position: position + 1, artist: artist, title: title,
             album: track?.album ?? outside?.album ?? "", year: track?.year ?? outside?.year,
-            evidence: MCPPlaylistSongEvidence(evidence, check: check, heardDays: heardDays, heardLast: heard?.max(), notes: MCPNoteEvidence(notes))))
+            evidence: MCPPlaylistSongEvidence(evidence, check: check, heardDays: heardDays, heardLast: heard?.max(), notes: notes)))
         }
         let limit = max(1, min(p.limit ?? 100, 200))
         let unlabeled = PlaylistRoleMatcher.resolve(snapshot: snapshot, roles: roles).filter { $0.role == nil }.count
@@ -595,7 +601,7 @@ public enum LibraryMCPServer {
           throw ArgumentError.invalidShape("song notes require artist and title")
         }
         let note = TasteNote(notedAt: now(), note: payload.note, source: "chat",
-          title: payload.title, artist: payload.artist, album: payload.album, playlist: payload.playlist)
+          title: title, artist: artist, album: payload.album, playlist: payload.playlist)
         try await context.recordTasteNote(note)
         return .json(MCPRecordedTasteNote(recorded: true, notedAt: note.notedAt, source: note.source))
       },
@@ -676,9 +682,9 @@ private struct MCPCheckedTrack: Encodable {
   var favorited: Bool; var lastPlayed: Date?; var availability: [LibraryAvailability]
   var uploadedAlbums: [String]; var playlists: [String: [String]]; var playlistCounts: [String: Int]
   var disliked: Bool; var sharedAccountEra: Bool; var heardDays: Int?; var heardLast: Date?
-  var notes: MCPNoteEvidence
+  var notes: MCPNoteEvidence?
 
-  init(_ check: LibraryTrackCheck, evidence: PlaylistSongEvidence, heardDays: Int?, heardLast: Date?, notes: MCPNoteEvidence) {
+  init(_ check: LibraryTrackCheck, evidence: PlaylistSongEvidence, heardDays: Int?, heardLast: Date?, notes: MCPNoteEvidence?) {
     artist = check.artist; title = check.title; owned = check.owned; plays = check.plays
     versionCount = check.versionCount; favorited = check.favorited; lastPlayed = check.lastPlayed
     availability = check.availability; uploadedAlbums = check.uploadedAlbums
@@ -702,7 +708,7 @@ private struct MCPCheckedTrack: Encodable {
     try values.encode(playlistCounts, forKey: .playlistCounts); try values.encode(disliked, forKey: .disliked)
     try values.encode(sharedAccountEra, forKey: .sharedAccountEra)
     try values.encodeIfPresent(heardDays, forKey: .heardDays); try values.encodeIfPresent(heardLast, forKey: .heardLast)
-    try values.encode(notes, forKey: .notes)
+    try values.encodeIfPresent(notes, forKey: .notes)
   }
 }
 private struct MCPPlaylistSongEvidence: Encodable {
@@ -710,8 +716,8 @@ private struct MCPPlaylistSongEvidence: Encodable {
   var disliked: Bool; var sharedAccountEra: Bool; var heardDays: Int?; var heardLast: Date?
   var owned: Bool; var plays: Int; var favorited: Bool; var lastPlayed: Date?
   var availability: [LibraryAvailability]
-  var notes: MCPNoteEvidence
-  init(_ value: PlaylistSongEvidence, check: LibraryTrackCheck, heardDays: Int?, heardLast: Date?, notes: MCPNoteEvidence) {
+  var notes: MCPNoteEvidence?
+  init(_ value: PlaylistSongEvidence, check: LibraryTrackCheck, heardDays: Int?, heardLast: Date?, notes: MCPNoteEvidence?) {
     playlists = value.playlists; playlistCounts = value.playlistCounts; disliked = value.disliked
     sharedAccountEra = value.sharedAccountEra; self.heardDays = heardDays; self.heardLast = heardLast
     owned = check.owned; plays = check.plays; favorited = check.favorited
@@ -727,7 +733,7 @@ private struct MCPPlaylistSongEvidence: Encodable {
     try values.encode(owned, forKey: .owned); try values.encode(plays, forKey: .plays)
     try values.encode(favorited, forKey: .favorited); try values.encodeIfPresent(lastPlayed, forKey: .lastPlayed)
     try values.encode(availability, forKey: .availability)
-    try values.encode(notes, forKey: .notes)
+    try values.encodeIfPresent(notes, forKey: .notes)
   }
 }
 

@@ -39,7 +39,7 @@ public struct TasteNote: Codable, Equatable, Sendable {
   public var isTimeOnly: Bool {
     playlist == nil && (title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
   }
-  public var firstHearing: Bool? { playCount.map { $0 == 0 } }
+  public var firstHearing: Bool? { isTimeOnly ? nil : playCount.map { $0 == 0 } }
 }
 
 public struct TasteNotesReadResult: Equatable, Sendable {
@@ -99,6 +99,10 @@ public enum TasteNotesCodec {
           header?["version"] as? Int == 1,
           let note = try? decoder.decode(TasteNote.self, from: lineData)
         else {
+          skippedLines += 1
+          continue
+        }
+        guard !note.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
           skippedLines += 1
           continue
         }

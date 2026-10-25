@@ -10,8 +10,9 @@ time-only listening candidates, and the `taste_notes` / `record_taste_note` MCP 
 checks and playlist tracks now include note evidence. `setup-mac` creates the empty VF Note file
 and links the shortcut recipe. The shared live-client guard now has a direct test used by both
 the app and poller. Core (254), Listening (55), and macOS app (78) tests pass; the mutation check
-fails when the guard returns true; shellcheck passes. An isolated setup-mac apply twice left the
-notes file unchanged on the second run. Jon's CarPlay and chat gate remains owed.
+fails when the guard returns true; the Listening Poller build and shellcheck pass. An isolated
+setup-mac apply twice left the notes file unchanged on the second run. Jon's CarPlay and chat gate
+remains owed.
 
 ## 2026-10-24 — M17 · Dispatch 2 S2 (`m17/s2-exposure-curation`)
 

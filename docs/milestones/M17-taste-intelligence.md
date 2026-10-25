@@ -312,6 +312,7 @@ next. S2 and S3 both edit `vf-mcp`, so they can't run side by side.
 
 - [x] **S3 — Jon's reasons: VF Note and chat notes (Core + `vf-mcp` + `setup-mac`, plus one
   carried app fix).**
+  - **Done in #129. Jon's gate is owed.**
   - **Reader** (Core, pure): reads every `Taste Intelligence/notes*.jsonl`, in format
     `vf-taste-note` v1, with the rules in the design's *S0 results: VF Note*:
     - it skips blank lines and a partial last line, and tolerates no final newline;
