@@ -52,6 +52,16 @@ private struct MCPRecentListening: Encodable {
 }
 private struct MCPListeningArtists: Encodable { var artists: [ListeningArtistCount]; var coverage: MCPListeningCoverage }
 private struct MCPListeningTracks: Encodable { var tracks: [ListeningTrackCount]; var coverage: MCPListeningCoverage }
+private struct MCPTasteCoverage: Encodable {
+  var exposureGaps: Int
+  var exposureSkippedLines: Int
+  var listening: MCPListeningCoverage?
+  var listeningStatus: String?
+  var snapshotGeneratedAt: Date
+  var snapshotAge: TimeInterval
+}
+private struct MCPKeptAndPassed: Encodable { var weeks: [NewMusicWeekResult]; var coverage: MCPTasteCoverage }
+private struct MCPBaselines: Encodable { var baselines: TasteBaselines; var coverage: MCPTasteCoverage }
 
 private struct MCPTrack: Encodable {
   var name: String; var artist: String; var albumArtist: String; var album: String
@@ -187,6 +197,35 @@ private actor LibraryMCPContext {
     return log
   }
 
+  func newMusicExposure() throws -> NewMusicExposureReadResult {
+    let folder = tasteRootURL.appending(path: "exposure", directoryHint: .isDirectory)
+    guard FileManager.default.fileExists(atPath: folder.path) else { return NewMusicExposureReadResult(records: [], skippedLines: 0) }
+    let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
+      .filter { $0.pathExtension == "jsonl" }
+    var dataFiles: [Data] = []
+    for url in files {
+      guard let data = try Self.readCoordinated(url) else { continue }
+      dataFiles.append(data)
+    }
+    return NewMusicExposureCodec.readFiles(dataFiles)
+  }
+
+  func tasteCoverage(exposure: NewMusicExposureReadResult, now: Date, snapshotAt: Date) throws -> (MCPTasteCoverage, ListeningLog) {
+    let exposureGaps = exposure.records.filter { if case .gap = $0 { true } else { false } }.count
+    do {
+      let log = try listeningLog(now: now)
+      return (MCPTasteCoverage(exposureGaps: exposureGaps, exposureSkippedLines: exposure.skippedLines,
+        listening: MCPListeningCoverage(log.coverage, now: now, period: .quarter),
+        listeningStatus: nil, snapshotGeneratedAt: snapshotAt,
+        snapshotAge: max(0, now.timeIntervalSince(snapshotAt))), log)
+    } catch {
+      let log = ListeningLog(streams: [], now: now)
+      return (MCPTasteCoverage(exposureGaps: exposureGaps, exposureSkippedLines: exposure.skippedLines, listening: nil,
+        listeningStatus: error is ListeningHistoryNotSetUp ? "not_set_up" : String(describing: error),
+        snapshotGeneratedAt: snapshotAt, snapshotAge: max(0, now.timeIntervalSince(snapshotAt))), log)
+    }
+  }
+
   func heardDates(artist: String, title: String, identity: ArtistIdentity) -> [Date]? {
     guard cachedListeningLog != nil else { return nil }
     let normalizedTitle = SongTextNormalizer.libraryTitle(title)
@@ -281,6 +320,7 @@ public enum LibraryMCPServer {
     let artistSchema = schema(["artist": stringField], required: ["artist"])
     let playlistListSchema = schema(["role": enumField(PlaylistRole.allCases.map(\.rawValue) + ["unlabeled"]), "limit": integerField])
     let playlistTracksSchema = schema(["name": stringField, "limit": integerField], required: ["name"])
+    let keptPassedSchema = schema(["weeks": integerField])
     let checksSchema = schema(["tracks": .object(["type": .string("array"), "maxItems": .integer(LibraryIndex.maximumCheckTracks), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField]), "required": .array([.string("artist"), .string("title")])])])], required: ["tracks"])
     let stageSchema = schema(["name": stringField, "description": .object(["type": .string("string"), "description": .string(stageDescriptionGuidance)]), "tracks": .object(["type": .string("array"), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField, "album": stringField, "year": integerField]), "required": .array([.string("artist"), .string("title")])])])], required: ["name", "tracks"])
     return MCPServer(name: "Vinyl Fever", version: "1.0.0", instructions: instructions, tools: [
@@ -408,6 +448,27 @@ public enum LibraryMCPServer {
         let rows = zip(plays, checks).map { play, check in MCPRecentListening.Play(artist: play.item.artist, title: play.item.title, album: play.item.album, windowStart: play.windowStart, windowEnd: play.windowEnd, inLibrary: check.owned) }
         return .json(MCPRecentListening(plays: rows, coverage: MCPListeningCoverage(log.coverage, now: instant, period: period)))
       },
+      MCPTool(name: "kept_and_passed", description: "Show New Music weeks and classify each song as kept, passed, unheard, or pending using keeper playlists and listening history.", inputSchema: keptPassedSchema, annotations: readOnly) { input in
+        let payload = try decode(KeptPassedPayload.self, from: input, schema: keptPassedSchema)
+        let instant = now()
+        let (snapshot, roles, _, generatedAt, _) = try await context.playlistData()
+        let exposure = try await context.newMusicExposure()
+        let weeks = exposure.records.compactMap { record -> NewMusicWeek? in if case let .week(value) = record { value } else { nil } }
+        let (coverage, log) = try await context.tasteCoverage(exposure: exposure, now: instant, snapshotAt: generatedAt)
+        let results = TasteIntelligence.keptAndPassed(weeks: weeks, snapshot: snapshot,
+          roles: roles, log: log, now: instant, limit: payload.weeks ?? 8)
+        return .json(MCPKeptAndPassed(weeks: results, coverage: coverage))
+      },
+      MCPTool(name: "taste_baselines", description: "Summarize Apple's kept-to-passed yield by New Music week and Jon's yearly Selections stick rate, with counts.", inputSchema: schema([:]), annotations: readOnly) { _ in
+        let instant = now()
+        let (snapshot, roles, _, generatedAt, _) = try await context.playlistData()
+        let exposure = try await context.newMusicExposure()
+        let weeks = exposure.records.compactMap { record -> NewMusicWeek? in if case let .week(value) = record { value } else { nil } }
+        let (coverage, log) = try await context.tasteCoverage(exposure: exposure, now: instant, snapshotAt: generatedAt)
+        let classified = TasteIntelligence.keptAndPassed(weeks: weeks, snapshot: snapshot,
+          roles: roles, log: log, now: instant, limit: max(1, weeks.count))
+        return .json(MCPBaselines(baselines: TasteIntelligence.baselines(weeks: classified, snapshot: snapshot), coverage: coverage))
+      },
       MCPTool(name: "stage_playlist", description: "Stage a playlist proposal for Jon to review in Vinyl Fever; it does not change Apple Music.", inputSchema: stageSchema, annotations: MCPToolAnnotations(destructive: false, openWorld: false)) { input in
         let payload = try decode(PlaylistToolPayload.self, from: input, schema: stageSchema)
         let staged = try await context.stage(payload)
@@ -462,6 +523,8 @@ public enum LibraryMCPServer {
     }
   }
 }
+
+private struct KeptPassedPayload: Decodable, Sendable { var weeks: Int? }
 
 private struct MCPPlaylistSummary: Encodable {
   var name: String; var role: String?; var folder: String?; var kind: String

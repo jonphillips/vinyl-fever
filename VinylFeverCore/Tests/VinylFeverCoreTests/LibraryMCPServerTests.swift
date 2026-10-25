@@ -19,6 +19,8 @@ struct LibraryMCPServerTests {
       "list_playlists": ["role", "limit"],
       "playlist_tracks": ["name", "limit"],
       "recent_listening": ["period", "limit"],
+      "kept_and_passed": ["weeks"],
+      "taste_baselines": [],
       "stage_playlist": ["name", "description", "tracks"],
     ]
     #expect(Set(tools.compactMap { $0["name"] as? String }) == Set(expected.keys))

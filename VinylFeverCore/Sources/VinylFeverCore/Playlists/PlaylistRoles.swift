@@ -1,6 +1,10 @@
 import Foundation
 import VinylFeverListening
 
+public enum SelectionPlaylistName {
+  public static let pattern = #"^\d{4}: Jon's Selections$"#
+}
+
 public enum PlaylistRole: String, Codable, CaseIterable, Sendable {
   case keepers, replay, curated, situational, auditioned, discoveryInbox = "discovery-inbox"
   case followed, appleMix = "apple-mix", collection, vinylFever = "vinyl-fever", ignore
@@ -94,7 +98,7 @@ public enum PlaylistRoleSuggestion {
   }()
 
   public static func suggest(name: String, kind: LibraryPlaylistKind, folder: String?, createdNames: Set<String> = []) -> PlaylistRole? {
-    if name.range(of: #"^\d{4}: Jon's Selections$"#, options: .regularExpression) != nil { return .keepers }
+    if name.range(of: SelectionPlaylistName.pattern, options: .regularExpression) != nil { return .keepers }
     if name == "Replay All Time" { return .ignore }
     if let match = name.range(of: #"^Replay (\d{4})$"#, options: .regularExpression) {
       let yearText = name[match].split(separator: " ").last ?? "0"

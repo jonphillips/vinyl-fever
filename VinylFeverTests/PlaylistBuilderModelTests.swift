@@ -561,6 +561,7 @@ struct PlaylistBuilderModelTests {
     let snapshot = LibrarySnapshot(generatedAt: .now, tracks: [])
     let model = withDependencies {
       $0.defaultDatabase = database
+      $0.date.now = snapshot.generatedAt
       $0.musicAppClient.requestAutomationPermission = { .authorized }
       $0.musicAppClient.readLibrarySnapshot = { snapshot }
       $0.librarySnapshotStore = LibrarySnapshotStore(
@@ -582,6 +583,7 @@ struct PlaylistBuilderModelTests {
     let snapshot = LibrarySnapshot(generatedAt: .now, tracks: [])
     let model = withDependencies {
       $0.defaultDatabase = database
+      $0.date.now = snapshot.generatedAt
       $0.musicAppClient.requestAutomationPermission = { .authorized }
       $0.musicAppClient.readLibrarySnapshot = { snapshot }
       $0.librarySnapshotStore = LibrarySnapshotStore(
@@ -595,6 +597,97 @@ struct PlaylistBuilderModelTests {
     #expect(await writes.snapshot == snapshot)
     #expect(model.librarySnapshot == snapshot)
     #expect(model.librarySnapshotError?.contains("Alias file unavailable") == true)
+  }
+
+  @Test("snapshot refresh succeeds when curation append throws")
+  func snapshotRefreshSucceedsWhenCurationAppendThrows() async throws {
+    let database = try testDatabase()
+    let writes = SnapshotRefreshWrites()
+    let snapshot = LibrarySnapshot(generatedAt: .now, tracks: [])
+    let model = withDependencies {
+      $0.defaultDatabase = database
+      $0.date.now = snapshot.generatedAt
+      $0.musicAppClient.requestAutomationPermission = { .authorized }
+      $0.musicAppClient.readLibrarySnapshot = { snapshot }
+      $0.librarySnapshotStore = LibrarySnapshotStore(
+        read: { nil }, write: { await writes.captureSnapshot($0) }, readAliases: { [:] },
+        writeAliases: { _ in }, modifiedAt: { nil })
+      $0.tasteCurationClient.append = { _, _, _ in
+        throw NSError(domain: "curation", code: 1, userInfo: [NSLocalizedDescriptionKey: "iCloud unavailable"])
+      }
+    } operation: { PlaylistBuilderModel() }
+    await model.refreshLibrarySnapshot()
+    #expect(await writes.snapshot == snapshot)
+    #expect(model.librarySnapshot == snapshot)
+    #expect(model.librarySnapshotError?.contains("iCloud unavailable") == true)
+  }
+
+  @Test("snapshot refresh succeeds when the previous curation snapshot cannot be read")
+  func snapshotRefreshSucceedsWhenPreviousCurationSnapshotCannotBeRead() async throws {
+    let database = try testDatabase()
+    let writes = SnapshotRefreshWrites()
+    let snapshot = LibrarySnapshot(generatedAt: .now, tracks: [])
+    let model = withDependencies {
+      $0.defaultDatabase = database
+      $0.date.now = snapshot.generatedAt
+      $0.musicAppClient.requestAutomationPermission = { .authorized }
+      $0.musicAppClient.readLibrarySnapshot = { snapshot }
+      $0.librarySnapshotStore = LibrarySnapshotStore(
+        read: { throw CocoaError(.fileReadCorruptFile) }, write: { await writes.captureSnapshot($0) },
+        readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { nil })
+    } operation: { PlaylistBuilderModel() }
+    await model.refreshLibrarySnapshot()
+    #expect(await writes.snapshot == snapshot)
+    #expect(model.librarySnapshot == snapshot)
+    #expect(model.librarySnapshotError?.contains("curation changes could not be recorded") == true)
+  }
+
+  @Test("snapshot refresh appends curation only for a baseline or a change")
+  func refreshAppendsCurationLineOnlyWhenChanged() async throws {
+    let database = try testDatabase()
+    let now = Date(timeIntervalSince1970: 2_000_000_000)
+    let previous = LibrarySnapshot(generatedAt: now.addingTimeInterval(-60), tracks: [])
+    let snapshot = LibrarySnapshot(generatedAt: now, tracks: [], playlists: [
+      LibraryPlaylist(persistentID: "new-playlist", name: "New", kind: .user, members: [])
+    ])
+    let capture = CurationCapture()
+    let model = withDependencies {
+      $0.defaultDatabase = database
+      $0.date.now = now
+      $0.musicAppClient.requestAutomationPermission = { .authorized }
+      $0.musicAppClient.readLibrarySnapshot = { snapshot }
+      $0.librarySnapshotStore = LibrarySnapshotStore(
+        read: { previous }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { nil })
+      $0.listeningStore = ListeningStore.testValue
+      $0.tasteCurationClient.append = { change, host, _ in await capture.record(change, host: host) }
+    } operation: { PlaylistBuilderModel() }
+    await model.refreshLibrarySnapshot()
+    #expect(await capture.changes.count == 1)
+    #expect(await capture.changes.first?.isEmpty == false)
+    #expect(model.librarySnapshotError == nil)
+  }
+
+  @Test("the first snapshot refresh records a baseline curation line")
+  func refreshAppendsBaselineWhenPreviousSnapshotIsNil() async throws {
+    let database = try testDatabase()
+    let now = Date(timeIntervalSince1970: 2_000_000_000)
+    let snapshot = LibrarySnapshot(generatedAt: now, tracks: [])
+    let capture = CurationCapture()
+    let model = withDependencies {
+      $0.defaultDatabase = database
+      $0.date.now = now
+      $0.musicAppClient.requestAutomationPermission = { .authorized }
+      $0.musicAppClient.readLibrarySnapshot = { snapshot }
+      $0.librarySnapshotStore = LibrarySnapshotStore(
+        read: { nil }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { nil })
+      $0.listeningStore = ListeningStore.testValue
+      $0.tasteCurationClient.append = { change, host, _ in await capture.record(change, host: host) }
+    } operation: { PlaylistBuilderModel() }
+    await model.refreshLibrarySnapshot()
+    #expect(await capture.changes.count == 1)
+    #expect(await capture.changes.first?.baseline == true)
+    #expect(await capture.hosts == ["Test Mac"])
+    #expect(await capture.changes.first?.observedAt == now)
   }
 
   @Test(
@@ -1320,6 +1413,15 @@ private actor SnapshotRefreshWrites {
   private(set) var snapshot: LibrarySnapshot?
   func aliases(_ value: [String: String]) { aliasMap = value }
   func captureSnapshot(_ value: LibrarySnapshot) { snapshot = value }
+}
+
+private actor CurationCapture {
+  private(set) var changes: [CurationChange] = []
+  private(set) var hosts: [String] = []
+  func record(_ change: CurationChange, host: String) {
+    changes.append(change)
+    hosts.append(host)
+  }
 }
 
 private actor PlaylistSongReferenceCapture {

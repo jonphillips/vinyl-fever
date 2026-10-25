@@ -17,7 +17,7 @@ enum VinylFeverMain {
     @Dependency(\.context) var context
     if CommandLine.arguments.contains("--poll-listening") {
       do {
-        try prepareDependencies(includeDatabase: false)
+        try prepareVinylFeverDependencies(includeDatabase: false, context: context)
         let result = try await ListeningPoller().pollOnce()
         if case let .fetched(fetch) = result, fetch.outcome == .failed {
           listeningLogger.error("Listening poll recorded failure: \(fetch.error ?? "Unknown error", privacy: .public)")
@@ -39,7 +39,7 @@ enum VinylFeverMain {
       return
     }
     do {
-      try prepareDependencies(includeDatabase: true)
+      try prepareVinylFeverDependencies(includeDatabase: true, context: context)
     } catch {
       showStartupAlert(error.localizedDescription)
       return
@@ -140,7 +140,7 @@ private func showStartupAlert(_ message: String) {
   alert.runModal()
 }
 
-private func prepareDependencies(includeDatabase: Bool) throws {
+private func prepareVinylFeverDependencies(includeDatabase: Bool, context: DependencyContext) throws {
   let database: (any DatabaseWriter)?
   if includeDatabase {
     database = try VinylFeverDatabase.open()
@@ -150,6 +150,12 @@ private func prepareDependencies(includeDatabase: Bool) throws {
   prepareDependencies {
     $0.listeningStore = .liveValue
     $0.recentlyPlayedClient = .liveValue
+    if context == .live {
+      $0.newMusicCatalogClient = .liveValue
+      $0.tasteCurationClient = TasteCurationClient(append: { change, host, folder in
+        try TasteCurationLog.append(change, host: host, folder: folder)
+      })
+    }
     $0.listeningAuthorizationClient = .liveValue
     if let database {
       $0.defaultDatabase = database

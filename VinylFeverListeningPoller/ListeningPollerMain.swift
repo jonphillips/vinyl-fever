@@ -10,8 +10,9 @@ private let logger = Logger(subsystem: "com.jonphillips.vinylfever.listeningpoll
 @main
 struct ListeningPollerMain {
   static func main() async {
+    @Dependency(\.context) var context
     if CommandLine.arguments.contains("--poll") {
-      preparePollerDependencies()
+      preparePollerDependencies(context: context)
       do {
         let result = try await ListeningPoller().pollOnce()
         if case let .fetched(fetch) = result, fetch.outcome == .failed {
@@ -23,16 +24,17 @@ struct ListeningPollerMain {
       }
       return
     }
-    preparePollerDependencies()
+    preparePollerDependencies(context: context)
     ListeningPollerWindow.main()
   }
 }
 
-private func preparePollerDependencies() {
+private func preparePollerDependencies(context: DependencyContext) {
   prepareDependencies {
     $0.listeningStore = .liveValue
     $0.recentlyPlayedClient = .liveValue
     $0.listeningAuthorizationClient = .liveValue
+    if context == .live { $0.newMusicCatalogClient = .liveValue }
   }
 }
 
