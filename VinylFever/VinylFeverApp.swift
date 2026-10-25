@@ -150,7 +150,7 @@ private func prepareVinylFeverDependencies(includeDatabase: Bool, context: Depen
   prepareDependencies {
     $0.listeningStore = .liveValue
     $0.recentlyPlayedClient = .liveValue
-    if context == .live {
+    if installsLiveTasteClients(context) {
       $0.newMusicCatalogClient = .liveValue
       $0.tasteCurationClient = TasteCurationClient(append: { change, host, folder in
         try TasteCurationLog.append(change, host: host, folder: folder)

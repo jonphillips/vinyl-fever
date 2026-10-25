@@ -2,6 +2,10 @@ import Foundation
 import SystemConfiguration
 
 extension ListeningStore {
+  public static func liveHostName() -> String {
+    SCDynamicStoreCopyComputerName(nil, nil) as String? ?? Host.current().localizedName ?? "Mac"
+  }
+
   public static var liveValue: Self {
     let localFolder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
       .appendingPathComponent("VinylFever", isDirectory: true)
@@ -14,9 +18,7 @@ extension ListeningStore {
   public static func live(
     iCloudFolder: URL,
     localFolder: URL,
-    hostName: @escaping @Sendable () -> String = {
-      SCDynamicStoreCopyComputerName(nil, nil) as String? ?? Host.current().localizedName ?? "Mac"
-    }
+    hostName: @escaping @Sendable () -> String = { ListeningStore.liveHostName() }
   ) -> Self {
     return Self(
       pollerID: { try ListeningLocalState(folder: localFolder).pollerID() },

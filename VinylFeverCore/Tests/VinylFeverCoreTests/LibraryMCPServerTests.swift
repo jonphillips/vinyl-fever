@@ -21,6 +21,8 @@ struct LibraryMCPServerTests {
       "recent_listening": ["period", "limit"],
       "kept_and_passed": ["weeks"],
       "taste_baselines": [],
+      "taste_notes": ["artist", "title", "playlist", "period", "limit"],
+      "record_taste_note": ["note", "artist", "title", "album", "playlist"],
       "stage_playlist": ["name", "description", "tracks"],
     ]
     #expect(Set(tools.compactMap { $0["name"] as? String }) == Set(expected.keys))
@@ -31,7 +33,7 @@ struct LibraryMCPServerTests {
       #expect(Set(properties.keys) == expected[name])
       let annotations = try #require(tool["annotations"] as? [String: Any])
       #expect(annotations["openWorldHint"] as? Bool == false)
-      if name == "stage_playlist" {
+      if name == "stage_playlist" || name == "record_taste_note" {
         #expect(annotations["destructiveHint"] as? Bool == false)
         #expect(annotations["readOnlyHint"] == nil)
       } else {
@@ -46,6 +48,61 @@ struct LibraryMCPServerTests {
     let stageProperties = try #require((stage["inputSchema"] as? [String: Any])?["properties"] as? [String: Any])
     #expect((stageProperties["description"] as? [String: Any])?["description"] as? String
       == "One sentence about the music; it becomes the playlist's description in Apple Music. No library stats, availability notes, or dates.")
+  }
+
+  @Test("chat taste notes round-trip verbatim and never write the shortcut file")
+  func chatTasteNoteRoundTrip() async throws {
+    let root = temporaryDirectory()
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let snapshotURL = root.appending(path: "snapshot.json")
+    try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
+    let instant = Date(timeIntervalSince1970: 1_800_000_000)
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"),
+      tasteRootURL: tasteRoot, hostName: { "Test Mac" }, now: { instant })
+    let original = "The melody opens up in the chorus — keep that lift."
+    let recorded = try #require(await resultJSON(server, id: 60, name: "record_taste_note",
+      arguments: #"{"note":"The melody opens up in the chorus — keep that lift.","artist":" Artist ","title":"Song","album":"Album"}"#) as? [String: Any])
+    #expect(recorded["recorded"] as? Bool == true)
+    #expect(recorded["source"] as? String == "chat")
+    #expect(!FileManager.default.fileExists(atPath: tasteRoot.appending(path: "notes.jsonl").path))
+    #expect(FileManager.default.fileExists(atPath: tasteRoot.appending(path: "notes-chat-Test_Mac.jsonl").path))
+
+    let notes = try #require(await resultJSON(server, id: 61, name: "taste_notes",
+      arguments: #"{"artist":"Artist","title":"Song"}"#) as? [String: Any])
+    let rows = try #require(notes["notes"] as? [[String: Any]])
+    #expect(rows.count == 1)
+    #expect(rows.first?["note"] as? String == original)
+    #expect(rows.first?["source"] as? String == "chat")
+    #expect(rows.first?["artist"] as? String == "Artist")
+    #expect(notes["coverage"] != nil)
+    #expect(!String(describing: notes).contains("Taste Intelligence"))
+
+    _ = await call(server, id: 62, name: "record_taste_note",
+      arguments: #"{"note":"Keep the bright guitar line.","playlist":"Jangle Essentials"}"#)
+    let playlistNotes = try #require(await resultJSON(server, id: 63, name: "taste_notes",
+      arguments: #"{"playlist":"Jangle Essentials"}"#) as? [String: Any])
+    let playlistRows = try #require(playlistNotes["notes"] as? [[String: Any]])
+    #expect(playlistRows.count == 1)
+    #expect(playlistRows.first?["playlist"] as? String == "Jangle Essentials")
+    #expect(playlistRows.first?["note"] as? String == "Keep the bright guitar line.")
+    #expect(playlistRows.first?["candidates"] == nil)
+    #expect(!FileManager.default.fileExists(atPath: tasteRoot.appending(path: "notes.jsonl").path))
+  }
+
+  @Test("check_tracks succeeds when taste notes cannot be read")
+  func checkTracksToleratesTasteNoteReadFailure() async throws {
+    let root = temporaryDirectory()
+    let snapshotURL = root.appending(path: "snapshot.json")
+    try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: tasteRoot.appending(path: "notes x.jsonl", directoryHint: .isDirectory), withIntermediateDirectories: true)
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), tasteRootURL: tasteRoot)
+
+    let result = try #require(await resultJSON(server, id: 64, name: "check_tracks",
+      arguments: #"{"tracks":[{"artist":"Version Artist","title":"Version Song"}]}"#) as? [String: Any])
+    let rows = try #require(result["tracks"] as? [[String: Any]])
+    #expect(rows.count == 1)
+    #expect(rows.first?["notes"] == nil)
   }
 
   @Test("listening calls report setup guidance when no listening log exists")
@@ -186,8 +243,8 @@ struct LibraryMCPServerTests {
     let tracks = try #require(await resultJSON(server, id: 2, name: "playlist_tracks", arguments: #"{"name":"Selections 2025"}"#))
     let check = try #require(await resultJSON(server, id: 3, name: "check_tracks", arguments: #"{"tracks":[{"artist":"A","title":"Song"}]}"#))
     #expect(try canonicalJSON(list) == #"{"matchingCount":4,"playlists":[{"folder":"aJon Selections","inLibraryCount":2,"kind":"user","name":"Selections 2025","role":"keepers","songCount":3},{"inLibraryCount":1,"kind":"subscription","name":"Replay 2025","role":"replay","songCount":1},{"inLibraryCount":1,"kind":"user","name":"Followed Queue","role":"followed","songCount":1},{"inLibraryCount":1,"kind":"user","name":"Unlabeled Set","songCount":1}],"snapshotGeneratedAt":"2026-10-23T12:00:00Z","unlabeledCount":1}"#)
-    #expect(try canonicalJSON(tracks) == #"{"name":"Selections 2025","role":"keepers","snapshotGeneratedAt":"2026-10-23T12:00:00Z","tracks":[{"album":"Library Album","artist":"A & B","evidence":{"availability":["other"],"disliked":false,"favorited":true,"heardDays":1,"heardLast":"2026-10-20T12:01:00Z","owned":true,"playlistCounts":{"keepers":1,"replay":1},"playlists":{"keepers":["Selections 2025"],"replay":["Replay 2025"]},"plays":3,"sharedAccountEra":false},"position":1,"title":"Song","year":2020},{"album":"Library Album","artist":"A & B","evidence":{"availability":["other"],"disliked":false,"favorited":true,"heardDays":1,"heardLast":"2026-10-20T12:01:00Z","owned":true,"playlistCounts":{"keepers":1,"replay":1},"playlists":{"keepers":["Selections 2025"],"replay":["Replay 2025"]},"plays":3,"sharedAccountEra":false},"position":2,"title":"Song","year":2020},{"album":"Outside Album","artist":"B","evidence":{"availability":[],"disliked":false,"favorited":false,"heardDays":0,"owned":false,"playlistCounts":{"keepers":1},"playlists":{"keepers":["Selections 2025"]},"plays":0,"sharedAccountEra":false},"position":3,"title":"Outside Song","year":2021}],"unlabeledPlaylistCount":1}"#)
-    #expect(try canonicalJSON(check) == #"{"tracks":[{"artist":"A","availability":["other"],"disliked":false,"favorited":true,"heardDays":1,"heardLast":"2026-10-20T12:01:00Z","owned":true,"playlistCounts":{"keepers":1,"replay":1},"playlists":{"keepers":["Selections 2025"],"replay":["Replay 2025"]},"plays":3,"sharedAccountEra":false,"title":"Song","uploadedAlbums":[],"versionCount":1}],"unlabeledPlaylistCount":1}"#)
+    #expect(try canonicalJSON(tracks) == #"{"name":"Selections 2025","role":"keepers","snapshotGeneratedAt":"2026-10-23T12:00:00Z","tracks":[{"album":"Library Album","artist":"A & B","evidence":{"availability":["other"],"disliked":false,"favorited":true,"heardDays":1,"heardLast":"2026-10-20T12:01:00Z","notes":{"count":0},"owned":true,"playlistCounts":{"keepers":1,"replay":1},"playlists":{"keepers":["Selections 2025"],"replay":["Replay 2025"]},"plays":3,"sharedAccountEra":false},"position":1,"title":"Song","year":2020},{"album":"Library Album","artist":"A & B","evidence":{"availability":["other"],"disliked":false,"favorited":true,"heardDays":1,"heardLast":"2026-10-20T12:01:00Z","notes":{"count":0},"owned":true,"playlistCounts":{"keepers":1,"replay":1},"playlists":{"keepers":["Selections 2025"],"replay":["Replay 2025"]},"plays":3,"sharedAccountEra":false},"position":2,"title":"Song","year":2020},{"album":"Outside Album","artist":"B","evidence":{"availability":[],"disliked":false,"favorited":false,"heardDays":0,"notes":{"count":0},"owned":false,"playlistCounts":{"keepers":1},"playlists":{"keepers":["Selections 2025"]},"plays":0,"sharedAccountEra":false},"position":3,"title":"Outside Song","year":2021}],"unlabeledPlaylistCount":1}"#)
+    #expect(try canonicalJSON(check) == #"{"tracks":[{"artist":"A","availability":["other"],"disliked":false,"favorited":true,"heardDays":1,"heardLast":"2026-10-20T12:01:00Z","notes":{"count":0},"owned":true,"playlistCounts":{"keepers":1,"replay":1},"playlists":{"keepers":["Selections 2025"],"replay":["Replay 2025"]},"plays":3,"sharedAccountEra":false,"title":"Song","uploadedAlbums":[],"versionCount":1}],"unlabeledPlaylistCount":1}"#)
     #expect(!String(describing: [list, tracks, check]).contains("persistentID"))
     #expect(!String(describing: [list, tracks, check]).contains("song-id"))
   }
@@ -212,7 +269,7 @@ struct LibraryMCPServerTests {
     try LibrarySnapshotCodec.encode(
       LibrarySnapshot(generatedAt: .now, tracks: [unnamedUpload] + uploads + [almostMatch]))
       .write(to: snapshotURL)
-    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"))
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), tasteRootURL: root.appending(path: "Taste Intelligence"))
 
     let springsteen = try #require(await resultJSON(
       server, id: 40, name: "check_tracks",
@@ -244,7 +301,7 @@ struct LibraryMCPServerTests {
       "elvis": "elvis presley",
     ]
     try ArtistAliasesCodec.encode(aliases).write(to: root.appending(path: "artist-aliases.json"))
-    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"))
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), tasteRootURL: root.appending(path: "Taste Intelligence"))
     let check = try #require(await resultJSON(
       server, id: 81, name: "check_tracks",
       arguments: #"{"tracks":[{"artist":"John Cougar Mellencamp","title":"Ain't Even Done With the Night"}]}"#
@@ -258,7 +315,7 @@ struct LibraryMCPServerTests {
     let noFileRoot = temporaryDirectory()
     let noFileSnapshot = noFileRoot.appending(path: "snapshot.json")
     try LibrarySnapshotCodec.encode(LibrarySnapshot(generatedAt: .now, tracks: tracks)).write(to: noFileSnapshot)
-    let noFileServer = LibraryMCPServer.make(snapshotURL: noFileSnapshot, inboxRoot: noFileRoot.appending(path: "inbox"))
+    let noFileServer = LibraryMCPServer.make(snapshotURL: noFileSnapshot, inboxRoot: noFileRoot.appending(path: "inbox"), tasteRootURL: noFileRoot.appending(path: "Taste Intelligence"))
     let unchanged = try #require(await resultJSON(
       noFileServer, id: 83, name: "check_tracks",
       arguments: #"{"tracks":[{"artist":"John Cougar Mellencamp","title":"Ain't Even Done With the Night"}]}"#

@@ -282,6 +282,18 @@ args = []
 EOF
     result passed "Codex MCP server entry" chat-host "added"
   else result failed "Codex MCP server entry" chat-host "run setup-mac --apply"; fi
+
+  taste_root="$HOME/Library/Mobile Documents/com~apple~CloudDocs/Vinyl Fever/Taste Intelligence"
+  taste_notes="$taste_root/notes.jsonl"
+  if [[ -f "$taste_notes" ]]; then
+    result passed "VF Note file" chat-host
+  elif $apply; then
+    mkdir -p "$taste_root"
+    : > "$taste_notes"
+    result passed "VF Note file" chat-host "created empty file for Shortcuts"
+  else
+    result failed "VF Note file" chat-host "run setup-mac --role chat --apply"
+  fi
 fi
 
 if has_role poll; then

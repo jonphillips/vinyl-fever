@@ -32,6 +32,12 @@ private struct ListeningPayload: Decodable, Sendable { var period: String?; var 
 private struct ArtistPayload: Decodable, Sendable { var artist: String }
 private struct PlaylistListPayload: Decodable, Sendable { var role: String?; var limit: Int? }
 private struct PlaylistTracksPayload: Decodable, Sendable { var name: String; var limit: Int? }
+private struct TasteNotesPayload: Decodable, Sendable {
+  var artist: String?; var title: String?; var playlist: String?; var period: String?; var limit: Int?
+}
+private struct RecordTasteNotePayload: Decodable, Sendable {
+  var note: String; var artist: String?; var title: String?; var album: String?; var playlist: String?
+}
 
 private struct MCPListeningCoverage: Encodable {
   struct Gap: Encodable { var host: String; var outcome: String; var windowStart: Date?; var windowEnd: Date; var detail: String? }
@@ -62,6 +68,41 @@ private struct MCPTasteCoverage: Encodable {
 }
 private struct MCPKeptAndPassed: Encodable { var weeks: [NewMusicWeekResult]; var coverage: MCPTasteCoverage }
 private struct MCPBaselines: Encodable { var baselines: TasteBaselines; var coverage: MCPTasteCoverage }
+private struct MCPTasteNotesCoverage: Encodable {
+  var filesRead: Int
+  var skippedLines: Int
+  var listening: MCPListeningCoverage?
+  var listeningStatus: String?
+}
+private struct MCPTasteNote: Encodable {
+  var title: String?
+  var artist: String?
+  var album: String?
+  var playlist: String?
+  var notedAt: Date
+  var note: String
+  var source: String
+  var firstHearing: Bool?
+  var candidates: [TasteNoteSongCandidate]?
+
+  init(_ value: TasteNote, candidates: [TasteNoteSongCandidate]? = nil) {
+    title = value.title?.isEmpty == true ? nil : value.title
+    artist = value.artist?.isEmpty == true ? nil : value.artist
+    album = value.album; playlist = value.playlist; notedAt = value.notedAt
+    note = value.note; source = value.source; firstHearing = value.firstHearing
+    self.candidates = candidates
+  }
+}
+private struct MCPTasteNotes: Encodable { var notes: [MCPTasteNote]; var coverage: MCPTasteNotesCoverage }
+private struct MCPRecordedTasteNote: Encodable { var recorded: Bool; var notedAt: Date; var source: String }
+private struct MCPNoteEvidence: Encodable {
+  var count: Int
+  var newestNote: String?
+  var newestNotedAt: Date?
+  init(_ notes: [TasteNote]) {
+    count = notes.count; newestNote = notes.first?.note; newestNotedAt = notes.first?.notedAt
+  }
+}
 
 private struct MCPTrack: Encodable {
   var name: String; var artist: String; var albumArtist: String; var album: String
@@ -106,16 +147,20 @@ private actor LibraryMCPContext {
   private var cachedPlaylistRoles: PlaylistRoles?
   private let listeningRootURL: URL
   private let tasteRootURL: URL
+  private let hostName: @Sendable () -> String
   private var cachedListeningLog: ListeningLog?
   private var cachedListeningFiles: [URL: Date] = [:]
   private var cachedListeningIdentity: ArtistIdentity = .empty
   private var cachedHeardBySong: [String: [Date]] = [:]
+  private var cachedTasteNotes: TasteNotesReadResult?
+  private var cachedTasteNoteFiles: [URL: Date] = [:]
 
-  init(snapshotURL: URL?, inboxRoot: URL?, listeningRootURL: URL?, tasteRootURL: URL?) {
+  init(snapshotURL: URL?, inboxRoot: URL?, listeningRootURL: URL?, tasteRootURL: URL?, hostName: @escaping @Sendable () -> String) {
     self.snapshotURL = snapshotURL ?? Self.defaultSnapshotURL
     self.inbox = HandoffInbox(root: inboxRoot ?? Self.defaultInbox.root, fileExtension: "vfplaylist")
     self.listeningRootURL = listeningRootURL ?? Self.defaultListeningRootURL
     self.tasteRootURL = tasteRootURL ?? Self.defaultTasteRootURL
+    self.hostName = hostName
   }
 
   static var defaultSnapshotURL: URL {
@@ -208,6 +253,38 @@ private actor LibraryMCPContext {
       dataFiles.append(data)
     }
     return NewMusicExposureCodec.readFiles(dataFiles)
+  }
+
+  func tasteNotes() throws -> TasteNotesReadResult {
+    guard FileManager.default.fileExists(atPath: tasteRootURL.path) else {
+      return TasteNotesReadResult(notes: [], skippedLines: 0, filesRead: 0)
+    }
+    let files = try FileManager.default.contentsOfDirectory(at: tasteRootURL, includingPropertiesForKeys: nil)
+      .filter { $0.lastPathComponent.hasPrefix("notes") && $0.pathExtension == "jsonl" }
+      .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    let modified = Dictionary(uniqueKeysWithValues: files.compactMap { url in
+      let date = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+      return date.map { (url, $0) }
+    })
+    if let cachedTasteNotes, modified == cachedTasteNoteFiles { return cachedTasteNotes }
+    let data = try files.compactMap { try Self.readCoordinated($0) }
+    let result = TasteNotesCodec.readFiles(data)
+    cachedTasteNotes = result
+    cachedTasteNoteFiles = modified
+    return result
+  }
+
+  func recordTasteNote(_ note: TasteNote) throws {
+    try TasteNotesCodec.appendChatNote(note, host: hostName(), folder: tasteRootURL)
+    cachedTasteNotes = nil
+    cachedTasteNoteFiles = [:]
+  }
+
+  func tasteNotesBySong(identity: ArtistIdentity) throws -> [String: [TasteNote]] {
+    try tasteNotes().notes.reduce(into: [:]) { result, note in
+      guard let artist = note.artist, let title = note.title, !title.isEmpty else { return }
+      result[TasteIntelligence.songKey(artist: artist, title: title, identity: identity), default: []].append(note)
+    }
   }
 
   func tasteCoverage(exposure: NewMusicExposureReadResult, now: Date, snapshotAt: Date) throws -> (MCPTasteCoverage, ListeningLog) {
@@ -308,9 +385,10 @@ public enum LibraryMCPServer {
     inboxRoot: URL? = nil,
     listeningRootURL: URL? = nil,
     tasteRootURL: URL? = nil,
+    hostName: @escaping @Sendable () -> String = { ListeningStore.liveHostName() },
     now: @escaping @Sendable () -> Date = { Date() }
   ) -> MCPServer {
-    let context = LibraryMCPContext(snapshotURL: snapshotURL, inboxRoot: inboxRoot, listeningRootURL: listeningRootURL, tasteRootURL: tasteRootURL)
+    let context = LibraryMCPContext(snapshotURL: snapshotURL, inboxRoot: inboxRoot, listeningRootURL: listeningRootURL, tasteRootURL: tasteRootURL, hostName: hostName)
     let readOnly = MCPToolAnnotations(readOnly: true, openWorld: false)
     let overviewSchema = schema([:])
     let topArtistsSchema = schema(["by": enumField(["plays", "favorites", "recently_added"]), "period": enumField(["all_time", "7d", "30d", "90d"]), "limit": integerField])
@@ -321,6 +399,10 @@ public enum LibraryMCPServer {
     let playlistListSchema = schema(["role": enumField(PlaylistRole.allCases.map(\.rawValue) + ["unlabeled"]), "limit": integerField])
     let playlistTracksSchema = schema(["name": stringField, "limit": integerField], required: ["name"])
     let keptPassedSchema = schema(["weeks": integerField])
+    let tasteNotesSchema = schema(["artist": stringField, "title": stringField, "playlist": stringField,
+      "period": enumField(["24h", "7d", "30d", "90d", "all_time"]), "limit": integerField])
+    let recordTasteNoteSchema = schema(["note": .object(["type": .string("string"), "description": .string("Jon's words verbatim; do not paraphrase.")]),
+      "artist": stringField, "title": stringField, "album": stringField, "playlist": stringField], required: ["note"])
     let checksSchema = schema(["tracks": .object(["type": .string("array"), "maxItems": .integer(LibraryIndex.maximumCheckTracks), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField]), "required": .array([.string("artist"), .string("title")])])])], required: ["tracks"])
     let stageSchema = schema(["name": stringField, "description": .object(["type": .string("string"), "description": .string(stageDescriptionGuidance)]), "tracks": .object(["type": .string("array"), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField, "album": stringField, "year": integerField]), "required": .array([.string("artist"), .string("title")])])])], required: ["name", "tracks"])
     return MCPServer(name: "Vinyl Fever", version: "1.0.0", instructions: instructions, tools: [
@@ -373,6 +455,7 @@ public enum LibraryMCPServer {
         var listeningError: String?
         do { _ = try await context.listeningLog() }
         catch { listeningError = error is ListeningHistoryNotSetUp ? "not_set_up" : String(describing: error) }
+        let tasteNotesBySong = try? await context.tasteNotesBySong(identity: index.artistIdentity)
         let calendar = Calendar.current
         var rows: [MCPCheckedTrack] = []
         for request in p.tracks.prefix(LibraryIndex.maximumCheckTracks) {
@@ -380,9 +463,11 @@ public enum LibraryMCPServer {
           let days = Set(heard?.map { calendar.startOfDay(for: $0) } ?? [])
           let evidence = playlistIndex.evidence(artist: request.artist, title: request.title, identity: index.artistIdentity,
             tracks: index.matchingTracks(artist: request.artist, title: request.title))
+          let noteKey = TasteIntelligence.songKey(artist: request.artist, title: request.title, identity: index.artistIdentity)
+          let notes = tasteNotesBySong.map { MCPNoteEvidence($0[noteKey] ?? []) }
           let check = index.checkTracks([(artist: request.artist, title: request.title)]).first!
           rows.append(MCPCheckedTrack(check, evidence: evidence, heardDays: heard == nil ? nil : days.count,
-            heardLast: heard?.max())
+            heardLast: heard?.max(), notes: notes)
           )
         }
         let unlabeled = PlaylistRoleMatcher.resolve(snapshot: snapshot, roles: roles).filter { $0.role == nil }.count
@@ -418,6 +503,7 @@ public enum LibraryMCPServer {
         var listeningError: String?
         do { _ = try await context.listeningLog() }
         catch { listeningError = error is ListeningHistoryNotSetUp ? "not_set_up" : String(describing: error) }
+        let tasteNotesBySong = try? await context.tasteNotesBySong(identity: identity)
         var rows: [MCPPlaylistTrack] = []
         for (position, id) in match.members.enumerated() {
           let track = tracksByID[id]
@@ -427,10 +513,12 @@ public enum LibraryMCPServer {
             tracks: libraryIndex.matchingTracks(artist: artist, title: title))
           let heard = await context.heardDates(artist: artist, title: title, identity: identity)
           let heardDays = heard.map { Set($0.map { Calendar.current.startOfDay(for: $0) }).count }
+          let noteKey = TasteIntelligence.songKey(artist: artist, title: title, identity: identity)
+          let notes = tasteNotesBySong.map { MCPNoteEvidence($0[noteKey] ?? []) }
           let check = libraryIndex.checkTracks([(artist: artist, title: title)]).first!
           rows.append(MCPPlaylistTrack(position: position + 1, artist: artist, title: title,
             album: track?.album ?? outside?.album ?? "", year: track?.year ?? outside?.year,
-            evidence: MCPPlaylistSongEvidence(evidence, check: check, heardDays: heardDays, heardLast: heard?.max())))
+            evidence: MCPPlaylistSongEvidence(evidence, check: check, heardDays: heardDays, heardLast: heard?.max(), notes: notes)))
         }
         let limit = max(1, min(p.limit ?? 100, 200))
         let unlabeled = PlaylistRoleMatcher.resolve(snapshot: snapshot, roles: roles).filter { $0.role == nil }.count
@@ -468,6 +556,54 @@ public enum LibraryMCPServer {
         let classified = TasteIntelligence.keptAndPassed(weeks: weeks, snapshot: snapshot,
           roles: roles, log: log, now: instant, limit: max(1, weeks.count))
         return .json(MCPBaselines(baselines: TasteIntelligence.baselines(weeks: classified, snapshot: snapshot), coverage: coverage))
+      },
+      MCPTool(name: "taste_notes", description: "Read Jon's taste notes verbatim. Time-only notes include nearby listening-log candidates when available.", inputSchema: tasteNotesSchema, annotations: readOnly) { input in
+        let payload = try decode(TasteNotesPayload.self, from: input, schema: tasteNotesSchema)
+        let instant = now()
+        let period = try payload.period.map { value -> TasteNotePeriod in
+          guard let period = TasteNotePeriod(rawValue: value) else { throw ArgumentError.invalidEnum(value) }
+          return period
+        } ?? .allTime
+        let result = try await context.tasteNotes()
+        var log: ListeningLog?
+        var listeningError: String?
+        do { log = try await context.listeningLog(now: instant) }
+        catch { listeningError = error is ListeningHistoryNotSetUp ? "not_set_up" : String(describing: error) }
+        let matches = result.notes.filter { note in
+          guard period.contains(note.notedAt, now: instant) else { return false }
+          if let artist = payload.artist, note.artist?.localizedCaseInsensitiveContains(artist) != true { return false }
+          if let title = payload.title, note.title?.localizedCaseInsensitiveContains(title) != true { return false }
+          if let playlist = payload.playlist, note.playlist?.localizedCaseInsensitiveContains(playlist) != true { return false }
+          return true
+        }
+        let limit = max(1, min(payload.limit ?? 50, 100))
+        let rows = matches.prefix(limit).map { note -> MCPTasteNote in
+          let candidates = note.isTimeOnly ? log.map { TasteNoteCandidates.forNote(note, log: $0) } : nil
+          return MCPTasteNote(note, candidates: candidates)
+        }
+        let listeningCoverage = log.map { MCPListeningCoverage($0.coverage, now: instant, period: .quarter) }
+        return .json(MCPTasteNotes(notes: Array(rows), coverage: MCPTasteNotesCoverage(
+          filesRead: result.filesRead, skippedLines: result.skippedLines,
+          listening: listeningCoverage, listeningStatus: listeningError)))
+      },
+      MCPTool(name: "record_taste_note", description: "Record Jon's words verbatim about a song or playlist in Vinyl Fever's chat-note log. Never writes the VF Note shortcut file.", inputSchema: recordTasteNoteSchema,
+        annotations: MCPToolAnnotations(destructive: false, openWorld: false)) { input in
+        let payload = try decode(RecordTasteNotePayload.self, from: input, schema: recordTasteNoteSchema)
+        guard !payload.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+          throw ArgumentError.invalidShape("note must not be empty")
+        }
+        let hasSong = payload.artist != nil || payload.title != nil || payload.album != nil
+        let hasPlaylist = payload.playlist?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        guard hasSong != hasPlaylist else { throw ArgumentError.invalidShape("provide either artist and title, or playlist") }
+        let artist = payload.artist?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = payload.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !hasSong || (artist?.isEmpty == false && title?.isEmpty == false) else {
+          throw ArgumentError.invalidShape("song notes require artist and title")
+        }
+        let note = TasteNote(notedAt: now(), note: payload.note, source: "chat",
+          title: title, artist: artist, album: payload.album, playlist: payload.playlist)
+        try await context.recordTasteNote(note)
+        return .json(MCPRecordedTasteNote(recorded: true, notedAt: note.notedAt, source: note.source))
       },
       MCPTool(name: "stage_playlist", description: "Stage a playlist proposal for Jon to review in Vinyl Fever; it does not change Apple Music.", inputSchema: stageSchema, annotations: MCPToolAnnotations(destructive: false, openWorld: false)) { input in
         let payload = try decode(PlaylistToolPayload.self, from: input, schema: stageSchema)
@@ -546,19 +682,21 @@ private struct MCPCheckedTrack: Encodable {
   var favorited: Bool; var lastPlayed: Date?; var availability: [LibraryAvailability]
   var uploadedAlbums: [String]; var playlists: [String: [String]]; var playlistCounts: [String: Int]
   var disliked: Bool; var sharedAccountEra: Bool; var heardDays: Int?; var heardLast: Date?
+  var notes: MCPNoteEvidence?
 
-  init(_ check: LibraryTrackCheck, evidence: PlaylistSongEvidence, heardDays: Int?, heardLast: Date?) {
+  init(_ check: LibraryTrackCheck, evidence: PlaylistSongEvidence, heardDays: Int?, heardLast: Date?, notes: MCPNoteEvidence?) {
     artist = check.artist; title = check.title; owned = check.owned; plays = check.plays
     versionCount = check.versionCount; favorited = check.favorited; lastPlayed = check.lastPlayed
     availability = check.availability; uploadedAlbums = check.uploadedAlbums
     playlists = evidence.playlists; playlistCounts = evidence.playlistCounts
     disliked = evidence.disliked; sharedAccountEra = evidence.sharedAccountEra
     self.heardDays = heardDays; self.heardLast = heardLast
+    self.notes = notes
   }
 
   private enum CodingKeys: String, CodingKey {
     case artist, title, owned, plays, versionCount, favorited, lastPlayed, availability, uploadedAlbums
-    case playlists, playlistCounts, disliked, sharedAccountEra, heardDays, heardLast
+    case playlists, playlistCounts, disliked, sharedAccountEra, heardDays, heardLast, notes
   }
   func encode(to encoder: Encoder) throws {
     var values = encoder.container(keyedBy: CodingKeys.self)
@@ -570,6 +708,7 @@ private struct MCPCheckedTrack: Encodable {
     try values.encode(playlistCounts, forKey: .playlistCounts); try values.encode(disliked, forKey: .disliked)
     try values.encode(sharedAccountEra, forKey: .sharedAccountEra)
     try values.encodeIfPresent(heardDays, forKey: .heardDays); try values.encodeIfPresent(heardLast, forKey: .heardLast)
+    try values.encodeIfPresent(notes, forKey: .notes)
   }
 }
 private struct MCPPlaylistSongEvidence: Encodable {
@@ -577,13 +716,15 @@ private struct MCPPlaylistSongEvidence: Encodable {
   var disliked: Bool; var sharedAccountEra: Bool; var heardDays: Int?; var heardLast: Date?
   var owned: Bool; var plays: Int; var favorited: Bool; var lastPlayed: Date?
   var availability: [LibraryAvailability]
-  init(_ value: PlaylistSongEvidence, check: LibraryTrackCheck, heardDays: Int?, heardLast: Date?) {
+  var notes: MCPNoteEvidence?
+  init(_ value: PlaylistSongEvidence, check: LibraryTrackCheck, heardDays: Int?, heardLast: Date?, notes: MCPNoteEvidence?) {
     playlists = value.playlists; playlistCounts = value.playlistCounts; disliked = value.disliked
     sharedAccountEra = value.sharedAccountEra; self.heardDays = heardDays; self.heardLast = heardLast
     owned = check.owned; plays = check.plays; favorited = check.favorited
     lastPlayed = check.lastPlayed; availability = check.availability
+    self.notes = notes
   }
-  private enum CodingKeys: String, CodingKey { case playlists, playlistCounts, disliked, sharedAccountEra, heardDays, heardLast, owned, plays, favorited, lastPlayed, availability }
+  private enum CodingKeys: String, CodingKey { case playlists, playlistCounts, disliked, sharedAccountEra, heardDays, heardLast, owned, plays, favorited, lastPlayed, availability, notes }
   func encode(to encoder: Encoder) throws {
     var values = encoder.container(keyedBy: CodingKeys.self)
     try values.encode(playlists, forKey: .playlists); try values.encode(playlistCounts, forKey: .playlistCounts)
@@ -592,6 +733,7 @@ private struct MCPPlaylistSongEvidence: Encodable {
     try values.encode(owned, forKey: .owned); try values.encode(plays, forKey: .plays)
     try values.encode(favorited, forKey: .favorited); try values.encodeIfPresent(lastPlayed, forKey: .lastPlayed)
     try values.encode(availability, forKey: .availability)
+    try values.encodeIfPresent(notes, forKey: .notes)
   }
 }
 
@@ -609,12 +751,14 @@ private enum ArgumentError: LocalizedError {
   case unknown(String)
   case invalidEnum(String)
   case periodRanking
+  case invalidShape(String)
   var errorDescription: String? {
     switch self {
     case .expectedObject: "Expected an object of tool arguments."
     case .unknown(let key): "Unknown argument \"\(key)\"."
     case .invalidEnum(let value): "Unrecognized value \"\(value)\"."
     case .periodRanking: "Only by: plays is allowed with a listening period."
+    case .invalidShape(let detail): "Invalid arguments: \(detail)."
     }
   }
 }
