@@ -94,7 +94,7 @@ Music's own 25 songs before Jon hears them (S2).
 needs New Music weeks). **S3** is decided at S2's gate. S1 and S2 both edit `vf-mcp`, so they
 run one after the other.
 
-- [ ] **S1 — The recommendation ledger (Core + `vf-mcp`).**
+- [x] **S1 — The recommendation ledger (Core + `vf-mcp`).** Done in `m18/s1-recommendation-ledger`.
   - **Ledger file:** `Taste Intelligence/recommendations/<host>.jsonl`, one line per batch:
     ```json
     {"format":"vf-recommendation-batch","version":1,"kind":"staged-playlist","source":"chat",

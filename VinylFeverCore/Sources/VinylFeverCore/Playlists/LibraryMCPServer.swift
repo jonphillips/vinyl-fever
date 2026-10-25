@@ -154,6 +154,8 @@ private actor LibraryMCPContext {
   private var cachedHeardBySong: [String: [Date]] = [:]
   private var cachedTasteNotes: TasteNotesReadResult?
   private var cachedTasteNoteFiles: [URL: Date] = [:]
+  private var cachedRecommendationLedger: RecommendationLedgerReadResult?
+  private var cachedRecommendationFiles: [URL: Date] = [:]
 
   init(snapshotURL: URL?, inboxRoot: URL?, listeningRootURL: URL?, tasteRootURL: URL?, hostName: @escaping @Sendable () -> String) {
     self.snapshotURL = snapshotURL ?? Self.defaultSnapshotURL
@@ -280,6 +282,28 @@ private actor LibraryMCPContext {
     cachedTasteNoteFiles = [:]
   }
 
+  func recommendationLedger() throws -> RecommendationLedgerReadResult {
+    let folder = tasteRootURL.appending(path: "recommendations", directoryHint: .isDirectory)
+    guard FileManager.default.fileExists(atPath: folder.path) else {
+      let empty = RecommendationLedgerReadResult(batches: [], skippedLines: 0)
+      cachedRecommendationLedger = empty
+      cachedRecommendationFiles = [:]
+      return empty
+    }
+    let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
+      .filter { $0.pathExtension == "jsonl" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
+    let modified = Dictionary(uniqueKeysWithValues: files.compactMap { url in
+      let date = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+      return date.map { (url, $0) }
+    })
+    if let cachedRecommendationLedger, modified == cachedRecommendationFiles { return cachedRecommendationLedger }
+    let data = try files.compactMap { try Self.readCoordinated($0) }
+    let result = RecommendationLedgerCodec.readFiles(data)
+    cachedRecommendationLedger = result
+    cachedRecommendationFiles = modified
+    return result
+  }
+
   func tasteNotesBySong(identity: ArtistIdentity) throws -> [String: [TasteNote]] {
     try tasteNotes().notes.reduce(into: [:]) { result, note in
       guard let artist = note.artist, let title = note.title, !title.isEmpty else { return }
@@ -350,7 +374,8 @@ private actor LibraryMCPContext {
     return cachedOverview
   }
 
-  func stage(_ payload: PlaylistToolPayload) throws -> (name: String, trackCount: Int, dropped: [DroppedPlaylistTrack]) {
+  func stage(_ payload: PlaylistToolPayload, recordedAt: Date) throws -> (name: String, trackCount: Int,
+    dropped: [DroppedPlaylistTrack], ledgerRecorded: Bool, ledgerReason: String?) {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
     let json = String(decoding: try encoder.encode(payload), as: UTF8.self)
@@ -359,8 +384,31 @@ private actor LibraryMCPContext {
     guard !decoded.request.tracks.isEmpty else {
       throw PlaylistContractError.invalidShape("tracks must contain at least one track")
     }
-    _ = try inbox.stage(contract, slug: payload.name, now: Date())
-    return (decoded.request.name, decoded.request.tracks.count, decoded.droppedTracks)
+    _ = try inbox.stage(contract, slug: payload.name, now: recordedAt)
+    do {
+      let (snapshot, _, playlistIndex, _, _) = try playlistData()
+      let (index, _) = try self.index()
+      let log = try? listeningLog(now: recordedAt)
+      let noteKeys = Set((try? tasteNotesBySong(identity: index.artistIdentity).keys)
+        ?? Dictionary<String, [TasteNote]>().keys)
+      let priorLedger = try recommendationLedger()
+      let tracks = decoded.request.tracks.map { request in
+        RecommendationFamiliarity.evaluate(artist: request.artist, title: request.title,
+          album: request.album, year: request.year, snapshot: snapshot, index: index,
+          playlistIndex: playlistIndex, listeningLog: log, tasteNoteKeys: noteKeys,
+          ledger: priorLedger, recordedAt: recordedAt)
+      }
+      let batch = RecommendationBatch(recordedAt: recordedAt, host: hostName(),
+        playlist: decoded.request.name, tracks: tracks)
+      let folder = tasteRootURL.appending(path: "recommendations", directoryHint: .isDirectory)
+      try RecommendationLedgerCodec.append(batch, host: hostName(), folder: folder)
+      cachedRecommendationLedger = nil
+      cachedRecommendationFiles = [:]
+      return (decoded.request.name, decoded.request.tracks.count, decoded.droppedTracks, true, nil)
+    } catch {
+      return (decoded.request.name, decoded.request.tracks.count, decoded.droppedTracks, false,
+        "ledger could not be read or written")
+    }
   }
 }
 
@@ -377,7 +425,7 @@ public enum LibraryMCPServer {
   Vinyl Fever exposes Jon's Apple Music library and listening stats. Use these tools for any claim about what Jon owns, has played, or has loved — never guess. Before proposing a final list, call check_tracks on it. For Jon's uploads, use an exact album from uploadedAlbums as the album hint. When Jon asks for the playlist, call stage_playlist with the final list instead of printing it; Jon reviews and creates it in Vinyl Fever. Snapshot age is in library_overview.
   """
   public static let instructions: String = {
-    instructionHead + "\n\nFor taste questions, start with list_playlists. keepers are the strongest evidence and replay positions are ranks. Report evidence by role, not by counting playlists; don't infer taste from genre. sharedAccountEra play counts aren't Jon's alone. Before proposing songs Jon probably doesn't know, call check_tracks and remove anything owned, heard, or in a playlist.\n\n" + PlaylistContract.trackRules
+    instructionHead + "\n\nFor taste questions, start with list_playlists. keepers are the strongest evidence and replay positions are ranks. Report evidence by role, not by counting playlists; don't infer taste from genre. sharedAccountEra play counts aren't Jon's alone. Stage discoveries with stage_playlist, because Vinyl Fever records which songs were new to Jon. Drop songs recommended before, unless Jon asks for them again.\n\n" + PlaylistContract.trackRules
   }()
 
   public static func make(
@@ -452,6 +500,7 @@ public enum LibraryMCPServer {
         let p = try decode(CheckTracksPayload.self, from: input, schema: checksSchema)
         let (index, _) = try await context.index()
         let (snapshot, roles, playlistIndex, _, _) = try await context.playlistData()
+        let ledger = try? await context.recommendationLedger()
         var listeningError: String?
         do { _ = try await context.listeningLog() }
         catch { listeningError = error is ListeningHistoryNotSetUp ? "not_set_up" : String(describing: error) }
@@ -466,8 +515,10 @@ public enum LibraryMCPServer {
           let noteKey = TasteIntelligence.songKey(artist: request.artist, title: request.title, identity: index.artistIdentity)
           let notes = tasteNotesBySong.map { MCPNoteEvidence($0[noteKey] ?? []) }
           let check = index.checkTracks([(artist: request.artist, title: request.title)]).first!
+          let recommended = ledger.flatMap { RecommendationLedgerEvidence.forSong(artist: request.artist,
+            title: request.title, identity: index.artistIdentity, ledger: $0) }
           rows.append(MCPCheckedTrack(check, evidence: evidence, heardDays: heard == nil ? nil : days.count,
-            heardLast: heard?.max(), notes: notes)
+            heardLast: heard?.max(), notes: notes, recommended: recommended)
           )
         }
         let unlabeled = PlaylistRoleMatcher.resolve(snapshot: snapshot, roles: roles).filter { $0.role == nil }.count
@@ -504,6 +555,7 @@ public enum LibraryMCPServer {
         do { _ = try await context.listeningLog() }
         catch { listeningError = error is ListeningHistoryNotSetUp ? "not_set_up" : String(describing: error) }
         let tasteNotesBySong = try? await context.tasteNotesBySong(identity: identity)
+        let ledger = try? await context.recommendationLedger()
         var rows: [MCPPlaylistTrack] = []
         for (position, id) in match.members.enumerated() {
           let track = tracksByID[id]
@@ -516,9 +568,11 @@ public enum LibraryMCPServer {
           let noteKey = TasteIntelligence.songKey(artist: artist, title: title, identity: identity)
           let notes = tasteNotesBySong.map { MCPNoteEvidence($0[noteKey] ?? []) }
           let check = libraryIndex.checkTracks([(artist: artist, title: title)]).first!
+          let recommended = ledger.flatMap { RecommendationLedgerEvidence.forSong(artist: artist,
+            title: title, identity: identity, ledger: $0) }
           rows.append(MCPPlaylistTrack(position: position + 1, artist: artist, title: title,
             album: track?.album ?? outside?.album ?? "", year: track?.year ?? outside?.year,
-            evidence: MCPPlaylistSongEvidence(evidence, check: check, heardDays: heardDays, heardLast: heard?.max(), notes: notes)))
+            evidence: MCPPlaylistSongEvidence(evidence, check: check, heardDays: heardDays, heardLast: heard?.max(), notes: notes, recommended: recommended)))
         }
         let limit = max(1, min(p.limit ?? 100, 200))
         let unlabeled = PlaylistRoleMatcher.resolve(snapshot: snapshot, roles: roles).filter { $0.role == nil }.count
@@ -607,8 +661,9 @@ public enum LibraryMCPServer {
       },
       MCPTool(name: "stage_playlist", description: "Stage a playlist proposal for Jon to review in Vinyl Fever; it does not change Apple Music.", inputSchema: stageSchema, annotations: MCPToolAnnotations(destructive: false, openWorld: false)) { input in
         let payload = try decode(PlaylistToolPayload.self, from: input, schema: stageSchema)
-        let staged = try await context.stage(payload)
-        let json = MCPToolResult.json(StagedPlaylistResult(staged: true, name: staged.name, trackCount: staged.trackCount, dropped: staged.dropped))
+        let staged = try await context.stage(payload, recordedAt: now())
+        let json = MCPToolResult.json(StagedPlaylistResult(staged: true, name: staged.name, trackCount: staged.trackCount,
+          dropped: staged.dropped, ledgerRecorded: staged.ledgerRecorded, ledgerReason: staged.ledgerReason))
         let payloadText = json.content.first?.text ?? "{}"
         return .text(payloadText + "\n\nJon reviews and creates it in Vinyl Fever; nothing is in Apple Music yet.")
       },
@@ -683,20 +738,21 @@ private struct MCPCheckedTrack: Encodable {
   var uploadedAlbums: [String]; var playlists: [String: [String]]; var playlistCounts: [String: Int]
   var disliked: Bool; var sharedAccountEra: Bool; var heardDays: Int?; var heardLast: Date?
   var notes: MCPNoteEvidence?
+  var recommended: RecommendationEvidence?
 
-  init(_ check: LibraryTrackCheck, evidence: PlaylistSongEvidence, heardDays: Int?, heardLast: Date?, notes: MCPNoteEvidence?) {
+  init(_ check: LibraryTrackCheck, evidence: PlaylistSongEvidence, heardDays: Int?, heardLast: Date?, notes: MCPNoteEvidence?, recommended: RecommendationEvidence?) {
     artist = check.artist; title = check.title; owned = check.owned; plays = check.plays
     versionCount = check.versionCount; favorited = check.favorited; lastPlayed = check.lastPlayed
     availability = check.availability; uploadedAlbums = check.uploadedAlbums
     playlists = evidence.playlists; playlistCounts = evidence.playlistCounts
     disliked = evidence.disliked; sharedAccountEra = evidence.sharedAccountEra
     self.heardDays = heardDays; self.heardLast = heardLast
-    self.notes = notes
+    self.notes = notes; self.recommended = recommended
   }
 
   private enum CodingKeys: String, CodingKey {
     case artist, title, owned, plays, versionCount, favorited, lastPlayed, availability, uploadedAlbums
-    case playlists, playlistCounts, disliked, sharedAccountEra, heardDays, heardLast, notes
+    case playlists, playlistCounts, disliked, sharedAccountEra, heardDays, heardLast, notes, recommended
   }
   func encode(to encoder: Encoder) throws {
     var values = encoder.container(keyedBy: CodingKeys.self)
@@ -709,6 +765,7 @@ private struct MCPCheckedTrack: Encodable {
     try values.encode(sharedAccountEra, forKey: .sharedAccountEra)
     try values.encodeIfPresent(heardDays, forKey: .heardDays); try values.encodeIfPresent(heardLast, forKey: .heardLast)
     try values.encodeIfPresent(notes, forKey: .notes)
+    try values.encodeIfPresent(recommended, forKey: .recommended)
   }
 }
 private struct MCPPlaylistSongEvidence: Encodable {
@@ -717,14 +774,15 @@ private struct MCPPlaylistSongEvidence: Encodable {
   var owned: Bool; var plays: Int; var favorited: Bool; var lastPlayed: Date?
   var availability: [LibraryAvailability]
   var notes: MCPNoteEvidence?
-  init(_ value: PlaylistSongEvidence, check: LibraryTrackCheck, heardDays: Int?, heardLast: Date?, notes: MCPNoteEvidence?) {
+  var recommended: RecommendationEvidence?
+  init(_ value: PlaylistSongEvidence, check: LibraryTrackCheck, heardDays: Int?, heardLast: Date?, notes: MCPNoteEvidence?, recommended: RecommendationEvidence?) {
     playlists = value.playlists; playlistCounts = value.playlistCounts; disliked = value.disliked
     sharedAccountEra = value.sharedAccountEra; self.heardDays = heardDays; self.heardLast = heardLast
     owned = check.owned; plays = check.plays; favorited = check.favorited
     lastPlayed = check.lastPlayed; availability = check.availability
-    self.notes = notes
+    self.notes = notes; self.recommended = recommended
   }
-  private enum CodingKeys: String, CodingKey { case playlists, playlistCounts, disliked, sharedAccountEra, heardDays, heardLast, owned, plays, favorited, lastPlayed, availability, notes }
+  private enum CodingKeys: String, CodingKey { case playlists, playlistCounts, disliked, sharedAccountEra, heardDays, heardLast, owned, plays, favorited, lastPlayed, availability, notes, recommended }
   func encode(to encoder: Encoder) throws {
     var values = encoder.container(keyedBy: CodingKeys.self)
     try values.encode(playlists, forKey: .playlists); try values.encode(playlistCounts, forKey: .playlistCounts)
@@ -734,15 +792,18 @@ private struct MCPPlaylistSongEvidence: Encodable {
     try values.encode(favorited, forKey: .favorited); try values.encodeIfPresent(lastPlayed, forKey: .lastPlayed)
     try values.encode(availability, forKey: .availability)
     try values.encodeIfPresent(notes, forKey: .notes)
+    try values.encodeIfPresent(recommended, forKey: .recommended)
   }
 }
 
 private struct StagedPlaylistResult: Encodable {
   struct Dropped: Encodable { var index: Int; var artist: String; var title: String }
   var staged: Bool; var name: String; var trackCount: Int; var dropped: [Dropped]
-  init(staged: Bool, name: String, trackCount: Int, dropped: [DroppedPlaylistTrack]) {
+  var ledgerRecorded: Bool; var ledgerReason: String?
+  init(staged: Bool, name: String, trackCount: Int, dropped: [DroppedPlaylistTrack], ledgerRecorded: Bool, ledgerReason: String?) {
     self.staged = staged; self.name = name; self.trackCount = trackCount
     self.dropped = dropped.map { Dropped(index: $0.index, artist: $0.artist, title: $0.title) }
+    self.ledgerRecorded = ledgerRecorded; self.ledgerReason = ledgerReason
   }
 }
 

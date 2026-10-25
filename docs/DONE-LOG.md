@@ -3,6 +3,16 @@
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
+## 2026-10-25 — M18 · Dispatch 1 S1 (`m18/s1-recommendation-ledger`)
+
+Added the coordinated per-host recommendation JSONL ledger, pure familiarity evidence, and
+`recommended` evidence in `check_tracks` and `playlist_tracks`. `stage_playlist` now logs
+surviving songs and reports ledger write failures without failing staging. Updated chat
+instructions. Listening (55), Core (259), and macOS app (78) tests pass. The read-only laptop
+check against the 2026-10-23 snapshot and the archived 15-song batch found all 15 unfamiliar;
+five artists already had library tracks, and none had a listening start before staging. Jon's
+stage/check gate remains owed.
+
 ## 2026-10-25 — M17 · Dispatch 3 S3 (`m17/s3-taste-notes`)
 
 Added the Core reader for shortcut and chat taste notes, conflict-copy deduplication, coverage,

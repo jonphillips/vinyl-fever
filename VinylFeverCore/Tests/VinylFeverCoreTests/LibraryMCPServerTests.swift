@@ -126,7 +126,13 @@ struct LibraryMCPServerTests {
     ], outsideTracks: [
       "outside-id": LibraryOutsideTrack(name: "Second Song", artist: "The Records", album: "Other Album"),
     ])
-    let (server, snapshotURL) = try makeServer(snapshot: snapshot)
+    let tasteRoot = temporaryDirectory().appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let recordedAt = generatedAt.addingTimeInterval(-60)
+    let recommendationFolder = tasteRoot.appending(path: "recommendations", directoryHint: .isDirectory)
+    try RecommendationLedgerCodec.append(RecommendationBatch(recordedAt: recordedAt, host: "Fixture",
+      playlist: "Earlier", tracks: [RecommendationTrack(artist: "The Records", title: "Second Song",
+        familiar: false, reasons: [], artistKnown: false)]), host: "Fixture", folder: recommendationFolder)
+    let (server, snapshotURL) = try makeServer(snapshot: snapshot, tasteRootURL: tasteRoot)
     let initialModified = try #require(FileManager.default.attributesOfItem(atPath: snapshotURL.path)[.modificationDate] as? Date)
     let stableModified = Date(timeIntervalSince1970: floor(initialModified.timeIntervalSince1970))
     try FileManager.default.setAttributes([.modificationDate: stableModified], ofItemAtPath: snapshotURL.path)
@@ -138,6 +144,7 @@ struct LibraryMCPServerTests {
     #expect(tracks.contains("First Song"))
     #expect(tracks.contains("Second Song"))
     #expect(tracks.contains("\"position\":2"))
+    #expect(tracks.contains("\"recommended\":{\"count\":1,\"latestRecordedAt\":\"2023-11-14T22:12:20Z\"}"))
     #expect(!tracks.contains("private-id"))
     let checked = try #require(await call(server, id: 3, name: "check_tracks", arguments: #"{"tracks":[{"artist":"The Records","title":"First Song"}]}"#))
     #expect(checked.contains("\"playlists\":{}"))
@@ -460,10 +467,12 @@ struct LibraryMCPServerTests {
   func stagePlaylist() async throws {
     let root = temporaryDirectory()
     let inbox = root.appending(path: "PlaylistInbox", directoryHint: .isDirectory)
-    let (server, _) = try makeServer(snapshot: s0Fixture(), inbox: inbox)
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let (server, _) = try makeServer(snapshot: s0Fixture(), inbox: inbox, tasteRootURL: tasteRoot)
     let valid = try #require(await call(server, id: 1, name: "stage_playlist", arguments: #"{"name":"Power Pop","tracks":[{"artist":" ","title":"Dropped"},{"artist":"The Records","title":"Starry Eyes"}]}"#))
     #expect(valid.contains("\"staged\":true"))
     #expect(valid.contains("\"trackCount\":1"))
+    #expect(valid.contains("\"ledgerRecorded\":true"))
     #expect(valid.contains("\"dropped\":[{\"artist\":\"\",\"index\":1,\"title\":\"Dropped\"}]"))
     #expect(valid.contains("Jon reviews and creates it in Vinyl Fever; nothing is in Apple Music yet."))
     #expect(!valid.contains(".vfplaylist"))
@@ -471,6 +480,18 @@ struct LibraryMCPServerTests {
     let stagedURL = try #require(files.first)
     let decoded = try PlaylistContract.decode(String(contentsOf: stagedURL, encoding: .utf8))
     #expect(decoded.request == PlaylistRequest(name: "Power Pop", tracks: [TrackRequest(index: 2, artist: "The Records", title: "Starry Eyes")]))
+    let recommendationFolder = tasteRoot.appending(path: "recommendations")
+    let ledgerFile = try #require(FileManager.default.contentsOfDirectory(at: recommendationFolder, includingPropertiesForKeys: nil).first)
+    let ledger = RecommendationLedgerCodec.readFiles([try Data(contentsOf: ledgerFile)])
+    #expect(ledger.batches.count == 1)
+    #expect(ledger.batches[0].recordedAt != .distantPast)
+    #expect(ledger.batches[0].tracks.map(\.title) == ["Starry Eyes"])
+    #expect(ledger.batches[0].tracks[0].reasons.isEmpty)
+    let checked = try #require(await resultJSON(server, id: 4, name: "check_tracks",
+      arguments: #"{"tracks":[{"artist":"The Records","title":"Starry Eyes"}]}"#) as? [String: Any])
+    let checkedRows = try #require(checked["tracks"] as? [[String: Any]])
+    let recommended = try #require(checkedRows.first?["recommended"] as? [String: Any])
+    #expect(recommended["count"] as? Int == 1)
 
     let countBefore = files.count
     let zero = try #require(await call(server, id: 2, name: "stage_playlist", arguments: #"{"name":"Empty","tracks":[]}"#))
@@ -481,6 +502,19 @@ struct LibraryMCPServerTests {
     #expect(emptyName.contains("name must not be empty"))
     #expect(emptyName.contains("\"isError\":true"))
     #expect(try FileManager.default.contentsOfDirectory(at: inbox, includingPropertiesForKeys: nil).count == countBefore)
+
+    let blockedRoot = root.appending(path: "Blocked Taste")
+    try FileManager.default.createDirectory(at: blockedRoot, withIntermediateDirectories: true)
+    let recommendationsFile = blockedRoot.appending(path: "recommendations")
+    try Data("file prevents the ledger folder".utf8).write(to: recommendationsFile)
+    let (ledgerUnavailableServer, _) = try makeServer(snapshot: s0Fixture(), inbox: root.appending(path: "blocked-inbox"),
+      tasteRootURL: blockedRoot)
+    let stagedWithoutLedger = try #require(await resultJSON(ledgerUnavailableServer, id: 5,
+      name: "stage_playlist", arguments: #"{"name":"Still stages","tracks":[{"artist":"A","title":"B"}]}"#) as? [String: Any])
+    #expect(stagedWithoutLedger["staged"] as? Bool == true)
+    #expect(stagedWithoutLedger["ledgerRecorded"] as? Bool == false)
+    #expect(stagedWithoutLedger["ledgerReason"] as? String != nil)
+    #expect(!String(describing: stagedWithoutLedger).contains(recommendationsFile.path))
   }
 
   @Test("instructions use the brief's standalone head and only the track rules tail")
@@ -491,6 +525,8 @@ struct LibraryMCPServerTests {
     #expect(LibraryMCPServer.instructionHead.count <= 512)
     #expect(MCPServer.instructionsHeadStandsAlone(LibraryMCPServer.instructions))
     #expect(LibraryMCPServer.instructions.contains("For taste questions, start with list_playlists"))
+    #expect(LibraryMCPServer.instructions.contains("Stage discoveries with stage_playlist"))
+    #expect(LibraryMCPServer.instructions.contains("Drop songs recommended before, unless Jon asks for them again."))
     #expect(LibraryMCPServer.instructions.contains(PlaylistContract.trackRules))
     #expect(!LibraryMCPServer.instructions.contains("VF-PLAYLIST: v1"))
   }
