@@ -17,7 +17,8 @@ Summary: Two slices are dispatched, and a third is decided at S2's gate.
 - **S3**, which adds Apple's candidates for new releases, is built only if S2 shows the chat is a
   good judge of them.
 
-Vinyl Fever still makes no model calls and stores no scores.
+Vinyl Fever still makes no model calls and stores no scores. [M19](M19-backups.md)'s backup
+slice runs between S1 and S2 (M19 Decision 7).
 
 ## The milestone in one sentence
 

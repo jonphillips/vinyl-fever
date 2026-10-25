@@ -78,7 +78,20 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   this month's, and a chat model knows least about new releases. M18 logs every staged
   recommendation with per-song familiarity (S1), then reports outcomes by source within
   release-age bands and tests the chat on New Music's own weeks with blind picks (S2). Apple's
-  candidates for new releases (S3) wait on that result.
+  candidates for new releases (S3) wait on that result. **S1 merged as #132 (2026-10-25); Jon's
+  stage/check gate is owed.**
+- **Familiarity when evidence can't be read** (from the #132 review, 2026-10-25). At staging,
+  M18 S1 treats an unreadable listening log or notes file as empty, so the ledger records those
+  songs as unfamiliar, permanently. **Recommendation, for S2's plan:** each ledger batch records
+  which evidence it could read (for example `coverage: {"listening": false}`), and S2's outcomes
+  leave out batches recorded without listening evidence, or mark them. Decide before S2 is
+  dispatched.
+- **Backups** — planned as [M19](milestones/M19-backups.md) (2026-10-25). Jon asked about data
+  loss. The logs live only in iCloud Drive, the database only on the laptop, and the laptop's
+  Time Machine last finished on 2026-02-15 (its SMB destination doesn't mount). S1 makes a
+  daily set from the hourly agent: the iCloud logs go to local disk, the database goes to local
+  disk and iCloud, and a log that shrinks raises a warning. It runs before M18 S2. Jon owes the
+  Time Machine fix.
 - **The executor posted as Jon** (from the #126 review, 2026-10-24). One of Codex's PR comments
   was posted as `jonphillips`, not `jon-codex-bot`, so at least one of Codex's shells reaches
   Jon's `gh` keyring login. Later comments came from the bot. **For Jon:** check which shell or
