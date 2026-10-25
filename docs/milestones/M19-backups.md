@@ -66,7 +66,7 @@ caught.
 **Dispatch 1: S1** (Core + app + `setup-mac`; Jon's laptop gate). It runs before M18 S2, and its
 completing PR advances `NEXT_UP.md` to M16 S4 (added 2026-10-25), which runs before M18 S2.
 
-- [ ] **S1 — The daily backup set (Core + app).**
+- [x] **S1 — The daily backup set (Core + app).** Done in `m19/s1-daily-backup`.
   - **When:** after each `--poll-listening` run, and once at app launch in `.live`, Vinyl Fever
     makes today's set if it doesn't exist yet ("today" is the local calendar day). Both paths
     call one Core function. A lock file keeps the app and the agent from building the same set

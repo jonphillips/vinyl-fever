@@ -47,12 +47,78 @@ guide="https://github.com/jonphillips/vinyl-fever/blob/main/docs/setup/README.md
 has_role() { [[ ",${roles}," == *",$1,"* ]]; }
 manual() { report manual "$1" "$2" "complete this step by hand"; }
 result() { report "$1" "$2" "$3" "${4:-}"; }
+warn() { report warning "$1" "$2" "${3:-}"; }
 
 # Every Mac
 manual "Sign in with Apple ID and enable Apple Music Sync Library" every-mac
 icloud_root="$HOME/Library/Mobile Documents/com~apple~CloudDocs"
 if [[ -d "$icloud_root" ]]; then result passed "iCloud Drive folder" every-mac
 else manual "iCloud Drive is enabled and its folder is available" every-mac; fi
+
+tm_destinations="$(tmutil destinationinfo 2>/dev/null || true)"
+if [[ -z "$tm_destinations" || "$tm_destinations" == *"No destinations configured"* ]]; then
+  warn "Time Machine destination" backups-and-restoring "no destination is configured"
+else
+  tm_plist_path="${VF_TIMEMACHINE_PLIST:-}"
+  tm_settings_plist=""
+  if [[ -z "$tm_plist_path" ]]; then
+    tm_settings_plist="$(defaults export /Library/Preferences/com.apple.TimeMachine - 2>/dev/null || true)"
+  fi
+  snapshot_dates=""
+  destination_index=0
+  while true; do
+    if [[ -n "$tm_plist_path" ]]; then
+      destination_dates="$(plutil -extract "Destinations.$destination_index.SnapshotDates" xml1 -o - "$tm_plist_path" 2>/dev/null || true)"
+    else
+      destination_dates="$(printf '%s\n' "$tm_settings_plist" | plutil -extract "Destinations.$destination_index.SnapshotDates" xml1 -o - - 2>/dev/null || true)"
+    fi
+    [[ -n "$destination_dates" ]] || break
+    snapshot_dates+="$(printf '%s\n' "$destination_dates" | sed -n 's:^[[:space:]]*<date>\(.*\)</date>.*:\1:p')"$'\n'
+    destination_index=$((destination_index + 1))
+  done
+  latest_tm_epoch=""
+  latest_tm_date=""
+  while IFS= read -r snapshot_date; do
+    snapshot_epoch="$(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$snapshot_date" '+%s' 2>/dev/null || true)"
+    if [[ "$snapshot_epoch" =~ ^[0-9]+$ ]] && { [[ -z "$latest_tm_epoch" ]] || ((snapshot_epoch > latest_tm_epoch)); }; then
+      latest_tm_epoch="$snapshot_epoch"
+      latest_tm_date="$(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$snapshot_date" '+%Y-%m-%d')"
+    fi
+  done <<< "$snapshot_dates"
+
+  if [[ -n "$latest_tm_epoch" ]]; then
+    now_epoch="$(date +%s)"
+    days_old=$(((now_epoch - latest_tm_epoch) / (24 * 60 * 60)))
+    ((days_old < 0)) && days_old=0
+    if ((days_old > 7)); then
+      warn "Time Machine snapshot" backups-and-restoring "newest snapshot is $latest_tm_date, $days_old days ago"
+    fi
+  else
+    latest_tm_backup="$(tmutil latestbackup 2>/dev/null || true)"
+    if [[ -z "$latest_tm_backup" ]]; then
+      warn "Time Machine snapshot" backups-and-restoring "no completed snapshot found"
+    else
+      latest_tm_epoch="$(stat -f '%m' "$latest_tm_backup" 2>/dev/null || true)"
+      now_epoch="$(date +%s)"
+      if [[ "$latest_tm_epoch" =~ ^[0-9]+$ ]] && ((now_epoch - latest_tm_epoch > 7 * 24 * 60 * 60)); then
+        warn "Time Machine snapshot" backups-and-restoring "newest snapshot is older than 7 days"
+      fi
+    fi
+  fi
+fi
+
+daily_backup_root="$HOME/Library/Application Support/VinylFever/Backups/Daily"
+latest_daily_set="$(find "$daily_backup_root" -mindepth 1 -maxdepth 1 -type d -name '20??-??-??' -print 2>/dev/null | sort -r | head -n 1 || true)"
+if [[ -z "$latest_daily_set" ]]; then
+  warn "Daily backup set" backups-and-restoring "no completed set found"
+else
+  latest_daily_day="${latest_daily_set##*/}"
+  latest_daily_epoch="$(date -j -f '%Y-%m-%d' "$latest_daily_day" '+%s' 2>/dev/null || true)"
+  now_epoch="$(date +%s)"
+  if [[ "$latest_daily_epoch" =~ ^[0-9]+$ ]] && ((now_epoch - latest_daily_epoch > 2 * 24 * 60 * 60)); then
+    warn "Daily backup set" backups-and-restoring "newest set is older than 2 days"
+  fi
+fi
 manual "iCloud Keychain is enabled" every-mac
 manual "Optimize Mac Storage is off" every-mac
 

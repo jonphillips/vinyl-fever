@@ -23,9 +23,13 @@ struct SettingsView: View {
   @State private var isShowingPlaylistRoles = false
   @State private var tasteStatus = "Checking…"
   @State private var tasteError: String?
+  @State private var backupManifest: DailyBackupManifest?
+  @State private var backupWarnings: [DailyBackupWarning] = []
+  @State private var backupFailure: DailyBackupFailure?
   @Dependency(\.librarySnapshotStore) private var librarySnapshotStore
   @Dependency(\.playlistRolesStore) private var playlistRolesStore
   @Dependency(\.listeningStore) private var listeningStore
+  @Dependency(\.context) private var context
 
   private var settings: AppSetting {
     AppSetting.current(from: persistedSettings)
@@ -146,6 +150,39 @@ struct SettingsView: View {
 
         tasteSection
 
+        Section {
+          if let backupManifest {
+            LabeledContent("Newest set", value: backupManifest.createdAt.formatted(date: .abbreviated, time: .shortened))
+            LabeledContent("Size", value: ByteCountFormatter.string(fromByteCount: Int64(backupManifest.files.reduce(0) { $0 + $1.bytes }), countStyle: .file))
+          } else {
+            Text("No daily backup set yet.").foregroundStyle(.secondary)
+          }
+          if backupWarnings.isEmpty {
+            Label("No warnings in the last 30 days", systemImage: "checkmark.circle")
+              .foregroundStyle(.secondary)
+          } else {
+            ForEach(Array(backupWarnings.enumerated()), id: \.offset) { _, warning in
+              Label("\(warning.kind.rawValue): \(warning.path)", systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .textSelection(.enabled)
+            }
+          }
+          if let backupFailure {
+            Label("Last backup failed at \(backupFailure.occurredAt.formatted(date: .abbreviated, time: .shortened))", systemImage: "exclamationmark.triangle.fill")
+              .foregroundStyle(.red)
+            Text(backupFailure.message).foregroundStyle(.secondary).textSelection(.enabled)
+          }
+          Button("Show in Finder") { NSWorkspace.shared.open(backupRoot) }
+        } header: {
+          Text("Backups")
+        } footer: {
+          if backupHealthState == .noSet || backupHealthState == .stale {
+            Text("No daily set has completed in the last 2 days.")
+          } else {
+            Text("Daily sets are stored on this Mac and the database copy is also saved in iCloud Drive.")
+          }
+        }
+
         artistAliasesSection
 
         Section("Source Labels") {
@@ -165,10 +202,12 @@ struct SettingsView: View {
         await refreshLibrarySnapshotStatus()
         await refreshTasteStatus()
         await listeningModel.refresh()
+        refreshBackupStatus()
       }
       .onChange(of: appearsActive) { _, isActive in
         guard isActive else { return }
         Task { await listeningModel.refresh() }
+        refreshBackupStatus()
       }
       .toolbar {
         ToolbarItem {
@@ -197,6 +236,27 @@ struct SettingsView: View {
   private func refreshButtonTapped() async {
     await model.refreshToolStatuses(settings: settings)
     await listeningModel.refresh()
+    refreshBackupStatus()
+  }
+
+  private var backupRoot: URL {
+    DailyBackup.dailyRoot(in: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0])
+  }
+
+  private var backupHealthState: BackupHealthState {
+    backupHealth(manifest: backupManifest, warnings: backupWarnings, now: .now)
+  }
+
+  private func refreshBackupStatus() {
+    guard context == .live else {
+      backupManifest = nil
+      backupWarnings = []
+      backupFailure = nil
+      return
+    }
+    backupManifest = try? DailyBackup.latestManifest(in: backupRoot)
+    backupWarnings = DailyBackup.recentWarnings(in: backupRoot)
+    backupFailure = DailyBackup.latestFailure(in: backupRoot)
   }
 
   private var artistAliasesSection: some View {
@@ -299,6 +359,19 @@ struct SettingsView: View {
       Label(copiedMCPConfig == key ? "Copied \(title)" : "Copy \(title)", systemImage: copiedMCPConfig == key ? "checkmark" : "doc.on.doc")
     }
   }
+}
+
+enum BackupHealthState: Equatable {
+  case noSet
+  case stale
+  case warnings([DailyBackupWarning])
+  case ok
+}
+
+func backupHealth(manifest: DailyBackupManifest?, warnings: [DailyBackupWarning], now: Date) -> BackupHealthState {
+  guard let manifest else { return .noSet }
+  guard now.timeIntervalSince(manifest.createdAt) < 2 * 24 * 60 * 60 else { return .stale }
+  return warnings.isEmpty ? .ok : .warnings(warnings)
 }
 
 struct ListeningAgentClient {
