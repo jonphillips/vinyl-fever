@@ -70,8 +70,15 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
 
   S0's probes finished 2026-10-23. M17: S1 playlists in the snapshot with roles, S2 exposure
   and curation logs, S3 feedback (VF Note and chat notes); then an outcomes milestone.
-  S1 merged in #125 (Jon's gate passed 2026-10-24), and S2 in #126 (2026-10-25; its gate is owed
-  until the mini saves two weeks).
+  S1 merged in #125 (Jon's gate passed 2026-10-24: all 15 new, 11 kept), S2 in #126, and S3 in
+  #129 (both 2026-10-25, gates owed). M17's code is done.
+
+  **Outcomes planned as [M18](milestones/M18-taste-outcomes.md) (2026-10-25).** Jon noted that
+  "beat New Music" isn't a fair contest: the chat's first batch spanned 2006–2024, New Music is
+  this month's, and a chat model knows least about new releases. M18 logs every staged
+  recommendation with per-song familiarity (S1), then reports outcomes by source within
+  release-age bands and tests the chat on New Music's own weeks with blind picks (S2). Apple's
+  candidates for new releases (S3) wait on that result.
 - **The executor posted as Jon** (from the #126 review, 2026-10-24). One of Codex's PR comments
   was posted as `jonphillips`, not `jon-codex-bot`, so at least one of Codex's shells reaches
   Jon's `gh` keyring login. Later comments came from the bot. **For Jon:** check which shell or
