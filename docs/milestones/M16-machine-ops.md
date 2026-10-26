@@ -316,7 +316,7 @@ S4, and S4's advances it to M18 S2.
     - The second case needs `open -n` on the stale copy. While the installed copy runs, a Finder
       double-click on a copy with the same bundle ID just activates the running one.
 
-- [x] **S4 — Know which build the chat is talking to (Core + `vf-mcp` + app + scripts).** Done in `m16/s4-connector-build`; Jon's post-install laptop gate remains owed.
+- [x] **S4 — Know which build the chat is talking to (Core + `vf-mcp` + app + scripts).** Merged as #139; the laptop gate passed 2026-10-26.
   *Added 2026-10-25. #125's playlist tools merged on 2026-10-24, but `/Applications` kept the
   2026-10-23 build until Jon installed on 10-25. Nothing installs a build when a PR merges.
   ChatGPT.app's built-in Codex also kept its own `vf-mcp` from that build running, and its
@@ -351,11 +351,17 @@ S4, and S4's advances it to M18 S2.
   - **Script:** `shellcheck`. The stale-helper listing is a function tested on canned `ps` output:
     start times before and after the swap, the tunnel's child excluded, and the owning app
     named. An isolated run prints the reminder.
-  - **Jon's laptop gate (after install, owed until done):**
+  - **Jon's laptop gate — passed 2026-10-26:**
     1. The installer prints the stamp, and lists any old helpers with the app that owns each.
     2. In a ChatGPT or Codex thread opened before the install, "what build is your Vinyl Fever
        connector?" can't name the new build. After refreshing tools, it names the commit the
        installer printed.
+    - **Result:** installed from `main` at `028bbb2` (built 2026-10-26T15:05:17Z, so the stamp
+      is #138's docs merge on top of #139's code). A thread opened before the install couldn't
+      name the new build. After a tool refresh, it named `028bbb2`. Settings → Chat Access (MCP)
+      showed `028bbb2 · clean · 2026-10-26T15:05:17Z` once Jon reopened the app (his first
+      look didn't show the line; the installed binary had it all along). Afterward, both running
+      `vf-mcp` helpers (the tunnel's child and ChatGPT's Codex) had started after the install.
 
 ## Constants register (starting values)
 
