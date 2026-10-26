@@ -64,7 +64,7 @@ caught.
 ## Slices
 
 **Dispatch 1: S1** (Core + app + `setup-mac`; Jon's laptop gate). It runs before M18 S2, and its
-completing PR advances `NEXT_UP.md` to M18 S2.
+completing PR advances `NEXT_UP.md` to M16 S4 (added 2026-10-25), which runs before M18 S2.
 
 - [ ] **S1 — The daily backup set (Core + app).**
   - **When:** after each `--poll-listening` run, and once at app launch in `.live`, Vinyl Fever

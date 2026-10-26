@@ -119,5 +119,8 @@ the tempo or the vocals?". At the start of a taste conversation, it asks at most
 - **A new playlist needs a role.** If you make a playlist you choose songs into, label it in
   **Settings → Taste → Playlist Roles…** (`keepers`, `curated`, `situational`, and so on).
   Unlabeled playlists still count as "you know this song", but only `keepers` count as kept.
-- **Re-copy the ChatGPT Project instructions from Settings** after any Vinyl Fever update that
-  changes them. The architect says so when one does.
+- **After installing a new Vinyl Fever, refresh the Vinyl Fever tools** in ChatGPT and Codex, or
+  start a new thread. Open threads keep the old tool list, and a Codex session can keep running
+  an old copy of the connector. Ask the chat which tools it has (or, once M16 S4 ships, which
+  connector build) before trusting it with a new feature. There's nothing to copy from
+  Settings: the chat gets Vinyl Fever's instructions from the connector.

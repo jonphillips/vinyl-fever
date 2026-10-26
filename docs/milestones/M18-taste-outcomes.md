@@ -91,6 +91,11 @@ Music's own 25 songs before Jon hears them (S2).
   - `ListeningStore.liveHostName()`, injected through `LibraryMCPServer.make(hostName:)` as in
     M17 S3;
   - tests use temp roots and never the live `Taste Intelligence/` folder.
+- **Every chat gate starts the same way** (added 2026-10-25, after M17 S1's gate ran on an old
+  build). Install from `main`, refresh the Vinyl Fever tools in the chat (or start a new
+  thread), and confirm the chat lists the expected tools. Once M16 S4 ships, it should also name
+  the build the installer printed. The architect checks the install time before recording a
+  gate.
 
 ## Slices
 
@@ -304,7 +309,10 @@ advances `NEXT_UP.md` to S4.
   running build is from 2026-10-23, before M17 S2 and S3. Then refresh the snapshot once, so
   the curation log records the 10 Selections adds and Vinyl Fever Keepers.
 - [ ] **Label "Vinyl Fever Keepers" `keepers`** in Settings → Taste → Playlist Roles… (Decision 6).
-- [ ] **After S1 merges:** re-copy the ChatGPT Project instructions from Settings.
+- [x] **After S1 merges: nothing to copy** (corrected 2026-10-25). The taste guidance reaches the
+  chat through `vf-mcp`'s server instructions (jon-platform ADR-0007 D6). Settings' Project
+  instructions are only the paste-format fallback, and S1 didn't change them. Install from
+  `main`, then refresh the Vinyl Fever tools in the chat.
 - [ ] M17 S3's gate is still owed: a Music Feedback note (the VF Note shortcut, renamed) in the
   car, read back word for word, then a playlist note.
 

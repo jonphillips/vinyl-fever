@@ -233,6 +233,13 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   There's no new Mac mini on order, so S2's gate is the laptop plus the Intel mini.
   **S1 (#110) and S2 (#111) merged 2026-10-21, and their laptop gates passed.** M16 closes when
   Jon's Intel mini poll-role gate passes.
+- **The chat ran on an old connector for two days** (2026-10-25). #125's playlist tools merged
+  on 10-24, but nothing installed the build, and ChatGPT.app's Codex kept an old `vf-mcp`
+  running with a cached list of 7 tools. M17 S1's gate ran without the tools it was testing.
+  The fix is planned as [M16](milestones/M16-machine-ops.md) S4 (a build stamp the chat can
+  report, and an installer warning about old helpers), plus a rule that every chat gate starts
+  with an install and a tool refresh. Telling Jon to "re-copy the Project instructions" was
+  also wrong: that text is only the paste fallback (corrected in M18 and the feedback guide).
 - **The installer's System Events gap and the flaky timing tests** are dispatched as M16 S3
   (2026-10-22). The two entries below stay for history until S3 merges.
 - **The installer assumes nothing is running when System Events access is denied** (from the

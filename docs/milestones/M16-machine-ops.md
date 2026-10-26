@@ -46,7 +46,9 @@ serving ChatGPT, and a new Mac is one command from "what's missing?"
 **Dispatch 1: S0** (Core + app; device gate). **Dispatch 2: S1** (scripts; device gate).
 **Dispatch 3: S2** (scripts; device gate on the laptop and the Intel mini). **Dispatch 4: S3**
 (scripts + tests; added 2026-10-22 from the #108 and #110 reviews; no device gate beyond the
-laptop).
+laptop). **Dispatch 5: S4** (Core + `vf-mcp` + app + scripts; added 2026-10-25; Jon's laptop
+gate). It runs after M19 S1 and before M18 S2. M19 S1's completing PR advances `NEXT_UP.md` to
+S4, and S4's advances it to M18 S2.
 
 - [x] **S0 — The database's own home (Core + app).** Merged as #108; the laptop device gate passed 2026-10-21.
   - The live path is `~/Library/Application Support/VinylFever/VinylFever.sqlite`, next to the
@@ -314,6 +316,47 @@ laptop).
     - The second case needs `open -n` on the stale copy. While the installed copy runs, a Finder
       double-click on a copy with the same bundle ID just activates the running one.
 
+- [ ] **S4 — Know which build the chat is talking to (Core + `vf-mcp` + app + scripts).**
+  *Added 2026-10-25. #125's playlist tools merged on 2026-10-24, but `/Applications` kept the
+  2026-10-23 build until Jon installed on 10-25. Nothing installs a build when a PR merges.
+  ChatGPT.app's built-in Codex also kept its own `vf-mcp` from that build running, and its
+  thread kept a cached list of 7 tools until Jon pressed refresh. So M17 S1's gate ran without
+  the tools it was testing, and no one could tell (M17 S1, Correction).*
+  - **The connector's build stamp:**
+    - At build time, record the commit (short SHA), whether the tree was dirty, and the build
+      time in the app bundle, where both the app and the bundled `vf-mcp` can read it. The
+      mechanism is the executor's choice, for example an Info.plist key set by a build phase in
+      `project.yml`. A build outside git reports `unknown` and never fails.
+    - `library_overview` gains `"connector":{"build":"c8fa5db","dirty":false,"builtAt":"…"}`,
+      with no path.
+    - Settings → Chat Access shows the same stamp under the database path.
+    - The installer's smoke test checks that the installed helper reports the commit it just
+      built.
+  - **The installer's last words** (`scripts/install-vinyl-fever`, after the smoke test):
+    - List every running `vf-mcp` from the installed path that started before the app was
+      swapped in, except the tunnel's new child. For each one, name the app that owns it by
+      walking up the parent processes to the first `.app` (for example "ChatGPT.app (Codex)"),
+      then print: "2 vf-mcp helpers are still on the old build (ChatGPT.app (Codex)). Restart
+      those sessions to pick up this install."
+    - Always print: "In ChatGPT and Codex, refresh the Vinyl Fever tools or start a new thread.
+      Open threads keep the old tool list."
+    - Warn only. Never quit or signal another app's process.
+  - **Docs:** the setup guide's install steps gain the refresh step, and "ask the chat which
+    connector build it has", as the way to confirm an install reached the chat.
+
+  **DoD:**
+  - **Core and `vf-mcp` tests:** `library_overview`'s golden JSON includes `connector` from an
+    injected stamp, a missing stamp reads `unknown`, and there's no path.
+  - **App test:** the Settings line, for a stamp and for `unknown`.
+  - **Script:** `shellcheck`. The stale-helper listing is a function tested on canned `ps` output:
+    start times before and after the swap, the tunnel's child excluded, and the owning app
+    named. An isolated run prints the reminder.
+  - **Jon's laptop gate (after install, owed until done):**
+    1. The installer prints the stamp, and lists any old helpers with the app that owns each.
+    2. In a ChatGPT or Codex thread opened before the install, "what build is your Vinyl Fever
+       connector?" can't name the new build. After refreshing tools, it names the commit the
+       installer printed.
+
 ## Constants register (starting values)
 
 | Constant | Value | Rationale |
@@ -364,3 +407,11 @@ doesn't dispatch anything: the review that approves M13 S3 sets `NEXT_UP.md` to 
    passed the tunnel smoke test on 2026-10-21. The flag makes switching one word.
 7. **Scripts check first and never use `sudo` or the developer portal.** The read-only report is
    the useful part on a new Mac. `--apply` only does what's idempotent and local.
+8. **Make the build visible, and warn about old helpers instead of stopping them** (S4, added
+   2026-10-25).
+   - A chat can't tell a missing feature from a missing install, so the connector says which
+     build it is, and every chat gate starts by asking.
+   - Stopping another app's `vf-mcp` could break a Codex task halfway through, and the chat
+     thread would still hold its old tool list, so the installer names the old helpers and
+     leaves the restart to Jon.
+   - S4 goes before M18 S2, because S2's gate is a chat gate.
