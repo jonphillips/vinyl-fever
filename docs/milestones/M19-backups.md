@@ -66,7 +66,7 @@ caught.
 **Dispatch 1: S1** (Core + app + `setup-mac`; Jon's laptop gate). It runs before M18 S2, and its
 completing PR advances `NEXT_UP.md` to M16 S4 (added 2026-10-25), which runs before M18 S2.
 
-- [x] **S1 — The daily backup set (Core + app).** Done in `m19/s1-daily-backup`.
+- [x] **S1 — The daily backup set (Core + app).** Merged as #135; the laptop gate passed 2026-10-26.
   - **When:** after each `--poll-listening` run, and once at app launch in `.live`, Vinyl Fever
     makes today's set if it doesn't exist yet ("today" is the local calendar day). Both paths
     call one Core function. A lock file keeps the app and the agent from building the same set
@@ -142,6 +142,15 @@ completing PR advances `NEXT_UP.md` to M16 S4 (added 2026-10-25), which runs bef
        17,472 bytes or more), which proves cloud-only files were downloaded.
     3. Settings → Backups shows the set. The next day's set hard-links the unchanged files (the
        architect checks inodes).
+    - **Result:** passed 2026-10-26. The hourly agent made the sets itself (11 runs, last exit 0), so
+      step 1 needed no manual run.
+      - Local sets `Daily/2026-10-25/` and `Daily/2026-10-26/`, and iCloud copies
+        `Backups/Jon_MBP/VinylFever-2026-10-25.sqlite` and `…-2026-10-26.sqlite` (6.6 MB each).
+      - `notes.jsonl` is 3,152 bytes in both sets. `playlist-roles.json` is 17,472, then 17,942
+        after a real edit. The 10-26 manifest has 14 files and no warnings.
+      - Hard links: the unchanged `notes.jsonl` shares one inode (543346738) across both sets, and
+        the changed `playlist-roles.json` got a fresh copy.
+      - Jon checked Settings → Backups.
 
 ## Prerequisites (Jon, not the executor's)
 
