@@ -87,7 +87,8 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   songs as unfamiliar, permanently. **Recommendation, for S2's plan:** each ledger batch records
   which evidence it could read (for example `coverage: {"listening": false}`), and S2's outcomes
   leave out batches recorded without listening evidence, or mark them. Decide before S2 is
-  dispatched.
+  dispatched. **Decided 2026-10-25:** added to M18 S2 as Decision 12 (coverage on every batch,
+  and an uncovered batch is listed but not scored).
 - **Backups** — planned as [M19](milestones/M19-backups.md) (2026-10-25). Jon asked about data
   loss. The logs live only in iCloud Drive, the database only on the laptop, and the laptop's
   Time Machine last finished on 2026-02-15 (its SMB destination doesn't mount). S1 makes a
