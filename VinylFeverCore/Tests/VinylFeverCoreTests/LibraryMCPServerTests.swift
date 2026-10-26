@@ -73,6 +73,9 @@ struct LibraryMCPServerTests {
       } else {
         #expect(annotations["readOnlyHint"] as? Bool == true)
       }
+      if name == "library_overview" {
+        #expect((tool["description"] as? String)?.contains("connector's build stamp") == true)
+      }
     }
     #expect(enumValues(in: tools, tool: "top_artists", property: "by") == ["plays", "favorites", "recently_added"])
     #expect(enumValues(in: tools, tool: "top_tracks", property: "by") == ["plays", "favorites", "recently_added", "recently_played"])

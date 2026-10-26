@@ -31,12 +31,15 @@ public struct ConnectorBuildStamp: Codable, Equatable, Sendable {
 
   public static func fromMainAppBundle(
     mainBundle: Bundle = .main,
-    executableURL: URL = URL(fileURLWithPath: CommandLine.arguments.first ?? "")
+    executableURL: URL? = nil
   ) -> Self {
     let mainBundleStamp = from(infoDictionary: mainBundle.infoDictionary ?? [:])
     if mainBundleStamp != .unknown { return mainBundleStamp }
 
-    var candidate = executableURL.standardizedFileURL
+    let launchedExecutable = executableURL
+      ?? mainBundle.executableURL
+      ?? URL(fileURLWithPath: CommandLine.arguments.first ?? "")
+    var candidate = launchedExecutable.resolvingSymlinksInPath().standardizedFileURL
     while candidate.path != "/" {
       if candidate.pathExtension == "app", let bundle = Bundle(url: candidate) {
         let stamp = from(infoDictionary: bundle.infoDictionary ?? [:])

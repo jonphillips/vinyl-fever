@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+REFRESH_REMINDER = "In ChatGPT and Codex, refresh the Vinyl Fever tools or start a new thread. Open threads keep the old tool list."
+
 
 def elapsed_seconds(value):
     value = value.strip()
@@ -64,6 +66,20 @@ def find_stale_helpers(ps_output, helper_path, swapped_at, captured_at):
     return stale
 
 
+def format_report(stale, include_reminder=True):
+    if stale:
+        owners = ", ".join(f"PID {pid}: {owner}" for pid, owner in stale)
+        count = len(stale)
+        noun = "helper is" if count == 1 else "helpers are"
+        action = "that session" if count == 1 else "those sessions"
+        listing = f"{count} vf-mcp {noun} still on the old build ({owners}). Restart {action} to pick up this install."
+    else:
+        listing = "No vf-mcp helpers from the installed app are still on the old build."
+    if include_reminder:
+        return f"{listing}\n{REFRESH_REMINDER}"
+    return listing
+
+
 def self_test():
     helper = "/Applications/VinylFever.app/Contents/Helpers/vf-mcp"
     output = """100 301 10:00 /Applications/VinylFever.app/Contents/Helpers/vf-mcp
@@ -75,8 +91,10 @@ def self_test():
     # tunnel's new helper child and started after the swap, so it is excluded.
     processes = find_stale_helpers(output, helper, swapped_at=1_000, captured_at=1_300)
     assert processes == [(100, "ChatGPT.app (Codex)")], processes
-    print("1 vf-mcp helper is still on the old build (ChatGPT.app (Codex)); restart that session to pick up this install.")
-    print("In ChatGPT and Codex, refresh the Vinyl Fever tools or start a new thread. Open threads keep the old tool list.")
+    report = format_report(processes)
+    assert "PID 100: ChatGPT.app (Codex)" in report
+    assert REFRESH_REMINDER in report
+    print(report)
     print("vf-mcp process listing self-test: passed")
 
 
@@ -85,6 +103,7 @@ def main():
     parser.add_argument("--helper")
     parser.add_argument("--swapped-at", type=float)
     parser.add_argument("--self-test", action="store_true")
+    parser.add_argument("--listing-only", action="store_true")
     args = parser.parse_args()
     if args.self_test:
         self_test()
@@ -96,15 +115,7 @@ def main():
         ["ps", "-axo", "pid=,ppid=,etime=,command="], text=True
     )
     stale = find_stale_helpers(ps_output, args.helper, args.swapped_at, captured_at)
-    if stale:
-        owners = ", ".join(f"PID {pid}: {owner}" for pid, owner in stale)
-        count = len(stale)
-        noun = "helper is" if count == 1 else "helpers are"
-        action = "that session" if count == 1 else "those sessions"
-        print(f"{count} vf-mcp {noun} still on the old build ({owners}). Restart {action} to pick up this install.")
-    else:
-        print("No vf-mcp helpers from the installed app are still on the old build.")
-    print("In ChatGPT and Codex, refresh the Vinyl Fever tools or start a new thread. Open threads keep the old tool list.")
+    print(format_report(stale, include_reminder=not args.listing_only))
 
 
 if __name__ == "__main__":

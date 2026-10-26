@@ -7,7 +7,7 @@ stamp, Settings → Chat Access shows it, and the install smoke check verifies t
 the installed commit. After smoke, the installer names pre-swap helpers by their owning app and
 reminds ChatGPT and Codex sessions to refresh their tools. Updated the install guide.
 
-Core (277 tests), Listening (55), and macOS app (81) suites passed; `vf-mcp` builds; both script
+Core (277 tests), Listening (55), and macOS app (82) suites passed; `vf-mcp` builds; both script
 self-checks, shellcheck, code-signature verification, and `check-handoff` passed. The built helper
 reported the same commit as its bundle and read recent listening coverage. Jon's post-install
 connector and refresh gate remains owed. Advanced `NEXT_UP.md` to M18 · S2.

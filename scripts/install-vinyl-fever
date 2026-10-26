@@ -46,11 +46,15 @@ xcodegen generate
 xcodebuild -project VinylFever.xcodeproj -scheme VinylFever -configuration $configuration -destination 'platform=macOS' -derivedDataPath $derived_data build
 xcodegen generate
 Verify codesign, bundled vf-mcp, embedded Vinyl Fever Dev Profile, and this Mac's Provisioning UDID
+Read expected_build from the current Git commit and built_build from $build_app/Contents/Info.plist
+Fail before staging if built_build is unknown or does not match expected_build
 If Vinyl Fever is running, prompt and quit it
 Stage $build_app beside $installed_app, swap it in while retaining the previous app
 If $tunnel_label is loaded, kickstart it and wait for /readyz
-python3 -I scripts/mcp-smoke $helper
+python3 -I scripts/mcp-smoke $helper --expected-build <build commit>
 On smoke failure, restore the previous app; on success, remove the backup and report mcp-tunnel status
+After smoke, run python3 -I scripts/vf-mcp-processes.py --helper $helper --swapped-at <captured swap time> --listing-only; warn and continue if it fails
+Always print the ChatGPT/Codex tool-refresh reminder
 If installation quit Vinyl Fever, reopen the installed app after success or rollback
 EOF
   exit 0
@@ -66,6 +70,14 @@ xcodegen generate
   -derivedDataPath "$derived_data" \
   build
 xcodegen generate
+
+expected_build="$(git -C "$repo_root" rev-parse --short HEAD)"
+built_build="$(/usr/libexec/PlistBuddy -c 'Print :VFConnectorBuild' "$build_app/Contents/Info.plist")"
+if [[ "$built_build" == unknown || "$built_build" != "$expected_build" ]]; then
+  echo "error: built app connector stamp is '${built_build:-missing}', expected '$expected_build'; refusing to stage" >&2
+  exit 1
+fi
+echo "connector build: $built_build"
 
 codesign --verify --deep --strict "$build_app"
 echo "codesign: verified"
@@ -200,10 +212,11 @@ else
   echo "tunnel: agent not loaded; restart skipped"
 fi
 
-expected_build="$(/usr/libexec/PlistBuddy -c 'Print :VFConnectorBuild' "$installed_app/Contents/Info.plist")"
 smoke_report="$(python3 -I "$repo_root/scripts/mcp-smoke" "$helper" --expected-build "$expected_build")"
 printf '%s\n' "$smoke_report"
-helper_report="$(python3 -I "$repo_root/scripts/vf-mcp-processes.py" --helper "$helper" --swapped-at "$swapped_at")"
+if ! helper_report="$(python3 -I "$repo_root/scripts/vf-mcp-processes.py" --helper "$helper" --swapped-at "$swapped_at" --listing-only)"; then
+  helper_report="warning: could not list running vf-mcp helpers"
+fi
 recent_summary="$(printf '%s\n' "$smoke_report" | awk -F ' — ' '/^recent_listening:/ {print $2}')"
 [[ -n "$recent_summary" ]] || recent_summary="passed; coverage unavailable"
 status_summary="not configured"
@@ -235,3 +248,4 @@ swapped=false
 had_previous=false
 echo "install: passed ($configuration) — $installed_app"
 printf '%s\n' "$helper_report"
+printf '%s\n' "In ChatGPT and Codex, refresh the Vinyl Fever tools or start a new thread. Open threads keep the old tool list."
