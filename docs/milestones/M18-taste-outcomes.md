@@ -166,9 +166,20 @@ advances `NEXT_UP.md` to S4.
   - **Jon's gate (after install, owed until done):** ask the chat for a new batch on any theme
     and stage it. The ledger gains a line. Then ask the chat to check a few of those songs:
     `check_tracks` shows them as recommended once.
+    - **Half done (2026-10-26).** The first real line is "2024 Selections: 15 New Discoveries",
+      staged from ChatGPT.app's Codex at 00:15Z. All 15 songs are unfamiliar, and 7 have
+      `artistKnown`. The architect checked every song against the snapshot and the log:
+      - none is owned or heard;
+      - `artistKnown` matches library tracks or log plays for all 15;
+      - Little Simz's "Gorilla" is only in "222.2022", a `followed` subscription playlist, so
+        leaving it unfamiliar is right.
 
-- [ ] **S2 — Outcomes by source and release age, the chat's New Music picks, and the stick-rate
-  fix (Core + `vf-mcp`).**
+      Still owed: `check_tracks` on a few of these songs shows them as recommended once.
+
+- [ ] **S2 — Outcomes by source and release age, the chat's New Music picks, the chat's
+  reasoning, and the stick-rate fix (Core + `vf-mcp`).** *Amended 2026-10-25, before dispatch,
+  from S1's first real batch: release years, the chat's reasoning (Decision 10), and coverage
+  per batch (Decision 12).*
   - **One classifier.** Generalize `TasteIntelligence.keptAndPassed` into one function over a
     batch (a date and songs), used for New Music weeks and ledger batches alike. Its rules stay
     M17's: kept is in a `keepers` playlist now; passed is heard within 14 days and not kept, with
@@ -208,6 +219,46 @@ advances `NEXT_UP.md` to S4.
   - **Stick-rate fix:** a song whose add to "N: Jon's Selections" the curation log first observed
     after the end of year N+1 is left out of N's stick rate. Adds from before the log began count
     as before. Each year reports `excludedLateAdds`.
+  - **Release years, always** (Decision 11). S1's first real batch ("2024 Selections: 15 New
+    Discoveries") came with no `year` on any song, so its whole band would be `unknown`.
+    - **Instructions:** when staging discoveries, give every song its original release year.
+    - **`stage_playlist`'s result** lists the songs that came without a year (`missingYear`), so
+      the chat can fix them and stage again.
+    - **No catalog lookup.** `vf-mcp` has no Apple Music API access, so a missing year stays
+      `unknown`.
+  - **The chat's reasoning, recorded and checked** (Decision 10). `stage_playlist` gains optional
+    fields that go only into the ledger, never into the `.vfplaylist`. The paste contract and
+    `PlaylistContract.trackRules` don't change.
+    - **On the batch:** `request`, Jon's ask as the chat received it, word for word (at most 500
+      characters).
+    - **On each song:**
+      - `why`, the chat's one-sentence reason (at most 300 characters);
+      - `like`, at most 3 songs it's explained against, each an `artist` and `title`, plus an
+        optional `from` (the playlist name it cites).
+    - **References are checked at staging.** Each `like` is recorded with `found`:
+      - `playlist` when `from` names a playlist that contains the song;
+      - `library` when the song is in the library, but not in the cited playlist, or there's
+        no `from`;
+      - `none` otherwise.
+
+      A wrong reference is recorded, never refused: a ledger problem never fails staging.
+    - **Longer text is truncated,** and the result says so.
+    - **`stage_playlist`'s result** lists `unverifiedReferences`: every `like` whose `found`
+      isn't what was claimed. Then the chat can correct its explanation to Jon right away.
+    - **Outcomes:** `recommendation_outcomes` shows each song's `why` and `like` beside its
+      class, so the chat can see which kinds of reasons led to keeps. `check_tracks`'s
+      `recommended` shows the latest `why`.
+    - **Instructions:** when staging discoveries, pass Jon's request as `request`, and for each
+      song a one-sentence `why` and the songs it's `like`. Cite only songs you've read from a
+      Vinyl Fever tool in this conversation, and name the playlist you read them from.
+  - **Coverage on every batch** (Decision 12; it resolves the question deferred from the #132
+    review). Each new batch records what S1's familiarity check could read:
+    `"coverage":{"listening":true,"notes":true,"snapshotAt":"…"}`. In `recommendation_outcomes`,
+    a batch staged without listening evidence is listed, but it's left out of every ratio,
+    marked `notScored: "no listening evidence at staging"`. Batches from before this field
+    count as covered.
+  - **The ledger stays `vf-recommendation-batch` v1.** Every new field is optional, so S1's lines
+    and older readers keep working.
   - **`check_tracks`'s `recommended`** gains the latest outcome.
 
   **DoD:**
@@ -218,14 +269,27 @@ advances `NEXT_UP.md` to S4.
     - the small-cell rule (counts and no ratio);
     - picks validation, `heardBeforePick` left out, and the picked-versus-rest counts on a fixture
       week;
-    - the stick-rate exclusion on a fixture curation log with a late add.
-  - **`vf-mcp` tests:** golden JSON for both tools, with no IDs or paths.
+    - the stick-rate exclusion on a fixture curation log with a late add;
+    - reference checking: `found` is `playlist`, `library`, and `none`, including a `from` that
+      names a playlist that doesn't contain the song;
+    - truncation of `request` and `why`;
+    - a batch without listening coverage is listed but not scored;
+    - S1's v1 lines, with none of the new fields, read unchanged.
+  - **`vf-mcp` tests:**
+    - golden JSON for both tools, with no IDs or paths;
+    - `stage_playlist` with `request`, `why`, and `like` writes them to the ledger and not to the
+      `.vfplaylist`;
+    - its result lists `missingYear` and `unverifiedReferences`.
   - **Executor's laptop check:** `recommendation_outcomes` against the real data shows Jon's S1
-    gate batch, pending or classified. Report it.
+    gate batch ("2024 Selections: 15 New Discoveries"), pending or classified, banded
+    `unknown`, with no reasoning. Report it.
   - **Jon's gate (owed until two weeks finish):** for two New Music weeks, ask the chat on the
     Friday to pick the songs he'll keep before listening. After each week's 14 days, read
     `taste_baselines`, and say whether the picked-versus-rest result matches what happened. That
     result decides S3.
+    - Also, stage one discovery batch: the ledger line carries `request`, a `why` per song, and
+      `like` references, and every year. If any reference comes back unverified, the chat said
+      so when it staged.
 
 - [ ] **S3 — Apple's candidates for new releases (decided at S2's gate; not dispatched).**
   - **If the chat's picks beat the rest of the week** over about four finished weeks: give the
@@ -302,13 +366,18 @@ advances `NEXT_UP.md` to S4.
 
 ## Prerequisites (Jon, not the executor's)
 
-- [ ] **Before Friday 2026-10-30:** rebuild the VF Listening Poller from `main` and install it on
-  the mini ([poller setup](../listening/POLLER-SETUP.md)). `main` has M17 S2's New Music saving
+- [x] **Before Friday 2026-10-30:** rebuild the VF Listening Poller from `main` and install it on
+  the mini. *Done 2026-10-25. Its first run saved the week of 2026-10-23 (25 songs, all 2026, each
+  with a catalog ID) to `exposure/Jon_s_Mac_mini__2_.jsonl`.* ([poller setup](../listening/POLLER-SETUP.md)). `main` has M17 S2's New Music saving
   and S3's fix to the poller's build. Until then, no week is saved, and S2's gate can't start.
-- [ ] **Install Vinyl Fever on the laptop from `main`** (`scripts/install-vinyl-fever`). The
+- [x] **Install Vinyl Fever on the laptop from `main`** (`scripts/install-vinyl-fever`). *Done
+  2026-10-25 at 19:34. The refresh at 23:30Z recorded the Selections adds and Vinyl Fever
+  Keepers in the curation log.* The
   running build is from 2026-10-23, before M17 S2 and S3. Then refresh the snapshot once, so
   the curation log records the 10 Selections adds and Vinyl Fever Keepers.
 - [ ] **Label "Vinyl Fever Keepers" `keepers`** in Settings → Taste → Playlist Roles… (Decision 6).
+  *Still unlabeled on 2026-10-25. Until it's labeled, songs filed there don't count as kept,
+  including keepers from the 2024 batch.*
 - [x] **After S1 merges: nothing to copy** (corrected 2026-10-25). The taste guidance reaches the
   chat through `vf-mcp`'s server instructions (jon-platform ADR-0007 D6). Settings' Project
   instructions are only the paste-format fallback, and S1 didn't change them. Install from
@@ -394,3 +463,19 @@ Added 2026-10-25 with S4. Merging that plan PR approves them.
    Vinyl Fever Keepers, and widening the rule would change New Music's existing numbers (S2
    keeps M17's classifier unchanged). Revisit only if Jon files finds straight into curated
    playlists.
+
+Added 2026-10-25 to S2, before dispatch. Merging that plan PR approves them.
+
+10. **Record the chat's reasoning word for word, and check its references** (Jon, 2026-10-25).
+    - The reason the chat gives for a song is the hypothesis, and the outcome tests it. Without
+      the reason, S2 can say which songs Jon kept, but not which kinds of reasons hold up.
+    - The 2025 batch showed the risk: the chat explained its picks against Selections it
+      couldn't read (M17 S1, Correction). Checking each cited song at staging catches that
+      while Jon is still in the conversation.
+    - It's the chat's text, stored like Jon's notes. Vinyl Fever still makes no model calls and
+      stores no scores.
+11. **The chat sends the year. Vinyl Fever doesn't look it up.** `vf-mcp` has no catalog access.
+    A result that names the missing years makes the chat fix them while it can.
+12. **Each batch records its coverage, and an uncovered batch isn't scored.** A song recorded as
+    new only because the listening log couldn't be read would be a false discovery,
+    permanently. Listing such a batch without scoring it keeps the record honest.

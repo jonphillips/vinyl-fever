@@ -305,6 +305,9 @@ next. S2 and S3 both edit `vf-mcp`, so they can't run side by side.
   - **Jon's gate, owed until two weeks are saved:** the mini saves a week without the laptop
     open. Jon reads `kept_and_passed` for a finished week and confirms the keeps and passes match
     what he did.
+    - **1 of 2 weeks saved (2026-10-26).** After Jon installed the rebuilt poller on 2026-10-25,
+      the mini's first run saved the week of 2026-10-23 (25 songs). The second saved week can
+      be the one after Friday 2026-10-30's update.
   - **Done in #126, merged 2026-10-25.** Jon's gate is owed. What the review's read-only probes
     settled (2026-10-24):
     - `/v1/me/library/playlists` has no name filter: `filter[name]` returns 400. The poller
