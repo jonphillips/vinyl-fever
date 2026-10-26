@@ -175,6 +175,7 @@ if [[ "${VF_INSTALL_FAIL_BEFORE_SWAP:-0}" == 1 ]]; then
 fi
 
 ditto "$build_app" "$stage_app"
+swapped_at="$(date +%s)"
 if [[ -d "$installed_app" ]]; then
   mv "$installed_app" "$previous_app"
   had_previous=true
@@ -199,8 +200,10 @@ else
   echo "tunnel: agent not loaded; restart skipped"
 fi
 
-smoke_report="$(python3 -I "$repo_root/scripts/mcp-smoke" "$helper")"
+expected_build="$(/usr/libexec/PlistBuddy -c 'Print :VFConnectorBuild' "$installed_app/Contents/Info.plist")"
+smoke_report="$(python3 -I "$repo_root/scripts/mcp-smoke" "$helper" --expected-build "$expected_build")"
 printf '%s\n' "$smoke_report"
+helper_report="$(python3 -I "$repo_root/scripts/vf-mcp-processes.py" --helper "$helper" --swapped-at "$swapped_at")"
 recent_summary="$(printf '%s\n' "$smoke_report" | awk -F ' — ' '/^recent_listening:/ {print $2}')"
 [[ -n "$recent_summary" ]] || recent_summary="passed; coverage unavailable"
 status_summary="not configured"
@@ -231,3 +234,4 @@ rm -rf "$previous_app"
 swapped=false
 had_previous=false
 echo "install: passed ($configuration) — $installed_app"
+printf '%s\n' "$helper_report"

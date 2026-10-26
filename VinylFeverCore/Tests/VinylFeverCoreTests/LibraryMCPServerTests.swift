@@ -5,6 +5,40 @@ import VinylFeverCore
 import VinylFeverListening
 
 struct LibraryMCPServerTests {
+  @Test("library overview reports the injected connector stamp without exposing a path")
+  func libraryOverviewConnectorStamp() async throws {
+    let root = temporaryDirectory()
+    let snapshotURL = root.appending(path: "snapshot.json")
+    try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
+    let stamp = ConnectorBuildStamp(build: "c8fa5db", dirty: false, builtAt: "2026-10-26T13:00:00Z")
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), buildStamp: stamp)
+
+    let response = try #require(await resultJSON(server, id: 65, name: "library_overview", arguments: "{}") as? [String: Any])
+    let connector = try #require(response["connector"] as? [String: Any])
+    #expect(connector["build"] as? String == "c8fa5db")
+    #expect(connector["dirty"] as? Bool == false)
+    #expect(connector["builtAt"] as? String == "2026-10-26T13:00:00Z")
+    #expect(!String(describing: response).contains("snapshot.json"))
+  }
+
+  @Test("a missing app build stamp is reported as unknown")
+  func missingConnectorBuildStampIsUnknown() {
+    #expect(ConnectorBuildStamp.from(infoDictionary: [:]) == .unknown)
+  }
+
+  @Test("library overview uses unknown when no connector stamp is injected")
+  func libraryOverviewMissingConnectorStamp() async throws {
+    let root = temporaryDirectory()
+    let snapshotURL = root.appending(path: "snapshot.json")
+    try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), buildStamp: .unknown)
+
+    let response = try #require(await resultJSON(server, id: 66, name: "library_overview", arguments: "{}") as? [String: Any])
+    let connector = try #require(response["connector"] as? [String: Any])
+    #expect(connector["build"] as? String == "unknown")
+    #expect(connector["builtAt"] as? String == "unknown")
+  }
+
   @Test("tool list matches the brief's names, properties, enums, and annotations")
   func toolsList() async throws {
     let server = LibraryMCPServer.make(snapshotURL: temporaryDirectory().appending(path: "missing.json"), inboxRoot: temporaryDirectory())

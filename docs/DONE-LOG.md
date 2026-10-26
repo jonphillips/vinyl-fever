@@ -1,5 +1,17 @@
 # Done log
 
+## 2026-10-26 — M16 · Dispatch 5 S4 (`m16/s4-connector-build`)
+
+The app bundle now carries the commit, dirty state, and build time. `library_overview` returns that
+stamp, Settings → Chat Access shows it, and the install smoke check verifies the helper reports
+the installed commit. After smoke, the installer names pre-swap helpers by their owning app and
+reminds ChatGPT and Codex sessions to refresh their tools. Updated the install guide.
+
+Core (277 tests), Listening (55), and macOS app (81) suites passed; `vf-mcp` builds; both script
+self-checks, shellcheck, code-signature verification, and `check-handoff` passed. The built helper
+reported the same commit as its bundle and read recent listening coverage. Jon's post-install
+connector and refresh gate remains owed. Advanced `NEXT_UP.md` to M18 · S2.
+
 ## 2026-10-25 — M19 · S1 daily backup set (`m19/s1-daily-backup`)
 
 Added one daily backup set from both live app launch and listening-poller runs. The local set contains an online SQLite copy, coordinated iCloud files, processed inbox files, and a SHA-256 manifest; unchanged files use hard links. Shrink, missing, and unreadable logs are recorded, with unreadable files falling back to the prior copy. Local and iCloud retention, Settings status, setup warnings, and restore instructions are included.

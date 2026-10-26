@@ -129,8 +129,9 @@ for Vinyl Fever, so the Tunnels page may still call it something else.
    profile is already there.
 5. Only one Mac should run the `vinyl-fever` agent. When moving the chat host, run
    `scripts/mcp-tunnel uninstall-agent vinyl-fever` on the old Mac.
-6. Smoke test: in ChatGPT, ask `@Vinyl Fever` for a library overview. If tools changed since the
-   plugin was added, use **Refresh** on the plugin's detail page.
+6. Smoke test: in ChatGPT, ask `@Vinyl Fever` for a library overview and ask which connector
+   build it has. After an install, refresh the Vinyl Fever tools in ChatGPT or Codex, or start a
+   new thread; open threads keep the older tool list.
 
 For Claude Code and Codex, recreate `~/music-chat` from [MCP setup](../chatgpt/MCP-SETUP.md).
 To check or apply the automatable setup steps, run `scripts/setup-mac --role build,chat --apply`;

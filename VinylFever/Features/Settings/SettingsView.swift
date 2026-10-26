@@ -134,6 +134,8 @@ struct SettingsView: View {
             .textSelection(.enabled)
           LabeledContent("Database", value: databasePath)
             .textSelection(.enabled)
+          LabeledContent("Connector build", value: ConnectorBuildStamp.fromMainAppBundle().displayValue)
+            .textSelection(.enabled)
           LabeledContent("Snapshot status", value: librarySnapshotStatus)
           copyButton("Claude Code .mcp.json", key: "claude", value: claudeConfig)
           copyButton("Codex config.toml", key: "codex", value: codexConfig)

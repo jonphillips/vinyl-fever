@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "$#" -ne 2 ]]; then
+  echo "usage: scripts/write-connector-build-stamp <app-info.plist> <repository-root>" >&2
+  exit 2
+fi
+
+info_plist="$1"
+repo_root="$2"
+[[ -f "$info_plist" ]] || { echo "error: app Info.plist not found: $info_plist" >&2; exit 1; }
+
+build="unknown"
+dirty="false"
+if command -v git >/dev/null 2>&1 && git -C "$repo_root" rev-parse --verify HEAD >/dev/null 2>&1; then
+  build="$(git -C "$repo_root" rev-parse --short HEAD)"
+  if [[ -n "$(git -C "$repo_root" status --porcelain)" ]]; then
+    dirty="true"
+  fi
+fi
+built_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+set_plist_value() {
+  local key="$1" value="$2"
+  if /usr/libexec/PlistBuddy -c "Print :$key" "$info_plist" >/dev/null 2>&1; then
+    /usr/libexec/PlistBuddy -c "Set :$key $value" "$info_plist"
+  else
+    /usr/libexec/PlistBuddy -c "Add :$key string $value" "$info_plist"
+  fi
+}
+
+set_plist_value VFConnectorBuild "$build"
+set_plist_value VFConnectorDirty "$dirty"
+set_plist_value VFConnectorBuiltAt "$built_at"
+printf 'connector build: %s (dirty: %s; built at: %s)\n' "$build" "$dirty" "$built_at"
