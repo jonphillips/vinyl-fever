@@ -170,15 +170,19 @@ completing PR advances `NEXT_UP.md` to S5.
   - **Jon's gate (after install, owed until done):** ask the chat for a new batch on any theme
     and stage it. The ledger gains a line. Then ask the chat to check a few of those songs:
     `check_tracks` shows them as recommended once.
-    - **Half done (2026-10-26).** The first real line is "2024 Selections: 15 New Discoveries",
-      staged from ChatGPT.app's Codex at 00:15Z. All 15 songs are unfamiliar, and 7 have
-      `artistKnown`. The architect checked every song against the snapshot and the log:
-      - none is owned or heard;
-      - `artistKnown` matches library tracks or log plays for all 15;
-      - Little Simz's "Gorilla" is only in "222.2022", a `followed` subscription playlist, so
-        leaving it unfamiliar is right.
-
-      Still owed: `check_tracks` on a few of these songs shows them as recommended once.
+    - **Passed 2026-10-26.** The first real line is "2024 Selections: 15 New Discoveries",
+      staged from ChatGPT.app's Codex at 00:15Z, on the build installed at 19:34 on 10-25 (after
+      #132 merged), with the chat on the refreshed 14-tool list.
+      - **All 15 songs are unfamiliar, and 7 have `artistKnown`.** The architect checked every
+        song against the snapshot and the log:
+        - none is owned or heard;
+        - `artistKnown` matches library tracks or log plays for all 15;
+        - Little Simz's "Gorilla" is only in "222.2022", a `followed` subscription playlist, so
+          leaving it unfamiliar is right.
+      - **`check_tracks`:** in the chat (Jon), and again through the installed helper (the
+        architect), batch songs show `recommended: {count: 1}` at 00:15Z, and a song outside
+        the batch shows none.
+      - **The batch has no years.** That's why S2 now asks the chat for them (Decision 11).
 
 - [ ] **S2 — Outcomes by source and release age, the chat's New Music picks, the chat's
   reasoning, and the stick-rate fix (Core + `vf-mcp`).** *Amended 2026-10-25, before dispatch,
