@@ -316,7 +316,7 @@ S4, and S4's advances it to M18 S2.
     - The second case needs `open -n` on the stale copy. While the installed copy runs, a Finder
       double-click on a copy with the same bundle ID just activates the running one.
 
-- [ ] **S4 — Know which build the chat is talking to (Core + `vf-mcp` + app + scripts).**
+- [x] **S4 — Know which build the chat is talking to (Core + `vf-mcp` + app + scripts).** Done in `m16/s4-connector-build`; Jon's post-install laptop gate remains owed.
   *Added 2026-10-25. #125's playlist tools merged on 2026-10-24, but `/Applications` kept the
   2026-10-23 build until Jon installed on 10-25. Nothing installs a build when a PR merges.
   ChatGPT.app's built-in Codex also kept its own `vf-mcp` from that build running, and its

@@ -39,6 +39,25 @@ def summarize(result, allow_setup_warning=False):
     return text[:240] or "ok", False
 
 
+def connector_stamp(result):
+    chunks = [item.get("text", "") for item in result.get("content", []) if item.get("type") == "text"]
+    try:
+        value = json.loads(" ".join(chunks).strip())
+    except (TypeError, json.JSONDecodeError):
+        fail("library_overview did not return JSON")
+    connector = value.get("connector") if isinstance(value, dict) else None
+    if not isinstance(connector, dict):
+        fail("library_overview did not include a connector build stamp")
+    build = connector.get("build")
+    dirty = connector.get("dirty")
+    built_at = connector.get("builtAt")
+    if not isinstance(build, str) or not build or not isinstance(dirty, bool) or not isinstance(built_at, str) or not built_at:
+        fail("library_overview returned an invalid connector build stamp")
+    if any("/" in str(item) for item in connector.values()):
+        fail("connector build stamp must not expose filesystem paths")
+    return connector
+
+
 def main():
     if len(sys.argv) == 2 and sys.argv[1] == "--self-test":
         warning, is_warning = summarize({
@@ -53,13 +72,18 @@ def main():
             assert error.code == 1
         else:
             raise AssertionError("an unrelated recent_listening error must fail")
+        connector = connector_stamp({"content": [{"type": "text", "text": json.dumps({
+            "connector": {"build": "unknown", "dirty": False, "builtAt": "unknown"},
+        })}]})
+        assert connector == {"build": "unknown", "dirty": False, "builtAt": "unknown"}
         print("mcp-smoke self-test: passed")
         return
     if os.environ.get("VF_MCP_SMOKE_FAIL") == "1":
         fail("forced smoke failure requested by VF_MCP_SMOKE_FAIL")
-    if len(sys.argv) != 2:
-        fail("usage: python3 -I scripts/mcp-smoke <helper> | --self-test")
+    if len(sys.argv) not in (2, 4) or (len(sys.argv) == 4 and sys.argv[2] != "--expected-build"):
+        fail("usage: python3 -I scripts/mcp-smoke <helper> [--expected-build <commit>] | --self-test")
     helper = sys.argv[1]
+    expected_build = sys.argv[3] if len(sys.argv) == 4 else None
     try:
         process = subprocess.Popen(
             [helper], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -113,6 +137,11 @@ def main():
 
         for name, arguments in (("library_overview", {}), ("recent_listening", {"period": "24h"})):
             result, elapsed = request("tools/call", {"name": name, "arguments": arguments})
+            if name == "library_overview":
+                connector = connector_stamp(result)
+                if expected_build is not None and connector["build"] != expected_build:
+                    fail(f"helper reports connector build {connector['build']!r}; expected {expected_build!r}")
+                print(f"connector build: {connector['build']} (dirty: {str(connector['dirty']).lower()}; built at: {connector['builtAt']})")
             summary, warning = summarize(result, allow_setup_warning=name == "recent_listening")
             suffix = " (warning)" if warning else ""
             print(f"{name}: {elapsed:.2f}s — {summary}{suffix}")

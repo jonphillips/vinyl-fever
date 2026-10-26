@@ -1,7 +1,7 @@
-# Next Up — M16 · S4: Know which build the chat is talking to
+# Next Up — M18 · S2: Outcomes by source and release age, the chat's New Music picks, the chat's reasoning, and the stick-rate fix
 
-**Slices:** M16 · S4 (branch `m16/s4-connector-build`)
-**Briefs:** docs/milestones/M16-machine-ops.md §S4
-**Done when:** S4's DoD; Core, `vf-mcp`, macOS app, and script checks pass from a clean checkout of the pushed head; PR opened in `jonphillips/vinyl-fever`. The completing PR advances this file to M18 · S2.
-**Owed:** M13 S2's iPad device gate; the listening-settings two-Mac check; M17 S2's gate (two mini-saved weeks, then Jon checks a finished week); M17 S3's gate (a Music Feedback note in the car, read back word for word, then a playlist note); M19 S1's laptop backup gate.
-**Notes:** S4 runs after M19 S1 and before M18 S2. M19 S1's laptop gate remains owed.
+**Slices:** M18 · S2 (branch `m18/s2-recommendation-outcomes`)
+**Briefs:** docs/milestones/M18-taste-outcomes.md §S2
+**Done when:** S2's DoD; Core and `vf-mcp` checks pass from a clean checkout of the pushed head; PR opened in `jonphillips/vinyl-fever`. The completing PR advances this file to M18 · S4.
+**Owed:** M13 S2's iPad device gate; the listening-settings two-Mac check; M17 S2's gate (two mini-saved weeks, then Jon checks a finished week); M17 S3's gate (a Music Feedback note in the car, read back word for word, then a playlist note); M16 S4's connector and refresh gate after install; M19 S1's laptop backup gate.
+**Notes:** S3 is decided at S2's gate; S2's completing PR advances this file to S4.
