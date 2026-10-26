@@ -58,6 +58,23 @@ private struct MCPRecentListening: Encodable {
 }
 private struct MCPListeningArtists: Encodable { var artists: [ListeningArtistCount]; var coverage: MCPListeningCoverage }
 private struct MCPListeningTracks: Encodable { var tracks: [ListeningTrackCount]; var coverage: MCPListeningCoverage }
+private struct MCPOverview: Encodable {
+  var overview: LibraryOverview
+  var connector: ConnectorBuildStamp
+
+  init(_ overview: LibraryOverview, connector: ConnectorBuildStamp) {
+    self.overview = overview
+    self.connector = connector
+  }
+
+  private enum CodingKeys: String, CodingKey { case connector }
+
+  func encode(to encoder: Encoder) throws {
+    try overview.encode(to: encoder)
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(connector, forKey: .connector)
+  }
+}
 private struct MCPTasteCoverage: Encodable {
   var exposureGaps: Int
   var exposureSkippedLines: Int
@@ -447,6 +464,7 @@ public enum LibraryMCPServer {
     inboxRoot: URL? = nil,
     listeningRootURL: URL? = nil,
     tasteRootURL: URL? = nil,
+    buildStamp: ConnectorBuildStamp = ConnectorBuildStamp.fromMainAppBundle(),
     hostName: @escaping @Sendable () -> String = { ListeningStore.liveHostName() },
     now: @escaping @Sendable () -> Date = { Date() }
   ) -> MCPServer {
@@ -468,8 +486,8 @@ public enum LibraryMCPServer {
     let checksSchema = schema(["tracks": .object(["type": .string("array"), "maxItems": .integer(LibraryIndex.maximumCheckTracks), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField]), "required": .array([.string("artist"), .string("title")])])])], required: ["tracks"])
     let stageSchema = schema(["name": stringField, "description": .object(["type": .string("string"), "description": .string(stageDescriptionGuidance)]), "tracks": .object(["type": .string("array"), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField, "album": stringField, "year": integerField]), "required": .array([.string("artist"), .string("title")])])])], required: ["name", "tracks"])
     return MCPServer(name: "Vinyl Fever", version: "1.0.0", instructions: instructions, tools: [
-      MCPTool(name: "library_overview", description: "Summarize Jon's Apple Music library, including track, artist, album, genre and decade counts.", inputSchema: overviewSchema, annotations: readOnly) { _ in
-        return .json(try await context.overview())
+      MCPTool(name: "library_overview", description: "Summarize Jon's Apple Music library, including track, artist, album, genre and decade counts, plus the connector's build stamp (commit, dirty state, and build time).", inputSchema: overviewSchema, annotations: readOnly) { _ in
+        return .json(MCPOverview(try await context.overview(), connector: buildStamp))
       },
       MCPTool(name: "top_artists", description: "Without period, ranks Mac library counts, which miss device plays. Periods count songs started in the listening log since polling began; skips and brief autoplay count. Only by: plays is allowed with periods.", inputSchema: topArtistsSchema, annotations: readOnly) { input in
         let p = try decode(RankingPayload.self, from: input, schema: topArtistsSchema)

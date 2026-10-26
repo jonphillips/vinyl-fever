@@ -108,6 +108,16 @@ targets:
           mkdir -p "$helper_dir"
           cp "$scratch_path/$swift_configuration/vf-mcp" "$helper_dir/vf-mcp"
           chmod 755 "$helper_dir/vf-mcp"
+      - name: Write connector build stamp
+        basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)
+        outputFiles:
+          - $(DERIVED_FILE_DIR)/vf-connector-build-stamp
+        script: |
+          set -euo pipefail
+          "$SRCROOT/scripts/write-connector-build-stamp" "$TARGET_BUILD_DIR/$INFOPLIST_PATH" "$SRCROOT"
+          touch "$DERIVED_FILE_DIR/vf-connector-build-stamp"
       - name: Install listening poller agent definition
         inputFiles:
           - $(SRCROOT)/VinylFever/VinylFeverListeningAgent.plist
