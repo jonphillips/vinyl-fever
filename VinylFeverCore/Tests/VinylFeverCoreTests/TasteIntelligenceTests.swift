@@ -75,6 +75,77 @@ struct TasteIntelligenceTests {
     #expect(result.stickRates.first(where: { $0.year == 2025 })?.returned == 1)
   }
 
+  @Test("release age boundaries and unknown years")
+  func releaseAgeBands() {
+    #expect(TasteIntelligence.band(releaseYear: 2026, batchYear: 2026) == .new)
+    #expect(TasteIntelligence.band(releaseYear: 2025, batchYear: 2026) == .new)
+    #expect(TasteIntelligence.band(releaseYear: 2024, batchYear: 2026) == .recent)
+    #expect(TasteIntelligence.band(releaseYear: 2021, batchYear: 2026) == .recent)
+    #expect(TasteIntelligence.band(releaseYear: 2020, batchYear: 2026) == .catalog)
+    #expect(TasteIntelligence.band(releaseYear: nil, batchYear: 2026) == .unknown)
+  }
+
+  @Test("stick rate excludes additions first observed after the following year")
+  func stickRateExcludesLateAdds() {
+    let observed = ISO8601DateFormatter().date(from: "2026-02-01T12:00:00Z")!
+    let snapshot = LibrarySnapshot(generatedAt: observed, tracks: [
+      LibraryTrack(persistentID: "early", name: "Early", artist: "A"),
+      LibraryTrack(persistentID: "late", name: "Late", artist: "B"),
+    ], playlists: [LibraryPlaylist(persistentID: "selection", name: "2024: Jon's Selections", kind: .user, members: ["early", "late"])])
+    let curation = CurationChange(observedAt: observed, previousSnapshotAt: observed.addingTimeInterval(-60),
+      playlists: [CurationPlaylistChange(name: "2024: Jon's Selections", persistentID: "selection",
+        added: [CurationSong(artist: "B", title: "Late", album: "")])])
+    let result = TasteIntelligence.baselines(weeks: [], snapshot: snapshot, curation: [curation])
+    let rate = result.stickRates.first { $0.year == 2024 }
+    #expect(rate?.selections == 1)
+    #expect(rate?.excludedLateAdds == 1)
+  }
+
+  @Test("New Music picks score picked songs against the rest of the same week")
+  func newMusicPickOutcomes() {
+    let date = Date(timeIntervalSince1970: 1_800_000_000)
+    let now = date.addingTimeInterval(15 * 86_400)
+    let snapshot = LibrarySnapshot(generatedAt: now, tracks: [
+      LibraryTrack(persistentID: "keep-id", name: "Keep Song", artist: "Keep Artist"),
+    ], playlists: [LibraryPlaylist(persistentID: "keepers", name: "Keepers", kind: .user, members: ["keep-id"])])
+    let roles = PlaylistRoles(updatedAt: now,
+      playlists: [PlaylistRoleEntry(persistentID: "keepers", name: "Keepers", role: .keepers)])
+    let poller = UUID()
+    let fetch = ListeningFetch(poller: poller, host: "Mac", fetchedAt: date.addingTimeInterval(3 * 86_400),
+      outcome: .plays, newCount: 1, pagesRead: 1,
+      items: [
+        ListeningItem(kind: .song, id: "pass-id", title: "Pass Song", artist: "Pass Artist"),
+        ListeningItem(kind: .song, id: "heard-id", title: "Heard Song", artist: "Heard Artist"),
+      ])
+    let log = ListeningLog(streams: [[fetch]], now: now)
+    let week = NewMusicWeek(lastModifiedDate: date, fetchedAt: date, host: "Mac", tracks: [
+      NewMusicTrack(catalogID: "keep-catalog", title: "Keep Song", artist: "Keep Artist", releaseDate: "2027-01-01"),
+      NewMusicTrack(catalogID: "pass-catalog", title: "Pass Song", artist: "Pass Artist", releaseDate: "2026-01-01"),
+      NewMusicTrack(catalogID: "heard-catalog", title: "Heard Song", artist: "Heard Artist", releaseDate: "2027-01-01"),
+    ])
+    let ledgerBatch = RecommendationBatch(kind: "new-music-picks", recordedAt: date.addingTimeInterval(100),
+      host: "Mac", tracks: [
+        RecommendationTrack(artist: "Keep Artist", title: "Keep Song", year: 2027, familiar: false, reasons: [], artistKnown: false, picked: true),
+        RecommendationTrack(artist: "Pass Artist", title: "Pass Song", year: 2026, familiar: false, reasons: [], artistKnown: false, picked: false),
+        RecommendationTrack(artist: "Heard Artist", title: "Heard Song", year: 2027, familiar: false, reasons: [], artistKnown: false, heardBeforePick: true, picked: true),
+      ], coverage: RecommendationCoverage(listening: true, notes: true, snapshotAt: now), batchDate: date)
+    let ledger = RecommendationLedgerReadResult(batches: [ledgerBatch], skippedLines: 0)
+    let classified = TasteIntelligence.keptAndPassed(weeks: [week], snapshot: snapshot,
+      roles: roles, log: log, now: now)
+    let outcomes = TasteIntelligence.recommendationOutcomes(ledger: ledger, weeks: [week],
+      snapshot: snapshot, roles: roles, log: log, now: now)
+    let batch = outcomes.batches[0]
+    #expect(batch.pickedCounts == ["kept": 1])
+    #expect(batch.notPickedCounts == ["passed": 1])
+    #expect(batch.songs.map(\.title).sorted() == ["Keep Song", "Pass Song"])
+    let baselines = TasteIntelligence.baselines(weeks: classified, snapshot: snapshot,
+      ledger: ledger, outcomes: outcomes)
+    let pick = baselines.picksByWeek[date.ISO8601Format()]
+    #expect(pick?.picked.kept == 1)
+    #expect(pick?.notPicked.passed == 1)
+    #expect(baselines.bySourceAndBand["chat|new"]?.ratio == nil)
+  }
+
   @Test("pending weeks do not contribute to yield")
   func baselinesExcludePendingWeeksFromYield() {
     let date = Date(timeIntervalSince1970: 1_800_000_000)

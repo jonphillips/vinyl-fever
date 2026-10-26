@@ -9,10 +9,24 @@ private struct PlaylistToolPayload: Codable, Sendable {
     var title: String
     var album: String?
     var year: Int?
+    var why: String?
+    var like: [RecommendationLikeInput]?
+    enum CodingKeys: String, CodingKey { case artist, title, album, year, why, like }
   }
   var name: String
   var description: String?
+  var request: String?
   var tracks: [Track]
+}
+private struct RecordNewMusicPicksPayload: Decodable, Sendable {
+  struct Song: Decodable, Sendable { var artist: String; var title: String }
+  var songs: [Song]
+}
+
+private struct RecommendationLikeInput: Codable, Sendable {
+  var artist: String
+  var title: String
+  var from: String?
 }
 
 private struct CheckTracksPayload: Decodable, Sendable {
@@ -85,6 +99,8 @@ private struct MCPTasteCoverage: Encodable {
 }
 private struct MCPKeptAndPassed: Encodable { var weeks: [NewMusicWeekResult]; var coverage: MCPTasteCoverage }
 private struct MCPBaselines: Encodable { var baselines: TasteBaselines; var coverage: MCPTasteCoverage }
+private struct MCPRecommendationOutcomes: Encodable { var outcomes: RecommendationOutcomes; var coverage: MCPTasteCoverage }
+private struct MCPRecordPicks: Encodable { var recorded: Bool; var recordedAt: Date; var songCount: Int }
 private struct MCPTasteNotesCoverage: Encodable {
   var filesRead: Int
   var skippedLines: Int
@@ -324,6 +340,52 @@ private actor LibraryMCPContext {
     return result
   }
 
+  func curationChanges() -> [CurationChange] {
+    let folder = tasteRootURL.appending(path: "curation", directoryHint: .isDirectory)
+    guard let files = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) else { return [] }
+    let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+    return files.filter { $0.pathExtension == "jsonl" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
+      .flatMap { url -> [CurationChange] in
+        guard let data = try? Self.readCoordinated(url) else { return [] }
+        return String(decoding: data, as: UTF8.self).split(separator: "\n").compactMap { try? decoder.decode(CurationChange.self, from: Data($0.utf8)) }
+      }
+  }
+
+  func recordNewMusicPicks(_ songs: [(artist: String, title: String)], recordedAt: Date) throws -> Int {
+    let weeks = try newMusicExposure().records.compactMap { record -> NewMusicWeek? in
+      if case let .week(week) = record { week } else { nil }
+    }
+    guard let week = weeks.max(by: { $0.lastModifiedDate < $1.lastModifiedDate }) else {
+      throw ArgumentError.invalidShape("there is no saved New Music week")
+    }
+    let (snapshot, _, _, _, identity) = try playlistData()
+    let available = Set(week.tracks.map { TasteIntelligence.songKey(artist: $0.artist, title: $0.title, identity: identity) })
+    for song in songs where !available.contains(TasteIntelligence.songKey(artist: song.artist, title: song.title, identity: identity)) {
+      throw ArgumentError.invalidShape("\(song.artist) — \(song.title) isn't in the latest saved New Music week")
+    }
+    let heardKeys: Set<String>
+    if let log = try? listeningLog(now: recordedAt) {
+      heardKeys = Set(log.plays.filter { $0.windowEnd <= recordedAt }.map {
+        TasteIntelligence.songKey(artist: $0.item.artist, title: $0.item.title, identity: identity)
+      })
+    } else { heardKeys = [] }
+    let picked = Set(songs.map { TasteIntelligence.songKey(artist: $0.artist, title: $0.title, identity: identity) })
+    let tracks = week.tracks.map { track in
+      let key = TasteIntelligence.songKey(artist: track.artist, title: track.title, identity: identity)
+      return RecommendationTrack(artist: track.artist, title: track.title, album: track.album,
+        year: track.releaseDate.flatMap { Int($0.prefix(4)) }, familiar: false, reasons: [], artistKnown: false,
+        heardBeforePick: heardKeys.contains(key), picked: picked.contains(key))
+    }
+    let batch = RecommendationBatch(kind: "new-music-picks", recordedAt: recordedAt,
+      host: hostName(), playlist: nil, tracks: tracks,
+      coverage: RecommendationCoverage(listening: (try? listeningLog(now: recordedAt)) != nil,
+        notes: (try? tasteNotes()) != nil, snapshotAt: snapshot.generatedAt),
+      batchDate: week.lastModifiedDate)
+    try RecommendationLedgerCodec.append(batch, host: hostName(), folder: tasteRootURL.appending(path: "recommendations", directoryHint: .isDirectory))
+    cachedRecommendationLedger = nil; cachedRecommendationFiles = [:]; cachedRecommendationEvidence = nil
+    return songs.count
+  }
+
   func recommendationEvidenceIndex(identity: ArtistIdentity) throws -> RecommendationLedgerEvidenceIndex {
     let ledger = try recommendationLedger()
     if let cachedRecommendationEvidence, cachedRecommendationEvidence.identity == identity {
@@ -355,6 +417,34 @@ private actor LibraryMCPContext {
         listeningStatus: error is ListeningHistoryNotSetUp ? "not_set_up" : String(describing: error),
         snapshotGeneratedAt: snapshotAt, snapshotAge: max(0, now.timeIntervalSince(snapshotAt))), log)
     }
+  }
+
+  func recommendationOutcomes(now: Date, limit: Int) throws -> (RecommendationOutcomes, MCPTasteCoverage) {
+    let (snapshot, roles, _, generatedAt, _) = try playlistData()
+    let exposure = try newMusicExposure()
+    let (coverage, log) = try tasteCoverage(exposure: exposure, now: now, snapshotAt: generatedAt)
+    let ledger = (try? recommendationLedger()) ?? RecommendationLedgerReadResult(batches: [], skippedLines: 0)
+    let weeks = exposure.records.compactMap { record -> NewMusicWeek? in
+      if case let .week(week) = record { return week }
+      return nil
+    }
+    let outcomes = TasteIntelligence.recommendationOutcomes(ledger: ledger, weeks: weeks,
+      snapshot: snapshot, roles: roles, log: log, now: now, limit: limit)
+    return (outcomes, coverage)
+  }
+
+  func latestRecommendationOutcomes(now: Date) throws -> [String: String] {
+    let (outcomes, _) = try recommendationOutcomes(now: now, limit: 50)
+    let identity = try index().0.artistIdentity
+    var latest: [String: String] = [:]
+    for batch in outcomes.batches {
+      for song in batch.songs {
+        guard let classification = song.classification else { continue }
+        let key = TasteIntelligence.songKey(artist: song.artist, title: song.title, identity: identity)
+        if latest[key] == nil { latest[key] = classification.rawValue }
+      }
+    }
+    return latest
   }
 
   func heardDates(artist: String, title: String, identity: ArtistIdentity) -> [Date]? {
@@ -405,10 +495,15 @@ private actor LibraryMCPContext {
   }
 
   func stage(_ payload: PlaylistToolPayload, recordedAt: Date) throws -> (name: String, trackCount: Int,
-    dropped: [DroppedPlaylistTrack], ledgerRecorded: Bool, ledgerReason: String?) {
+    dropped: [DroppedPlaylistTrack], ledgerRecorded: Bool, ledgerReason: String?, missingYear: [String],
+    unverifiedReferences: [String], truncated: Bool) {
+    struct ContractTrack: Encodable { var artist: String; var title: String; var album: String?; var year: Int? }
+    struct ContractPayload: Encodable { var name: String; var description: String?; var tracks: [ContractTrack] }
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-    let json = String(decoding: try encoder.encode(payload), as: UTF8.self)
+    let contractPayload = ContractPayload(name: payload.name, description: payload.description,
+      tracks: payload.tracks.map { ContractTrack(artist: $0.artist, title: $0.title, album: $0.album, year: $0.year) })
+    let json = String(decoding: try encoder.encode(contractPayload), as: UTF8.self)
     let contract = "VF-PLAYLIST: v1\n\(json)"
     let decoded = try PlaylistContract.decode(contract)
     guard !decoded.request.tracks.isEmpty else {
@@ -419,26 +514,78 @@ private actor LibraryMCPContext {
       let (snapshot, _, playlistIndex, _, _) = try playlistData()
       let (index, _) = try self.index()
       let log = try? listeningLog(now: recordedAt)
-      let noteKeys = Set((try? tasteNotesBySong(identity: index.artistIdentity).keys)
-        ?? Dictionary<String, [TasteNote]>().keys)
+      let notesBySong = try? tasteNotesBySong(identity: index.artistIdentity)
+      let noteKeys = Set(notesBySong?.keys ?? Dictionary<String, [TasteNote]>().keys)
       let recommendationEvidence = try recommendationEvidenceIndex(identity: index.artistIdentity)
       let familiarity = RecommendationFamiliarityIndex(snapshot: snapshot, index: index,
         playlistIndex: playlistIndex, listeningLog: log, tasteNoteKeys: noteKeys,
         recommendationEvidence: recommendationEvidence, recordedAt: recordedAt)
+      let survivingInputs = decoded.request.tracks.map { request in
+        payload.tracks.first { $0.artist.localizedCaseInsensitiveCompare(request.artist) == .orderedSame &&
+          $0.title.localizedCaseInsensitiveCompare(request.title) == .orderedSame }
+      }
       let tracks = decoded.request.tracks.map { request in
         familiarity.evaluate(artist: request.artist, title: request.title, album: request.album, year: request.year)
       }
+      var truncated = false
+      let references = survivingInputs.map { input -> [RecommendationLike] in
+        guard let request = input else { return [] }
+        let likes: [RecommendationLikeInput] = request.like ?? []
+        let refs = likes.prefix(3).map { (like: RecommendationLikeInput) -> RecommendationLike in
+          let from: String? = like.from?.trimmingCharacters(in: .whitespacesAndNewlines)
+          let matchingPlaylist = from.flatMap { (name: String) -> LibraryPlaylist? in
+            snapshot.playlists.first { $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame }
+          }
+          let found: String
+          let matchingTracks: [LibraryTrack] = index.matchingTracks(artist: like.artist, title: like.title)
+          var matchingIDs = Set(matchingTracks.map(\.persistentID))
+          let likeKey = TasteIntelligence.songKey(artist: like.artist, title: like.title, identity: index.artistIdentity)
+          for (persistentID, outsideTrack) in snapshot.outsideTracks {
+            let outsideKey = TasteIntelligence.songKey(artist: outsideTrack.artist, title: outsideTrack.name,
+              identity: index.artistIdentity)
+            if outsideKey == likeKey { matchingIDs.insert(persistentID) }
+          }
+          let isInCitedPlaylist = matchingPlaylist.map { playlist in
+            playlist.members.contains { matchingIDs.contains($0) }
+          } ?? false
+          if isInCitedPlaylist {
+            found = "playlist"
+          } else if !matchingTracks.isEmpty || !matchingIDs.isEmpty { found = "library" }
+          else { found = "none" }
+          return RecommendationLike(artist: like.artist, title: like.title, from: like.from, found: found)
+        }
+        return refs
+      }
+      let enriched = zip(tracks, survivingInputs).enumerated().map { index, pair -> RecommendationTrack in
+        let (track, input) = pair
+        var result = track
+        if let why = input?.why {
+          if why.count > 300 { truncated = true }
+          result.why = String(why.prefix(300))
+        }
+        result.like = references[index]
+        return result
+      }
+      if let request = payload.request, request.count > 500 { truncated = true }
       let batch = RecommendationBatch(recordedAt: recordedAt, host: hostName(),
-        playlist: decoded.request.name, tracks: tracks)
+        playlist: decoded.request.name, tracks: enriched, request: payload.request.map { String($0.prefix(500)) },
+        coverage: RecommendationCoverage(listening: log != nil, notes: notesBySong != nil, snapshotAt: snapshot.generatedAt))
       let folder = tasteRootURL.appending(path: "recommendations", directoryHint: .isDirectory)
       try RecommendationLedgerCodec.append(batch, host: hostName(), folder: folder)
       cachedRecommendationLedger = nil
       cachedRecommendationFiles = [:]
       cachedRecommendationEvidence = nil
-      return (decoded.request.name, decoded.request.tracks.count, decoded.droppedTracks, true, nil)
+      if payload.tracks.contains(where: { ($0.like?.count ?? 0) > 3 }) { truncated = true }
+      let unverified = enriched.flatMap { (track: RecommendationTrack) -> [String] in
+        let likes: [RecommendationLike] = track.like ?? []
+        return likes.filter { ($0.found != "playlist" && $0.from != nil) || $0.found == "none" }
+          .map { "\(track.artist) — \(track.title): \($0.artist) — \($0.title)" }
+      }
+      let missingYear = decoded.request.tracks.filter { $0.year == nil }.map { "\($0.artist) — \($0.title)" }
+      return (decoded.request.name, decoded.request.tracks.count, decoded.droppedTracks, true, nil, missingYear, unverified, truncated)
     } catch {
       return (decoded.request.name, decoded.request.tracks.count, decoded.droppedTracks, false,
-        "ledger could not be read or written")
+        "ledger could not be read or written", [], [], false)
     }
   }
 }
@@ -456,7 +603,7 @@ public enum LibraryMCPServer {
   Vinyl Fever exposes Jon's Apple Music library and listening stats. Use these tools for any claim about what Jon owns, has played, or has loved — never guess. Before proposing a final list, call check_tracks on it. For Jon's uploads, use an exact album from uploadedAlbums as the album hint. When Jon asks for the playlist, call stage_playlist with the final list instead of printing it; Jon reviews and creates it in Vinyl Fever. Snapshot age is in library_overview.
   """
   public static let instructions: String = {
-    instructionHead + "\n\nFor taste questions, start with list_playlists. keepers are the strongest evidence and replay positions are ranks. Report evidence by role, not by counting playlists; don't infer taste from genre. sharedAccountEra play counts aren't Jon's alone. Stage discoveries with stage_playlist, because Vinyl Fever records which songs were new to Jon. Drop songs recommended before, unless Jon asks for them again.\n\n" + PlaylistContract.trackRules
+    instructionHead + "\n\nFor taste questions, start with list_playlists. keepers are the strongest evidence and replay positions are ranks. Report evidence by role, not by counting playlists; don't infer taste from genre. sharedAccountEra play counts aren't Jon's alone. Stage discoveries with stage_playlist, because Vinyl Fever records which songs were new to Jon. Give every discovery its original release year, Jon's request as request, and a one-sentence why with only references read in this conversation. Drop songs recommended before, unless Jon asks for them again. When Jon asks which New Music songs he'll keep, read kept_and_passed, choose before he listens, then call record_new_music_picks.\n\n" + PlaylistContract.trackRules
   }()
 
   public static func make(
@@ -479,12 +626,15 @@ public enum LibraryMCPServer {
     let playlistListSchema = schema(["role": enumField(PlaylistRole.allCases.map(\.rawValue) + ["unlabeled"]), "limit": integerField])
     let playlistTracksSchema = schema(["name": stringField, "limit": integerField], required: ["name"])
     let keptPassedSchema = schema(["weeks": integerField])
+    let recommendationOutcomesSchema = schema(["batches": integerField])
+    let recordPicksSchema = schema(["songs": .object(["type": .string("array"), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField]), "required": .array([.string("artist"), .string("title")])])])], required: ["songs"])
     let tasteNotesSchema = schema(["artist": stringField, "title": stringField, "playlist": stringField,
       "period": enumField(["24h", "7d", "30d", "90d", "all_time"]), "limit": integerField])
     let recordTasteNoteSchema = schema(["note": .object(["type": .string("string"), "description": .string("Jon's words verbatim; do not paraphrase.")]),
       "artist": stringField, "title": stringField, "album": stringField, "playlist": stringField], required: ["note"])
     let checksSchema = schema(["tracks": .object(["type": .string("array"), "maxItems": .integer(LibraryIndex.maximumCheckTracks), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField]), "required": .array([.string("artist"), .string("title")])])])], required: ["tracks"])
-    let stageSchema = schema(["name": stringField, "description": .object(["type": .string("string"), "description": .string(stageDescriptionGuidance)]), "tracks": .object(["type": .string("array"), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField, "album": stringField, "year": integerField]), "required": .array([.string("artist"), .string("title")])])])], required: ["name", "tracks"])
+    let likeSchema = MCPValue.object(["type": .string("array"), "maxItems": .integer(3), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField, "from": stringField]), "required": .array([.string("artist"), .string("title")])])])
+    let stageSchema = schema(["name": stringField, "description": .object(["type": .string("string"), "description": .string(stageDescriptionGuidance)]), "request": stringField, "tracks": .object(["type": .string("array"), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField, "album": stringField, "year": integerField, "why": stringField, "like": likeSchema]), "required": .array([.string("artist"), .string("title")])])])], required: ["name", "tracks"])
     return MCPServer(name: "Vinyl Fever", version: "1.0.0", instructions: instructions, tools: [
       MCPTool(name: "library_overview", description: "Summarize Jon's Apple Music library, including track, artist, album, genre and decade counts, plus the connector's build stamp (commit, dirty state, and build time).", inputSchema: overviewSchema, annotations: readOnly) { _ in
         return .json(MCPOverview(try await context.overview(), connector: buildStamp))
@@ -533,6 +683,7 @@ public enum LibraryMCPServer {
         let (index, _) = try await context.index()
         let (snapshot, roles, playlistIndex, _, _) = try await context.playlistData()
         let recommendationEvidence = try? await context.recommendationEvidenceIndex(identity: index.artistIdentity)
+        let recommendationOutcomes = try? await context.latestRecommendationOutcomes(now: now())
         var listeningError: String?
         do { _ = try await context.listeningLog() }
         catch { listeningError = error is ListeningHistoryNotSetUp ? "not_set_up" : String(describing: error) }
@@ -547,7 +698,9 @@ public enum LibraryMCPServer {
           let noteKey = TasteIntelligence.songKey(artist: request.artist, title: request.title, identity: index.artistIdentity)
           let notes = tasteNotesBySong.map { MCPNoteEvidence($0[noteKey] ?? []) }
           let check = index.checkTracks([(artist: request.artist, title: request.title)]).first!
-          let recommended = recommendationEvidence?.forSong(artist: request.artist, title: request.title)
+          var recommended = recommendationEvidence?.forSong(artist: request.artist, title: request.title)
+          let recommendationKey = TasteIntelligence.songKey(artist: request.artist, title: request.title, identity: index.artistIdentity)
+          recommended?.latestOutcome = recommendationOutcomes?[recommendationKey]
           rows.append(MCPCheckedTrack(check, evidence: evidence, heardDays: heard == nil ? nil : days.count,
             heardLast: heard?.max(), notes: notes, recommended: recommended)
           )
@@ -587,6 +740,7 @@ public enum LibraryMCPServer {
         catch { listeningError = error is ListeningHistoryNotSetUp ? "not_set_up" : String(describing: error) }
         let tasteNotesBySong = try? await context.tasteNotesBySong(identity: identity)
         let recommendationEvidence = try? await context.recommendationEvidenceIndex(identity: identity)
+        let recommendationOutcomes = try? await context.latestRecommendationOutcomes(now: now())
         var rows: [MCPPlaylistTrack] = []
         for (position, id) in match.members.enumerated() {
           let track = tracksByID[id]
@@ -599,7 +753,9 @@ public enum LibraryMCPServer {
           let noteKey = TasteIntelligence.songKey(artist: artist, title: title, identity: identity)
           let notes = tasteNotesBySong.map { MCPNoteEvidence($0[noteKey] ?? []) }
           let check = libraryIndex.checkTracks([(artist: artist, title: title)]).first!
-          let recommended = recommendationEvidence?.forSong(artist: artist, title: title)
+          var recommended = recommendationEvidence?.forSong(artist: artist, title: title)
+          let recommendationKey = TasteIntelligence.songKey(artist: artist, title: title, identity: identity)
+          recommended?.latestOutcome = recommendationOutcomes?[recommendationKey]
           rows.append(MCPPlaylistTrack(position: position + 1, artist: artist, title: title,
             album: track?.album ?? outside?.album ?? "", year: track?.year ?? outside?.year,
             evidence: MCPPlaylistSongEvidence(evidence, check: check, heardDays: heardDays, heardLast: heard?.max(), notes: notes, recommended: recommended)))
@@ -631,16 +787,9 @@ public enum LibraryMCPServer {
           roles: roles, log: log, now: instant, limit: payload.weeks ?? 8)
         return .json(MCPKeptAndPassed(weeks: results, coverage: coverage))
       },
-      MCPTool(name: "taste_baselines", description: "Summarize Apple's kept-to-passed yield by New Music week and Jon's yearly Selections stick rate, with counts.", inputSchema: schema([:]), annotations: readOnly) { _ in
-        let instant = now()
-        let (snapshot, roles, _, generatedAt, _) = try await context.playlistData()
-        let exposure = try await context.newMusicExposure()
-        let weeks = exposure.records.compactMap { record -> NewMusicWeek? in if case let .week(value) = record { value } else { nil } }
-        let (coverage, log) = try await context.tasteCoverage(exposure: exposure, now: instant, snapshotAt: generatedAt)
-        let classified = TasteIntelligence.keptAndPassed(weeks: weeks, snapshot: snapshot,
-          roles: roles, log: log, now: instant, limit: max(1, weeks.count))
-        return .json(MCPBaselines(baselines: TasteIntelligence.baselines(weeks: classified, snapshot: snapshot), coverage: coverage))
-      },
+      tasteBaselinesTool(context: context, now: now, schema: schema([:]), annotations: readOnly),
+      recommendationOutcomesTool(context: context, now: now, schema: recommendationOutcomesSchema, annotations: readOnly),
+      recordNewMusicPicksTool(context: context, now: now, schema: recordPicksSchema),
       MCPTool(name: "taste_notes", description: "Read Jon's taste notes verbatim. Time-only notes include nearby listening-log candidates when available.", inputSchema: tasteNotesSchema, annotations: readOnly) { input in
         let payload = try decode(TasteNotesPayload.self, from: input, schema: tasteNotesSchema)
         let instant = now()
@@ -693,11 +842,54 @@ public enum LibraryMCPServer {
         let payload = try decode(PlaylistToolPayload.self, from: input, schema: stageSchema)
         let staged = try await context.stage(payload, recordedAt: now())
         let json = MCPToolResult.json(StagedPlaylistResult(staged: true, name: staged.name, trackCount: staged.trackCount,
-          dropped: staged.dropped, ledgerRecorded: staged.ledgerRecorded, ledgerReason: staged.ledgerReason))
+          dropped: staged.dropped, ledgerRecorded: staged.ledgerRecorded, ledgerReason: staged.ledgerReason,
+          missingYear: staged.missingYear, unverifiedReferences: staged.unverifiedReferences, truncated: staged.truncated))
         let payloadText = json.content.first?.text ?? "{}"
         return .text(payloadText + "\n\nJon reviews and creates it in Vinyl Fever; nothing is in Apple Music yet.")
       },
     ])
+  }
+
+  private static func tasteBaselinesTool(context: LibraryMCPContext, now: @escaping @Sendable () -> Date,
+    schema: MCPValue, annotations: MCPToolAnnotations) -> MCPTool {
+    MCPTool(name: "taste_baselines", description: "Summarize recommendation outcomes by source and release age, Apple's own New Music yield, and Jon's yearly Selections stick rate, with counts.", inputSchema: schema, annotations: annotations) { _ in
+      let instant = now()
+      let (snapshot, roles, _, generatedAt, _) = try await context.playlistData()
+      let exposure = try await context.newMusicExposure()
+      let weeks = exposure.records.compactMap { record -> NewMusicWeek? in
+        if case let .week(value) = record { return value }; return nil
+      }
+      let (coverage, log) = try await context.tasteCoverage(exposure: exposure, now: instant, snapshotAt: generatedAt)
+      let classified = TasteIntelligence.keptAndPassed(weeks: weeks, snapshot: snapshot, roles: roles,
+        log: log, now: instant, limit: max(1, weeks.count))
+      let ledger = (try? await context.recommendationLedger()) ?? RecommendationLedgerReadResult(batches: [], skippedLines: 0)
+      let outcomes = TasteIntelligence.recommendationOutcomes(ledger: ledger, weeks: weeks, snapshot: snapshot,
+        roles: roles, log: log, now: instant, limit: max(1, min(ledger.batches.count, 50)))
+      let baselines = TasteIntelligence.baselines(weeks: classified, snapshot: snapshot, ledger: ledger,
+        outcomes: outcomes, curation: await context.curationChanges())
+      return .json(MCPBaselines(baselines: baselines, coverage: coverage))
+    }
+  }
+
+  private static func recommendationOutcomesTool(context: LibraryMCPContext, now: @escaping @Sendable () -> Date,
+    schema: MCPValue, annotations: MCPToolAnnotations) -> MCPTool {
+    MCPTool(name: "recommendation_outcomes", description: "Classify recent unfamiliar songs from recommendation batches and show New Music pick outcomes, with coverage.", inputSchema: schema, annotations: annotations) { input in
+      let payload = try decode(RecommendationOutcomesPayload.self, from: input, schema: schema)
+      let limit = max(1, min(payload.batches ?? 10, 50))
+      let result = try await context.recommendationOutcomes(now: now(), limit: limit)
+      return .json(MCPRecommendationOutcomes(outcomes: result.0, coverage: result.1))
+    }
+  }
+
+  private static func recordNewMusicPicksTool(context: LibraryMCPContext, now: @escaping @Sendable () -> Date,
+    schema: MCPValue) -> MCPTool {
+    MCPTool(name: "record_new_music_picks", description: "Record the chat's blind picks from the latest saved New Music week before Jon listens.", inputSchema: schema, annotations: MCPToolAnnotations(destructive: false, openWorld: false)) { input in
+      let payload = try decode(RecordNewMusicPicksPayload.self, from: input, schema: schema)
+      let instant = now()
+      let songs = payload.songs.map { (artist: $0.artist, title: $0.title) }
+      let count = try await context.recordNewMusicPicks(songs, recordedAt: instant)
+      return .json(MCPRecordPicks(recorded: true, recordedAt: instant, songCount: count))
+    }
   }
 
   /// Create writes the description into Apple Music, so keep chat's process notes out of it.
@@ -746,6 +938,7 @@ public enum LibraryMCPServer {
 }
 
 private struct KeptPassedPayload: Decodable, Sendable { var weeks: Int? }
+private struct RecommendationOutcomesPayload: Decodable, Sendable { var batches: Int? }
 
 private struct MCPPlaylistSummary: Encodable {
   var name: String; var role: String?; var folder: String?; var kind: String
@@ -829,11 +1022,14 @@ private struct MCPPlaylistSongEvidence: Encodable {
 private struct StagedPlaylistResult: Encodable {
   struct Dropped: Encodable { var index: Int; var artist: String; var title: String }
   var staged: Bool; var name: String; var trackCount: Int; var dropped: [Dropped]
-  var ledgerRecorded: Bool; var ledgerReason: String?
-  init(staged: Bool, name: String, trackCount: Int, dropped: [DroppedPlaylistTrack], ledgerRecorded: Bool, ledgerReason: String?) {
+  var ledgerRecorded: Bool; var ledgerReason: String?; var missingYear: [String]
+  var unverifiedReferences: [String]; var truncated: Bool
+  init(staged: Bool, name: String, trackCount: Int, dropped: [DroppedPlaylistTrack], ledgerRecorded: Bool,
+    ledgerReason: String?, missingYear: [String], unverifiedReferences: [String], truncated: Bool) {
     self.staged = staged; self.name = name; self.trackCount = trackCount
     self.dropped = dropped.map { Dropped(index: $0.index, artist: $0.artist, title: $0.title) }
     self.ledgerRecorded = ledgerRecorded; self.ledgerReason = ledgerReason
+    self.missingYear = missingYear; self.unverifiedReferences = unverifiedReferences; self.truncated = truncated
   }
 }
 

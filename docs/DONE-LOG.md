@@ -1,5 +1,21 @@
 # Done log
 
+## 2026-10-26 — M18 · Dispatch 2 S2 (`m18/s2-recommendation-outcomes`)
+
+Added shared outcome classification for New Music weeks and recommendation batches, release-age
+bands, per-source baselines, the New Music blind-pick ledger, late Selections-add exclusions, and
+request/reason/reference capture for staged discoveries. `recommendation_outcomes` reports each
+batch with coverage and reasoning; `check_tracks` includes the latest recommendation outcome.
+Reference checks use actual playlist membership, including unlabeled playlists. The five
+architect fixes were preserved: reordered `RecommendationBatch` arguments, a single notes read in
+staging, explicit closure intermediates, corrected playlist membership verification, and the
+write-tool annotation for `record_new_music_picks`.
+
+Core (283 tests) and macOS app (82 tests) suites passed; `scripts/mcp-smoke` passed with 16 tools.
+The read-only laptop check found the S1 batch "2024 Selections: 15 New Discoveries" with 15 songs,
+all pending, all in the unknown release band, and no reasoning recorded. Jon's two-week New Music
+pick gate and discovery staging check remain owed. Advanced `NEXT_UP.md` to M18 · S4.
+
 ## 2026-10-26 — M16 · Dispatch 5 S4 (`m16/s4-connector-build`)
 
 The app bundle now carries the commit, dirty state, and build time. `library_overview` returns that
