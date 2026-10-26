@@ -241,6 +241,14 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   report, and an installer warning about old helpers), plus a rule that every chat gate starts
   with an install and a tool refresh. Telling Jon to "re-copy the Project instructions" was
   also wrong: that text is only the paste fallback (corrected in M18 and the feedback guide).
+- **`setup-mac`'s Time Machine check stops at the first destination without snapshots** (from
+  the #135 review, 2026-10-26). The loop reads `Destinations.$i.SnapshotDates` for i = 0, 1, …,
+  and stops at the first one that's missing. So if Jon adds a second destination and the first
+  has no snapshots, the newer one is never read. It errs toward a warning ("no completed
+  snapshot found"), never toward a silent pass. **Recommendation:** read the destination count
+  first (`plutil -extract Destinations raw`), and skip destinations that have no dates. A
+  fixture with an empty first destination and a recent second one gives no warning. Do it with
+  the next `setup-mac` change; it isn't worth its own dispatch.
 - **The installer's System Events gap and the flaky timing tests** are dispatched as M16 S3
   (2026-10-22). The two entries below stay for history until S3 merges.
 - **The installer assumes nothing is running when System Events access is denied** (from the
