@@ -12,7 +12,7 @@ iCloud Drive. The poller runs on Jon's always-on **Intel Mac mini** as a separat
 because the main app targets macOS 27 and the mini stops at macOS 15 Sequoia. Vinyl Fever can run the
 **same poller code** itself, for the laptop as a backup today and for an Apple-silicon mini
 later; a lease makes sure only one Mac polls at a time. `vf-mcp` reads the log, so ChatGPT,
-Claude Code, and Codex can answer "what have I been into lately?". Six slices in six dispatches (S4 and S5 added 2026-10-22). All six are done; only S2's iPad gate is still owed.
+Claude Code, and Codex can answer "what have I been into lately?". Six slices in six dispatches (S4 and S5 added 2026-10-22). All six are done, and S2's iPad gate passed 2026-10-26, so every gate is closed.
 No schema.
 
 ## The milestone in one sentence
@@ -360,7 +360,7 @@ can produce on handback, and adds **Poll now**. Same files as S4, so it goes nex
     - Over 26 hours: 26 hourly lines with no gaps (7 `plays`, 19 `none`), and every line after
       the baseline read 1 page.
 
-- [x] **S2 — Listening in `vf-mcp` and Settings (core + app).** Device gate owed.
+- [x] **S2 — Listening in `vf-mcp` and Settings (core + app).** The iPad device gate passed 2026-10-26.
   - Implement the tool surface above in `LibraryMCPServer`. The log is read lazily and reloaded
     when any stream file's `modifiedAt` changes, like the snapshot. Reads are coordinated
     (`NSFileCoordinator`), so a stream file iCloud has offloaded downloads first.
@@ -382,6 +382,7 @@ can produce on handback, and adds **Poll now**. Same files as S4, so it goes nex
   - A model test for the Settings status line.
   - **Device gate:** ChatGPT on the iPad answers "what have I been listening to this week?" and
     Jon agrees it's right.
+    - **Result:** passed 2026-10-26. Jon confirmed the iPad answer was right.
 
 - [x] **S3 — The same poller inside Vinyl Fever (app; Apple silicon, macOS 27).** Implementation complete; the laptop↔mini device gate passed 2026-10-22, and it measured
   a real handover hole (see below).
