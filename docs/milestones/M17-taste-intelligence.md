@@ -226,6 +226,13 @@ next. S2 and S3 both edit `vf-mcp`, so they can't run side by side.
     - **Result (Jon, 2026-10-25):** all 15 songs were new to him, and he kept 11. He knew an
       artist or two, but not the songs. For the outcomes milestone's familiarity field, that
       means familiarity is per song: a known artist doesn't make a song known.
+    - **Correction (architect, 2026-10-25): the chat didn't have S1's tools.** `/Applications`
+      held the 2026-10-23 build, from before #125, until 2026-10-25. Its `vf-mcp` had 7 tools
+      and no `list_playlists` or `playlist_tracks`. So the chat (ChatGPT.app's Codex) couldn't
+      read 2025 Selections. It inferred the reference songs, and the next day it said it had
+      overstated them. The outcome stands (15 new, 11 kept), but the gate didn't exercise S1's
+      playlist tools. The first chat to have them was Jon's 2024 run on 2026-10-25, after the
+      install and a tool refresh. M16 S4 makes the build visible to the chat.
   - **Laptop read — passed 2026-10-23** (read-only, written to a scratch path, at the #125 head):
     - 87,042 tracks, 148 playlists (65 user, 7 smart, 76 subscription), and 8,220 outside-library
       tracks;
