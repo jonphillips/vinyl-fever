@@ -7,7 +7,7 @@ design conflict, this doc's Decisions win. Rules in
 [../technical-architecture.md](../technical-architecture.md) and
 `/Users/jon/code/jon-platform/AGENTS.md` apply.*
 
-Summary: Three slices are dispatched, and a fourth is decided at S2's gate.
+Summary: Four slices are dispatched, and a fifth is decided at S2's gate.
 - **S1** starts the recommendation ledger now. Every `stage_playlist` records which songs were
   new to Jon, and `check_tracks` reports "recommended before". It's a log that can't be rebuilt
   later, so it goes first.
@@ -19,6 +19,9 @@ Summary: Three slices are dispatched, and a fourth is decided at S2's gate.
 - **S4** lets the chat ask Jon what it wonders about. Questions and answers are taste notes, at
   most 3 open at a time, and a skip is final. It comes from plan PR #127 (never merged), and it
   runs after S2.
+- **S5** asks for a role whenever a playlist has none: a banner in the app, and Vinyl Fever's own
+  playlists labeled automatically. An unlabeled playlist silently counts as "Jon knows these
+  songs" and never as kept. It runs last.
 
 Vinyl Fever still makes no model calls and stores no scores. [M19](M19-backups.md)'s backup
 slice runs between S1 and S2 (M19 Decision 7).
@@ -102,7 +105,8 @@ Music's own 25 songs before Jon hears them (S2).
 **Dispatch 1: S1** (Core + `vf-mcp`; Jon's gate). **Dispatch 2: S2** (Core + `vf-mcp`; Jon's gate
 needs New Music weeks). **Dispatch 3: S4** (Core + `vf-mcp`; Jon's gate). **S3** is decided at
 S2's gate. Every slice edits `vf-mcp`, so they run one after another. S2's completing PR
-advances `NEXT_UP.md` to S4.
+advances `NEXT_UP.md` to S4. **Dispatch 4: S5** (app; Jon's gate; added 2026-10-25). S4's
+completing PR advances `NEXT_UP.md` to S5.
 
 - [x] **S1 — The recommendation ledger (Core + `vf-mcp`).** Done in `m18/s1-recommendation-ledger`.
   - **Ledger file:** `Taste Intelligence/recommendations/<host>.jsonl`, one line per batch:
@@ -364,6 +368,46 @@ advances `NEXT_UP.md` to S4.
        question answered, with his words verbatim.
     3. Jon skips a second question, and it doesn't come back.
 
+- [ ] **S5 — Every playlist gets a role (app + Core).** *Added 2026-10-25. Vinyl Fever Keepers sat
+  unlabeled for a day after Jon made it, so nothing filed there counted as kept. The only signal
+  was a count in Settings → Taste. See Decision 13.*
+  - **The banner.** After every snapshot load or refresh in the `.live` app, check for playlists
+    with no role, of any kind: user, smart, or subscription. An unlabeled subscription playlist
+    counts as familiarity just as a user playlist does.
+    - If there are any, the main window shows a banner above its content: "1 playlist has no
+      role: Vinyl Fever Keepers". With more than 3, name the newest 3 and add "and N more".
+    - **Label…** opens Settings → Taste → Playlist Roles…, filtered to Unlabeled, with
+      suggestions already filled in for unlabeled rows. Nothing is saved until Jon saves.
+    - **Not now** hides the banner until a playlist that wasn't unlabeled at that moment
+      appears. The dismissed set is kept per Mac (`UserDefaults`, through a dependency).
+    - Never a modal alert, and never at launch before the snapshot has loaded.
+  - **Vinyl Fever's own playlists label themselves.** At the same check, an unlabeled playlist
+    whose suggestion is `vinyl-fever` gets the `vinyl-fever` role, saved through
+    `PlaylistRolesStore`. Today `PlaylistRoleSuggestion` only suggests it, for a name that
+    matches an archived `PlaylistInbox/Processed` request.
+    - Also count as Vinyl Fever's a playlist whose name matches a batch's `playlist` in the
+      recommendation ledger, so a playlist created on the other Mac is recognized too.
+    - Only `vinyl-fever` is applied automatically. Every other suggestion waits for Jon.
+    - Never change a playlist that already has a role.
+    - Report each automatic label once, in the banner's place: "Labeled 1 Vinyl Fever playlist
+      `vinyl-fever`: 2024 Selections: 15 New Discoveries".
+  - **The Settings → Taste summary line stays.**
+
+  **DoD:**
+  - **Core tests:** the unlabeled check covers every kind; the automatic labels apply only to
+    `vinyl-fever` suggestions (from the archive and from the ledger), never overwrite a role, and
+    write once.
+  - **App tests:**
+    - the banner model's states: none, some, more than 3, dismissed, and a new unlabeled
+      playlist after a dismissal;
+    - **Label…** opens the sheet filtered to Unlabeled;
+    - nothing runs, and nothing is written, outside `.live` (in-memory stores in tests).
+  - **Jon's gate (after install, owed until done):**
+    1. Create a playlist from a staged batch. After the next refresh, it has the `vinyl-fever`
+       role, with no action from Jon, and the one-time note says so.
+    2. Make an ordinary playlist in Music. After a refresh, the banner names it. **Not now**
+       hides the banner, and **Label…** opens the sheet filtered to Unlabeled.
+
 ## Prerequisites (Jon, not the executor's)
 
 - [x] **Before Friday 2026-10-30:** rebuild the VF Listening Poller from `main` and install it on
@@ -479,3 +523,10 @@ Added 2026-10-25 to S2, before dispatch. Merging that plan PR approves them.
 12. **Each batch records its coverage, and an uncovered batch isn't scored.** A song recorded as
     new only because the listening log couldn't be read would be a false discovery,
     permanently. Listing such a batch without scoring it keeps the record honest.
+13. **A playlist with no role asks for one, and Vinyl Fever labels its own** (S5, Jon,
+    2026-10-25).
+    - **Why it matters:** an unlabeled playlist isn't neutral. Its songs count as familiar
+      (`playlist:unlabeled`), and nothing in it counts as kept.
+    - **A banner, not a pop-up:** a modal at every launch gets dismissed without being read.
+    - **Only `vinyl-fever` is applied automatically,** because only that one is certain: Vinyl
+      Fever made the playlist. Every other role is Jon's judgment.
