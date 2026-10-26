@@ -375,9 +375,9 @@ advances `NEXT_UP.md` to S4.
   Keepers in the curation log.* The
   running build is from 2026-10-23, before M17 S2 and S3. Then refresh the snapshot once, so
   the curation log records the 10 Selections adds and Vinyl Fever Keepers.
-- [ ] **Label "Vinyl Fever Keepers" `keepers`** in Settings → Taste → Playlist Roles… (Decision 6).
-  *Still unlabeled on 2026-10-25. Until it's labeled, songs filed there don't count as kept,
-  including keepers from the 2024 batch.*
+- [x] **Label "Vinyl Fever Keepers" `keepers`** in Settings → Taste → Playlist Roles… (Decision 6).
+  *Done 2026-10-26T00:25Z. The only unlabeled playlist left is the staged "2025 Selections: 15
+  New Discoveries".*
 - [x] **After S1 merges: nothing to copy** (corrected 2026-10-25). The taste guidance reaches the
   chat through `vf-mcp`'s server instructions (jon-platform ADR-0007 D6). Settings' Project
   instructions are only the paste-format fallback, and S1 didn't change them. Install from
