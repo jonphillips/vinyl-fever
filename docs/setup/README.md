@@ -168,6 +168,31 @@ app: see [poller setup](../listening/POLLER-SETUP.md).
 running Vinyl Fever there and opening Playlists once. The mini's Music library play counts come
 from Sync Library and can differ from the laptop's. That trade-off is still open.
 
+## Backups and restoring
+
+Vinyl Fever makes one daily set after the listening poll and at app launch. A set is complete
+only after it appears in both locations:
+
+- On this Mac: `~/Library/Application Support/VinylFever/Backups/Daily/<yyyy-MM-dd>/`
+- In iCloud Drive: `Vinyl Fever/Backups/<host>/VinylFever-<yyyy-MM-dd>.sqlite` (database only)
+
+The local set contains `VinylFever.sqlite`, files from iCloud Drive's `Vinyl Fever/` folder
+(except `Backups/` and `.DS_Store`), the processed playlist inbox, and `manifest.json`. The
+manifest records each file's size and SHA-256, plus line counts for JSONL logs. Unchanged files
+share storage with the previous set through hard links. Settings → Backups shows the newest set,
+its size, recent warnings or the last failed attempt, and opens the folder in Finder. Failed
+backups are retried on the next hourly poll or app launch. `scripts/setup-mac` warns if Time
+Machine has no destination or no snapshot from the last 7 days, or if the newest daily set is
+older than 2 days.
+
+To restore the database, quit Vinyl Fever and turn off its listening agent in Settings. Copy
+`VinylFever.sqlite` from the chosen set over
+`~/Library/Application Support/VinylFever/VinylFever.sqlite`, then remove the live database's
+`-wal` and `-shm` sidecar files if present. Reopen Vinyl Fever and turn the agent back on.
+
+To restore a log, copy it back into iCloud Drive only if the live file is missing or has fewer
+lines than the backup. Never replace a live log with a backup that has fewer lines.
+
 ## Signing: adding a Mac to the profiles
 
 Both apps sign manually: automatic signing picks the wildcard team profile, which has no

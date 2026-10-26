@@ -1,5 +1,11 @@
 # Done log
 
+## 2026-10-25 — M19 · S1 daily backup set (`m19/s1-daily-backup`)
+
+Added one daily backup set from both live app launch and listening-poller runs. The local set contains an online SQLite copy, coordinated iCloud files, processed inbox files, and a SHA-256 manifest; unchanged files use hard links. Shrink, missing, and unreadable logs are recorded, with unreadable files falling back to the prior copy. Local and iCloud retention, Settings status, setup warnings, and restore instructions are included.
+
+Core (272 tests), Listening (55 tests), and macOS app (80 tests) suites passed; `shellcheck scripts/setup-mac` passed. The isolated setup check showed the expected Time Machine and daily-set warnings. Jon’s laptop backup gate remains owed. Advanced `NEXT_UP.md` to M18 · S2.
+
 History, newest first. The PR that completes a dispatch adds an entry naming its branch
 (jon-platform ADR-0005 D5). No dispatch reads this file.
 
