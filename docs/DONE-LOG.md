@@ -11,14 +11,14 @@ architect fixes were preserved: reordered `RecommendationBatch` arguments, a sin
 staging, explicit closure intermediates, corrected playlist membership verification, and the
 write-tool annotation for `record_new_music_picks`.
 
-Review follow-up keeps New Music pick batches out of staged recommendation evidence, preserves the
-first covered picks per week, rejects empty picks, and memoizes latest outcomes with invalidation
-on ledger, snapshot, listening, exposure, or role changes. The classifier builds its play-window
-index once; `check_tracks` and `playlist_tracks` skip outcome work when no recommendation evidence
-is present. Added the requested MCP goldens, uncovered/familiar tests, missing-year and latest-why
-checks, and cache-refresh coverage.
+Review follow-up keeps New Music pick batches out of staged recommendation evidence and latest
+outcomes, chooses the first covered picks per week (so an uncovered attempt can be retried), rejects
+empty picks, and memoizes latest outcomes until ledger, snapshot, listening, or role inputs reload.
+The classifier builds its play-window index once; `check_tracks` and `playlist_tracks` skip outcome
+work when no recommendation evidence is present. Added MCP goldens, uncovered/familiar and retry
+tests, missing-year and latest-why checks, and cache-refresh coverage for ledger and snapshot changes.
 
-Core (287 tests; full `VF_PERF_TESTS=1` suite passed), Listening (55), and macOS app (82) suites
+Core (289 tests; full `VF_PERF_TESTS=1` suite passed), Listening (55), and macOS app (82) suites
 passed; `scripts/mcp-smoke` passed with 16 tools and `check-handoff` passed.
 The read-only laptop check found the S1 batch "2024 Selections: 15 New Discoveries" with 15 songs,
 all pending, all in the unknown release band, and no reasoning recorded. Jon's two-week New Music

@@ -334,6 +334,71 @@ struct LibraryMCPServerTests {
     #expect(secondEvidence["latestRecordedAt"] as? String == "2027-01-15T08:00:00Z")
   }
 
+  @Test("latest outcome ignores New Music pick batches")
+  func latestOutcomeIgnoresNewMusicPicks() async throws {
+    let root = temporaryDirectory()
+    let snapshotURL = root.appending(path: "snapshot.json")
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let clock = TestClock(now)
+    try LibrarySnapshotCodec.encode(LibrarySnapshot(generatedAt: now, tracks: [])).write(to: snapshotURL)
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"),
+      listeningRootURL: root.appending(path: "Listening"), tasteRootURL: tasteRoot, now: { clock.now() })
+    let staged = try #require(await resultJSON(server, id: 1, name: "stage_playlist",
+      arguments: #"{"name":"Chat batch","tracks":[{"artist":"Shared Artist","title":"Shared Song","year":2026}]}"#) as? [String: Any])
+    #expect(staged["ledgerRecorded"] as? Bool == true)
+    let first = try #require(await resultJSON(server, id: 2, name: "check_tracks",
+      arguments: #"{"tracks":[{"artist":"Shared Artist","title":"Shared Song"}]}"#) as? [String: Any])
+    let firstRow = try #require((first["tracks"] as? [[String: Any]])?.first)
+    #expect((firstRow["recommended"] as? [String: Any])?["latestOutcome"] as? String == "pending")
+
+    let exposureFolder = tasteRoot.appending(path: "exposure", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: exposureFolder, withIntermediateDirectories: true)
+    let weekDate = now.addingTimeInterval(10)
+    let week = NewMusicWeek(lastModifiedDate: weekDate, fetchedAt: weekDate, host: "Mac", tracks: [
+      NewMusicTrack(catalogID: "catalog", title: "Shared Song", artist: "Shared Artist", releaseDate: "2026-01-01"),
+    ])
+    try NewMusicExposureCodec.encode(week).write(to: exposureFolder.appending(path: "week.jsonl"))
+    clock.advance(by: 20)
+    let pick = try #require(await resultJSON(server, id: 3, name: "record_new_music_picks",
+      arguments: #"{"songs":[{"artist":"Shared Artist","title":"Shared Song"}]}"#) as? [String: Any])
+    #expect(pick["recorded"] as? Bool == true)
+
+    let checked = try #require(await resultJSON(server, id: 4, name: "check_tracks",
+      arguments: #"{"tracks":[{"artist":"Shared Artist","title":"Shared Song"}]}"#) as? [String: Any])
+    let row = try #require((checked["tracks"] as? [[String: Any]])?.first)
+    let evidence = try #require(row["recommended"] as? [String: Any])
+    #expect(evidence["count"] as? Int == 1)
+    #expect(evidence["latestOutcome"] as? String == "pending")
+  }
+
+  @Test("check_tracks latest outcome refreshes when a newer snapshot ends the window")
+  func checkTracksLatestOutcomeRefreshesWhenSnapshotEndsWindow() async throws {
+    let root = temporaryDirectory()
+    let snapshotURL = root.appending(path: "snapshot.json")
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let clock = TestClock(now)
+    try LibrarySnapshotCodec.encode(LibrarySnapshot(generatedAt: now, tracks: [])).write(to: snapshotURL)
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"),
+      listeningRootURL: root.appending(path: "Listening"), tasteRootURL: tasteRoot, now: { clock.now() })
+    let staged = try #require(await resultJSON(server, id: 1, name: "stage_playlist",
+      arguments: #"{"name":"Window batch","tracks":[{"artist":"Window Artist","title":"Window Song","year":2026}]}"#) as? [String: Any])
+    #expect(staged["ledgerRecorded"] as? Bool == true)
+    let arguments = #"{"tracks":[{"artist":"Window Artist","title":"Window Song"}]}"#
+    let first = try #require(await resultJSON(server, id: 2, name: "check_tracks", arguments: arguments) as? [String: Any])
+    let firstRow = try #require((first["tracks"] as? [[String: Any]])?.first)
+    #expect((firstRow["recommended"] as? [String: Any])?["latestOutcome"] as? String == "pending")
+
+    let windowEnd = now.addingTimeInterval(15 * 86_400)
+    try LibrarySnapshotCodec.encode(LibrarySnapshot(generatedAt: windowEnd, tracks: [])).write(to: snapshotURL)
+    try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(60)], ofItemAtPath: snapshotURL.path)
+    clock.advance(by: 15 * 86_400)
+    let second = try #require(await resultJSON(server, id: 3, name: "check_tracks", arguments: arguments) as? [String: Any])
+    let secondRow = try #require((second["tracks"] as? [[String: Any]])?.first)
+    #expect((secondRow["recommended"] as? [String: Any])?["latestOutcome"] as? String == "unheard")
+  }
+
   @Test("recommendation lookups stay fast at library and ledger scale", .enabled(if: ProcessInfo.processInfo.environment["VF_PERF_TESTS"] == "1"))
   func recommendationLookupsPerformance() async throws {
     let root = temporaryDirectory()

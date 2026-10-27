@@ -406,7 +406,7 @@ public enum TasteIntelligence {
     var seenWeeks = Set<Date>()
     for batch in batches {
       let date = batch.batchDate ?? batch.recordedAt
-      guard seenWeeks.insert(date).inserted, batch.coverage?.listening != false else { continue }
+      guard batch.coverage?.listening != false, seenWeeks.insert(date).inserted else { continue }
       guard let week = weeks.first(where: { $0.lastModifiedDate == date }) else { continue }
       var classified: [String: NewMusicClassification] = [:]
       for row in week.tracks { classified[songKey(artist: row.track.artist, title: row.track.title, identity: identity)] = row.classification }

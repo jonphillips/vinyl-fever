@@ -107,7 +107,8 @@ struct TasteIntelligenceTests {
     let now = date.addingTimeInterval(15 * 86_400)
     let snapshot = LibrarySnapshot(generatedAt: now, tracks: [
       LibraryTrack(persistentID: "keep-id", name: "Keep Song", artist: "Keep Artist"),
-    ], playlists: [LibraryPlaylist(persistentID: "keepers", name: "Keepers", kind: .user, members: ["keep-id"])])
+      LibraryTrack(persistentID: "uncovered-id", name: "Uncovered Song", artist: "Other Artist"),
+    ], playlists: [LibraryPlaylist(persistentID: "keepers", name: "Keepers", kind: .user, members: ["keep-id", "uncovered-id"])])
     let roles = PlaylistRoles(updatedAt: now,
       playlists: [PlaylistRoleEntry(persistentID: "keepers", name: "Keepers", role: .keepers)])
     let poller = UUID()
@@ -134,7 +135,7 @@ struct TasteIntelligenceTests {
         RecommendationTrack(artist: "Keep Artist", title: "Keep Song", year: 2027, familiar: false, reasons: [], artistKnown: false, picked: false),
         RecommendationTrack(artist: "Pass Artist", title: "Pass Song", year: 2026, familiar: false, reasons: [], artistKnown: false, picked: true),
       ], coverage: RecommendationCoverage(listening: true, notes: true, snapshotAt: now), batchDate: date)
-    let uncoveredDate = date.addingTimeInterval(7 * 86_400)
+    let uncoveredDate = date.addingTimeInterval(-7 * 86_400)
     let uncoveredWeek = NewMusicWeek(lastModifiedDate: uncoveredDate, fetchedAt: uncoveredDate, host: "Mac", tracks: [
       NewMusicTrack(catalogID: "uncovered", title: "Uncovered Song", artist: "Other Artist", releaseDate: "2027-01-01"),
     ])
@@ -142,10 +143,14 @@ struct TasteIntelligenceTests {
       host: "Mac", tracks: [RecommendationTrack(artist: "Other Artist", title: "Uncovered Song", year: 2027,
         familiar: false, reasons: [], artistKnown: false, picked: true)],
       coverage: RecommendationCoverage(listening: false, notes: true, snapshotAt: now), batchDate: uncoveredDate)
-    let ledger = RecommendationLedgerReadResult(batches: [replacementPick, uncoveredPick, ledgerBatch], skippedLines: 0)
+    let coveredRetry = RecommendationBatch(kind: "new-music-picks", recordedAt: uncoveredDate.addingTimeInterval(200),
+      host: "Mac", tracks: [RecommendationTrack(artist: "Other Artist", title: "Uncovered Song", year: 2027,
+        familiar: false, reasons: [], artistKnown: false, picked: true)],
+      coverage: RecommendationCoverage(listening: true, notes: true, snapshotAt: now), batchDate: uncoveredDate)
+    let ledger = RecommendationLedgerReadResult(batches: [replacementPick, uncoveredPick, ledgerBatch, coveredRetry], skippedLines: 0)
     let classified = TasteIntelligence.keptAndPassed(weeks: [week, uncoveredWeek], snapshot: snapshot,
       roles: roles, log: log, now: now)
-    let outcomes = TasteIntelligence.recommendationOutcomes(ledger: ledger, weeks: [week],
+    let outcomes = TasteIntelligence.recommendationOutcomes(ledger: ledger, weeks: [week, uncoveredWeek],
       snapshot: snapshot, roles: roles, log: log, now: now)
     let batch = try #require(outcomes.batches.first { $0.recordedAt == ledgerBatch.recordedAt })
     #expect(batch.pickedCounts == ["kept": 1])
@@ -153,10 +158,11 @@ struct TasteIntelligenceTests {
     #expect(batch.songs.map(\.title).sorted() == ["Keep Song", "Pass Song"])
     let baselines = TasteIntelligence.baselines(weeks: classified, snapshot: snapshot,
       ledger: ledger, outcomes: outcomes)
+    #expect(baselines.picksByWeek[uncoveredDate.ISO8601Format()]?.picked == .init(kept: 1, passed: 0))
     let pick = baselines.picksByWeek[date.ISO8601Format()]
     #expect(pick?.picked.kept == 1)
     #expect(pick?.notPicked.passed == 1)
-    #expect(baselines.picksByWeek[uncoveredDate.ISO8601Format()] == nil)
+    #expect(baselines.picksByWeek[uncoveredDate.ISO8601Format()]?.picked.kept == 1)
     #expect(baselines.bySourceAndBand["chat|new"]?.ratio == nil)
   }
 

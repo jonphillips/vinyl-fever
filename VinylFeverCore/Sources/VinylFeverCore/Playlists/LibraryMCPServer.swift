@@ -194,7 +194,6 @@ private actor LibraryMCPContext {
   private var cachedRecommendationFiles: [URL: Date] = [:]
   private var cachedRecommendationEvidence: RecommendationLedgerEvidenceIndex?
   private var cachedLatestRecommendationOutcomes: [String: String]?
-  private var cachedLatestRecommendationOutcomesAt: Date?
 
   init(snapshotURL: URL?, inboxRoot: URL?, listeningRootURL: URL?, tasteRootURL: URL?, hostName: @escaping @Sendable () -> String) {
     self.snapshotURL = snapshotURL ?? Self.defaultSnapshotURL
@@ -464,12 +463,12 @@ private actor LibraryMCPContext {
   }
 
   func latestRecommendationOutcomes(now: Date) throws -> [String: String] {
-    if let cachedLatestRecommendationOutcomes, let cachedAt = cachedLatestRecommendationOutcomesAt,
-      now.timeIntervalSince(cachedAt) < 60 { return cachedLatestRecommendationOutcomes }
+    if let cachedLatestRecommendationOutcomes { return cachedLatestRecommendationOutcomes }
     let (outcomes, _) = try recommendationOutcomes(now: now, limit: 50)
     let identity = try index().0.artistIdentity
     var latest: [String: String] = [:]
     for batch in outcomes.batches {
+      guard batch.kind == "staged-playlist" else { continue }
       for song in batch.songs {
         guard let classification = song.classification else { continue }
         let key = TasteIntelligence.songKey(artist: song.artist, title: song.title, identity: identity)
@@ -477,13 +476,11 @@ private actor LibraryMCPContext {
       }
     }
     cachedLatestRecommendationOutcomes = latest
-    cachedLatestRecommendationOutcomesAt = now
     return latest
   }
 
   private func invalidateLatestRecommendationOutcomes() {
     cachedLatestRecommendationOutcomes = nil
-    cachedLatestRecommendationOutcomesAt = nil
   }
 
   func heardDates(artist: String, title: String, identity: ArtistIdentity) -> [Date]? {
