@@ -55,9 +55,11 @@ struct LibraryMCPServerTests {
       "recent_listening": ["period", "limit"],
       "kept_and_passed": ["weeks"],
       "taste_baselines": [],
+      "recommendation_outcomes": ["batches"],
+      "record_new_music_picks": ["songs"],
       "taste_notes": ["artist", "title", "playlist", "period", "limit"],
       "record_taste_note": ["note", "artist", "title", "album", "playlist"],
-      "stage_playlist": ["name", "description", "tracks"],
+      "stage_playlist": ["name", "description", "request", "tracks"],
     ]
     #expect(Set(tools.compactMap { $0["name"] as? String }) == Set(expected.keys))
     for tool in tools {
@@ -67,7 +69,7 @@ struct LibraryMCPServerTests {
       #expect(Set(properties.keys) == expected[name])
       let annotations = try #require(tool["annotations"] as? [String: Any])
       #expect(annotations["openWorldHint"] as? Bool == false)
-      if name == "stage_playlist" || name == "record_taste_note" {
+      if name == "stage_playlist" || name == "record_taste_note" || name == "record_new_music_picks" {
         #expect(annotations["destructiveHint"] as? Bool == false)
         #expect(annotations["readOnlyHint"] == nil)
       } else {
@@ -181,7 +183,7 @@ struct LibraryMCPServerTests {
     #expect(tracks.contains("First Song"))
     #expect(tracks.contains("Second Song"))
     #expect(tracks.contains("\"position\":2"))
-    #expect(tracks.contains("\"recommended\":{\"count\":1,\"latestRecordedAt\":\"2023-11-14T22:12:20Z\"}"))
+    #expect(tracks.contains("\"recommended\":{\"count\":1,\"latestOutcome\":\"pending\",\"latestRecordedAt\":\"2023-11-14T22:12:20Z\"}"))
     #expect(!tracks.contains("private-id"))
     let checked = try #require(await call(server, id: 3, name: "check_tracks", arguments: #"{"tracks":[{"artist":"The Records","title":"First Song"}]}"#))
     #expect(checked.contains("\"playlists\":{}"))
@@ -296,6 +298,105 @@ struct LibraryMCPServerTests {
     let secondRow = try #require((second["tracks"] as? [[String: Any]])?.first)
     let secondEvidence = try #require(secondRow["recommended"] as? [String: Any])
     #expect(secondEvidence["count"] as? Int == 2)
+  }
+
+  @Test("check_tracks latest outcome refreshes when the ledger changes")
+  func checkTracksLatestOutcomeRefreshesWhenLedgerChanges() async throws {
+    let root = temporaryDirectory()
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let recommendationFolder = tasteRoot.appending(path: "recommendations", directoryHint: .isDirectory)
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let oldDate = now.addingTimeInterval(-15 * 86_400)
+    try RecommendationLedgerCodec.append(RecommendationBatch(recordedAt: oldDate, host: "Other", tracks: [
+      RecommendationTrack(artist: "Cached Artist", title: "Cached Song", familiar: false, reasons: [], artistKnown: false),
+    ], coverage: RecommendationCoverage(listening: true, notes: true, snapshotAt: now)), host: "Other", folder: recommendationFolder)
+    let clock = TestClock(now)
+    let server = LibraryMCPServer.make(snapshotURL: root.appending(path: "snapshot.json"),
+      inboxRoot: root.appending(path: "inbox"), listeningRootURL: root.appending(path: "Listening"),
+      tasteRootURL: tasteRoot, now: { clock.now() })
+    try LibrarySnapshotCodec.encode(LibrarySnapshot(generatedAt: now.addingTimeInterval(20 * 86_400), tracks: [])).write(to: root.appending(path: "snapshot.json"))
+
+    let first = try #require(await resultJSON(server, id: 1, name: "check_tracks",
+      arguments: #"{"tracks":[{"artist":"Cached Artist","title":"Cached Song"}]}"#) as? [String: Any])
+    let firstRow = try #require((first["tracks"] as? [[String: Any]])?.first)
+    let firstEvidence = try #require(firstRow["recommended"] as? [String: Any])
+    #expect(firstEvidence["latestOutcome"] as? String == "unheard")
+
+    let staged = try #require(await resultJSON(server, id: 2, name: "stage_playlist",
+      arguments: #"{"name":"New batch","tracks":[{"artist":"Cached Artist","title":"Cached Song","year":2020},{"artist":"Fresh Artist","title":"Fresh Song","year":2024}]}"#) as? [String: Any])
+    #expect(staged["ledgerRecorded"] as? Bool == true)
+    let second = try #require(await resultJSON(server, id: 3, name: "check_tracks",
+      arguments: #"{"tracks":[{"artist":"Fresh Artist","title":"Fresh Song"}]}"#) as? [String: Any])
+    let secondRow = try #require((second["tracks"] as? [[String: Any]])?.first)
+    let secondEvidence = try #require(secondRow["recommended"] as? [String: Any])
+    #expect(secondEvidence["count"] as? Int == 1)
+    #expect(secondEvidence["latestOutcome"] as? String == "pending")
+    #expect(secondEvidence["latestRecordedAt"] as? String == "2027-01-15T08:00:00Z")
+  }
+
+  @Test("latest outcome ignores New Music pick batches")
+  func latestOutcomeIgnoresNewMusicPicks() async throws {
+    let root = temporaryDirectory()
+    let snapshotURL = root.appending(path: "snapshot.json")
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let clock = TestClock(now)
+    try LibrarySnapshotCodec.encode(LibrarySnapshot(generatedAt: now, tracks: [])).write(to: snapshotURL)
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"),
+      listeningRootURL: root.appending(path: "Listening"), tasteRootURL: tasteRoot, now: { clock.now() })
+    let staged = try #require(await resultJSON(server, id: 1, name: "stage_playlist",
+      arguments: #"{"name":"Chat batch","tracks":[{"artist":"Shared Artist","title":"Shared Song","year":2026}]}"#) as? [String: Any])
+    #expect(staged["ledgerRecorded"] as? Bool == true)
+    let first = try #require(await resultJSON(server, id: 2, name: "check_tracks",
+      arguments: #"{"tracks":[{"artist":"Shared Artist","title":"Shared Song"}]}"#) as? [String: Any])
+    let firstRow = try #require((first["tracks"] as? [[String: Any]])?.first)
+    #expect((firstRow["recommended"] as? [String: Any])?["latestOutcome"] as? String == "pending")
+
+    let exposureFolder = tasteRoot.appending(path: "exposure", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: exposureFolder, withIntermediateDirectories: true)
+    let weekDate = now.addingTimeInterval(10)
+    let week = NewMusicWeek(lastModifiedDate: weekDate, fetchedAt: weekDate, host: "Mac", tracks: [
+      NewMusicTrack(catalogID: "catalog", title: "Shared Song", artist: "Shared Artist", releaseDate: "2026-01-01"),
+    ])
+    try NewMusicExposureCodec.encode(week).write(to: exposureFolder.appending(path: "week.jsonl"))
+    clock.advance(by: 20)
+    let pick = try #require(await resultJSON(server, id: 3, name: "record_new_music_picks",
+      arguments: #"{"songs":[{"artist":"Shared Artist","title":"Shared Song"}]}"#) as? [String: Any])
+    #expect(pick["recorded"] as? Bool == true)
+
+    let checked = try #require(await resultJSON(server, id: 4, name: "check_tracks",
+      arguments: #"{"tracks":[{"artist":"Shared Artist","title":"Shared Song"}]}"#) as? [String: Any])
+    let row = try #require((checked["tracks"] as? [[String: Any]])?.first)
+    let evidence = try #require(row["recommended"] as? [String: Any])
+    #expect(evidence["count"] as? Int == 1)
+    #expect(evidence["latestOutcome"] as? String == "pending")
+  }
+
+  @Test("check_tracks latest outcome refreshes when a newer snapshot ends the window")
+  func checkTracksLatestOutcomeRefreshesWhenSnapshotEndsWindow() async throws {
+    let root = temporaryDirectory()
+    let snapshotURL = root.appending(path: "snapshot.json")
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let clock = TestClock(now)
+    try LibrarySnapshotCodec.encode(LibrarySnapshot(generatedAt: now, tracks: [])).write(to: snapshotURL)
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"),
+      listeningRootURL: root.appending(path: "Listening"), tasteRootURL: tasteRoot, now: { clock.now() })
+    let staged = try #require(await resultJSON(server, id: 1, name: "stage_playlist",
+      arguments: #"{"name":"Window batch","tracks":[{"artist":"Window Artist","title":"Window Song","year":2026}]}"#) as? [String: Any])
+    #expect(staged["ledgerRecorded"] as? Bool == true)
+    let arguments = #"{"tracks":[{"artist":"Window Artist","title":"Window Song"}]}"#
+    let first = try #require(await resultJSON(server, id: 2, name: "check_tracks", arguments: arguments) as? [String: Any])
+    let firstRow = try #require((first["tracks"] as? [[String: Any]])?.first)
+    #expect((firstRow["recommended"] as? [String: Any])?["latestOutcome"] as? String == "pending")
+
+    let windowEnd = now.addingTimeInterval(15 * 86_400)
+    try LibrarySnapshotCodec.encode(LibrarySnapshot(generatedAt: windowEnd, tracks: [])).write(to: snapshotURL)
+    try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(60)], ofItemAtPath: snapshotURL.path)
+    clock.advance(by: 15 * 86_400)
+    let second = try #require(await resultJSON(server, id: 3, name: "check_tracks", arguments: arguments) as? [String: Any])
+    let secondRow = try #require((second["tracks"] as? [[String: Any]])?.first)
+    #expect((secondRow["recommended"] as? [String: Any])?["latestOutcome"] as? String == "unheard")
   }
 
   @Test("recommendation lookups stay fast at library and ledger scale", .enabled(if: ProcessInfo.processInfo.environment["VF_PERF_TESTS"] == "1"))
@@ -605,9 +706,10 @@ struct LibraryMCPServerTests {
     let inbox = root.appending(path: "PlaylistInbox", directoryHint: .isDirectory)
     let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
     let (server, _) = try makeServer(snapshot: s0Fixture(), inbox: inbox, tasteRootURL: tasteRoot)
-    let valid = try #require(await call(server, id: 1, name: "stage_playlist", arguments: #"{"name":"Power Pop","tracks":[{"artist":" ","title":"Dropped"},{"artist":"The Records","title":"Starry Eyes"}]}"#))
+    let valid = try #require(await call(server, id: 1, name: "stage_playlist", arguments: #"{"name":"Power Pop","tracks":[{"artist":" ","title":"Dropped"},{"artist":"The Records","title":"Starry Eyes","why":"Bright guitars and wiry hooks."}]}"#))
     #expect(valid.contains("\"staged\":true"))
     #expect(valid.contains("\"trackCount\":1"))
+    #expect(valid.contains("\"missingYear\":[\"The Records — Starry Eyes\"]"))
     #expect(valid.contains("\"ledgerRecorded\":true"))
     #expect(valid.contains("\"dropped\":[{\"artist\":\"\",\"index\":1,\"title\":\"Dropped\"}]"))
     #expect(valid.contains("Jon reviews and creates it in Vinyl Fever; nothing is in Apple Music yet."))
@@ -628,6 +730,8 @@ struct LibraryMCPServerTests {
     let checkedRows = try #require(checked["tracks"] as? [[String: Any]])
     let recommended = try #require(checkedRows.first?["recommended"] as? [String: Any])
     #expect(recommended["count"] as? Int == 1)
+    #expect(recommended["latestWhy"] as? String == "Bright guitars and wiry hooks.")
+    #expect(recommended["latestOutcome"] as? String == "pending")
 
     let countBefore = files.count
     let zero = try #require(await call(server, id: 2, name: "stage_playlist", arguments: #"{"name":"Empty","tracks":[]}"#))
@@ -653,6 +757,119 @@ struct LibraryMCPServerTests {
     #expect(!String(describing: stagedWithoutLedger).contains(recommendationsFile.path))
   }
 
+  @Test("unlabeled cited playlist membership verifies a recommendation reference")
+  func stageReferenceInUnlabeledPlaylist() async throws {
+    let root = temporaryDirectory()
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let inbox = root.appending(path: "PlaylistInbox", directoryHint: .isDirectory)
+    let snapshot = LibrarySnapshot(generatedAt: Date(timeIntervalSince1970: 1_800_000_000), tracks: [
+      LibraryTrack(persistentID: "reference-id", name: "Reference Song", artist: "Reference Artist"),
+    ], playlists: [
+      LibraryPlaylist(persistentID: "unlabeled-id", name: "Unlabeled Reference Set", kind: .user, members: ["reference-id"]),
+    ])
+    let (server, _) = try makeServer(snapshot: snapshot, inbox: inbox, tasteRootURL: tasteRoot)
+    let staged = try #require(await resultJSON(server, id: 1, name: "stage_playlist", arguments: #"{"name":"Reference Test","request":"Find a companion","tracks":[{"artist":"New Artist","title":"New Song","year":2024,"why":"It shares the bright guitars.","like":[{"artist":"Reference Artist","title":"Reference Song","from":"Unlabeled Reference Set"},{"artist":"Reference Artist","title":"Reference Song","from":"Wrong Playlist"},{"artist":"Missing Artist","title":"Missing Song","from":"Unlabeled Reference Set"}]},{"artist":"Second Artist","title":"Second New Song","like":[{"artist":"Reference Artist","title":"Reference Song"}]}]}"#) as? [String: Any])
+    #expect(staged["ledgerRecorded"] as? Bool == true)
+    let recommendations = tasteRoot.appending(path: "recommendations", directoryHint: .isDirectory)
+    let ledgerFile = try #require(FileManager.default.contentsOfDirectory(at: recommendations, includingPropertiesForKeys: nil).first)
+    let ledger = RecommendationLedgerCodec.readFiles([try Data(contentsOf: ledgerFile)])
+    let reference = try #require(ledger.batches.first?.tracks.first?.like?.first)
+    #expect(reference.found == "playlist")
+    let references = try #require(ledger.batches.first?.tracks.first?.like)
+    #expect(references.map(\.found) == ["playlist", "library", "none"])
+    #expect(ledger.batches.first?.tracks.last?.like?.first?.found == "library")
+    #expect((staged["unverifiedReferences"] as? [String])?.count == 2)
+    let stagedFile = try #require(FileManager.default.contentsOfDirectory(at: inbox, includingPropertiesForKeys: nil).first)
+    let stagedText = try String(contentsOf: stagedFile, encoding: .utf8)
+    #expect(!stagedText.contains("request"))
+    #expect(!stagedText.contains("why"))
+    #expect(!stagedText.contains("like"))
+  }
+
+  @Test("stage truncates request and reason in the ledger and reports it")
+  func stageReasoningTruncation() async throws {
+    let root = temporaryDirectory()
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let request = String(repeating: "r", count: 501)
+    let why = String(repeating: "w", count: 301)
+    let (server, _) = try makeServer(snapshot: s0Fixture(), tasteRootURL: tasteRoot)
+    let arguments = #"{"name":"Long Reason","request":"\#(request)","tracks":[{"artist":"A","title":"B","year":2024,"why":"\#(why)"}]}"#
+    let staged = try #require(await resultJSON(server, id: 1, name: "stage_playlist", arguments: arguments) as? [String: Any])
+    #expect(staged["truncated"] as? Bool == true)
+    let recommendationFolder = tasteRoot.appending(path: "recommendations", directoryHint: .isDirectory)
+    let ledgerFile = try #require(FileManager.default.contentsOfDirectory(at: recommendationFolder, includingPropertiesForKeys: nil).first)
+    let batch = try #require(RecommendationLedgerCodec.readFiles([try Data(contentsOf: ledgerFile)]).batches.first)
+    #expect(batch.request?.count == 500)
+    #expect(batch.tracks.first?.why?.count == 300)
+  }
+
+  @Test("New Music picks validate against and record the latest saved week")
+  func recordNewMusicPicks() async throws {
+    let root = temporaryDirectory()
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let exposureFolder = tasteRoot.appending(path: "exposure", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: exposureFolder, withIntermediateDirectories: true)
+    let week = NewMusicWeek(lastModifiedDate: Date(timeIntervalSince1970: 1_790_000_000),
+      fetchedAt: Date(timeIntervalSince1970: 1_790_000_100), host: "Mac", tracks: [
+        NewMusicTrack(catalogID: "catalog", title: "Week Song", artist: "Week Artist", releaseDate: "2026-01-01"),
+        NewMusicTrack(catalogID: "catalog-2", title: "Other Week Song", artist: "Other Week Artist", releaseDate: "2025-01-01"),
+      ])
+    try NewMusicExposureCodec.encode(week).write(to: exposureFolder.appending(path: "week.jsonl"))
+    let inbox = root.appending(path: "PlaylistInbox", directoryHint: .isDirectory)
+    let recordedAt = Date(timeIntervalSince1970: 1_800_000_000)
+    let (server, _) = try makeServer(snapshot: s0Fixture(), inbox: inbox, tasteRootURL: tasteRoot, now: { recordedAt })
+    let empty = try #require(await call(server, id: 0, name: "record_new_music_picks", arguments: #"{"songs":[]}"#))
+    #expect(empty.contains("songs must contain at least one pick"))
+    #expect(empty.contains("\"isError\":true"))
+    let invalid = try #require(await call(server, id: 1, name: "record_new_music_picks",
+      arguments: #"{"songs":[{"artist":"Other Artist","title":"Other Song"}]}"#))
+    #expect(invalid.contains("Other Artist — Other Song isn't in the latest saved New Music week"))
+    #expect(invalid.contains("\"isError\":true"))
+    let recorded = try #require(await resultJSON(server, id: 2, name: "record_new_music_picks",
+      arguments: #"{"songs":[{"artist":"Week Artist","title":"Week Song"}]}"#) as? [String: Any])
+    #expect(recorded["recorded"] as? Bool == true)
+    #expect(recorded["songCount"] as? Int == 1)
+    #expect(try canonicalJSON(recorded) == #"{"recorded":true,"recordedAt":"2027-01-15T08:00:00Z","songCount":1}"#)
+    #expect(!String(describing: recorded).contains(tasteRoot.path))
+    #expect(!String(describing: recorded).contains("catalog"))
+    let recommendationFolder = tasteRoot.appending(path: "recommendations", directoryHint: .isDirectory)
+    let ledgerFile = try #require(FileManager.default.contentsOfDirectory(at: recommendationFolder, includingPropertiesForKeys: nil).first)
+    let batch = try #require(RecommendationLedgerCodec.readFiles([try Data(contentsOf: ledgerFile)]).batches.first)
+    #expect(batch.kind == "new-music-picks")
+    #expect(batch.batchDate == week.lastModifiedDate)
+    #expect(batch.tracks.first?.picked == true)
+
+    let beforeStage = try #require(await resultJSON(server, id: 3, name: "check_tracks",
+      arguments: #"{"tracks":[{"artist":"Week Artist","title":"Week Song"},{"artist":"Other Week Artist","title":"Other Week Song"}]}"#) as? [String: Any])
+    let beforeRows = try #require(beforeStage["tracks"] as? [[String: Any]])
+    #expect(beforeRows.allSatisfy { $0["recommended"] == nil })
+    _ = try #require(await resultJSON(server, id: 4, name: "stage_playlist",
+      arguments: #"{"name":"Picked week","tracks":[{"artist":"Week Artist","title":"Week Song","year":2026},{"artist":"Other Week Artist","title":"Other Week Song","year":2025}]}"#) as? [String: Any])
+    let batches = RecommendationLedgerCodec.readFiles([try Data(contentsOf: ledgerFile)]).batches
+    let staged = try #require(batches.first { $0.kind == "staged-playlist" })
+    #expect(staged.tracks.count == 2)
+    #expect(staged.tracks.allSatisfy { !$0.familiar && !$0.reasons.contains("recommended") })
+  }
+
+  @Test("recommendation_outcomes returns golden JSON without library identifiers or paths")
+  func recommendationOutcomesGoldenJSON() async throws {
+    let root = temporaryDirectory()
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let snapshot = LibrarySnapshot(generatedAt: now, tracks: [])
+    let recommendationFolder = tasteRoot.appending(path: "recommendations", directoryHint: .isDirectory)
+    try RecommendationLedgerCodec.append(RecommendationBatch(recordedAt: now, host: "Fixture",
+      playlist: "Fixture batch", tracks: [RecommendationTrack(artist: "New Artist", title: "New Song",
+        familiar: false, reasons: [], artistKnown: false)]), host: "Fixture", folder: recommendationFolder)
+    let (server, _) = try makeServer(snapshot: snapshot, tasteRootURL: tasteRoot, now: { now })
+    let result = try #require(await resultJSON(server, id: 1, name: "recommendation_outcomes",
+      arguments: #"{"batches":10}"#) as? [String: Any])
+    let json = try canonicalJSON(result)
+    #expect(json == #"{"coverage":{"exposureGaps":0,"exposureSkippedLines":0,"listeningStatus":"not_set_up","snapshotAge":0,"snapshotGeneratedAt":"2027-01-15T08:00:00Z"},"outcomes":{"batches":[{"counts":{"pending":1},"kind":"staged-playlist","notCounted":[],"playlist":"Fixture batch","recordedAt":"2027-01-15T08:00:00Z","songs":[{"artist":"New Artist","band":"unknown","classification":"pending","title":"New Song"}],"source":"chat"}],"listeningCoverage":{"collapsedOverlappingPlays":0,"gaps":[]},"skippedLines":0,"snapshotAge":0}}"#)
+    #expect(!json.contains("persistentID"))
+    #expect(!json.contains(root.path))
+  }
+
   @Test("instructions use the brief's standalone head and only the track rules tail")
   func instructions() {
     let briefParagraph = "Vinyl Fever exposes Jon's Apple Music library and listening stats. Use these tools for any claim about what Jon owns, has played, or has loved — never guess. Before proposing a final list, call check_tracks on it. For Jon's uploads, use an exact album from uploadedAlbums as the album hint. When Jon asks for the playlist, call stage_playlist with the final list instead of printing it; Jon reviews and creates it in Vinyl Fever. Snapshot age is in library_overview."
@@ -663,6 +880,9 @@ struct LibraryMCPServerTests {
     #expect(LibraryMCPServer.instructions.contains("For taste questions, start with list_playlists"))
     #expect(LibraryMCPServer.instructions.contains("Stage discoveries with stage_playlist"))
     #expect(LibraryMCPServer.instructions.contains("Drop songs recommended before, unless Jon asks for them again."))
+    #expect(LibraryMCPServer.instructions.contains("record_new_music_picks"))
+    #expect(LibraryMCPServer.instructions.contains("`like`"))
+    #expect(LibraryMCPServer.instructions.contains("name the playlist"))
     #expect(LibraryMCPServer.instructions.contains(PlaylistContract.trackRules))
     #expect(!LibraryMCPServer.instructions.contains("VF-PLAYLIST: v1"))
   }
@@ -676,11 +896,12 @@ struct LibraryMCPServerTests {
     return LibrarySnapshot(generatedAt: generatedAt, tracks: tracks)
   }
 
-  private func makeServer(snapshot: LibrarySnapshot, inbox: URL? = nil, listeningRootURL: URL? = nil, tasteRootURL: URL? = nil) throws -> (MCPServer, URL) {
+  private func makeServer(snapshot: LibrarySnapshot, inbox: URL? = nil, listeningRootURL: URL? = nil,
+    tasteRootURL: URL? = nil, now: @escaping @Sendable () -> Date = { Date() }) throws -> (MCPServer, URL) {
     let root = temporaryDirectory()
     let snapshotURL = root.appending(path: "library-snapshot.json")
     try LibrarySnapshotCodec.encode(snapshot).write(to: snapshotURL)
-    return (LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: inbox ?? root.appending(path: "inbox"), listeningRootURL: listeningRootURL ?? root.appending(path: "Listening"), tasteRootURL: tasteRootURL ?? root.appending(path: "Taste Intelligence")), snapshotURL)
+    return (LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: inbox ?? root.appending(path: "inbox"), listeningRootURL: listeningRootURL ?? root.appending(path: "Listening"), tasteRootURL: tasteRootURL ?? root.appending(path: "Taste Intelligence"), now: now), snapshotURL)
   }
 
   private func listedTools(_ server: MCPServer) async throws -> [[String: Any]] {

@@ -184,7 +184,7 @@ completing PR advances `NEXT_UP.md` to S5.
         the batch shows none.
       - **The batch has no years.** That's why S2 now asks the chat for them (Decision 11).
 
-- [ ] **S2 — Outcomes by source and release age, the chat's New Music picks, the chat's
+- [x] **S2 — Outcomes by source and release age, the chat's New Music picks, the chat's
   reasoning, and the stick-rate fix (Core + `vf-mcp`).** *Amended 2026-10-25, before dispatch,
   from S1's first real batch: release years, the chat's reasoning (Decision 10), and coverage
   per batch (Decision 12).*

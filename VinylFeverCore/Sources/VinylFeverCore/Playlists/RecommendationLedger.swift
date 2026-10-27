@@ -9,11 +9,28 @@ public struct RecommendationTrack: Codable, Equatable, Sendable {
   public var familiar: Bool
   public var reasons: [String]
   public var artistKnown: Bool
+  public var why: String?
+  public var like: [RecommendationLike]?
+  public var heardBeforePick: Bool?
+  public var picked: Bool?
 
   public init(artist: String, title: String, album: String? = nil, year: Int? = nil,
-    familiar: Bool, reasons: [String], artistKnown: Bool) {
+    familiar: Bool, reasons: [String], artistKnown: Bool, why: String? = nil,
+    like: [RecommendationLike]? = nil, heardBeforePick: Bool? = nil, picked: Bool? = nil) {
     self.artist = artist; self.title = title; self.album = album; self.year = year
     self.familiar = familiar; self.reasons = reasons; self.artistKnown = artistKnown
+    self.why = why; self.like = like; self.heardBeforePick = heardBeforePick
+    self.picked = picked
+  }
+}
+
+public struct RecommendationLike: Codable, Equatable, Sendable {
+  public var artist: String
+  public var title: String
+  public var from: String?
+  public var found: String?
+  public init(artist: String, title: String, from: String? = nil, found: String? = nil) {
+    self.artist = artist; self.title = title; self.from = from; self.found = found
   }
 }
 
@@ -26,12 +43,27 @@ public struct RecommendationBatch: Codable, Equatable, Sendable {
   public var host: String
   public var playlist: String?
   public var tracks: [RecommendationTrack]
+  public var request: String?
+  public var coverage: RecommendationCoverage?
+  public var batchDate: Date?
 
   public init(kind: String = "staged-playlist", source: String = "chat", recordedAt: Date,
-    host: String, playlist: String? = nil, tracks: [RecommendationTrack], version: Int = 1) {
+    host: String, playlist: String? = nil, tracks: [RecommendationTrack], version: Int = 1,
+    request: String? = nil, coverage: RecommendationCoverage? = nil, batchDate: Date? = nil) {
     format = "vf-recommendation-batch"; self.version = version; self.kind = kind
     self.source = source; self.recordedAt = recordedAt; self.host = host
     self.playlist = playlist; self.tracks = tracks
+    self.request = request; self.coverage = coverage
+    self.batchDate = batchDate
+  }
+}
+
+public struct RecommendationCoverage: Codable, Equatable, Sendable {
+  public var listening: Bool
+  public var notes: Bool
+  public var snapshotAt: Date?
+  public init(listening: Bool, notes: Bool, snapshotAt: Date?) {
+    self.listening = listening; self.notes = notes; self.snapshotAt = snapshotAt
   }
 }
 
@@ -46,8 +78,18 @@ public struct RecommendationLedgerReadResult: Equatable, Sendable {
 public struct RecommendationEvidence: Codable, Equatable, Sendable {
   public var count: Int
   public var latestRecordedAt: Date
-  public init(count: Int, latestRecordedAt: Date) {
+  public var latestWhy: String?
+  public var latestOutcome: String?
+  public init(count: Int, latestRecordedAt: Date, latestWhy: String? = nil, latestOutcome: String? = nil) {
     self.count = count; self.latestRecordedAt = latestRecordedAt
+    self.latestWhy = latestWhy; self.latestOutcome = latestOutcome
+  }
+  private enum CodingKeys: String, CodingKey { case count, latestRecordedAt, latestWhy, latestOutcome }
+  public func encode(to encoder: Encoder) throws {
+    var values = encoder.container(keyedBy: CodingKeys.self)
+    try values.encode(count, forKey: .count); try values.encode(latestRecordedAt, forKey: .latestRecordedAt)
+    try values.encodeIfPresent(latestWhy, forKey: .latestWhy)
+    try values.encodeIfPresent(latestOutcome, forKey: .latestOutcome)
   }
 }
 
@@ -139,17 +181,20 @@ public struct RecommendationLedgerEvidenceIndex: Sendable {
   public init(ledger: RecommendationLedgerReadResult, identity: ArtistIdentity) {
     self.identity = identity
     var evidence: [String: RecommendationEvidence] = [:]
-    for batch in ledger.batches {
+    for batch in ledger.batches where batch.kind == "staged-playlist" {
       // A batch contributes at most once per song, even if its input repeats a row.
       let keys = Set(batch.tracks.lazy.filter { !$0.familiar }.map {
         TasteIntelligence.songKey(artist: $0.artist, title: $0.title, identity: identity)
       })
       for key in keys {
         if let current = evidence[key] {
+          let latest = batch.recordedAt >= current.latestRecordedAt
+          let why = batch.tracks.first(where: { !$0.familiar && TasteIntelligence.songKey(artist: $0.artist, title: $0.title, identity: identity) == key })?.why
           evidence[key] = RecommendationEvidence(count: current.count + 1,
-            latestRecordedAt: max(current.latestRecordedAt, batch.recordedAt))
+            latestRecordedAt: max(current.latestRecordedAt, batch.recordedAt), latestWhy: latest ? why : current.latestWhy)
         } else {
-          evidence[key] = RecommendationEvidence(count: 1, latestRecordedAt: batch.recordedAt)
+          let why = batch.tracks.first(where: { !$0.familiar && TasteIntelligence.songKey(artist: $0.artist, title: $0.title, identity: identity) == key })?.why
+          evidence[key] = RecommendationEvidence(count: 1, latestRecordedAt: batch.recordedAt, latestWhy: why)
         }
       }
     }
