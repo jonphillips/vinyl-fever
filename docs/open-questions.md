@@ -82,11 +82,11 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   candidates for new releases (S3) wait on that result. **S1 merged as #132 (2026-10-25); Jon's
   stage/check gate is owed.** **The chat's questions, from the never-merged plan PR #127,
   were added as M18 S4 after S2 (2026-10-25); #127 is closed as superseded.**
-- **Now-playing album brief, and a Vinyl Fever iPhone target** (Jon and the architect,
+- **Now-playing album brief, and the iPhone companion** (Jon and the architect,
   2026-10-27). Jon wants to be on a song in Music on his iPhone, ask ChatGPT "tell me about this
   album and artist," and get more than a bio: where the artist sits against his own evidence,
   and particular tracks to try. Then he wants those tracks queued without making a playlist.
-  **Not planned yet. Jon's decision and the probes come first.**
+  **The iPhone companion is decided. The features aren't planned yet; the probes come first.**
   - **The brief.** A new read-only vf-mcp tool, working name `album_brief(artist, album,
     track?)`, returns everything in one call so the phone isn't waiting on several round trips:
     - **From the Apple Music catalog:** a search that resolves the title, artist, and album to
@@ -132,11 +132,13 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
        format, a log, and daily use.
     2. **Album brief** identifies the song the same way and opens the chat with the prompt.
     3. **Play Next from Vinyl Fever** reads the queue request and inserts the songs into Up Next.
-  - **For Jon: this changes the Mac-first stance.** `AGENTS.md` says the iPhone isn't a v1
-    execution surface, and *iPad Companion* below is the only question so far about anything off
-    the Mac. The target touches no files on disk. It reads and writes the iCloud logs and drives
-    Music's queue. But it's a new platform with its own App ID, profile, and TestFlight builds
-    (jon-platform `docs/ios/testflight.md`). Decide before any plan.
+  - **Decided (Jon, 2026-10-27): the iPhone companion with App Intents is approved.** File
+    and shell work stays on the Mac. `AGENTS.md`, *Platform Stance* in
+    [product-requirements.md](product-requirements.md), and
+    [technical-architecture.md](technical-architecture.md) now say so. The target touches no
+    files on disk: it reads and writes the iCloud logs and drives Music's queue. Its plan owes
+    the setup: an App ID, a profile, and TestFlight builds (jon-platform
+    `docs/ios/testflight.md`).
   - **Probes (S0-sized):**
     1. **The chat route.** Can a chat started from an intent or a shortcut open in the right
        ChatGPT project with the vf-mcp connector usable? Voice mode probably can't call tools.
@@ -455,8 +457,8 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
 
 ## iPad Companion
 
-- An iPhone target comes first if Jon approves *Now-playing album brief, and a Vinyl Fever
-  iPhone target* above (2026-10-27). Its packages would serve an iPad later.
+- The iPhone companion comes first (approved 2026-10-27; see *Now-playing album brief, and the
+  iPhone companion* above). Its packages would serve an iPad later.
 - Which screens would be useful away from the Mac?
 - Should work queues and metadata policies sync through CloudKit eventually?
 

@@ -94,19 +94,29 @@ MusicBrainz/source lookup, artwork decisions, and Apple Music remediation for ne
 or already-imported tracks. This area is intentionally still hazier than the
 other two and should be clarified through focused requirements work.
 
-## Mac-First Platform Stance
+## Platform Stance
 
-The execution surface is macOS.
+The Mac is the console: every file and shell workflow runs there.
 
 Reasons:
 
 - Raw folders and local music files live on the Mac.
 - Existing engines are Bash, Python, ffmpeg, ffprobe, metaflac, and mutagen.
 - Music.app import and remediation are Mac-centered workflows.
-- iPad does not have equivalent access to arbitrary local folders or shell tools.
+- iPhone and iPad don't have equivalent access to arbitrary local folders or shell tools.
 
-Use SwiftUI and shared package boundaries so an iPad companion can exist later.
-Do not design v1 around iPad execution.
+**The iPhone companion is approved (Jon, 2026-10-27).** It's a Vinyl Fever
+iPhone target for what happens while Jon is listening away from the Mac. It
+works through App Intents (Siri, CarPlay, the Action button, Control Center,
+Shortcuts) and MusicKit, and it touches no local files: it reads and writes
+Vinyl Fever's iCloud Drive logs and drives Music's queue. First uses:
+
+- Music Feedback, moved from the shortcut into an intent, writing the same notes format.
+- A now-playing album and artist brief in the chat, tied to Jon's evidence.
+- Queueing chat-picked songs into Up Next without making a playlist.
+
+Use SwiftUI and shared package boundaries so the Mac app, the iPhone companion,
+and a later iPad surface share logic.
 
 Potential future iPad companion surfaces for v2 or later:
 
