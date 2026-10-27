@@ -165,48 +165,83 @@ public struct TasteBaselines: Codable, Equatable, Sendable {
 }
 
 public enum TasteIntelligence {
+  private struct ClassificationIndex {
+    var identity: ArtistIdentity
+    var keepKeys: Set<String>
+    var heardKeysByWindow: [Date: Set<String>]
+  }
+
   public static func songKey(artist: String, title: String, identity: ArtistIdentity) -> String {
     "\(identity.key(artist))|\(ListeningTextNormalizer.libraryTitle(title))"
   }
 
   public static func keptAndPassed(weeks: [NewMusicWeek], snapshot: LibrarySnapshot,
     roles: PlaylistRoles, log: ListeningLog, now: Date, limit: Int = 8) -> [NewMusicWeekResult] {
-    let resolved = PlaylistRoleMatcher.resolve(snapshot: snapshot, roles: roles)
-    let tracksByID = Dictionary(snapshot.tracks.map { ($0.persistentID, $0) }, uniquingKeysWith: { first, _ in first })
+    let selectedWeeks = Array(weeks.sorted { $0.lastModifiedDate > $1.lastModifiedDate }.prefix(max(1, limit)))
+    let classifier = classificationIndex(snapshot: snapshot, roles: roles, log: log,
+      dates: selectedWeeks.map(\.lastModifiedDate))
+    return selectedWeeks.map { classifyWeek($0, snapshot: snapshot, classifier: classifier, now: now) }
+  }
+
+  private static func classificationIndex(snapshot: LibrarySnapshot, roles: PlaylistRoles,
+    log: ListeningLog, dates: [Date]) -> ClassificationIndex {
     let artists = Set(snapshot.tracks.map(\.artist) + snapshot.outsideTracks.values.map(\.artist))
     let identity = ArtistIdentity(knownArtists: artists)
-    let keepKeys = Set(resolved.filter { $0.role == .keepers }.flatMap { row in
-      row.playlist.members.compactMap { id -> String? in
-        let track = tracksByID[id]
-        let outside = snapshot.outsideTracks[id]
-        guard let artist = track?.artist ?? outside?.artist,
-          let title = track?.name ?? outside?.name,
-          !identity.key(artist).isEmpty else { return nil }
-        return songKey(artist: artist, title: title, identity: identity)
+    let keepKeys = keepKeys(snapshot: snapshot, roles: roles, identity: identity)
+    let keyedPlays = log.plays.map { (windowEnd: $0.windowEnd,
+      key: songKey(artist: $0.item.artist, title: $0.item.title, identity: identity)) }
+    return ClassificationIndex(identity: identity, keepKeys: keepKeys,
+      heardKeysByWindow: heardKeysByWindow(dates: dates, keyedPlays: keyedPlays))
+  }
+
+  private static func heardKeysByWindow(dates: [Date], keyedPlays: [(windowEnd: Date, key: String)]) -> [Date: Set<String>] {
+    let orderedDates = Array(Set(dates)).sorted()
+    var values = Array(repeating: Set<String>(), count: orderedDates.count)
+    for play in keyedPlays {
+      let earliestDate = play.windowEnd.addingTimeInterval(-14 * 86_400)
+      var lower = 0
+      var upper = orderedDates.count
+      while lower < upper {
+        let middle = lower + (upper - lower) / 2
+        if orderedDates[middle] < earliestDate { lower = middle + 1 } else { upper = middle }
       }
-    })
-    let keyedPlays = log.plays.map { (windowEnd: $0.windowEnd, key: songKey(artist: $0.item.artist, title: $0.item.title, identity: identity)) }
-    return Array(weeks.sorted { $0.lastModifiedDate > $1.lastModifiedDate }.prefix(max(1, limit))).map { week in
-      var rows = week.tracks.map { track -> ClassifiedNewMusicTrack in
-        let status = classify(artist: track.artist, title: track.title, date: week.lastModifiedDate,
-          snapshot: snapshot, keepKeys: keepKeys, keyedPlays: keyedPlays, identity: identity, now: now)
-        return ClassifiedNewMusicTrack(track: track, classification: status)
+      let firstDate = lower
+      lower = firstDate
+      upper = orderedDates.count
+      while lower < upper {
+        let middle = lower + (upper - lower) / 2
+        if orderedDates[middle] <= play.windowEnd { lower = middle + 1 } else { upper = middle }
       }
-      let order: [NewMusicClassification] = [.kept, .passed, .unheard, .pending]
-      rows.sort { (order.firstIndex(of: $0.classification) ?? 0) < (order.firstIndex(of: $1.classification) ?? 0) }
-      var counts: [String: Int] = [:]
-      for row in rows { counts[row.classification.rawValue, default: 0] += 1 }
-      return NewMusicWeekResult(lastModifiedDate: week.lastModifiedDate, fetchedAt: week.fetchedAt, counts: counts, tracks: rows)
+      for index in firstDate..<lower {
+        values[index].insert(play.key)
+      }
     }
+    return Dictionary(uniqueKeysWithValues: zip(orderedDates, values))
+  }
+
+  private static func classifyWeek(_ week: NewMusicWeek, snapshot: LibrarySnapshot,
+    classifier: ClassificationIndex, now: Date) -> NewMusicWeekResult {
+    let heardKeys = classifier.heardKeysByWindow[week.lastModifiedDate] ?? []
+    var rows = week.tracks.map { track -> ClassifiedNewMusicTrack in
+      let status = classify(artist: track.artist, title: track.title, date: week.lastModifiedDate,
+        snapshot: snapshot, keepKeys: classifier.keepKeys, heardKeys: heardKeys, identity: classifier.identity, now: now)
+      return ClassifiedNewMusicTrack(track: track, classification: status)
+    }
+    let order: [NewMusicClassification] = [.kept, .passed, .unheard, .pending]
+    rows.sort { (order.firstIndex(of: $0.classification) ?? 0) < (order.firstIndex(of: $1.classification) ?? 0) }
+    var counts: [String: Int] = [:]
+    for row in rows { counts[row.classification.rawValue, default: 0] += 1 }
+    return NewMusicWeekResult(lastModifiedDate: week.lastModifiedDate, fetchedAt: week.fetchedAt,
+      counts: counts, tracks: rows)
   }
 
   private static func classify(artist: String, title: String, date: Date, snapshot: LibrarySnapshot,
-    keepKeys: Set<String>, keyedPlays: [(windowEnd: Date, key: String)], identity: ArtistIdentity, now: Date) -> NewMusicClassification {
+    keepKeys: Set<String>, heardKeys: Set<String>, identity: ArtistIdentity, now: Date) -> NewMusicClassification {
     let key = songKey(artist: artist, title: title, identity: identity)
     let windowEnd = date.addingTimeInterval(14 * 86_400)
     guard !keepKeys.contains(key) else { return .kept }
     guard now >= windowEnd && snapshot.generatedAt >= windowEnd else { return .pending }
-    return keyedPlays.contains { $0.key == key && $0.windowEnd >= date && $0.windowEnd <= windowEnd } ? .passed : .unheard
+    return heardKeys.contains(key) ? .passed : .unheard
   }
 
   public static func band(releaseYear: Int?, batchYear: Int?) -> ReleaseAgeBand {
@@ -219,13 +254,15 @@ public enum TasteIntelligence {
 
   public static func recommendationOutcomes(ledger: RecommendationLedgerReadResult, weeks: [NewMusicWeek],
     snapshot: LibrarySnapshot, roles: PlaylistRoles, log: ListeningLog, now: Date, limit: Int = 10) -> RecommendationOutcomes {
-    let classifiedWeeks = keptAndPassed(weeks: weeks, snapshot: snapshot, roles: roles, log: log, now: now, limit: max(1, weeks.count))
-    var resultByDate: [Date: NewMusicWeekResult] = [:]
-    for week in classifiedWeeks { resultByDate[week.lastModifiedDate] = week }
-    let identity = ArtistIdentity(knownArtists: Set(snapshot.tracks.map(\.artist) + snapshot.outsideTracks.values.map(\.artist)))
-    let keys = keepKeys(snapshot: snapshot, roles: roles)
-    let keyedPlays = log.plays.map { (windowEnd: $0.windowEnd, key: songKey(artist: $0.item.artist, title: $0.item.title, identity: identity)) }
     let sorted = Array(ledger.batches.sorted { $0.recordedAt > $1.recordedAt }.prefix(max(1, limit)))
+    let needsWeekClassifications = sorted.contains { $0.kind == "new-music-picks" }
+    let dates = (needsWeekClassifications ? weeks.map(\.lastModifiedDate) : []) + sorted.map { $0.batchDate ?? $0.recordedAt }
+    let classifier = classificationIndex(snapshot: snapshot, roles: roles, log: log, dates: dates)
+    var resultByDate: [Date: NewMusicWeekResult] = [:]
+    if needsWeekClassifications {
+      for week in weeks { resultByDate[week.lastModifiedDate] = classifyWeek(week, snapshot: snapshot, classifier: classifier, now: now) }
+    }
+    let identity = classifier.identity
     var batches: [RecommendationOutcomeBatch] = []
     for batch in sorted {
       let date = batch.batchDate ?? batch.recordedAt
@@ -240,7 +277,7 @@ public enum TasteIntelligence {
           status = week.tracks.first { songKey(artist: $0.track.artist, title: $0.track.title, identity: identity) == trackKey }?.classification
         } else {
           status = classify(artist: track.artist, title: track.title, date: date, snapshot: snapshot,
-            keepKeys: keys, keyedPlays: keyedPlays, identity: identity, now: now)
+            keepKeys: classifier.keepKeys, heardKeys: classifier.heardKeysByWindow[date] ?? [], identity: identity, now: now)
         }
         rows.append(RecommendationOutcomeSong(artist: track.artist, title: track.title, year: track.year,
           band: band(releaseYear: track.year, batchYear: year), classification: status, why: track.why,
@@ -267,10 +304,9 @@ public enum TasteIntelligence {
       listeningCoverage: log.coverage, snapshotAge: max(0, now.timeIntervalSince(snapshot.generatedAt)))
   }
 
-  private static func keepKeys(snapshot: LibrarySnapshot, roles: PlaylistRoles) -> Set<String> {
+  private static func keepKeys(snapshot: LibrarySnapshot, roles: PlaylistRoles, identity: ArtistIdentity) -> Set<String> {
     let resolved = PlaylistRoleMatcher.resolve(snapshot: snapshot, roles: roles)
     let tracks = Dictionary(snapshot.tracks.map { ($0.persistentID, $0) }, uniquingKeysWith: { first, _ in first })
-    let identity = ArtistIdentity(knownArtists: Set(snapshot.tracks.map(\.artist) + snapshot.outsideTracks.values.map(\.artist)))
     return Set(resolved.filter { $0.role == .keepers }.flatMap { row in row.playlist.members.compactMap { id in
       let track = tracks[id]; let outside = snapshot.outsideTracks[id]
       guard let artist = track?.artist ?? outside?.artist, let title = track?.name ?? outside?.name else { return nil }
@@ -365,8 +401,12 @@ public enum TasteIntelligence {
   private static func pickYields(weeks: [NewMusicWeekResult], ledger: RecommendationLedgerReadResult?,
     identity: ArtistIdentity) -> [String: TasteBaselines.PickYield] {
     var picks: [String: TasteBaselines.PickYield] = [:]
-    for batch in ledger?.batches ?? [] where batch.kind == "new-music-picks" {
+    let batches = (ledger?.batches ?? []).filter { $0.kind == "new-music-picks" }
+      .sorted { $0.recordedAt < $1.recordedAt }
+    var seenWeeks = Set<Date>()
+    for batch in batches {
       let date = batch.batchDate ?? batch.recordedAt
+      guard seenWeeks.insert(date).inserted, batch.coverage?.listening != false else { continue }
       guard let week = weeks.first(where: { $0.lastModifiedDate == date }) else { continue }
       var classified: [String: NewMusicClassification] = [:]
       for row in week.tracks { classified[songKey(artist: row.track.artist, title: row.track.title, identity: identity)] = row.classification }

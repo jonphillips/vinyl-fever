@@ -181,7 +181,7 @@ public struct RecommendationLedgerEvidenceIndex: Sendable {
   public init(ledger: RecommendationLedgerReadResult, identity: ArtistIdentity) {
     self.identity = identity
     var evidence: [String: RecommendationEvidence] = [:]
-    for batch in ledger.batches {
+    for batch in ledger.batches where batch.kind == "staged-playlist" {
       // A batch contributes at most once per song, even if its input repeats a row.
       let keys = Set(batch.tracks.lazy.filter { !$0.familiar }.map {
         TasteIntelligence.songKey(artist: $0.artist, title: $0.title, identity: identity)

@@ -102,7 +102,7 @@ struct TasteIntelligenceTests {
   }
 
   @Test("New Music picks score picked songs against the rest of the same week")
-  func newMusicPickOutcomes() {
+  func newMusicPickOutcomes() throws {
     let date = Date(timeIntervalSince1970: 1_800_000_000)
     let now = date.addingTimeInterval(15 * 86_400)
     let snapshot = LibrarySnapshot(generatedAt: now, tracks: [
@@ -129,12 +129,25 @@ struct TasteIntelligenceTests {
         RecommendationTrack(artist: "Pass Artist", title: "Pass Song", year: 2026, familiar: false, reasons: [], artistKnown: false, picked: false),
         RecommendationTrack(artist: "Heard Artist", title: "Heard Song", year: 2027, familiar: false, reasons: [], artistKnown: false, heardBeforePick: true, picked: true),
       ], coverage: RecommendationCoverage(listening: true, notes: true, snapshotAt: now), batchDate: date)
-    let ledger = RecommendationLedgerReadResult(batches: [ledgerBatch], skippedLines: 0)
-    let classified = TasteIntelligence.keptAndPassed(weeks: [week], snapshot: snapshot,
+    let replacementPick = RecommendationBatch(kind: "new-music-picks", recordedAt: date.addingTimeInterval(200),
+      host: "Mac", tracks: [
+        RecommendationTrack(artist: "Keep Artist", title: "Keep Song", year: 2027, familiar: false, reasons: [], artistKnown: false, picked: false),
+        RecommendationTrack(artist: "Pass Artist", title: "Pass Song", year: 2026, familiar: false, reasons: [], artistKnown: false, picked: true),
+      ], coverage: RecommendationCoverage(listening: true, notes: true, snapshotAt: now), batchDate: date)
+    let uncoveredDate = date.addingTimeInterval(7 * 86_400)
+    let uncoveredWeek = NewMusicWeek(lastModifiedDate: uncoveredDate, fetchedAt: uncoveredDate, host: "Mac", tracks: [
+      NewMusicTrack(catalogID: "uncovered", title: "Uncovered Song", artist: "Other Artist", releaseDate: "2027-01-01"),
+    ])
+    let uncoveredPick = RecommendationBatch(kind: "new-music-picks", recordedAt: uncoveredDate.addingTimeInterval(100),
+      host: "Mac", tracks: [RecommendationTrack(artist: "Other Artist", title: "Uncovered Song", year: 2027,
+        familiar: false, reasons: [], artistKnown: false, picked: true)],
+      coverage: RecommendationCoverage(listening: false, notes: true, snapshotAt: now), batchDate: uncoveredDate)
+    let ledger = RecommendationLedgerReadResult(batches: [replacementPick, uncoveredPick, ledgerBatch], skippedLines: 0)
+    let classified = TasteIntelligence.keptAndPassed(weeks: [week, uncoveredWeek], snapshot: snapshot,
       roles: roles, log: log, now: now)
     let outcomes = TasteIntelligence.recommendationOutcomes(ledger: ledger, weeks: [week],
       snapshot: snapshot, roles: roles, log: log, now: now)
-    let batch = outcomes.batches[0]
+    let batch = try #require(outcomes.batches.first { $0.recordedAt == ledgerBatch.recordedAt })
     #expect(batch.pickedCounts == ["kept": 1])
     #expect(batch.notPickedCounts == ["passed": 1])
     #expect(batch.songs.map(\.title).sorted() == ["Keep Song", "Pass Song"])
@@ -143,7 +156,42 @@ struct TasteIntelligenceTests {
     let pick = baselines.picksByWeek[date.ISO8601Format()]
     #expect(pick?.picked.kept == 1)
     #expect(pick?.notPicked.passed == 1)
+    #expect(baselines.picksByWeek[uncoveredDate.ISO8601Format()] == nil)
     #expect(baselines.bySourceAndBand["chat|new"]?.ratio == nil)
+  }
+
+  @Test("familiar songs are not counted and uncovered batches do not enter baselines")
+  func outcomesSkipFamiliarAndUncoveredBatches() {
+    let date = Date(timeIntervalSince1970: 1_800_000_000)
+    let now = date.addingTimeInterval(15 * 86_400)
+    let snapshot = LibrarySnapshot(generatedAt: now, tracks: [
+      LibraryTrack(persistentID: "kept", name: "Known Song", artist: "Known Artist"),
+      LibraryTrack(persistentID: "uncovered", name: "Uncovered Song", artist: "Uncovered Artist"),
+      LibraryTrack(persistentID: "counted", name: "Counted Song", artist: "Counted Artist"),
+    ], playlists: [LibraryPlaylist(persistentID: "keepers", name: "Keepers", kind: .user, members: ["kept", "uncovered", "counted"])])
+    let roles = PlaylistRoles(updatedAt: now,
+      playlists: [PlaylistRoleEntry(persistentID: "keepers", name: "Keepers", role: .keepers)])
+    let batch = RecommendationBatch(recordedAt: date, host: "Mac", playlist: "Known songs", tracks: [
+      RecommendationTrack(artist: "Known Artist", title: "Known Song", year: 2020,
+        familiar: true, reasons: ["owned"], artistKnown: true),
+      RecommendationTrack(artist: "Uncovered Artist", title: "Uncovered Song", year: 2020,
+        familiar: false, reasons: [], artistKnown: false),
+    ], coverage: RecommendationCoverage(listening: false, notes: true, snapshotAt: now))
+    let coveredBatch = RecommendationBatch(recordedAt: date.addingTimeInterval(1), host: "Mac", playlist: "Covered", tracks: [
+      RecommendationTrack(artist: "Counted Artist", title: "Counted Song", year: 2020,
+        familiar: false, reasons: [], artistKnown: false),
+    ], coverage: RecommendationCoverage(listening: true, notes: true, snapshotAt: now))
+    let outcomes = TasteIntelligence.recommendationOutcomes(ledger: .init(batches: [batch, coveredBatch], skippedLines: 0),
+      weeks: [], snapshot: snapshot, roles: roles, log: ListeningLog(streams: [], now: now), now: now)
+    let result = outcomes.batches.first { $0.playlist == "Known songs" }!
+    #expect(result.notCounted == ["Known Artist — Known Song"])
+    #expect(result.songs.map(\.title) == ["Uncovered Song"])
+    #expect(result.counts == ["kept": 1])
+    #expect(result.notScored == "no listening evidence at staging")
+    let baselines = TasteIntelligence.baselines(weeks: [], snapshot: snapshot,
+      ledger: .init(batches: [batch, coveredBatch], skippedLines: 0), outcomes: outcomes)
+    #expect(baselines.bySourceAndBand["chat|catalog"]?.kept == 1)
+    #expect(baselines.bySourceAndBand["chat|catalog"]?.passed == 0)
   }
 
   @Test("pending weeks do not contribute to yield")
@@ -202,6 +250,46 @@ struct TasteIntelligenceTests {
     let elapsed = clock.measure {
       _ = TasteIntelligence.keptAndPassed(weeks: weeks, snapshot: snapshot, roles: roles, log: log,
         now: start.addingTimeInterval(60 * 86_400))
+    }
+    #expect(elapsed < .seconds(1))
+  }
+
+  @Test("recommendation outcomes scale to Jon's library size", .enabled(if: ProcessInfo.processInfo.environment["VF_PERF_TESTS"] == "1"))
+  func recommendationOutcomesAtJonsScale() {
+    let start = Date(timeIntervalSince1970: 1_700_000_000)
+    let tracks = (0..<87_000).map { index in
+      LibraryTrack(persistentID: "track-\(index)", name: "Track \(index)", artist: "Artist \(index % 500)")
+    }
+    let playlists = (0..<150).map { index in
+      LibraryPlaylist(persistentID: "playlist-\(index)", name: "Playlist \(index)", kind: .user, members: [])
+    }
+    let snapshot = LibrarySnapshot(generatedAt: start.addingTimeInterval(60 * 86_400), tracks: tracks, playlists: playlists)
+    let roles = PlaylistRoles(updatedAt: start, playlists: [])
+    let weeks = (0..<8).map { index in
+      NewMusicWeek(lastModifiedDate: start.addingTimeInterval(Double(index) * 7 * 86_400), fetchedAt: start,
+        host: "Mini", tracks: (0..<25).map { song in
+          NewMusicTrack(catalogID: "week-\(index)-\(song)", title: "New \(song)", artist: "Artist \(song)")
+        })
+    }
+    let poller = UUID()
+    let plays = (0..<15_000).map { index in
+      ListeningFetch(poller: poller, host: "Mini", fetchedAt: start.addingTimeInterval(Double(index) * 20),
+        outcome: .plays, newCount: 1, pagesRead: 1,
+        items: [ListeningItem(kind: .song, id: "play-\(index)", title: "New \(index % 25)", artist: "Artist \(index % 25)")])
+    }
+    let log = ListeningLog(streams: [plays], now: start.addingTimeInterval(60 * 86_400))
+    let batches = (0..<50).map { batchIndex in
+      RecommendationBatch(recordedAt: start.addingTimeInterval(Double(batchIndex) * 7 * 86_400), host: "Mini",
+        tracks: (0..<25).map { songIndex in
+          RecommendationTrack(artist: "Batch Artist \(songIndex)", title: "Batch Song \(batchIndex)-\(songIndex)",
+            year: 2020, familiar: false, reasons: [], artistKnown: false)
+        }, coverage: RecommendationCoverage(listening: true, notes: true, snapshotAt: snapshot.generatedAt))
+    }
+    let ledger = RecommendationLedgerReadResult(batches: batches, skippedLines: 0)
+    let clock = ContinuousClock()
+    let elapsed = clock.measure {
+      _ = TasteIntelligence.recommendationOutcomes(ledger: ledger, weeks: weeks, snapshot: snapshot,
+        roles: roles, log: log, now: start.addingTimeInterval(60 * 86_400), limit: 50)
     }
     #expect(elapsed < .seconds(1))
   }
