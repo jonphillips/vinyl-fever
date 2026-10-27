@@ -19,5 +19,6 @@ regenerate it after checkout, pull, and rebase. Run `xcodegen generate` first wh
 or the file list changed. Run the opt-in performance suites before a PR that touches
 `LibraryIndex`, `ArtistIdentity`, or the listening log reader. Start with the
 narrowest test (`swift test --filter …`) and run the full set once before marking a PR ready.
-Vinyl Fever is Mac-first: no simulator; name any Music.app or on-device risk in the PR as
-unverified.
+The Mac app has no simulator; name any Music.app or on-device risk in the PR as unverified.
+The iPhone companion builds and runs in the iOS Simulator, but Siri, MusicKit playback and
+Up Next, and ShazamKit need a device: name those as owed device gates.

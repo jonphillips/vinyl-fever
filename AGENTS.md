@@ -25,9 +25,13 @@ Read, in order:
 2. `docs/README.md`
 3. The linked Vinyl Fever docs in the order listed there
 
-Vinyl Fever is Mac-first. The raw-file and script-running workflows are macOS
-execution flows. SwiftUI and shared Swift package boundaries should preserve the
-option for a future iPad companion, but iPad is not a v1 execution surface.
+Vinyl Fever is a Mac console with an iPhone companion (Jon, 2026-10-27). The
+raw-file and script-running workflows are macOS execution flows and stay on the
+Mac. The iPhone companion is an approved target: App Intents (Siri, the Action
+button, Control Center, Shortcuts) and MusicKit for what happens away from the
+Mac, such as Music Feedback, now-playing briefs, and queueing songs into Up Next.
+Keep shared logic in Swift packages so the Mac app, the iPhone companion, and a
+later iPad surface reuse it. See `docs/product-requirements.md` *Platform Stance*.
 
 Do not use SwiftData. Follow Jon's house stack from `jon-platform`: plain value
 records, SQLiteData for app state, `@Observable` feature models, dependency-backed

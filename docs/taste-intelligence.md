@@ -12,7 +12,9 @@ deterministic and explainable, and lets the chat model do the reasoning: it prop
 probably doesn't know, explains each one against named examples, and Vinyl Fever measures which
 ones he keeps. No scores, no embeddings, no Vinyl Fever-side model calls, and no iPhone app to
 start: keeps and passes come from what Jon already does, and one shortcut captures his reasons
-on the move.
+on the move. *Amended 2026-10-27 (Jon): the iPhone companion is approved, and Music Feedback
+moves from the shortcut into an App Intent that writes the same notes format (see
+[Open Questions](open-questions.md) *Now-playing album brief*).*
 
 ## The north star
 

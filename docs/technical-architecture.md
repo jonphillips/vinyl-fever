@@ -19,11 +19,13 @@ Settled defaults:
 
 ## Platform Architecture
 
-Mac is the v1 execution platform.
+The Mac is the execution platform for every file and shell workflow. An iPhone
+companion target is approved (Jon, 2026-10-27; see
+[Product Requirements](product-requirements.md) *Platform Stance*).
 
-The shared core should live in an SPM package so future iPad companion surfaces
-can reuse models, policies, read models, and non-file-execution UI in v2 or
-later.
+The shared core lives in SPM packages so the iPhone companion, and later an
+iPad surface, can reuse models, policies, read models, log formats, and
+non-file-execution UI.
 
 Suggested boundary:
 
@@ -31,6 +33,9 @@ Suggested boundary:
   result values, run log values, pure planning logic, tests.
 - macOS app target: file pickers, security-scoped bookmarks, Process execution,
   Music.app integration, Quick Look/reveal, local tool discovery.
+- iPhone companion target: App Intents (`AppShortcutsProvider` for Siri, the Action
+  button, and Control Center), MusicKit (now playing, catalog, Up Next), ShazamKit,
+  and reading and writing Vinyl Fever's iCloud Drive logs. No local file or shell work.
 - Future iPad target: review/status/policy editing surfaces, not shell execution.
 
 ## Shared Components And External Services
@@ -38,7 +43,7 @@ Suggested boundary:
 Distinguish two kinds of "shared package":
 
 - Vinyl Fever's own core package (above): domain models, policies, planning
-  logic, for a possible future iPad companion. App-internal.
+  logic, shared with the iPhone companion and a later iPad surface. App-internal.
 - jon-platform cross-app packages that Vinyl Fever *consumes*. Vinyl Fever does
   not re-document or reimplement these; it depends on them and links the canonical
   spec.
