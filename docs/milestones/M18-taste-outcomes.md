@@ -7,7 +7,7 @@ design conflict, this doc's Decisions win. Rules in
 [../technical-architecture.md](../technical-architecture.md) and
 `/Users/jon/code/jon-platform/AGENTS.md` apply.*
 
-Summary: Four slices are dispatched, and a fifth is decided at S2's gate.
+Summary: Five slices are dispatched, and a sixth is decided at S2's gate.
 - **S1** starts the recommendation ledger now. Every `stage_playlist` records which songs were
   new to Jon, and `check_tracks` reports "recommended before". It's a log that can't be rebuilt
   later, so it goes first.
@@ -21,7 +21,10 @@ Summary: Four slices are dispatched, and a fifth is decided at S2's gate.
   runs after S2.
 - **S5** asks for a role whenever a playlist has none: a banner in the app, and Vinyl Fever's own
   playlists labeled automatically. An unlabeled playlist silently counts as "Jon knows these
-  songs" and never as kept. It runs last.
+  songs" and never as kept.
+- **S6** puts the open questions where the chat already looks, in `list_playlists`, because at
+  S4's gate the chat never asked one until Jon prompted it. It also stops the chat from staging a
+  batch a second time to fix a year. Added 2026-10-28; it runs after S5.
 
 Vinyl Fever still makes no model calls and stores no scores. [M19](M19-backups.md)'s backup
 slice runs between S1 and S2 (M19 Decision 7).
@@ -106,7 +109,8 @@ Music's own 25 songs before Jon hears them (S2).
 needs New Music weeks). **Dispatch 3: S4** (Core + `vf-mcp`; Jon's gate). **S3** is decided at
 S2's gate. Every slice edits `vf-mcp`, so they run one after another. S2's completing PR
 advances `NEXT_UP.md` to S4. **Dispatch 4: S5** (app; Jon's gate; added 2026-10-25). S4's
-completing PR advances `NEXT_UP.md` to S5.
+completing PR advances `NEXT_UP.md` to S5. **Dispatch 5: S6** (`vf-mcp`; Jon's gate; added
+2026-10-28). S5's completing PR advances `NEXT_UP.md` to S6.
 
 - [x] **S1 — The recommendation ledger (Core + `vf-mcp`).** Done in `m18/s1-recommendation-ledger`.
   - **Ledger file:** `Taste Intelligence/recommendations/<host>.jsonl`, one line per batch:
@@ -298,6 +302,25 @@ completing PR advances `NEXT_UP.md` to S5.
     - Also, stage one discovery batch: the ledger line carries `request`, a `why` per song, and
       `like` references, and every year. If any reference comes back unverified, the chat said
       so when it staged.
+      - **Staging part passed 2026-10-28, except one year.** "2023 Selections: 15 New
+        Discoveries" was staged at 19:42:02Z from ChatGPT on the iPad. The build was installed
+        at 08:52 local, after #144 merged, and the connector's `vf-mcp` started at 08:52:52.
+        - **What the ledger line carries:**
+          - `request`, word for word;
+          - a `why` on all 15 songs;
+          - two `like` references each, all `found: library`. The chat sent no `from`, so no
+            reference names a playlist, and none came back unverified;
+          - a year on 14 of 15. Fickle Friends' "Swim" has none.
+        - **The missing year went unmentioned.** The result listed "Swim" in `missingYear`, but
+          the chat neither fixed it nor told Jon. Its reply showed no years or reasons at all,
+          although both were staged.
+        - **All 15 songs were new to Jon,** and Jon confirms it. Each is recorded unfamiliar
+          with no reasons. The architect also checked each song:
+          - none was in the 12:54Z snapshot (87,091 tracks) or the 2024 batch;
+          - none was played before staging. The first plays are in the mini's 20:02Z fetch.
+        - **The S2 brief's "fix them and stage again" is a trap.** A second staging marks every
+          song `recommended`, so none of them would count as an outcome. S6 changes the
+          instructions (Decision 15).
 
 - [ ] **S3 — Apple's candidates for new releases (decided at S2's gate; not dispatched).**
   - **If the chat's picks beat the rest of the week** over about four finished weeks: give the
@@ -371,6 +394,20 @@ completing PR advances `NEXT_UP.md` to S5.
     2. In a new taste conversation, the chat asks it. Jon answers, and `taste_notes` shows the
        question answered, with his words verbatim.
     3. Jon skips a second question, and it doesn't come back.
+    - **First run, 2026-10-28: step 1 passed; steps 2 and 3 move to S6's gate.** It ran on the
+      same build and conversation surface as S2's staging check above.
+      - **Step 1 passed.** While staging the 2023 batch, the chat recorded two questions at
+        19:41Z. Each has `about` and cites a contrast in Jon's evidence:
+        - pop-punk in his 2023 Selections: a main lane, or an accent?
+        - soft, hazy vocals: enjoyed, or tolerated? It set NewDad and Soft Science against Jon's
+          own Music Feedback on Pixey's "Million Dollar Baby" that morning.
+      - **Step 2: the chat didn't ask until Jon prompted it.** It never saw the questions:
+        `openQuestions` comes back only from `taste_notes`, and the instructions start a taste
+        conversation with `list_playlists`. Once prompted, it asked both. Jon's two answers
+        were recorded at 20:28Z, word for word and each linked to its question, and
+        `openQuestions` is now empty.
+      - **Step 3 wasn't run.** Jon answered both questions, so none was left to skip.
+      - S6 fixes step 2, and its gate re-runs steps 2 and 3.
 
 - [ ] **S5 — Every playlist gets a role (app + Core).** *Added 2026-10-25. Vinyl Fever Keepers sat
   unlabeled for a day after Jon made it, so nothing filed there counted as kept. The only signal
@@ -412,6 +449,50 @@ completing PR advances `NEXT_UP.md` to S5.
     2. Make an ordinary playlist in Music. After a refresh, the banner names it. **Not now**
        hides the banner, and **Label…** opens the sheet filtered to Unlabeled.
 
+- [ ] **S6 — The chat finds its open questions (`vf-mcp`).** *Added 2026-10-28 from S4's and
+  S2's gates. See Decisions 14 and 15.*
+  - **`list_playlists` carries `openQuestions`.**
+    - The entries are the same as `taste_notes`' (`id`, text, `about`, and age), from
+      `TasteNotesCodec.openQuestions`: at most 3.
+    - The key is left out when there are none.
+    - When the notes can't be read, it's left out with no error, as `check_tracks` does, and the
+      playlists still come back.
+    - Read the notes once per call.
+  - **Instructions.** In the taste paragraph:
+    - Replace S4's question sentence with: `list_playlists` returns `openQuestions` when there
+      are any. In a taste conversation, ask at most one without waiting to be asked, and only
+      when it bears on what Jon is doing. Record his reply word for word as `note` with the
+      question's id in `answers`. Record "skip" or "not now" the same way, with `skipped: true`.
+    - Add: when you stage, show Jon each song's year and why. If the result lists `missingYear`
+      or `unverifiedReferences`, tell Jon which songs. Don't stage the same batch again: a
+      second staging marks every song as recommended before (Decision 15).
+
+    The first 512 characters must still stand alone. Update the instructions snapshot test.
+  - **`stage_playlist`'s description** says not to stage a batch again to fix a year.
+  - **Nothing else changes.** The note format, the question rules, and `taste_notes` stay as S4
+    shipped them.
+
+  **DoD:**
+  - **`vf-mcp` tests:**
+    - golden JSON for `list_playlists` with one open question; with none (the key is left out,
+      and the rest of the output is unchanged); and with unreadable notes (no key and no
+      error);
+    - an answered or skipped question isn't in `list_playlists`' `openQuestions`;
+    - the instructions snapshot has the new sentences, and the head still stands alone;
+    - `stage_playlist`'s description has the warning against staging again.
+  - **Executor's laptop check** (read-only, against a copy of Jon's live notes):
+    `list_playlists` shows no `openQuestions`, because both of S4's questions are answered.
+  - **Jon's gate (after install, owed until done).** It replaces S4's steps 2 and 3:
+    1. While building a list, the chat records up to two questions.
+    2. In a new conversation, Jon makes an ordinary taste request about the same area. The chat
+       asks one question without being prompted. Jon answers, and `taste_notes` shows his words
+       word for word.
+    3. In another new conversation, the chat asks the other question, and Jon says "not now".
+       In a third new conversation, the chat doesn't ask it, and `taste_notes` shows it
+       skipped.
+    4. When the chat stages a batch, its reply shows each song's year and why. If the result
+       lists a missing year, the chat names the song.
+
 ## Prerequisites (Jon, not the executor's)
 
 - [x] **Before Friday 2026-10-30:** rebuild the VF Listening Poller from `main` and install it on
@@ -432,6 +513,10 @@ completing PR advances `NEXT_UP.md` to S5.
   `main`, then refresh the Vinyl Fever tools in the chat.
 - [ ] M17 S3's gate is still owed: a Music Feedback note (the VF Note shortcut, renamed) in the
   car, read back word for word, then a playlist note.
+- [ ] **Stop Music Feedback writing empty lines** (Decision 16). In the shortcut, after the
+  dictation, stop without writing when the text is empty or is "Cancel". The reader already
+  skips lines with no text: there were 3 by 2026-10-28, one of them that day. A "Cancel" line
+  shows up as a note.
 
 ## Constants register (starting values)
 
@@ -534,3 +619,28 @@ Added 2026-10-25 to S2, before dispatch. Merging that plan PR approves them.
     - **A banner, not a pop-up:** a modal at every launch gets dismissed without being read.
     - **Only `vinyl-fever` is applied automatically,** because only that one is certain: Vinyl
       Fever made the playlist. Every other role is Jon's judgment.
+
+Added 2026-10-28 with S6. Merging that plan PR approves them.
+
+14. **Open questions travel with `list_playlists`,** not with an extra call. The instructions
+    already start every taste conversation there. At S4's gate, the chat never called
+    `taste_notes` on its own, so it never saw a question until Jon asked for one. Telling it to
+    call `taste_notes` first would cost a call and up to 50 notes on every conversation, and it
+    would still depend on the chat remembering to make the call.
+15. **A batch is staged once. A missing year stays `unknown`.** This corrects S2's "so the chat
+    can fix them and stage again":
+    - a second staging is a second ledger batch, and S1's familiarity then marks every song
+      `recommended`, so none of them counts as an outcome;
+    - a single `unknown` year costs one song's band, which is far cheaper;
+    - the chat names a missing year to Jon instead.
+
+    Decision 11 still stands: the chat sends the year, and Vinyl Fever doesn't look it up.
+16. **The note files aren't edited by hand.** The fix for empty lines belongs in the Music
+    Feedback shortcut.
+    - **The files are live.** `notes.jsonl` is appended to from Jon's iPhone and iPad. An edit
+      from the Mac while a device writes can leave a conflict copy or lose a line.
+    - **Empty lines are already harmless.** The reader skips them, and coverage only counts
+      them.
+    - **Two setup-day lines from 2026-10-22 stay:** "Cancel" and "This is just a test". The
+      alternative is to remove them once, after a backup, with no device writing; Jon decides
+      at merge.
