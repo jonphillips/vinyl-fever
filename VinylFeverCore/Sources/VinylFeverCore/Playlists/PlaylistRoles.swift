@@ -90,6 +90,37 @@ public enum PlaylistRoleMatcher {
   }
 }
 
+public struct PlaylistRoleAutoLabelResult: Equatable, Sendable {
+  public var roles: PlaylistRoles
+  public var labeled: [LibraryPlaylist]
+
+  public init(roles: PlaylistRoles, labeled: [LibraryPlaylist]) {
+    self.roles = roles
+    self.labeled = labeled
+  }
+}
+
+public enum PlaylistRoleAutoLabeling {
+  /// Applies only Vinyl Fever's own role, leaving every existing role untouched.
+  public static func applyVinylFeverRole(
+    snapshot: LibrarySnapshot, roles: PlaylistRoles, createdNames: Set<String>, updatedAt: Date
+  ) -> PlaylistRoleAutoLabelResult {
+    let resolved = PlaylistRoleMatcher.resolve(snapshot: snapshot, roles: roles)
+    let labeled = resolved.compactMap { row -> LibraryPlaylist? in
+      guard row.role == nil,
+        PlaylistRoleSuggestion.suggest(name: row.playlist.name, kind: row.playlist.kind,
+          folder: row.playlist.folder, createdNames: createdNames) == .vinylFever
+      else { return nil }
+      return row.playlist
+    }
+    guard !labeled.isEmpty else { return PlaylistRoleAutoLabelResult(roles: roles, labeled: []) }
+    let entries = labeled.map { PlaylistRoleEntry(persistentID: $0.persistentID, name: $0.name, role: .vinylFever) }
+    return PlaylistRoleAutoLabelResult(
+      roles: PlaylistRoles(updatedAt: updatedAt, playlists: roles.playlists + entries), labeled: labeled
+    )
+  }
+}
+
 public enum PlaylistRoleSuggestion {
   /// M17 S1 defines this local-time boundary for separating shared-family Mac play history.
   public static let sharedAccountCutoffYear = 2018

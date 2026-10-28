@@ -21,6 +21,7 @@ struct SettingsView: View {
   @State private var listeningModel = ListeningPollingSettingsModel()
   @State private var isShowingArtistAliases = false
   @State private var isShowingPlaylistRoles = false
+  @State private var playlistRolesInitialFilter = "all"
   @State private var tasteStatus = "Checking…"
   @State private var tasteError: String?
   @State private var backupManifest: DailyBackupManifest?
@@ -211,6 +212,11 @@ struct SettingsView: View {
         Task { await listeningModel.refresh() }
         refreshBackupStatus()
       }
+      .onChange(of: model.playlistRolesRequest, initial: true) { _, _ in
+        guard model.takePlaylistRolesRequest() else { return }
+        playlistRolesInitialFilter = "unlabeled"
+        isShowingPlaylistRoles = true
+      }
       .toolbar {
         ToolbarItem {
           Button {
@@ -229,7 +235,9 @@ struct SettingsView: View {
     }
     .frame(minWidth: 620, minHeight: 420)
     .sheet(isPresented: $isShowingArtistAliases) { ArtistAliasesView() }
-    .sheet(isPresented: $isShowingPlaylistRoles, onDismiss: { Task { await refreshTasteStatus() } }) { PlaylistRolesView() }
+    .sheet(isPresented: $isShowingPlaylistRoles, onDismiss: { Task { await refreshTasteStatus() } }) {
+      PlaylistRolesView(initialFilter: playlistRolesInitialFilter)
+    }
     .task(id: settings) {
       await model.refreshToolStatuses(settings: settings)
     }

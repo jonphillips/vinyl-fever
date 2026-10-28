@@ -409,7 +409,7 @@ completing PR advances `NEXT_UP.md` to S5. **Dispatch 5: S6** (`vf-mcp`; Jon's g
       - **Step 3 wasn't run.** Jon answered both questions, so none was left to skip.
       - S6 fixes step 2, and its gate re-runs steps 2 and 3.
 
-- [ ] **S5 — Every playlist gets a role (app + Core).** *Added 2026-10-25. Vinyl Fever Keepers sat
+- [x] **S5 — Every playlist gets a role (app + Core).** Done in `m18/s5-playlist-roles`. *Added 2026-10-25. Vinyl Fever Keepers sat
   unlabeled for a day after Jon made it, so nothing filed there counted as kept. The only signal
   was a count in Settings → Taste. See Decision 13.*
   - **The banner.** After every snapshot load or refresh in the `.live` app, check for playlists

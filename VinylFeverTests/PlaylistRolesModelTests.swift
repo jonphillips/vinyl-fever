@@ -8,6 +8,19 @@ import VinylFeverCore
 @MainActor
 @Suite("Playlist roles editor")
 struct PlaylistRolesModelTests {
+  @Test("the banner's Label action opens roles filtered to unlabeled playlists")
+  func labelStartsFiltered() {
+    #expect(PlaylistRolesModel(initialFilter: "unlabeled").filter == "unlabeled")
+  }
+
+  @Test("a queued Settings request is consumed once when Settings first appears")
+  func takesQueuedPlaylistRolesRequest() {
+    let model = withDependencies { _ in } operation: { AppModel() }
+    model.requestPlaylistRoles()
+    #expect(model.takePlaylistRolesRequest())
+    #expect(!model.takePlaylistRolesRequest())
+  }
+
   @Test("suggestions only fill unlabeled playlists and Save writes the selected roles")
   func suggestionsAndSave() async {
     let snapshot = LibrarySnapshot(generatedAt: .now, tracks: [], playlists: [

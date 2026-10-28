@@ -9,11 +9,16 @@ final class PlaylistRolesModel {
   var snapshot: LibrarySnapshot?
   var savedRoles: PlaylistRoles?
   var selections: [String: PlaylistRole] = [:]
+  var filter: String
   var errorMessage: String?
   var isSaving = false
   @ObservationIgnored @Dependency(\.librarySnapshotStore) private var snapshotStore
   @ObservationIgnored @Dependency(\.playlistRolesStore) private var rolesStore
   @ObservationIgnored @Dependency(\.playlistInboxClient) private var playlistInboxClient
+
+  init(initialFilter: String = "all") {
+    filter = initialFilter
+  }
 
   var missingEntries: [PlaylistRoleEntry] {
     guard let snapshot, let savedRoles else { return [] }
@@ -64,11 +69,14 @@ final class PlaylistRolesModel {
 
 struct PlaylistRolesView: View {
   @Environment(\.dismiss) private var dismiss
-  @State private var model = PlaylistRolesModel()
-  @State private var filter = "all"
+  @State private var model: PlaylistRolesModel
+
+  init(initialFilter: String = "all") {
+    _model = State(initialValue: PlaylistRolesModel(initialFilter: initialFilter))
+  }
 
   private var visibleRows: [LibraryPlaylist] {
-    switch filter {
+    switch model.filter {
     case "unlabeled": model.rows.filter { model.selections[$0.persistentID] == nil }
     case "missing": []
     case let role where role.hasPrefix("role:"):
@@ -77,7 +85,7 @@ struct PlaylistRolesView: View {
     }
   }
   private var visibleMissing: [PlaylistRoleEntry] {
-    guard filter == "all" || filter == "missing" else { return [] }
+    guard model.filter == "all" || model.filter == "missing" else { return [] }
     return model.missingEntries
   }
 
@@ -88,14 +96,14 @@ struct PlaylistRolesView: View {
           Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
         }
         Section {
-          Picker("Filter", selection: $filter) {
+          Picker("Filter", selection: $model.filter) {
             Text("All").tag("all")
             Text("Unlabeled").tag("unlabeled")
             Text("Missing").tag("missing")
             ForEach(PlaylistRole.allCases, id: \.self) { role in Text(role.rawValue).tag("role:\(role.rawValue)") }
           }
         }
-        if filter != "missing" {
+        if model.filter != "missing" {
           Section("Playlists") {
           ForEach(visibleRows) { playlist in
             HStack {

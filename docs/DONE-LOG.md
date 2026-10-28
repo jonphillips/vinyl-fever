@@ -1,5 +1,19 @@
 # Done log
 
+## 2026-10-27 — M18 · Dispatch 4 S5 (`m18/s5-playlist-roles`)
+
+The app now checks every loaded or refreshed library snapshot for unlabeled user, smart, and
+subscription playlists. It shows a dismissible main-window banner, opens Playlist Roles filtered
+to Unlabeled from Settings, and remembers dismissed playlist IDs per Mac. On the same check, it
+labels playlists named by processed inbox requests or recommendation ledger batches as
+`vinyl-fever`, without overwriting existing roles, and reports each automatic label once.
+
+Core (294 tests), Listening (55 tests), and the macOS app suite passed. `check-handoff` passed.
+The opt-in Core performance suite still fails its two existing one-second scale assertions for
+`keptAndPassed` and recommendation outcomes, including on an isolated retry. Jon's playlist-role
+gate remains owed, as do the two-Mac listening-settings check, M17 S2 and S3 gates, and M18 S2
+and S4 gates. Advanced `NEXT_UP.md` to `Nothing dispatched.`
+
 ## 2026-10-27 — M18 · Dispatch 3 S4 (`m18/s4-taste-questions`)
 
 Added question and answer kinds to the existing taste-note format, UUID handles, cross-host

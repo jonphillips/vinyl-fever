@@ -37,6 +37,7 @@ final class AppModel {
   @Dependency(\.collectionInboxClient) private var collectionInboxClient
 
   var selectedSection: AppSection = .liveShows
+  var playlistRolesRequest: UUID?
   var destination: Destination?
   var scannedShowFolder: ScannedShowFolder?
   var scanErrorMessage: String?
@@ -107,6 +108,16 @@ final class AppModel {
   private var recipeSampleScannedCount = 0
 
   enum Destination: Hashable {
+  }
+
+  func requestPlaylistRoles() {
+    playlistRolesRequest = UUID()
+  }
+
+  func takePlaylistRolesRequest() -> Bool {
+    guard playlistRolesRequest != nil else { return false }
+    playlistRolesRequest = nil
+    return true
   }
 
   func scanShowFolder(at url: URL) {

@@ -47,6 +47,30 @@ struct PlaylistRolesTests {
     #expect(PlaylistRoleSuggestion.suggest(name: "Collection: Jazz", kind: .user, folder: nil) == .collection)
   }
 
+  @Test("only unlabeled Vinyl Fever playlists auto-label, regardless of kind")
+  func automaticVinylFeverLabels() {
+    let snapshot = LibrarySnapshot(generatedAt: .now, tracks: [], playlists: [
+      LibraryPlaylist(persistentID: "archive", name: "Archive Batch", kind: .user, members: []),
+      LibraryPlaylist(persistentID: "ledger", name: "Ledger Batch", kind: .subscription, members: []),
+      LibraryPlaylist(persistentID: "ordinary", name: "Ordinary", kind: .smart, members: []),
+      LibraryPlaylist(persistentID: "already", name: "Already Labeled", kind: .user, members: []),
+    ])
+    let roles = PlaylistRoles(updatedAt: .now, playlists: [
+      PlaylistRoleEntry(persistentID: "already", name: "Already Labeled", role: .keepers),
+    ])
+    let result = PlaylistRoleAutoLabeling.applyVinylFeverRole(
+      snapshot: snapshot, roles: roles, createdNames: ["Archive Batch", "Ledger Batch"], updatedAt: .now
+    )
+    #expect(result.labeled.map(\.persistentID) == ["archive", "ledger"])
+    #expect(result.roles.playlists.first(where: { $0.persistentID == "already" })?.role == .keepers)
+    #expect(result.roles.playlists.filter { $0.role == .vinylFever }.count == 2)
+    let repeated = PlaylistRoleAutoLabeling.applyVinylFeverRole(
+      snapshot: snapshot, roles: result.roles, createdNames: ["Archive Batch", "Ledger Batch"], updatedAt: .now
+    )
+    #expect(repeated.labeled.isEmpty)
+    #expect(repeated.roles == result.roles)
+  }
+
   @Test("playlist roles codec rejects unknown values with the role name")
   func unknownRole() throws {
     let data = Data(#"{"format":"vf-playlist-roles","version":1,"updatedAt":"2026-10-23T00:00:00Z","playlists":[{"persistentID":"x","name":"X","role":"mystery"}]}"#.utf8)
