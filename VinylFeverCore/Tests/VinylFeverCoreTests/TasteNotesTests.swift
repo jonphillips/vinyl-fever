@@ -4,6 +4,32 @@ import VinylFeverCore
 import VinylFeverListening
 
 struct TasteNotesTests {
+  @Test("question state is derived across hosts, expires, and keeps only three newest open")
+  func questionState() throws {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    func q(_ id: String, _ age: TimeInterval) -> TasteNote {
+      TasteNote(notedAt: now.addingTimeInterval(-age), note: "Which contrast?", source: "chat", kind: "question", id: id,
+        about: TasteNote.About(songs: [.init(artist: "A", title: "B")]))
+    }
+    let old = q("old", 60)
+    let a = q("a", 50), b = q("b", 40), c = q("c", 30), d = q("d", 20)
+    let answer = TasteNote(notedAt: now, note: "The vocals", source: "chat", kind: "answer", id: "answer", answers: "a")
+    let skipped = TasteNote(notedAt: now, note: "not now", source: "chat", kind: "answer", id: "skip", answers: "b", skipped: true)
+    let open = TasteNotesCodec.openQuestions(in: [old, a, b, c, d, answer, skipped], now: now)
+    #expect(open.map(\.id) == ["d", "c", "old"])
+    #expect(!d.isTimeOnly)
+    #expect(TasteNotesCodec.openQuestions(in: [q("fourth", 10), q("third", 20), q("second", 30), q("first", 40)], now: now).map(\.id) == ["fourth", "third", "second"])
+    #expect(TasteNotesCodec.openQuestions(in: [q("expired", 21 * 86_400)], now: now).isEmpty)
+    let acrossHosts = TasteNotesCodec.readFiles([try TasteNotesCodec.encode(a), try TasteNotesCodec.encode(answer)])
+    #expect(TasteNotesCodec.openQuestions(in: acrossHosts.notes, now: now).isEmpty)
+    let copy = try TasteNotesCodec.encode(d)
+    #expect(TasteNotesCodec.readFiles([copy, copy]).notes.count == 1)
+    let legacy = Data(#"{"format":"vf-taste-note","version":1,"notedAt":"2026-10-22T10:30:35-04:00","title":"White Knight","artist":"Cats in Space","note":"Has a rock opera vibe","source":"current-song"}"#.utf8)
+    let read = TasteNotesCodec.readFiles([legacy])
+    #expect(read.notes.first?.resolvedKind == "note")
+    #expect(read.notes.first?.id == nil)
+  }
+
   @Test("reader handles VF Note line shapes, conflict copies, deduplication and incomplete tails")
   func readsShortcutNotes() throws {
     let whiteKnight = #"{"format":"vf-taste-note","version":1,"notedAt":"2026-10-22T10:30:35-04:00","title":"White Knight","artist":"Cats in Space","album":"White Knight - Single","playCount":0,"releaseDate":"2026-10-16T08:00:00-04:00","duration":"4:42","note":"Has a rock opera vibe","source":"current-song","device":"Jon’s iPhone 17 Pro"}"#

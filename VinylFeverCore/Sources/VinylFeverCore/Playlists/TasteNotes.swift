@@ -2,6 +2,28 @@ import Foundation
 import VinylFeverListening
 
 public struct TasteNote: Codable, Equatable, Sendable {
+  public struct About: Codable, Equatable, Sendable {
+    public var songs: [Song]
+    public var playlists: [String]
+    public struct Song: Codable, Equatable, Sendable {
+      public var artist: String
+      public var title: String
+      public init(artist: String, title: String) { self.artist = artist; self.title = title }
+    }
+    public init(songs: [Song] = [], playlists: [String] = []) { self.songs = songs; self.playlists = playlists }
+
+    private enum CodingKeys: String, CodingKey { case songs, playlists }
+    public init(from decoder: Decoder) throws {
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      songs = try container.decodeIfPresent([Song].self, forKey: .songs) ?? []
+      playlists = try container.decodeIfPresent([String].self, forKey: .playlists) ?? []
+    }
+  }
+  public var kind: String?
+  public var id: String?
+  public var answers: String?
+  public var skipped: Bool?
+  public var about: About?
   public var format: String
   public var version: Int
   public var notedAt: Date
@@ -19,7 +41,9 @@ public struct TasteNote: Codable, Equatable, Sendable {
   public init(
     notedAt: Date, note: String, source: String, title: String? = nil, artist: String? = nil,
     album: String? = nil, playCount: Int? = nil, releaseDate: String? = nil,
-    duration: String? = nil, device: String? = nil, playlist: String? = nil
+    duration: String? = nil, device: String? = nil, playlist: String? = nil,
+    kind: String? = nil, id: String? = nil, answers: String? = nil, skipped: Bool? = nil,
+    about: About? = nil
   ) {
     format = "vf-taste-note"
     version = 1
@@ -34,10 +58,13 @@ public struct TasteNote: Codable, Equatable, Sendable {
     self.source = source
     self.device = device
     self.playlist = playlist
+    self.kind = kind; self.id = id; self.answers = answers; self.skipped = skipped; self.about = about
   }
 
+  public var resolvedKind: String { kind ?? "note" }
+
   public var isTimeOnly: Bool {
-    playlist == nil && (title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+    resolvedKind == "note" && playlist == nil && (title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
   }
   public var firstHearing: Bool? { isTimeOnly ? nil : playCount.map { $0 == 0 } }
 }
@@ -112,11 +139,22 @@ public enum TasteNotesCodec {
 
     var seen = Set<String>()
     let unique = notes.filter { note in
-      let key = "\(note.notedAt.timeIntervalSince1970)|\(note.title ?? "")|\(note.artist ?? "")"
+      let key = note.id.map { "id:\($0)" } ?? "\(note.notedAt.timeIntervalSince1970)|\(note.title ?? "")|\(note.artist ?? "")"
       return seen.insert(key).inserted
     }
     return TasteNotesReadResult(notes: unique.sorted { $0.notedAt > $1.notedAt },
       skippedLines: skippedLines, filesRead: files.count)
+  }
+
+  public static func openQuestions(in notes: [TasteNote], now: Date) -> [TasteNote] {
+    let answered = Set(notes.compactMap { $0.resolvedKind == "answer" ? $0.answers : nil })
+    let questions = notes.filter { note in
+      guard note.resolvedKind == "question", let id = note.id else { return false }
+      return !answered.contains(id)
+    }
+      .sorted { $0.notedAt > $1.notedAt }
+    let unexpired = questions.filter { now.timeIntervalSince($0.notedAt) < 21 * 86_400 }
+    return Array(unexpired.prefix(3))
   }
 
   public static func appendChatNote(_ note: TasteNote, host: String, folder: URL) throws {
