@@ -58,7 +58,7 @@ struct LibraryMCPServerTests {
       "recommendation_outcomes": ["batches"],
       "record_new_music_picks": ["songs"],
       "taste_notes": ["artist", "title", "playlist", "period", "limit"],
-      "record_taste_note": ["note", "artist", "title", "album", "playlist"],
+      "record_taste_note": ["note", "artist", "title", "album", "playlist", "kind", "answers", "skipped", "about"],
       "stage_playlist": ["name", "description", "request", "tracks"],
     ]
     #expect(Set(tools.compactMap { $0["name"] as? String }) == Set(expected.keys))
@@ -103,6 +103,7 @@ struct LibraryMCPServerTests {
       arguments: #"{"note":"The melody opens up in the chorus — keep that lift.","artist":" Artist ","title":"Song","album":"Album"}"#) as? [String: Any])
     #expect(recorded["recorded"] as? Bool == true)
     #expect(recorded["source"] as? String == "chat")
+    let recordedID = try #require(recorded["id"] as? String)
     #expect(!FileManager.default.fileExists(atPath: tasteRoot.appending(path: "notes.jsonl").path))
     #expect(FileManager.default.fileExists(atPath: tasteRoot.appending(path: "notes-chat-Test_Mac.jsonl").path))
 
@@ -113,6 +114,8 @@ struct LibraryMCPServerTests {
     #expect(rows.first?["note"] as? String == original)
     #expect(rows.first?["source"] as? String == "chat")
     #expect(rows.first?["artist"] as? String == "Artist")
+    #expect(rows.first?["id"] as? String == recordedID)
+    #expect(notes["openQuestions"] as? [[String: Any]] != nil)
     #expect(notes["coverage"] != nil)
     #expect(!String(describing: notes).contains("Taste Intelligence"))
 
@@ -126,6 +129,27 @@ struct LibraryMCPServerTests {
     #expect(playlistRows.first?["note"] as? String == "Keep the bright guitar line.")
     #expect(playlistRows.first?["candidates"] == nil)
     #expect(!FileManager.default.fileExists(atPath: tasteRoot.appending(path: "notes.jsonl").path))
+  }
+
+  @Test("questions can be answered verbatim and unknown question ids are refused")
+  func tasteQuestionFlow() async throws {
+    let root = temporaryDirectory()
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let snapshotURL = root.appending(path: "snapshot.json")
+    try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, tasteRootURL: tasteRoot, now: { Date(timeIntervalSince1970: 1_800_000_000) })
+    let questionResult = try #require(await resultJSON(server, id: 1, name: "record_taste_note", arguments: #"{"note":"Was it vocals or tempo?","kind":"question","about":{"songs":[{"artist":"A","title":"B"}],"playlists":[]}}"#) as? [String: Any])
+    let questionID = try #require(questionResult["id"] as? String)
+    let open = try #require(await resultJSON(server, id: 2, name: "taste_notes", arguments: "{}") as? [String: Any])
+    #expect((open["openQuestions"] as? [[String: Any]])?.count == 1)
+    let rejected = await call(server, id: 3, name: "record_taste_note", arguments: #"{"note":"The vocals, verbatim.","kind":"answer","answers":"unknown"}"#)
+    #expect(rejected?.contains("known open question") == true)
+    let answered = try #require(await resultJSON(server, id: 4, name: "record_taste_note", arguments: "{\"note\":\"The vocals, verbatim.\",\"kind\":\"answer\",\"answers\":\"\(questionID)\"}") as? [String: Any])
+    #expect(answered["recorded"] as? Bool == true)
+    let closed = try #require(await resultJSON(server, id: 5, name: "taste_notes", arguments: "{}") as? [String: Any])
+    #expect((closed["openQuestions"] as? [[String: Any]])?.isEmpty == true)
+    let rows = try #require(closed["notes"] as? [[String: Any]])
+    #expect(rows.first(where: { $0["kind"] as? String == "answer" })?["note"] as? String == "The vocals, verbatim.")
   }
 
   @Test("check_tracks succeeds when taste notes cannot be read")
@@ -878,6 +902,9 @@ struct LibraryMCPServerTests {
     #expect(LibraryMCPServer.instructionHead.count <= 512)
     #expect(MCPServer.instructionsHeadStandsAlone(LibraryMCPServer.instructions))
     #expect(LibraryMCPServer.instructions.contains("For taste questions, start with list_playlists"))
+    #expect(LibraryMCPServer.instructions.contains("ask at most one open question"))
+    #expect(LibraryMCPServer.instructions.contains("never ask what tools can tell you"))
+    #expect(!LibraryMCPServer.instructions.contains("VF Note"))
     #expect(LibraryMCPServer.instructions.contains("Stage discoveries with stage_playlist"))
     #expect(LibraryMCPServer.instructions.contains("Drop songs recommended before, unless Jon asks for them again."))
     #expect(LibraryMCPServer.instructions.contains("record_new_music_picks"))

@@ -308,7 +308,7 @@ completing PR advances `NEXT_UP.md` to S5.
   - **If not:** the chat stays on catalog depth, and New Music stays Apple's job, unfiltered.
   - Either way, the result is recorded here before anything is built.
 
-- [ ] **S4 — The chat's questions (Core + `vf-mcp`).** *Added 2026-10-25 from plan PR #127,
+- [x] **S4 — The chat's questions (Core + `vf-mcp`).** *Added 2026-10-25 from plan PR #127,
   which was never merged; see Decision 8. M17 S3 (#129) built the notes it extends.*
   - **A question and its answer are taste notes.** They use the same files (`notes-chat-<host>.jsonl`)
     and the same reader. These optional keys are added to `vf-taste-note` v1; a line without

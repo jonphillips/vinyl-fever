@@ -1,5 +1,17 @@
 # Done log
 
+## 2026-10-27 — M18 · Dispatch 3 S4 (`m18/s4-taste-questions`)
+
+Added question and answer kinds to the existing taste-note format, UUID handles, cross-host
+answer links, evidence context, and derived open-question state with expiry and a three-question
+limit. `record_taste_note` now validates active question answers and records skips; `taste_notes`
+returns open questions before notes. Legacy Music Feedback lines keep their existing decoding and
+deduplication. Updated the MCP instructions and renamed the setup check to Music Feedback.
+
+Core (291 tests) passed and `vf-mcp` built. The MCP smoke self-test passed; live smoke reached
+`library_overview` but `recent_listening` could not open the local `2026-10.jsonl` listening log.
+Jon's post-install question, answer, and skip gate remains owed. Advanced `NEXT_UP.md` to M18 · S5.
+
 ## 2026-10-26 — M18 · Dispatch 2 S2 (`m18/s2-recommendation-outcomes`)
 
 Added shared outcome classification for New Music weeks and recommendation batches, release-age
