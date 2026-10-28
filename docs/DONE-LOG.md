@@ -8,9 +8,11 @@ limit. `record_taste_note` now validates active question answers and records ski
 returns open questions before notes. Legacy Music Feedback lines keep their existing decoding and
 deduplication. Updated the MCP instructions and renamed the setup check to Music Feedback.
 
-Core (291 tests) passed and `vf-mcp` built. The MCP smoke self-test passed; live smoke reached
-`library_overview` but `recent_listening` could not open the local `2026-10.jsonl` listening log.
-Jon's post-install question, answer, and skip gate remains owed. Advanced `NEXT_UP.md` to M18 · S5.
+Core (291 tests) passed and `vf-mcp` built. The read-only copy audit decoded 10 nonempty notes
+from the two live note files, skipped the two intentionally blank shortcut records, and found no
+open questions. The MCP smoke self-test passed; live smoke reached `library_overview` but
+`recent_listening` could not open the local `2026-10.jsonl` listening log. Jon's post-install
+question, answer, and skip gate remains owed. Advanced `NEXT_UP.md` to M18 · S5.
 
 ## 2026-10-26 — M18 · Dispatch 2 S2 (`m18/s2-recommendation-outcomes`)
 
