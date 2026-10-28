@@ -4,11 +4,13 @@
 
 Added question and answer kinds to the existing taste-note format, UUID handles, cross-host
 answer links, evidence context, and derived open-question state with expiry and a three-question
-limit. `record_taste_note` now validates active question answers and records skips; `taste_notes`
-returns open questions before notes. Legacy Music Feedback lines keep their existing decoding and
-deduplication. Updated the MCP instructions and renamed the setup check to Music Feedback.
+limit. `record_taste_note` validates known question IDs and records skipped answers; `taste_notes`
+returns open questions before notes and attaches the newest answer to each answered question.
+Question and answer lines stay out of song-note evidence. Legacy Music Feedback lines keep their
+existing decoding and deduplication. Updated the MCP instructions and renamed the setup check to
+Music Feedback.
 
-Core (291 tests) passed and `vf-mcp` built. The read-only copy audit decoded 10 nonempty notes
+Core (293 tests) passed and `vf-mcp` built. The read-only copy audit decoded 10 nonempty notes
 from the two live note files, skipped the two intentionally blank shortcut records, and found no
 open questions. The MCP smoke self-test passed; live smoke reached `library_overview` but
 `recent_listening` could not open the local `2026-10.jsonl` listening log. Jon's post-install

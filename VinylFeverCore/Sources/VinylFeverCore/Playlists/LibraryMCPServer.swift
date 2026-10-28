@@ -122,17 +122,25 @@ private struct MCPTasteNote: Encodable {
   var answers: String?
   var skipped: Bool?
   var about: TasteNote.About?
+  var answer: MCPTasteAnswer?
   var firstHearing: Bool?
   var candidates: [TasteNoteSongCandidate]?
 
-  init(_ value: TasteNote, candidates: [TasteNoteSongCandidate]? = nil) {
+  init(_ value: TasteNote, answer: MCPTasteAnswer? = nil, candidates: [TasteNoteSongCandidate]? = nil) {
     title = value.title?.isEmpty == true ? nil : value.title
     artist = value.artist?.isEmpty == true ? nil : value.artist
     album = value.album; playlist = value.playlist; notedAt = value.notedAt
     note = value.note; source = value.source; firstHearing = value.firstHearing
     kind = value.resolvedKind; id = value.id; answers = value.answers; skipped = value.skipped; about = value.about
+    self.answer = answer
     self.candidates = candidates
   }
+}
+private struct MCPTasteAnswer: Encodable {
+  var note: String
+  var notedAt: Date
+  var skipped: Bool
+  init(_ value: TasteNote) { note = value.note; notedAt = value.notedAt; skipped = value.skipped ?? false }
 }
 private struct MCPOpenQuestion: Encodable {
   var id: String
@@ -445,6 +453,7 @@ private actor LibraryMCPContext {
 
   func tasteNotesBySong(identity: ArtistIdentity) throws -> [String: [TasteNote]] {
     try tasteNotes().notes.reduce(into: [:]) { result, note in
+      guard note.resolvedKind == "note" else { return }
       guard let artist = note.artist, let title = note.title, !title.isEmpty else { return }
       result[TasteIntelligence.songKey(artist: artist, title: title, identity: identity), default: []].append(note)
     }
@@ -659,7 +668,7 @@ public enum LibraryMCPServer {
   Vinyl Fever exposes Jon's Apple Music library and listening stats. Use these tools for any claim about what Jon owns, has played, or has loved — never guess. Before proposing a final list, call check_tracks on it. For Jon's uploads, use an exact album from uploadedAlbums as the album hint. When Jon asks for the playlist, call stage_playlist with the final list instead of printing it; Jon reviews and creates it in Vinyl Fever. Snapshot age is in library_overview.
   """
   public static let instructions: String = {
-    instructionHead + "\n\nFor taste questions, start with list_playlists. keepers are the strongest evidence and replay positions are ranks. Report evidence by role, not by counting playlists; don't infer taste from genre. sharedAccountEra play counts aren't Jon's alone. Stage discoveries with stage_playlist, because Vinyl Fever records which songs were new to Jon. Give every discovery its original release year, Jon's request as request, a one-sentence why, and up to three songs in `like`. Cite only songs read from a Vinyl Fever tool in this conversation, and name the playlist you read each one from in `from`. Drop songs recommended before, unless Jon asks for them again. When Jon asks which New Music songs he'll keep, read kept_and_passed, choose before he listens, then call record_new_music_picks. In a taste conversation, ask at most one open question and only when it bears on what Jon is doing; answer questions verbatim with `answers`, and record 'skip' or 'not now' with `skipped`. Record a new question when evidence leaves a meaningful contrast unresolved, even if Jon isn't there; ask only when the answer could change your next recommendation, cite the evidence, and never ask what tools can tell you.\n\n" + PlaylistContract.trackRules
+    instructionHead + "\n\nFor taste questions, start with list_playlists. keepers are the strongest evidence and replay positions are ranks. Report evidence by role, not by counting playlists; don't infer taste from genre. sharedAccountEra play counts aren't Jon's alone. Stage discoveries with stage_playlist, because Vinyl Fever records which songs were new to Jon. Give every discovery its original release year, Jon's request as request, a one-sentence why, and up to three songs in `like`. Cite only songs read from a Vinyl Fever tool in this conversation, and name the playlist you read each one from in `from`. Drop songs recommended before, unless Jon asks for them again. When Jon asks which New Music songs he'll keep, read kept_and_passed, choose before he listens, then call record_new_music_picks. In a taste conversation, ask at most one open question and only when it bears on what Jon is doing; record Jon's reply verbatim as `note` with the question's id in `answers`; record 'skip' or 'not now' the same way with `skipped: true`. Record a new question when evidence leaves a meaningful contrast unresolved, even if Jon isn't there; ask only when the answer could change your next recommendation, cite the evidence, and never ask what tools can tell you.\n\n" + PlaylistContract.trackRules
   }()
 
   public static func make(
@@ -880,34 +889,61 @@ public enum LibraryMCPServer {
           return true
         }
         let limit = max(1, min(payload.limit ?? 50, 100))
+        let answersByQuestionID = result.notes.reduce(into: [String: TasteNote]()) { answers, note in
+          guard note.resolvedKind == "answer", let questionID = note.answers else { return }
+          if let existing = answers[questionID], existing.notedAt >= note.notedAt { return }
+          answers[questionID] = note
+        }
         let rows = matches.prefix(limit).map { note -> MCPTasteNote in
           let candidates = note.isTimeOnly ? log.map { TasteNoteCandidates.forNote(note, log: $0) } : nil
-          return MCPTasteNote(note, candidates: candidates)
+          let answer = note.resolvedKind == "question" ? note.id.flatMap { answersByQuestionID[$0] }.map(MCPTasteAnswer.init) : nil
+          return MCPTasteNote(note, answer: answer, candidates: candidates)
         }
         let listeningCoverage = log.map { MCPListeningCoverage($0.coverage, now: instant, period: .quarter) }
         return .json(MCPTasteNotes(openQuestions: TasteNotesCodec.openQuestions(in: result.notes, now: instant).compactMap { MCPOpenQuestion($0, now: instant) }, notes: Array(rows), coverage: MCPTasteNotesCoverage(
           filesRead: result.filesRead, skippedLines: result.skippedLines,
           listening: listeningCoverage, listeningStatus: listeningError)))
       },
-      MCPTool(name: "record_taste_note", description: "Record Music Feedback or taste questions verbatim. Ask a question only when its answer could change your next recommendation, and cite the evidence contrast that prompted it. Answers must name a known question; mark a declined question skipped.", inputSchema: recordTasteNoteSchema,
+      MCPTool(name: "record_taste_note", description: "Record Music Feedback or taste questions verbatim. Ask a question only when its answer could change your next recommendation, and cite the evidence contrast that prompted it. Put question context in about; answers name a known question by id and use skipped: true for a decline.", inputSchema: recordTasteNoteSchema,
         annotations: MCPToolAnnotations(destructive: false, openWorld: false)) { input in
         let payload = try decode(RecordTasteNotePayload.self, from: input, schema: recordTasteNoteSchema)
         guard !payload.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
           throw ArgumentError.invalidShape("note must not be empty")
         }
-        let kind = payload.kind ?? "note"
+        let kind = payload.kind ?? (payload.answers == nil && payload.skipped == nil ? "note" : "answer")
         guard ["note", "question", "answer"].contains(kind) else { throw ArgumentError.invalidShape("kind must be note, question, or answer") }
+        var payloadAbout: TasteNote.About?
         if kind == "answer" {
+          guard payload.answers != nil else { throw ArgumentError.invalidShape("answers must name a known question") }
           let knownNotes = try await context.tasteNotes()
-          let openIDs = Set(TasteNotesCodec.openQuestions(in: knownNotes.notes, now: now()).compactMap(\.id))
-          guard let answers = payload.answers, openIDs.contains(answers) else {
-            throw ArgumentError.invalidShape("answers must name a known open question")
+          let questionIDs = Set(knownNotes.notes.compactMap { $0.resolvedKind == "question" ? $0.id : nil })
+          guard let answers = payload.answers, questionIDs.contains(answers) else {
+            throw ArgumentError.invalidShape("answers must name a known question")
           }
-        } else if payload.answers != nil || payload.skipped != nil { throw ArgumentError.invalidShape("answers and skipped are only valid for answers") }
+        } else if payload.answers != nil || payload.skipped != nil { throw ArgumentError.invalidShape("answers and skipped require an answer") }
         if kind == "question" {
+          guard payload.artist == nil, payload.title == nil, payload.album == nil, payload.playlist == nil else {
+            throw ArgumentError.invalidShape("question context belongs in about")
+          }
           guard let about = payload.about, !about.songs.isEmpty || !about.playlists.isEmpty else {
             throw ArgumentError.invalidShape("questions require songs or playlists in about")
           }
+          let songs = about.songs.map { TasteNote.About.Song(
+            artist: $0.artist.trimmingCharacters(in: .whitespacesAndNewlines),
+            title: $0.title.trimmingCharacters(in: .whitespacesAndNewlines)) }
+          let playlists = about.playlists.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+          guard songs.allSatisfy({ !$0.artist.isEmpty && !$0.title.isEmpty }),
+            playlists.allSatisfy({ !$0.isEmpty }), !songs.isEmpty || !playlists.isEmpty else {
+            throw ArgumentError.invalidShape("about entries must have non-empty song names or playlist names")
+          }
+          payloadAbout = TasteNote.About(songs: songs, playlists: playlists)
+        } else {
+          if kind == "answer" {
+            guard payload.artist == nil, payload.title == nil, payload.album == nil, payload.playlist == nil else {
+              throw ArgumentError.invalidShape("answer lines cannot include song or playlist fields")
+            }
+          }
+          guard payload.about == nil else { throw ArgumentError.invalidShape("about is only valid for questions") }
         }
         let hasSong = payload.artist != nil || payload.title != nil || payload.album != nil
         let hasPlaylist = payload.playlist?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
@@ -921,7 +957,7 @@ public enum LibraryMCPServer {
         let note = TasteNote(notedAt: now(), note: payload.note, source: "chat",
           title: title, artist: artist, album: payload.album, playlist: payload.playlist,
           kind: kind, id: id, answers: payload.answers, skipped: payload.skipped,
-          about: payload.about)
+          about: payloadAbout)
         try await context.recordTasteNote(note)
         return .json(MCPRecordedTasteNote(recorded: true, notedAt: note.notedAt, source: note.source, id: id))
       },

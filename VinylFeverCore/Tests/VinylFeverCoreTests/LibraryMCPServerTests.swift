@@ -69,6 +69,7 @@ struct LibraryMCPServerTests {
       #expect(Set(properties.keys) == expected[name])
       let annotations = try #require(tool["annotations"] as? [String: Any])
       #expect(annotations["openWorldHint"] as? Bool == false)
+      #expect(!((tool["description"] as? String) ?? "").contains("VF Note"))
       if name == "stage_playlist" || name == "record_taste_note" || name == "record_new_music_picks" {
         #expect(annotations["destructiveHint"] as? Bool == false)
         #expect(annotations["readOnlyHint"] == nil)
@@ -79,6 +80,10 @@ struct LibraryMCPServerTests {
         #expect((tool["description"] as? String)?.contains("connector's build stamp") == true)
       }
     }
+    let repoRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+      .appending(path: "../../../scripts/setup-mac").standardizedFileURL
+    let setupScript = try String(contentsOf: repoRoot, encoding: .utf8)
+    #expect(!setupScript.contains("VF Note"))
     #expect(enumValues(in: tools, tool: "top_artists", property: "by") == ["plays", "favorites", "recently_added"])
     #expect(enumValues(in: tools, tool: "top_tracks", property: "by") == ["plays", "favorites", "recently_added", "recently_played"])
     #expect(enumValues(in: tools, tool: "recent_listening", property: "period") == ["24h", "7d", "30d", "90d"])
@@ -136,20 +141,88 @@ struct LibraryMCPServerTests {
     let root = temporaryDirectory()
     let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
     let snapshotURL = root.appending(path: "snapshot.json")
+    let clock = TestClock(Date(timeIntervalSince1970: 1_800_000_000))
     try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
-    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, tasteRootURL: tasteRoot, now: { Date(timeIntervalSince1970: 1_800_000_000) })
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, listeningRootURL: root.appending(path: "Listening"), tasteRootURL: tasteRoot, now: { clock.now() })
     let questionResult = try #require(await resultJSON(server, id: 1, name: "record_taste_note", arguments: #"{"note":"Was it vocals or tempo?","kind":"question","about":{"songs":[{"artist":"A","title":"B"}],"playlists":[]}}"#) as? [String: Any])
     let questionID = try #require(questionResult["id"] as? String)
+    let noteResult = try #require(await resultJSON(server, id: 22, name: "record_taste_note",
+      arguments: #"{"note":"A known song note.","artist":"A","title":"B"}"#) as? [String: Any])
+    let noteID = try #require(noteResult["id"] as? String)
+    let nonQuestionAnswer = await call(server, id: 23, name: "record_taste_note",
+      arguments: "{\"note\":\"That note is not a question.\",\"answers\":\"\(noteID)\"}")
+    #expect(nonQuestionAnswer?.contains("known question") == true)
     let open = try #require(await resultJSON(server, id: 2, name: "taste_notes", arguments: "{}") as? [String: Any])
-    #expect((open["openQuestions"] as? [[String: Any]])?.count == 1)
-    let rejected = await call(server, id: 3, name: "record_taste_note", arguments: #"{"note":"The vocals, verbatim.","kind":"answer","answers":"unknown"}"#)
-    #expect(rejected?.contains("known open question") == true)
-    let answered = try #require(await resultJSON(server, id: 4, name: "record_taste_note", arguments: "{\"note\":\"The vocals, verbatim.\",\"kind\":\"answer\",\"answers\":\"\(questionID)\"}") as? [String: Any])
+    var newerQuestionIDs: [String] = []
+    for id in 10...12 {
+      clock.advance(by: 10)
+      let result = try #require(await resultJSON(server, id: id, name: "record_taste_note",
+        arguments: #"{"note":"Another contrast?","kind":"question","about":{"playlists":["Selections"]}}"#) as? [String: Any])
+      newerQuestionIDs.append(try #require(result["id"] as? String))
+    }
+    let openIDs = try #require((open["openQuestions"] as? [[String: Any]])?.compactMap { $0["id"] as? String })
+    #expect(openIDs.count == 1)
+    let superseded = try #require(await resultJSON(server, id: 13, name: "taste_notes", arguments: "{}") as? [String: Any])
+    #expect((superseded["openQuestions"] as? [[String: Any]])?.count == 3)
+    #expect(!((superseded["openQuestions"] as? [[String: Any]] ?? []).contains { $0["id"] as? String == questionID }))
+    let rejected = await call(server, id: 14, name: "record_taste_note", arguments: #"{"note":"The vocals, verbatim.","answers":"unknown"}"#)
+    #expect(rejected?.contains("known question") == true)
+    let emptyQuestion = await call(server, id: 15, name: "record_taste_note", arguments: #"{"note":"  ","kind":"question","about":{"playlists":["Selections"]}}"#)
+    #expect(emptyQuestion?.contains("note must not be empty") == true)
+    let invalidAbout = await call(server, id: 16, name: "record_taste_note", arguments: #"{"note":"Which?","kind":"question","about":{"songs":[{"artist":" ","title":""}]}}"#)
+    #expect(invalidAbout?.contains("about entries") == true)
+    let songQuestion = await call(server, id: 17, name: "record_taste_note", arguments: #"{"note":"Which?","kind":"question","artist":"Artist","title":"Song","about":{"songs":[{"artist":"Artist","title":"Song"}]}}"#)
+    #expect(songQuestion?.contains("question context belongs in about") == true)
+    let notAnAnswer = await call(server, id: 18, name: "record_taste_note", arguments: #"{"note":"The vocals.","kind":"answer"}"#)
+    #expect(notAnAnswer?.contains("answers must name a known question") == true)
+    let answered = try #require(await resultJSON(server, id: 19, name: "record_taste_note", arguments: "{\"note\":\"The vocals, verbatim.\",\"answers\":\"\(questionID)\"}") as? [String: Any])
     #expect(answered["recorded"] as? Bool == true)
-    let closed = try #require(await resultJSON(server, id: 5, name: "taste_notes", arguments: "{}") as? [String: Any])
-    #expect((closed["openQuestions"] as? [[String: Any]])?.isEmpty == true)
+    let skipped = try #require(await resultJSON(server, id: 20, name: "record_taste_note", arguments: "{\"note\":\"not now\",\"answers\":\"\(newerQuestionIDs[0])\",\"skipped\":true}") as? [String: Any])
+    #expect(skipped["recorded"] as? Bool == true)
+    let closed = try #require(await resultJSON(server, id: 21, name: "taste_notes", arguments: "{}") as? [String: Any])
+    #expect((closed["openQuestions"] as? [[String: Any]])?.count == 2)
     let rows = try #require(closed["notes"] as? [[String: Any]])
     #expect(rows.first(where: { $0["kind"] as? String == "answer" })?["note"] as? String == "The vocals, verbatim.")
+  }
+
+  @Test("question lines are never song-note evidence in check_tracks")
+  func questionDoesNotCreateSongEvidence() async throws {
+    let root = temporaryDirectory()
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let snapshotURL = root.appending(path: "snapshot.json")
+    try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
+    let question = TasteNote(notedAt: Date(timeIntervalSince1970: 1_800_000_000), note: "Falsetto or groove?",
+      source: "chat", title: "Song", artist: "Artist", kind: "question", id: "question-id")
+    try TasteNotesCodec.appendChatNote(question, host: "Fixture", folder: tasteRoot)
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, listeningRootURL: root.appending(path: "Listening"), tasteRootURL: tasteRoot)
+    let response = try #require(await resultJSON(server, id: 1, name: "check_tracks",
+      arguments: #"{"tracks":[{"artist":"Artist","title":"Song"}]}"#) as? [String: Any])
+    let tracks = try #require(response["tracks"] as? [[String: Any]])
+    let notes = try #require(tracks.first?["notes"] as? [String: Any])
+    #expect(notes["count"] as? Int == 0)
+  }
+
+  @Test("taste_notes returns questions with their answers in the golden shape")
+  func tasteNotesQuestionAnswerGolden() async throws {
+    let root = temporaryDirectory()
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let snapshotURL = root.appending(path: "snapshot.json")
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
+    let open = TasteNote(notedAt: now.addingTimeInterval(-30), note: "Vocal or groove?", source: "chat",
+      kind: "question", id: "open-id", about: .init(songs: [.init(artist: "Artist", title: "Song")]))
+    let answered = TasteNote(notedAt: now.addingTimeInterval(-3_600), note: "Falsetto or rhythm?", source: "chat",
+      kind: "question", id: "answered-id", about: .init(playlists: ["Selections"]))
+    let answer = TasteNote(notedAt: now.addingTimeInterval(-10), note: "The falsetto.", source: "chat",
+      kind: "answer", id: "answer-id", answers: "answered-id")
+    for note in [open, answered, answer] { try TasteNotesCodec.appendChatNote(note, host: "Fixture", folder: tasteRoot) }
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, listeningRootURL: root.appending(path: "Listening"), tasteRootURL: tasteRoot, now: { now })
+    let result = try #require(await resultJSON(server, id: 1, name: "taste_notes", arguments: "{}"))
+    let json = try canonicalJSON(result)
+    #expect(json == #"{"coverage":{"filesRead":1,"listeningStatus":"not_set_up","skippedLines":0},"notes":[{"answers":"answered-id","id":"answer-id","kind":"answer","note":"The falsetto.","notedAt":"2027-01-15T07:59:50Z","source":"chat"},{"about":{"playlists":[],"songs":[{"artist":"Artist","title":"Song"}]},"id":"open-id","kind":"question","note":"Vocal or groove?","notedAt":"2027-01-15T07:59:30Z","source":"chat"},{"about":{"playlists":["Selections"],"songs":[]},"answer":{"note":"The falsetto.","notedAt":"2027-01-15T07:59:50Z","skipped":false},"id":"answered-id","kind":"question","note":"Falsetto or rhythm?","notedAt":"2027-01-15T07:00:00Z","source":"chat"}],"openQuestions":[{"about":{"playlists":[],"songs":[{"artist":"Artist","title":"Song"}]},"age":30,"id":"open-id","note":"Vocal or groove?"}]}"#)
+    #expect(!json.contains(root.path))
+    #expect(!json.contains("persistentID"))
+    #expect(!json.contains("Taste Intelligence"))
   }
 
   @Test("check_tracks succeeds when taste notes cannot be read")
