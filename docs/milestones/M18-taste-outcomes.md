@@ -7,7 +7,7 @@ design conflict, this doc's Decisions win. Rules in
 [../technical-architecture.md](../technical-architecture.md) and
 `/Users/jon/code/jon-platform/AGENTS.md` apply.*
 
-Summary: Six slices are dispatched, and a seventh is decided at S2's gate.
+Summary: Seven slices are dispatched, and an eighth is decided at S2's gate.
 - **S1** starts the recommendation ledger now. Every `stage_playlist` records which songs were
   new to Jon, and `check_tracks` reports "recommended before". It's a log that can't be rebuilt
   later, so it goes first.
@@ -28,6 +28,9 @@ Summary: Six slices are dispatched, and a seventh is decided at S2's gate.
 - **S7** labels a staged batch's playlist `vinyl-fever` the moment Vinyl Fever creates it,
   instead of after iCloud syncs it back and the library snapshot is refreshed. Added 2026-10-29
   from S5's gate; it runs after S6.
+- **S8** makes the tools enforce what S6 only asked for. `stage_playlist` requires a year on every
+  song, and `check_tracks` also returns the open questions. At S6's gate the chat skipped both
+  the years and the question. Added 2026-10-29; it runs after S7.
 
 Vinyl Fever still makes no model calls and stores no scores. [M19](M19-backups.md)'s backup
 slice runs between S1 and S2 (M19 Decision 7).
@@ -114,7 +117,8 @@ S2's gate. Every slice edits `vf-mcp`, so they run one after another. S2's compl
 advances `NEXT_UP.md` to S4. **Dispatch 4: S5** (app; Jon's gate; added 2026-10-25). S4's
 completing PR advances `NEXT_UP.md` to S5. **Dispatch 5: S6** (`vf-mcp`; Jon's gate; added
 2026-10-28). S5's completing PR advances `NEXT_UP.md` to S6. **Dispatch 6: S7** (app + Core;
-Jon's gate; added 2026-10-29). S6's completing PR advances `NEXT_UP.md` to S7.
+Jon's gate; added 2026-10-29). S6's completing PR advances `NEXT_UP.md` to S7. **Dispatch 7: S8**
+(`vf-mcp`; Jon's gate; added 2026-10-29). S7's completing PR advances `NEXT_UP.md` to S8.
 
 - [x] **S1 — The recommendation ledger (Core + `vf-mcp`).** Done in `m18/s1-recommendation-ledger`.
   - **Ledger file:** `Taste Intelligence/recommendations/<host>.jsonl`, one line per batch:
@@ -452,7 +456,7 @@ Jon's gate; added 2026-10-29). S6's completing PR advances `NEXT_UP.md` to S7.
        role, with no action from Jon, and the one-time note says so.
     2. Make an ordinary playlist in Music. After a refresh, the banner names it. **Not now**
        hides the banner, and **Label…** opens the sheet filtered to Unlabeled.
-  - **Gate record.** Step 1 passed on 2026-10-29. Step 2 is owed.
+  - **Gate record.** Passed on 2026-10-29: step 1 in the morning, step 2 in the afternoon.
     - **Step 1.** The chat staged "Sam Fender — Manchester 2027 Catch-Up", and Jon created it
       from the inbox at 09:53 EDT. It reached Music on the laptop only after iCloud synced it.
       After a manual Refresh Library Snapshot, the green note appeared. The roles file
@@ -504,6 +508,28 @@ Jon's gate; added 2026-10-29). S6's completing PR advances `NEXT_UP.md` to S7.
        skipped.
     4. When the chat stages a batch, its reply shows each song's year and why. If the result
        lists a missing year, the chat names the song.
+  - **Gate record, 2026-10-29.** Step 1 passed, steps 2 and 4 failed, and step 3 wasn't run.
+    Steps 2–4 move to S8's gate. The connector served build `2258e44`, which matches `main` at
+    `0f8d7a0`, from 13:15 EDT.
+    - **Step 4 failed.** The chat staged "Soft Vocals: Where's the Edge?" at 17:26Z: 12 songs,
+      each with a why and none with a year. The result listed all 12 under `missingYear`, and
+      the chat didn't tell Jon. Asked why, it pointed to the track rules: "album and year are
+      optional hints". `stage_playlist`'s schema also leaves `year` optional and undescribed.
+      Those outweighed the taste paragraph's "Give every discovery its original release year".
+      The batch was never created, and per Decision 15 it isn't staged again.
+    - **Step 1 passed.** At 17:38Z, when Jon asked, the chat recorded two questions about the
+      Soft Vocals batch: what makes a soft vocal a warning sign, and what lets one work. The
+      chat recorded nothing on its own while building the list. Recording on request is
+      allowed here, because this step doesn't test whether the chat asks.
+    - **Step 2 failed.** In a new conversation, Jon asked "Can you give me a few more soft vocal
+      tracks". The chat gave six songs with years and reasons, but it didn't ask either
+      question.
+      - The installed `vf-mcp`, probed read-only, returned both questions from
+        `list_playlists`, and its instructions had S6's sentences.
+      - The chat's reply cited only `check_tracks` evidence. Most likely it never called
+        `list_playlists`, because the request didn't read as a taste question.
+    - **Step 3 wasn't run.** Both questions stay open for S8's gate. They expire on
+      2026-11-19.
 
 - [ ] **S7 — Vinyl Fever labels its playlists when it creates them (app + Core).** *Added
   2026-10-29 from S5's gate. See Decision 17.*
@@ -551,6 +577,55 @@ Jon's gate; added 2026-10-29). S6's completing PR advances `NEXT_UP.md` to S7.
        it as waiting for sync.
     2. After it syncs and the snapshot refreshes, it's listed with `vinyl-fever`, with no
        banner and no S5 note. The roles file has its Music ID and no `pendingSince`.
+
+- [ ] **S8 — The tools enforce the year and carry the questions (`vf-mcp`).** *Added 2026-10-29
+  from S6's gate. See Decision 18.*
+  - **`stage_playlist` requires a year.**
+    - In the input schema, `year` is in each track's `required` list, with type
+      `["integer", "null"]`. Its description reads: "The song's original release year, not a
+      reissue's or compilation's. Use null only when you can't verify it."
+    - **Refuse before writing anything.** If any track has no `year` key, return a tool error
+      naming every such song. Write no inbox file and no ledger batch. Because nothing was
+      recorded, sending the list again with years isn't a second staging (Decision 15).
+    - `null` is accepted. The song is staged with no year, and `missingYear` lists it as today.
+    - **The paste path doesn't change.** A list pasted into the app still treats `year` as
+      optional. The requirement is in `stage_playlist`'s handling, not in
+      `PlaylistContract`'s decoder.
+  - **`check_tracks` carries `openQuestions`,** exactly as `list_playlists` does since S6: the
+    same projection, at most 3, left out when there are none or the notes can't be read, and the
+    notes read once per call. The instructions require `check_tracks` before every list, so the
+    chat sees the questions on any music request, however it's worded.
+  - **Wording.**
+    - In the track rules (`PlaylistContract.trackRules`), replace "album and year are optional
+      hints, and year means the original release year" with: "album is an optional hint. year
+      is the original release year: `stage_playlist` requires it on every track, with null
+      when you can't verify it."
+    - In the taste paragraph, "`list_playlists` returns `openQuestions` when there are any"
+      becomes "`list_playlists` and `check_tracks` return `openQuestions` when there are any".
+    - The first 512 characters must still stand alone. Update the instructions snapshot test.
+  - **Nothing else changes.** The ledger format, `missingYear`, and the question rules stay as
+    they are.
+
+  **DoD:**
+  - **`vf-mcp` tests:**
+    - A track without `year` is refused, the error names it, and the inbox and the
+      recommendation folder stay empty.
+    - A track with `year: null` is staged and listed in `missingYear`.
+    - The schema lists `year` as required, with type `["integer", "null"]`.
+    - Golden JSON for `check_tracks`: with one open question; with none (the key is left out and
+      the rest of the output is unchanged); and with unreadable notes (no key and no error).
+    - The instructions snapshot and the track rules have the new wording.
+    - A pasted list without years still decodes, as an existing test or a new one.
+  - **Executor's laptop check** (read-only, against copies of Jon's live notes and snapshot):
+    `check_tracks` on any song shows the two open soft-vocal questions.
+  - **Jon's gate (after install, owed until done).** It replaces S6's steps 2–4:
+    1. With the two soft-vocal questions still open, start a new conversation with an ordinary
+       music request. The chat asks one question without being prompted. Jon answers, and
+       `taste_notes` shows his words verbatim.
+    2. In another new conversation, the chat asks the other question, and Jon says "not now".
+       In a third new conversation, it doesn't ask it, and `taste_notes` shows it skipped.
+    3. When the chat stages a batch, every song in the ledger has a year, or the chat named the
+       songs it couldn't verify.
 
 ## Prerequisites (Jon, not the executor's)
 
@@ -716,3 +791,18 @@ Added 2026-10-29 with S7. Merging that plan PR approves it.
       rename keeps the role.
     - **Same scope as S5.** Only playlists created from the inbox. A playlist built from pasted
       text is Jon's own list and keeps waiting for his role.
+
+Added 2026-10-29 with S8. Merging that plan PR approves it.
+
+18. **What must happen is enforced by a tool, and what the chat must see comes back from the
+    calls it already makes** (S8, Jon, 2026-10-29).
+    - **Why:** at S6's gate, the chat followed the looser of two conflicting rules about the
+      year, and it ignored `missingYear` in the result. It also skipped `list_playlists` for a
+      request that didn't read as a taste question. Sentences in the instructions aren't
+      reliable enough on their own.
+    - **The year is refused, not just reported.** A refusal writes nothing, so the chat can
+      resend the list with years without making a second batch. Decision 15 still applies to a
+      batch that was recorded.
+    - **`check_tracks` is the call the chat can't skip.** The instructions require it before
+      every list. Up to three questions add little to each result, so this keeps Decision 14's
+      reasoning: the questions travel with a call the chat is already making.
