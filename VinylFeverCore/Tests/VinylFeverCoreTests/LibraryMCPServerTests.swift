@@ -91,7 +91,7 @@ struct LibraryMCPServerTests {
     let stage = try #require(tools.first { $0["name"] as? String == "stage_playlist" })
     let stageProperties = try #require((stage["inputSchema"] as? [String: Any])?["properties"] as? [String: Any])
     #expect((stageProperties["description"] as? [String: Any])?["description"] as? String
-      == "One sentence about the music; it becomes the playlist's description in Apple Music. No library stats, availability notes, or dates.")
+      == "One sentence about the music; it becomes the playlist's description in Apple Music. No library stats, availability notes, or dates. Don't stage the same batch again to fix a year; that marks every song as recommended before.")
   }
 
   @Test("chat taste notes round-trip verbatim and never write the shortcut file")
@@ -310,6 +310,50 @@ struct LibraryMCPServerTests {
     let limited = try #require(await resultJSON(server, id: 2, name: "list_playlists", arguments: #"{"limit":10}"#) as? [String: Any])
     #expect((limited["playlists"] as? [[String: Any]])?.count == 10)
     #expect(limited["matchingCount"] as? Int == 60)
+  }
+
+  @Test("list_playlists carries only unresolved open questions")
+  func playlistListOpenQuestions() async throws {
+    let root = temporaryDirectory()
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    let open = TasteNote(notedAt: now.addingTimeInterval(-30), note: "Bright or dreamy?", source: "chat",
+      kind: "question", id: "open-id", about: .init(songs: [.init(artist: "Artist", title: "Song")]))
+    let answered = TasteNote(notedAt: now.addingTimeInterval(-60), note: "Vocal or groove?", source: "chat",
+      kind: "question", id: "answered-id", about: .init(playlists: ["Selections"]))
+    let answer = TasteNote(notedAt: now.addingTimeInterval(-10), note: "The vocals.", source: "chat",
+      kind: "answer", id: "answer-id", answers: "answered-id")
+    let skipped = TasteNote(notedAt: now.addingTimeInterval(-50), note: "Skip this", source: "chat",
+      kind: "question", id: "skipped-id", about: .init(playlists: ["Keepers"]))
+    let skip = TasteNote(notedAt: now.addingTimeInterval(-5), note: "not now", source: "chat",
+      kind: "answer", id: "skip-id", answers: "skipped-id", skipped: true)
+    for note in [open, answered, answer, skipped, skip] {
+      try TasteNotesCodec.appendChatNote(note, host: "Fixture", folder: tasteRoot)
+    }
+    let (server, _) = try makeServer(snapshot: s0Fixture(generatedAt: now), tasteRootURL: tasteRoot, now: { now })
+    let listed = try #require(await resultJSON(server, id: 1, name: "list_playlists", arguments: "{}"))
+    let json = try canonicalJSON(listed)
+    #expect(json == #"{"matchingCount":0,"openQuestions":[{"about":{"playlists":[],"songs":[{"artist":"Artist","title":"Song"}]},"age":30,"id":"open-id","note":"Bright or dreamy?"}],"playlists":[],"snapshotGeneratedAt":"2023-11-14T22:13:20Z","unlabeledCount":0}"#)
+    #expect(!json.contains("answered-id"))
+    #expect(!json.contains("skipped-id"))
+  }
+
+  @Test("list_playlists omits openQuestions when absent or unreadable")
+  func playlistListOmitsUnavailableOpenQuestions() async throws {
+    let root = temporaryDirectory()
+    let snapshot = s0Fixture()
+    let emptyTasteRoot = root.appending(path: "Empty Taste", directoryHint: .isDirectory)
+    let (emptyServer, _) = try makeServer(snapshot: snapshot, tasteRootURL: emptyTasteRoot)
+    let empty = try #require(await resultJSON(emptyServer, id: 1, name: "list_playlists", arguments: "{}"))
+    let emptyJSON = try canonicalJSON(empty)
+    #expect(emptyJSON == #"{"matchingCount":0,"playlists":[],"snapshotGeneratedAt":"2023-11-14T22:13:20Z","unlabeledCount":0}"#)
+
+    let unreadableTasteRoot = root.appending(path: "Unreadable Taste", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: unreadableTasteRoot.appending(path: "notes unreadable.jsonl", directoryHint: .isDirectory), withIntermediateDirectories: true)
+    let (unreadableServer, _) = try makeServer(snapshot: snapshot, tasteRootURL: unreadableTasteRoot)
+    let unreadable = try #require(await resultJSON(unreadableServer, id: 2, name: "list_playlists", arguments: "{}"))
+    let unreadableJSON = try canonicalJSON(unreadable)
+    #expect(unreadableJSON == emptyJSON)
   }
 
   @Test("heard index matches duet credits and retains local play days")
@@ -975,7 +1019,12 @@ struct LibraryMCPServerTests {
     #expect(LibraryMCPServer.instructionHead.count <= 512)
     #expect(MCPServer.instructionsHeadStandsAlone(LibraryMCPServer.instructions))
     #expect(LibraryMCPServer.instructions.contains("For taste questions, start with list_playlists"))
-    #expect(LibraryMCPServer.instructions.contains("ask at most one open question"))
+    #expect(LibraryMCPServer.instructions.contains("`list_playlists` returns `openQuestions` when there are any."))
+    #expect(LibraryMCPServer.instructions.contains("ask at most one without waiting to be asked"))
+    #expect(LibraryMCPServer.instructions.contains("Record his reply word for word as `note`"))
+    #expect(LibraryMCPServer.instructions.contains("show Jon each song's year and why"))
+    #expect(LibraryMCPServer.instructions.contains("If the result lists `missingYear` or `unverifiedReferences`, tell Jon which songs."))
+    #expect(LibraryMCPServer.instructions.contains("Don't stage the same batch again"))
     #expect(LibraryMCPServer.instructions.contains("never ask what tools can tell you"))
     #expect(!LibraryMCPServer.instructions.contains("VF Note"))
     #expect(LibraryMCPServer.instructions.contains("Stage discoveries with stage_playlist"))
