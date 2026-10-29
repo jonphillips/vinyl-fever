@@ -6,13 +6,13 @@ The app now checks every loaded or refreshed library snapshot for unlabeled user
 subscription playlists. It shows a dismissible main-window banner, opens Playlist Roles filtered
 to Unlabeled from Settings, and remembers dismissed playlist IDs per Mac. On the same check, it
 labels playlists named by processed inbox requests or recommendation ledger batches as
-`vinyl-fever`, without overwriting existing roles, and reports each automatic label once.
+`vinyl-fever`, without overwriting existing roles, and reports each automatic label once. Banner
+names prioritize playlists not yet dismissed, then use snapshot order; "newest" isn't available
+because the snapshot has no playlist creation dates.
 
-Core (294 tests), Listening (55 tests), and the macOS app suite passed. `check-handoff` passed.
-The opt-in Core performance suite still fails its two existing one-second scale assertions for
-`keptAndPassed` and recommendation outcomes, including on an isolated retry. Jon's playlist-role
-gate remains owed, as do the two-Mac listening-settings check, M17 S2 and S3 gates, and M18 S2
-and S4 gates. Advanced `NEXT_UP.md` to `Nothing dispatched.`
+Core (295 tests), Listening (55 tests), and the macOS app (90 tests) suites passed. `check-handoff` passed.
+Jon's playlist-role gate remains owed, as do the two-Mac listening-settings check and M17 S2, M17
+S3, M18 S2, and M18 S4 gates. Advanced `NEXT_UP.md` to M18 · S6.
 
 ## 2026-10-27 — M18 · Dispatch 3 S4 (`m18/s4-taste-questions`)
 

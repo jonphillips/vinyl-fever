@@ -57,7 +57,6 @@ struct PlaylistRoleBannerModelTests {
       $0.playlistInboxClient.processedNames = { ["Vinyl Fever batch"] }
       $0.listeningStore.listeningFolder = { URL(fileURLWithPath: "/tmp/vf-banner-test/Listening") }
       $0.date.now = Date(timeIntervalSince1970: 0)
-      $0.date.now = Date(timeIntervalSince1970: 0)
     } operation: {
       PlaylistRoleBannerModel()
     }
@@ -122,6 +121,7 @@ struct PlaylistRoleBannerModelTests {
       $0.playlistRolesStore.write = { _ in throw BannerTestFailure.expected }
       $0.playlistInboxClient.processedNames = { ["Vinyl Fever batch"] }
       $0.listeningStore.listeningFolder = { URL(fileURLWithPath: "/tmp/vf-banner-test/Listening") }
+      $0.date.now = Date(timeIntervalSince1970: 0)
     } operation: {
       PlaylistRoleBannerModel()
     }

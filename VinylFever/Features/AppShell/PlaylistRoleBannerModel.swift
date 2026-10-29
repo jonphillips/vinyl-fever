@@ -71,7 +71,7 @@ final class PlaylistRoleBannerModel {
     do {
       let saved = try await rolesStore.read() ?? PlaylistRoles(updatedAt: .distantPast, playlists: [])
       var createdNames = (try? inbox.processedNames()) ?? []
-      createdNames.formUnion(recommendationPlaylistNames())
+      createdNames.formUnion(try recommendationPlaylistNames())
       let result = PlaylistRoleAutoLabeling.applyVinylFeverRole(
         snapshot: snapshot, roles: saved, createdNames: createdNames, updatedAt: now
       )
