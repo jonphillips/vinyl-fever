@@ -3,7 +3,10 @@ import Foundation
 enum ProbeBookmarkStore {
   private static let defaultsKey = "probe-folder-bookmark"
 
+  /// A bookmark made while the folder isn't being accessed carries no access, so saving opens it first.
   static func save(_ folder: URL, defaults: UserDefaults = .standard) throws {
+    let accessing = folder.startAccessingSecurityScopedResource()
+    defer { if accessing { folder.stopAccessingSecurityScopedResource() } }
     let bookmark = try folder.bookmarkData(
       options: [],
       includingResourceValuesForKeys: nil,
@@ -12,7 +15,7 @@ enum ProbeBookmarkStore {
     defaults.set(bookmark, forKey: defaultsKey)
   }
 
-  static func resolve(defaults: UserDefaults = .standard) throws -> URL {
+  static func resolve(defaults: UserDefaults = .standard) throws -> (folder: URL, isStale: Bool) {
     guard let bookmark = defaults.data(forKey: defaultsKey) else {
       throw ProbeBookmarkError.folderNotSelected
     }
@@ -23,8 +26,19 @@ enum ProbeBookmarkStore {
       relativeTo: nil,
       bookmarkDataIsStale: &stale
     )
-    if stale { try save(folder, defaults: defaults) }
-    return folder
+    return (folder, stale)
+  }
+
+  /// Runs `body` while the saved folder is accessible. A stale bookmark is refreshed inside that
+  /// access; refreshed outside it, the new bookmark has no access and the next run is refused.
+  static func withFolder<T>(defaults: UserDefaults = .standard, _ body: (URL) throws -> T) throws -> T {
+    let (folder, isStale) = try resolve(defaults: defaults)
+    guard folder.startAccessingSecurityScopedResource() else {
+      throw ProbeBookmarkError.accessRefused
+    }
+    defer { folder.stopAccessingSecurityScopedResource() }
+    if isStale { try save(folder, defaults: defaults) }
+    return try body(folder)
   }
 }
 
