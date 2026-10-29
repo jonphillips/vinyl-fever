@@ -110,6 +110,35 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
     `queue_tracks` vf-mcp tool resolves catalog IDs, logs the picks to the ledger, and writes a
     disposable queue request to iCloud Drive (the PlaylistInbox pattern); an iPhone intent then
     inserts the songs.
+  - **Why this song, and auditioning picks** (Jon, 2026-10-29). Two miles into a walk, a
+    recommended song comes on and Jon wants to know why the chat picked it. The answer is
+    already on iCloud Drive: since M18 S2, each staged song's ledger line carries the chat's
+    `why`, up to three `like` songs it was explained against (with `found`), and the batch's
+    `request` and `playlist`. On 2026-10-29 the laptop's ledger had 40 songs: 25 with a `why`
+    and 15 with `like`. The songs without one came from the batch staged before S2, or had no
+    reason-songs to cite. So the companion needs no chat round trip and no new vf-mcp tool. It
+    reads `Taste Intelligence/recommendations/*.jsonl`, every host's file.
+    - **A "Why this song?" intent.** It identifies the song as Music Feedback does, finds its
+      latest ledger entry, and *speaks* the answer through the intent's dialog: the `why`, the
+      `like` songs, and which playlist and request it came from. It has to work hands-free, on
+      a walk or through CarPlay. It doesn't depend on the chat route (probe 1), so it can come
+      before the album brief. When there's no entry, it says so: "Vinyl Fever didn't recommend
+      this one."
+    - **An audition view in the app.** Recent batches, each song with its `why` and `like`.
+      Tapping a song plays it, and tapping a `like` song plays that next, for comparison.
+      Feedback from this view goes through the Music Feedback path to the same notes file, so
+      M18's outcomes don't get a second judgment channel. The view never writes the ledger.
+    - **Limits:**
+      - Only staged songs have a reason. A longer explanation in the chat isn't kept, and
+        `why` is one sentence (at most 300 characters), which is the right length to speak.
+      - The ledger has no catalog IDs, only artist, title, album, and year. Matching is on
+        normalized title and artist, so live versions and remasters can miss. This joins
+        probes 2 and 5: if the now-playing entry carries a catalog ID, consider recording
+        catalog IDs on new ledger lines (an optional field; the ledger stays v1).
+      - Optimize Mac Storage already evicts the iCloud taste files on the laptop, and iOS
+        evicts too. The reader requests the download and reads through file coordination;
+        it never assumes the file is local. A file it can't read means "no answer yet", not
+        "not recommended".
   - **A Vinyl Fever iPhone target with App Intents.** This is the first iPhone version of
     Vinyl Fever, not a separate helper app, and not part of Cockpit or jon-platform:
     - Intents run in the app that owns the domain and the MusicKit entitlement.
