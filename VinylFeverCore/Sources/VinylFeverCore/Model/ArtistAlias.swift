@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import SQLiteData
 import VinylFeverListening
@@ -98,3 +99,4 @@ extension ArtistAlias {
     return current
   }
 }
+#endif

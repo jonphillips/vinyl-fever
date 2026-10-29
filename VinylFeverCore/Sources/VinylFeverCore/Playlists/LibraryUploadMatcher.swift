@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import VinylFeverListening
 
@@ -97,3 +98,4 @@ public enum LibraryUploadMatcher {
     return (2...words.count).reversed().map { words.prefix($0).joined(separator: " ") }
   }
 }
+#endif

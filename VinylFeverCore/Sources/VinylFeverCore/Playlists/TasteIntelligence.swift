@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import VinylFeverListening
 
@@ -422,3 +423,4 @@ public enum TasteIntelligence {
     return picks
   }
 }
+#endif

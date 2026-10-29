@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import VinylFeverListening
 
@@ -262,3 +263,4 @@ public struct PlaylistSongEvidence: Codable, Equatable, Sendable {
     self.sharedAccountEra = sharedAccountEra
   }
 }
+#endif

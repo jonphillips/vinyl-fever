@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import VinylFeverListening
 
@@ -347,3 +348,4 @@ public struct LibraryIndex: Sendable {
     return sortedTracks(values, by: ranking)
   }
 }
+#endif

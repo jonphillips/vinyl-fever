@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import VinylFeverListening
 
@@ -234,3 +235,4 @@ public enum TasteNoteCandidates {
       .prefix(max(1, limit)).map(\.1)
   }
 }
+#endif
