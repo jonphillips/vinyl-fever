@@ -9,7 +9,7 @@ struct ProbeLogWriter {
   @discardableResult
   func write(_ source: ProbeRecord, to url: URL) throws -> ProbeRecord {
     var record = source
-    record.previousWriteFailure = Self.failure(in: defaults)?.error
+    record.previousWriteFailure = Self.failure(in: defaults)
     do {
       try appendData(ProbeRecord.encodeLine(record), url)
       defaults.removeObject(forKey: Self.failureKey)
@@ -21,7 +21,7 @@ struct ProbeLogWriter {
   }
 
   static func saveFailure(time: Date, error: String, in defaults: UserDefaults = .standard) {
-    let failure = ProbeWriteFailure(time: time, error: error)
+    let failure = ProbeRecord.WriteFailure(time: time, error: error)
     let encoder = JSONEncoder()
     encoder.dateEncodingStrategy = .iso8601
     if let data = try? encoder.encode(failure) {
@@ -29,11 +29,11 @@ struct ProbeLogWriter {
     }
   }
 
-  private static func failure(in defaults: UserDefaults) -> ProbeWriteFailure? {
+  private static func failure(in defaults: UserDefaults) -> ProbeRecord.WriteFailure? {
     guard let data = defaults.data(forKey: failureKey) else { return nil }
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
-    return try? decoder.decode(ProbeWriteFailure.self, from: data)
+    return try? decoder.decode(ProbeRecord.WriteFailure.self, from: data)
   }
 
   private static func append(_ data: Data, to url: URL) throws {
@@ -58,9 +58,4 @@ struct ProbeLogWriter {
     if let coordinationError { throw coordinationError }
     if let writeError { throw writeError }
   }
-}
-
-private struct ProbeWriteFailure: Codable {
-  var time: Date
-  var error: String
 }

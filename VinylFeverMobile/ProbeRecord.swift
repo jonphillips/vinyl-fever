@@ -28,13 +28,18 @@ struct ProbeRecord: Codable, Equatable {
     var catalogID: String
   }
 
+  struct WriteFailure: Codable, Equatable {
+    var time: Date
+    var error: String
+  }
+
   var time: Date
   var device: String
   var startedFrom: String?
   var player: Player
   var recentlyPlayed: [RecentSong]
   var recentlyPlayedError: String?
-  var previousWriteFailure: String?
+  var previousWriteFailure: WriteFailure?
 
   static func encodeLine(_ record: ProbeRecord) throws -> Data {
     let encoder = JSONEncoder()

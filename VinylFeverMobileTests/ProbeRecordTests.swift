@@ -17,11 +17,11 @@ struct ProbeRecordTests {
       ),
       recentlyPlayed: [ProbeRecord.RecentSong(title: "Recent", artist: "Band", catalogID: "456")],
       recentlyPlayedError: "Music unavailable",
-      previousWriteFailure: "Earlier write failed"
+      previousWriteFailure: ProbeRecord.WriteFailure(time: Date(timeIntervalSince1970: 0), error: "Earlier write failed")
     )
 
     let json = String(decoding: try ProbeRecord.encodeLine(record), as: UTF8.self)
-    #expect(json == #"{"device":"iPhone","player":{"currentEntry":{"album":"Album","artist":"Artist","catalogID":"123","title":"Song"},"entryMissing":false,"itemMissing":false,"playbackStatus":"playing","playbackTime":12.5},"previousWriteFailure":"Earlier write failed","recentlyPlayed":[{"artist":"Band","catalogID":"456","title":"Recent"}],"recentlyPlayedError":"Music unavailable","time":"1970-01-01T00:00:00Z"}"# + "\n")
+    #expect(json == #"{"device":"iPhone","player":{"currentEntry":{"album":"Album","artist":"Artist","catalogID":"123","title":"Song"},"entryMissing":false,"itemMissing":false,"playbackStatus":"playing","playbackTime":12.5},"previousWriteFailure":{"error":"Earlier write failed","time":"1970-01-01T00:00:00Z"},"recentlyPlayed":[{"artist":"Band","catalogID":"456","title":"Recent"}],"recentlyPlayedError":"Music unavailable","time":"1970-01-01T00:00:00Z"}"# + "\n")
   }
 
   @Test func bookmarkStoreSavesAndResolvesATemporaryFolder() throws {
@@ -65,9 +65,12 @@ struct ProbeRecordTests {
 
     let successfulURL = root.appendingPathComponent("Probes/m20-s0-test.jsonl")
     let written = try writer.write(record(), to: successfulURL)
-    #expect(written.previousWriteFailure != nil)
-    let line = String(decoding: try Data(contentsOf: successfulURL), as: UTF8.self)
-    #expect(line.contains("\"previousWriteFailure\":\"\(written.previousWriteFailure!)\""))
+    #expect(written.previousWriteFailure?.time == Date(timeIntervalSince1970: 0))
+    #expect(written.previousWriteFailure?.error.isEmpty == false)
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let line = try decoder.decode(ProbeRecord.self, from: try Data(contentsOf: successfulURL))
+    #expect(line.previousWriteFailure == written.previousWriteFailure)
 
     let nextLine = try writer.write(record(), to: successfulURL)
     #expect(nextLine.previousWriteFailure == nil)

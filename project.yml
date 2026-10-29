@@ -175,7 +175,6 @@ targets:
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "Apple Development"
         DEVELOPMENT_TEAM: 7MQEE539G9
-        CODE_SIGN_ENTITLEMENTS: VinylFeverMobile/VinylFeverMobile.entitlements
   VinylFeverMobileTests:
     type: bundle.unit-test
     platform: iOS
