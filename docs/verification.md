@@ -9,6 +9,8 @@ qr=~/code/jon-platform/scripts/quiet-run
 $qr swift test --package-path VinylFeverListening
 $qr swift test --package-path VinylFeverCore
 $qr xcodebuild -scheme VinylFever -destination 'platform=macOS' test
+$qr xcodebuild -scheme VinylFeverMobile -destination 'generic/platform=iOS Simulator' build
+$qr xcodebuild -scheme VinylFeverMobile -destination 'platform=iOS Simulator,name=iPhone 18 Pro' test
 VF_PERF_TESTS=1 $qr swift test --package-path VinylFeverCore
 VF_PERF_TESTS=1 $qr swift test --package-path VinylFeverListening
 ~/code/jon-platform/scripts/check-handoff     # warn-only document-shape hygiene (ADR-0005)

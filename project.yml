@@ -156,6 +156,42 @@ targets:
         CODE_SIGN_IDENTITY: "Apple Development"
         DEVELOPMENT_TEAM: 7MQEE539G9
         PROVISIONING_PROFILE_SPECIFIER: Vinyl Fever Dev Profile
+  VinylFeverMobile:
+    type: application
+    platform: iOS
+    deploymentTarget: "27.0"
+    sources:
+      - VinylFeverMobile
+    info:
+      path: VinylFeverMobile/Info.plist
+      properties:
+        CFBundleDisplayName: Vinyl Fever
+        NSAppleMusicUsageDescription: Vinyl Fever reads the current song and recently played songs for a diagnostic probe.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jonphillips.vinylfever
+        PRODUCT_NAME: VinylFeverMobile
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "Apple Development"
+        DEVELOPMENT_TEAM: 7MQEE539G9
+  VinylFeverMobileTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "27.0"
+    sources:
+      - VinylFeverMobileTests
+    dependencies:
+      - target: VinylFeverMobile
+        link: false
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.jonphillips.VinylFeverMobileTests
+        PRODUCT_NAME: VinylFeverMobileTests
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/VinylFeverMobile.app/VinylFeverMobile"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        CODE_SIGN_STYLE: Automatic
   VinylFeverTests:
     type: bundle.unit-test
     platform: macOS
@@ -194,3 +230,13 @@ schemes:
       config: Debug
       targets:
         - VinylFeverTests
+  VinylFeverMobile:
+    build:
+      targets:
+        VinylFeverMobile: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - VinylFeverMobileTests
