@@ -96,7 +96,7 @@ struct MusicFeedbackIntent: AppIntent {
   static let description = IntentDescription("Save your thoughts about the song you are hearing.")
   static let openAppWhenRun = false
 
-  @Parameter(title: "Note") var note: String
+  @Parameter(title: "Note") var note: String?
 
   func perform() async throws -> some IntentResult & ProvidesDialog {
     let instant = Date()
