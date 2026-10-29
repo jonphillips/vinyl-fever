@@ -583,7 +583,7 @@ completing PR advances `NEXT_UP.md` to [M20](M20-music-feedback-intent.md) · S0
     2. After it syncs and the snapshot refreshes, it's listed with `vinyl-fever`, with no
        banner and no S5 note. The roles file has its Music ID and no `pendingSince`.
 
-- [ ] **S8 — The tools enforce the year and carry the questions (`vf-mcp`).** *Added 2026-10-29
+- [x] **S8 — The tools enforce the year and carry the questions (`vf-mcp`).** *Added 2026-10-29
   from S6's gate. See Decision 18.*
   - **`stage_playlist` requires a year.**
     - In the input schema, `year` is in each track's `required` list, with type

@@ -3,15 +3,27 @@ import LLMHandoffKit
 import MCPServerKit
 import VinylFeverListening
 
-private struct PlaylistToolPayload: Codable, Sendable {
-  struct Track: Codable, Sendable {
+private struct PlaylistToolPayload: Decodable, Sendable {
+  struct Track: Decodable, Sendable {
     var artist: String
     var title: String
     var album: String?
     var year: Int?
     var why: String?
     var like: [RecommendationLikeInput]?
+    var hasYear: Bool
     enum CodingKeys: String, CodingKey { case artist, title, album, year, why, like }
+
+    init(from decoder: Decoder) throws {
+      let values = try decoder.container(keyedBy: CodingKeys.self)
+      artist = try values.decode(String.self, forKey: .artist)
+      title = try values.decode(String.self, forKey: .title)
+      album = try values.decodeIfPresent(String.self, forKey: .album)
+      year = try values.decodeIfPresent(Int.self, forKey: .year)
+      why = try values.decodeIfPresent(String.self, forKey: .why)
+      like = try values.decodeIfPresent([RecommendationLikeInput].self, forKey: .like)
+      hasYear = values.contains(.year)
+    }
   }
   var name: String
   var description: String?
@@ -451,12 +463,16 @@ private actor LibraryMCPContext {
     return index
   }
 
-  func tasteNotesBySong(identity: ArtistIdentity) throws -> [String: [TasteNote]] {
-    try tasteNotes().notes.reduce(into: [:]) { result, note in
+  func tasteNotesBySong(_ notes: [TasteNote], identity: ArtistIdentity) -> [String: [TasteNote]] {
+    notes.reduce(into: [:]) { result, note in
       guard note.resolvedKind == "note" else { return }
       guard let artist = note.artist, let title = note.title, !title.isEmpty else { return }
       result[TasteIntelligence.songKey(artist: artist, title: title, identity: identity), default: []].append(note)
     }
+  }
+
+  func tasteNotesBySong(identity: ArtistIdentity) throws -> [String: [TasteNote]] {
+    tasteNotesBySong(try tasteNotes().notes, identity: identity)
   }
 
   func tasteCoverage(exposure: NewMusicExposureReadResult, now: Date, snapshotAt: Date) throws -> (MCPTasteCoverage, ListeningLog) {
@@ -668,7 +684,7 @@ public enum LibraryMCPServer {
   Vinyl Fever exposes Jon's Apple Music library and listening stats. Use these tools for any claim about what Jon owns, has played, or has loved — never guess. Before proposing a final list, call check_tracks on it. For Jon's uploads, use an exact album from uploadedAlbums as the album hint. When Jon asks for the playlist, call stage_playlist with the final list instead of printing it; Jon reviews and creates it in Vinyl Fever. Snapshot age is in library_overview.
   """
   public static let instructions: String = {
-    instructionHead + "\n\nFor taste questions, start with list_playlists. keepers are the strongest evidence and replay positions are ranks. Report evidence by role, not by counting playlists; don't infer taste from genre. sharedAccountEra play counts aren't Jon's alone. Stage discoveries with stage_playlist, because Vinyl Fever records which songs were new to Jon. Give every discovery its original release year, Jon's request as request, a one-sentence why, and up to three songs in `like`. Cite only songs read from a Vinyl Fever tool in this conversation, and name the playlist you read each one from in `from`. Drop songs recommended before, unless Jon asks for them again. When Jon asks which New Music songs he'll keep, read kept_and_passed, choose before he listens, then call record_new_music_picks. `list_playlists` returns `openQuestions` when there are any. In a taste conversation, ask at most one without waiting to be asked, and only when it bears on what Jon is doing. Record his reply word for word as `note` with the question's id in `answers`. Record 'skip' or 'not now' the same way, with `skipped: true`. When you stage, show Jon each song's year and why. If the result lists `missingYear` or `unverifiedReferences`, tell Jon which songs. Don't stage the same batch again: a second staging marks every song as recommended before. Record a new question when evidence leaves a meaningful contrast unresolved, even if Jon isn't there; ask only when the answer could change your next recommendation, cite the evidence, and never ask what tools can tell you.\n\n" + PlaylistContract.trackRules
+    instructionHead + "\n\nFor taste questions, start with list_playlists. keepers are the strongest evidence and replay positions are ranks. Report evidence by role, not by counting playlists; don't infer taste from genre. sharedAccountEra play counts aren't Jon's alone. Stage discoveries with stage_playlist, because Vinyl Fever records which songs were new to Jon. Give every discovery its original release year, Jon's request as request, a one-sentence why, and up to three songs in `like`. Cite only songs read from a Vinyl Fever tool in this conversation, and name the playlist you read each one from in `from`. Drop songs recommended before, unless Jon asks for them again. When Jon asks which New Music songs he'll keep, read kept_and_passed, choose before he listens, then call record_new_music_picks. `list_playlists` and `check_tracks` return `openQuestions` when there are any. In a taste conversation, ask at most one without waiting to be asked, and only when it bears on what Jon is doing. Record his reply word for word as `note` with the question's id in `answers`. Record 'skip' or 'not now' the same way, with `skipped: true`. When you stage, show Jon each song's year and why. If the result lists `missingYear` or `unverifiedReferences`, tell Jon which songs. Don't stage the same batch again: a second staging marks every song as recommended before. Record a new question when evidence leaves a meaningful contrast unresolved, even if Jon isn't there; ask only when the answer could change your next recommendation, cite the evidence, and never ask what tools can tell you.\n\n" + PlaylistContract.trackRules
   }()
 
   public static func make(
@@ -703,7 +719,9 @@ public enum LibraryMCPServer {
         "playlists": .object(["type": .string("array"), "items": stringField])])])], required: ["note"])
     let checksSchema = schema(["tracks": .object(["type": .string("array"), "maxItems": .integer(LibraryIndex.maximumCheckTracks), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField]), "required": .array([.string("artist"), .string("title")])])])], required: ["tracks"])
     let likeSchema = MCPValue.object(["type": .string("array"), "maxItems": .integer(3), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField, "from": stringField]), "required": .array([.string("artist"), .string("title")])])])
-    let stageSchema = schema(["name": stringField, "description": .object(["type": .string("string"), "description": .string(stageDescriptionGuidance)]), "request": stringField, "tracks": .object(["type": .string("array"), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField, "album": stringField, "year": integerField, "why": stringField, "like": likeSchema]), "required": .array([.string("artist"), .string("title")])])])], required: ["name", "tracks"])
+    let stageYearField = MCPValue.object(["type": .array([.string("integer"), .string("null")]),
+      "description": .string("The song's original release year, not a reissue's or compilation's. Use null only when you can't verify it.")])
+    let stageSchema = schema(["name": stringField, "description": .object(["type": .string("string"), "description": .string(stageDescriptionGuidance)]), "request": stringField, "tracks": .object(["type": .string("array"), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField, "album": stringField, "year": stageYearField, "why": stringField, "like": likeSchema]), "required": .array([.string("artist"), .string("title"), .string("year")])])])], required: ["name", "tracks"])
     return MCPServer(name: "Vinyl Fever", version: "1.0.0", instructions: instructions, tools: [
       MCPTool(name: "library_overview", description: "Summarize Jon's Apple Music library, including track, artist, album, genre and decade counts, plus the connector's build stamp (commit, dirty state, and build time).", inputSchema: overviewSchema, annotations: readOnly) { _ in
         return .json(MCPOverview(try await context.overview(), connector: buildStamp))
@@ -759,7 +777,17 @@ public enum LibraryMCPServer {
         catch { listeningError = error is ListeningHistoryNotSetUp ? "not_set_up" : String(describing: error) }
         let recommendationOutcomes = recommendedRows.contains(where: { $0 != nil })
           ? try? await context.latestRecommendationOutcomes(now: now()) : nil
-        let tasteNotesBySong = try? await context.tasteNotesBySong(identity: index.artistIdentity)
+        let tasteNoteResult = try? await context.tasteNotes()
+        let tasteNotesBySong: [String: [TasteNote]]?
+        if let tasteNoteResult {
+          tasteNotesBySong = await context.tasteNotesBySong(tasteNoteResult.notes, identity: index.artistIdentity)
+        } else {
+          tasteNotesBySong = nil
+        }
+        let instant = now()
+        let openQuestions = tasteNoteResult.map {
+          TasteNotesCodec.openQuestions(in: $0.notes, now: instant).compactMap { MCPOpenQuestion($0, now: instant) }
+        }.flatMap { $0.isEmpty ? nil : $0 }
         let calendar = Calendar.current
         var rows: [MCPCheckedTrack] = []
         for (request, ledgerEvidence) in zip(requests, recommendedRows) {
@@ -778,7 +806,8 @@ public enum LibraryMCPServer {
           )
         }
         let unlabeled = PlaylistRoleMatcher.resolve(snapshot: snapshot, roles: roles).filter { $0.role == nil }.count
-        return .json(MCPCheckResult(tracks: rows, unlabeledPlaylistCount: unlabeled, listening: listeningError))
+        return .json(MCPCheckResult(tracks: rows, unlabeledPlaylistCount: unlabeled,
+          listening: listeningError, openQuestions: openQuestions))
       },
       MCPTool(name: "list_playlists", description: "List Jon's playlists and their taste roles. Unlabeled playlists are visible but are not evidence.", inputSchema: playlistListSchema, annotations: readOnly) { input in
         let p = try decode(PlaylistListPayload.self, from: input, schema: playlistListSchema)
@@ -968,6 +997,11 @@ public enum LibraryMCPServer {
       },
       MCPTool(name: "stage_playlist", description: "Stage a playlist proposal for Jon to review in Vinyl Fever; it does not change Apple Music.", inputSchema: stageSchema, annotations: MCPToolAnnotations(destructive: false, openWorld: false)) { input in
         let payload = try decode(PlaylistToolPayload.self, from: input, schema: stageSchema)
+        let tracksMissingYear = payload.tracks.filter { !$0.hasYear }
+        guard tracksMissingYear.isEmpty else {
+          let songs = tracksMissingYear.map { "\($0.artist) — \($0.title)" }.joined(separator: ", ")
+          throw ArgumentError.invalidShape("year is required for every track; missing for: \(songs)")
+        }
         let staged = try await context.stage(payload, recordedAt: now())
         let json = MCPToolResult.json(StagedPlaylistResult(staged: true, name: staged.name, trackCount: staged.trackCount,
           dropped: staged.dropped, ledgerRecorded: staged.ledgerRecorded, ledgerReason: staged.ledgerReason,
@@ -1083,7 +1117,12 @@ private struct MCPPlaylistTrack: Encodable {
 private struct MCPPlaylistTracks: Encodable {
   var name: String; var role: String?; var tracks: [MCPPlaylistTrack]; var unlabeledPlaylistCount: Int; var listening: String?; var snapshotGeneratedAt: Date
 }
-private struct MCPCheckResult: Encodable { var tracks: [MCPCheckedTrack]; var unlabeledPlaylistCount: Int; var listening: String? }
+private struct MCPCheckResult: Encodable {
+  var tracks: [MCPCheckedTrack]
+  var unlabeledPlaylistCount: Int
+  var listening: String?
+  var openQuestions: [MCPOpenQuestion]?
+}
 private struct MCPCheckedTrack: Encodable {
   var artist: String; var title: String; var owned: Bool; var plays: Int; var versionCount: Int
   var favorited: Bool; var lastPlayed: Date?; var availability: [LibraryAvailability]

@@ -90,6 +90,14 @@ struct LibraryMCPServerTests {
     #expect(enumValues(in: tools, tool: "top_artists", property: "period") == ["all_time", "7d", "30d", "90d"])
     let stage = try #require(tools.first { $0["name"] as? String == "stage_playlist" })
     let stageProperties = try #require((stage["inputSchema"] as? [String: Any])?["properties"] as? [String: Any])
+    let stageTracks = try #require(stageProperties["tracks"] as? [String: Any])
+    let stageTrackSchema = try #require(stageTracks["items"] as? [String: Any])
+    #expect((stageTrackSchema["required"] as? [String]) == ["artist", "title", "year"])
+    let stageTrackProperties = try #require(stageTrackSchema["properties"] as? [String: Any])
+    let yearSchema = try #require(stageTrackProperties["year"] as? [String: Any])
+    #expect((yearSchema["type"] as? [String]) == ["integer", "null"])
+    #expect(yearSchema["description"] as? String
+      == "The song's original release year, not a reissue's or compilation's. Use null only when you can't verify it.")
     #expect((stageProperties["description"] as? [String: Any])?["description"] as? String
       == "One sentence about the music; it becomes the playlist's description in Apple Music. No library stats, availability notes, or dates. Don't stage the same batch again to fix a year; that marks every song as recommended before.")
   }
@@ -239,6 +247,7 @@ struct LibraryMCPServerTests {
     let rows = try #require(result["tracks"] as? [[String: Any]])
     #expect(rows.count == 1)
     #expect(rows.first?["notes"] == nil)
+    #expect(result["openQuestions"] == nil)
   }
 
   @Test("listening calls report setup guidance when no listening log exists")
@@ -332,10 +341,13 @@ struct LibraryMCPServerTests {
     }
     let (server, _) = try makeServer(snapshot: s0Fixture(generatedAt: now), tasteRootURL: tasteRoot, now: { now })
     let listed = try #require(await resultJSON(server, id: 1, name: "list_playlists", arguments: "{}"))
+    let checked = try #require(await resultJSON(server, id: 2, name: "check_tracks",
+      arguments: #"{"tracks":[{"artist":"Artist","title":"Song"}]}"#) as? [String: Any])
     let json = try canonicalJSON(listed)
     #expect(json == #"{"matchingCount":0,"openQuestions":[{"about":{"playlists":[],"songs":[{"artist":"Artist","title":"Song"}]},"age":30,"id":"open-id","note":"Bright or dreamy?"}],"playlists":[],"snapshotGeneratedAt":"2023-11-14T22:13:20Z","unlabeledCount":0}"#)
     #expect(!json.contains("answered-id"))
     #expect(!json.contains("skipped-id"))
+    #expect(try canonicalJSON(checked["openQuestions"]!) == #"[{"about":{"playlists":[],"songs":[{"artist":"Artist","title":"Song"}]},"age":30,"id":"open-id","note":"Bright or dreamy?"}]"#)
   }
 
   @Test("list_playlists omits openQuestions when absent or unreadable")
@@ -371,6 +383,46 @@ struct LibraryMCPServerTests {
     let (resolvedServer, _) = try makeServer(snapshot: snapshot, tasteRootURL: resolvedTasteRoot, now: { now })
     let resolved = try #require(await resultJSON(resolvedServer, id: 3, name: "list_playlists", arguments: "{}"))
     #expect(try canonicalJSON(resolved) == emptyJSON)
+  }
+
+  @Test("check_tracks omits openQuestions when absent or unreadable")
+  func checkTracksOmitsUnavailableOpenQuestions() async throws {
+    let root = temporaryDirectory()
+    let snapshot = s0Fixture()
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    let arguments = #"{"tracks":[]}"#
+
+    let emptyTasteRoot = root.appending(path: "Empty Check Taste", directoryHint: .isDirectory)
+    let (emptyServer, _) = try makeServer(snapshot: snapshot, tasteRootURL: emptyTasteRoot, now: { now })
+    let empty = try #require(await resultJSON(emptyServer, id: 1, name: "check_tracks", arguments: arguments))
+    let emptyJSON = try canonicalJSON(empty)
+    #expect(!emptyJSON.contains("openQuestions"))
+
+    let unreadableTasteRoot = root.appending(path: "Unreadable Check Taste", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: unreadableTasteRoot.appending(path: "notes x.jsonl", directoryHint: .isDirectory), withIntermediateDirectories: true)
+    let (unreadableServer, _) = try makeServer(snapshot: snapshot, tasteRootURL: unreadableTasteRoot, now: { now })
+    let unreadable = try #require(await resultJSON(unreadableServer, id: 2, name: "check_tracks", arguments: arguments))
+    let unreadableJSON = try canonicalJSON(unreadable)
+    #expect(!unreadableJSON.contains("openQuestions"))
+    #expect(unreadableJSON == emptyJSON)
+
+    let resolvedTasteRoot = root.appending(path: "Resolved Check Taste", directoryHint: .isDirectory)
+    let answeredQuestion = TasteNote(notedAt: now.addingTimeInterval(-60), note: "Vocal or groove?", source: "chat",
+      kind: "question", id: "answered-id", about: .init(playlists: ["Selections"]))
+    let answer = TasteNote(notedAt: now.addingTimeInterval(-30), note: "The vocals.", source: "chat",
+      kind: "answer", id: "answer-id", answers: "answered-id")
+    let skippedQuestion = TasteNote(notedAt: now.addingTimeInterval(-50), note: "Bright or dreamy?", source: "chat",
+      kind: "question", id: "skipped-id", about: .init(playlists: ["Keepers"]))
+    let skip = TasteNote(notedAt: now.addingTimeInterval(-10), note: "not now", source: "chat",
+      kind: "answer", id: "skip-id", answers: "skipped-id", skipped: true)
+    for note in [answeredQuestion, answer, skippedQuestion, skip] {
+      try TasteNotesCodec.appendChatNote(note, host: "Fixture", folder: resolvedTasteRoot)
+    }
+    let (resolvedServer, _) = try makeServer(snapshot: snapshot, tasteRootURL: resolvedTasteRoot, now: { now })
+    let resolved = try #require(await resultJSON(resolvedServer, id: 3, name: "check_tracks", arguments: arguments))
+    let resolvedJSON = try canonicalJSON(resolved)
+    #expect(!resolvedJSON.contains("openQuestions"))
+    #expect(resolvedJSON == emptyJSON)
   }
 
   @Test("heard index matches duet credits and retains local play days")
@@ -592,7 +644,7 @@ struct LibraryMCPServerTests {
     #expect(playlistElapsed < .seconds(1))
 
     // Warm the shared indexes and then measure the 15-track familiarity/stage pass.
-    let stageTracks = (0..<15).map { #"{"artist":"Artist \#($0)","title":"New Track \#($0)"}"# }.joined(separator: ",")
+    let stageTracks = (0..<15).map { #"{"artist":"Artist \#($0)","title":"New Track \#($0)","year":null}"# }.joined(separator: ",")
     let stageArguments = #"{"name":"Performance Stage","tracks":[\#(stageTracks)]}"#
     let stageStart = ContinuousClock.now
     let staged = try #require(await resultJSON(server, id: 3, name: "stage_playlist", arguments: stageArguments) as? [String: Any])
@@ -864,7 +916,15 @@ struct LibraryMCPServerTests {
     let inbox = root.appending(path: "PlaylistInbox", directoryHint: .isDirectory)
     let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
     let (server, _) = try makeServer(snapshot: s0Fixture(), inbox: inbox, tasteRootURL: tasteRoot)
-    let valid = try #require(await call(server, id: 1, name: "stage_playlist", arguments: #"{"name":"Power Pop","tracks":[{"artist":" ","title":"Dropped"},{"artist":"The Records","title":"Starry Eyes","why":"Bright guitars and wiry hooks."}]}"#))
+    let refused = try #require(await call(server, id: 10, name: "stage_playlist",
+      arguments: #"{"name":"Missing years","tracks":[{"artist":"Artist One","title":"Song One"},{"artist":"Artist Two","title":"Song Two","year":null}]}"#))
+    #expect(refused.contains("year is required for every track"))
+    #expect(refused.contains("Artist One — Song One"))
+    #expect(!refused.contains("Artist Two — Song Two"))
+    #expect(refused.contains("\"isError\":true"))
+    #expect(!FileManager.default.fileExists(atPath: inbox.path))
+    #expect(!FileManager.default.fileExists(atPath: tasteRoot.appending(path: "recommendations").path))
+    let valid = try #require(await call(server, id: 1, name: "stage_playlist", arguments: #"{"name":"Power Pop","tracks":[{"artist":" ","title":"Dropped","year":null},{"artist":"The Records","title":"Starry Eyes","year":null,"why":"Bright guitars and wiry hooks."}]}"#))
     #expect(valid.contains("\"staged\":true"))
     #expect(valid.contains("\"trackCount\":1"))
     #expect(valid.contains("\"missingYear\":[\"The Records — Starry Eyes\"]"))
@@ -896,7 +956,7 @@ struct LibraryMCPServerTests {
     #expect(zero.contains("tracks must contain at least one track"))
     #expect(zero.contains("\"isError\":true"))
     #expect(try FileManager.default.contentsOfDirectory(at: inbox, includingPropertiesForKeys: nil).count == countBefore)
-    let emptyName = try #require(await call(server, id: 3, name: "stage_playlist", arguments: #"{"name":" ","tracks":[{"artist":"A","title":"B"}]}"#))
+    let emptyName = try #require(await call(server, id: 3, name: "stage_playlist", arguments: #"{"name":" ","tracks":[{"artist":"A","title":"B","year":null}]}"#))
     #expect(emptyName.contains("name must not be empty"))
     #expect(emptyName.contains("\"isError\":true"))
     #expect(try FileManager.default.contentsOfDirectory(at: inbox, includingPropertiesForKeys: nil).count == countBefore)
@@ -908,7 +968,7 @@ struct LibraryMCPServerTests {
     let (ledgerUnavailableServer, _) = try makeServer(snapshot: s0Fixture(), inbox: root.appending(path: "blocked-inbox"),
       tasteRootURL: blockedRoot)
     let stagedWithoutLedger = try #require(await resultJSON(ledgerUnavailableServer, id: 5,
-      name: "stage_playlist", arguments: #"{"name":"Still stages","tracks":[{"artist":"A","title":"B"}]}"#) as? [String: Any])
+      name: "stage_playlist", arguments: #"{"name":"Still stages","tracks":[{"artist":"A","title":"B","year":null}]}"#) as? [String: Any])
     #expect(stagedWithoutLedger["staged"] as? Bool == true)
     #expect(stagedWithoutLedger["ledgerRecorded"] as? Bool == false)
     #expect(stagedWithoutLedger["ledgerReason"] as? String != nil)
@@ -926,7 +986,7 @@ struct LibraryMCPServerTests {
       LibraryPlaylist(persistentID: "unlabeled-id", name: "Unlabeled Reference Set", kind: .user, members: ["reference-id"]),
     ])
     let (server, _) = try makeServer(snapshot: snapshot, inbox: inbox, tasteRootURL: tasteRoot)
-    let staged = try #require(await resultJSON(server, id: 1, name: "stage_playlist", arguments: #"{"name":"Reference Test","request":"Find a companion","tracks":[{"artist":"New Artist","title":"New Song","year":2024,"why":"It shares the bright guitars.","like":[{"artist":"Reference Artist","title":"Reference Song","from":"Unlabeled Reference Set"},{"artist":"Reference Artist","title":"Reference Song","from":"Wrong Playlist"},{"artist":"Missing Artist","title":"Missing Song","from":"Unlabeled Reference Set"}]},{"artist":"Second Artist","title":"Second New Song","like":[{"artist":"Reference Artist","title":"Reference Song"}]}]}"#) as? [String: Any])
+    let staged = try #require(await resultJSON(server, id: 1, name: "stage_playlist", arguments: #"{"name":"Reference Test","request":"Find a companion","tracks":[{"artist":"New Artist","title":"New Song","year":2024,"why":"It shares the bright guitars.","like":[{"artist":"Reference Artist","title":"Reference Song","from":"Unlabeled Reference Set"},{"artist":"Reference Artist","title":"Reference Song","from":"Wrong Playlist"},{"artist":"Missing Artist","title":"Missing Song","from":"Unlabeled Reference Set"}]},{"artist":"Second Artist","title":"Second New Song","year":null,"like":[{"artist":"Reference Artist","title":"Reference Song"}]}]}"#) as? [String: Any])
     #expect(staged["ledgerRecorded"] as? Bool == true)
     let recommendations = tasteRoot.appending(path: "recommendations", directoryHint: .isDirectory)
     let ledgerFile = try #require(FileManager.default.contentsOfDirectory(at: recommendations, includingPropertiesForKeys: nil).first)
@@ -1036,7 +1096,7 @@ struct LibraryMCPServerTests {
     #expect(LibraryMCPServer.instructionHead.count <= 512)
     #expect(MCPServer.instructionsHeadStandsAlone(LibraryMCPServer.instructions))
     #expect(LibraryMCPServer.instructions.contains("For taste questions, start with list_playlists"))
-    #expect(LibraryMCPServer.instructions.contains("`list_playlists` returns `openQuestions` when there are any."))
+    #expect(LibraryMCPServer.instructions.contains("`list_playlists` and `check_tracks` return `openQuestions` when there are any."))
     #expect(LibraryMCPServer.instructions.contains("ask at most one without waiting to be asked"))
     #expect(LibraryMCPServer.instructions.contains("Record his reply word for word as `note`"))
     #expect(LibraryMCPServer.instructions.contains("show Jon each song's year and why"))

@@ -1,5 +1,13 @@
 # Done log
 
+## 2026-10-29 — M18 · S8: The tools enforce the year and carry the questions
+
+- Branch: `m18/s8-enforce-year-questions`.
+- `stage_playlist` requires a `year` key on every track and rejects missing years before writing. `check_tracks` returns the same unresolved `openQuestions` projection as `list_playlists`.
+- Core and Listening package tests, macOS app tests, and `check-handoff` passed. The opt-in Core performance suite exceeded timing thresholds in full-suite runs; its isolated Taste Intelligence suite passed.
+- The laptop check used temporary copies of the live snapshot and note files. Jon had answered the soft-vocal pair on 2026-10-29; the copies contained no unresolved questions (4 questions, 4 answers), so `check_tracks` omitted `openQuestions`. S8's Jon gate carries the open-question interaction check forward.
+
+
 ## 2026-10-29 — M18 · Dispatch 7 S7 (`m18/s7-label-at-create`)
 
 Playlists created from the inbox receive a pending `vinyl-fever` role immediately, keyed by name
