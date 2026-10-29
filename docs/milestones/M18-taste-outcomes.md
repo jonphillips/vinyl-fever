@@ -461,7 +461,7 @@ Jon's gate; added 2026-10-29). S6's completing PR advances `NEXT_UP.md` to S7.
     - **What it showed.** Waiting for iCloud and then refreshing, just to label a playlist
       Vinyl Fever had made a minute earlier, is awkward. S7 labels it at creation instead.
 
-- [ ] **S6 — The chat finds its open questions (`vf-mcp`).** *Added 2026-10-28 from S4's and
+- [x] **S6 — The chat finds its open questions (`vf-mcp`).** Done in `m18/s6-open-questions`. *Added 2026-10-28 from S4's and
   S2's gates. See Decisions 14 and 15.*
   - **`list_playlists` carries `openQuestions`.**
     - The entries are the same as `taste_notes`' (`id`, text, `about`, and age), from

@@ -342,8 +342,9 @@ struct LibraryMCPServerTests {
   func playlistListOmitsUnavailableOpenQuestions() async throws {
     let root = temporaryDirectory()
     let snapshot = s0Fixture()
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
     let emptyTasteRoot = root.appending(path: "Empty Taste", directoryHint: .isDirectory)
-    let (emptyServer, _) = try makeServer(snapshot: snapshot, tasteRootURL: emptyTasteRoot)
+    let (emptyServer, _) = try makeServer(snapshot: snapshot, tasteRootURL: emptyTasteRoot, now: { now })
     let empty = try #require(await resultJSON(emptyServer, id: 1, name: "list_playlists", arguments: "{}"))
     let emptyJSON = try canonicalJSON(empty)
     #expect(emptyJSON == #"{"matchingCount":0,"playlists":[],"snapshotGeneratedAt":"2023-11-14T22:13:20Z","unlabeledCount":0}"#)
@@ -354,6 +355,22 @@ struct LibraryMCPServerTests {
     let unreadable = try #require(await resultJSON(unreadableServer, id: 2, name: "list_playlists", arguments: "{}"))
     let unreadableJSON = try canonicalJSON(unreadable)
     #expect(unreadableJSON == emptyJSON)
+
+    let resolvedTasteRoot = root.appending(path: "Resolved Taste", directoryHint: .isDirectory)
+    let answeredQuestion = TasteNote(notedAt: now.addingTimeInterval(-60), note: "Vocal or groove?", source: "chat",
+      kind: "question", id: "answered-id", about: .init(playlists: ["Selections"]))
+    let answer = TasteNote(notedAt: now.addingTimeInterval(-30), note: "The vocals.", source: "chat",
+      kind: "answer", id: "answer-id", answers: "answered-id")
+    let skippedQuestion = TasteNote(notedAt: now.addingTimeInterval(-50), note: "Bright or dreamy?", source: "chat",
+      kind: "question", id: "skipped-id", about: .init(playlists: ["Keepers"]))
+    let skip = TasteNote(notedAt: now.addingTimeInterval(-10), note: "not now", source: "chat",
+      kind: "answer", id: "skip-id", answers: "skipped-id", skipped: true)
+    for note in [answeredQuestion, answer, skippedQuestion, skip] {
+      try TasteNotesCodec.appendChatNote(note, host: "Fixture", folder: resolvedTasteRoot)
+    }
+    let (resolvedServer, _) = try makeServer(snapshot: snapshot, tasteRootURL: resolvedTasteRoot, now: { now })
+    let resolved = try #require(await resultJSON(resolvedServer, id: 3, name: "list_playlists", arguments: "{}"))
+    #expect(try canonicalJSON(resolved) == emptyJSON)
   }
 
   @Test("heard index matches duet credits and retains local play days")
