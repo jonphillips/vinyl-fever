@@ -73,6 +73,26 @@ struct PlaylistRolesModelTests {
     await model.save()
     #expect(await memory.value?.playlists.map(\.persistentID) == ["old"])
   }
+
+  @Test("pending labels stay out of Missing and survive a Settings save")
+  func preservesPendingRole() async {
+    let now = Date(timeIntervalSince1970: 1_798_000_000)
+    let snapshot = LibrarySnapshot(generatedAt: now, tracks: [], playlists: [])
+    let pending = PlaylistRoleEntry(
+      persistentID: "catalog-id", name: "Staged", role: .vinylFever, pendingSince: now)
+    let existing = PlaylistRoles(updatedAt: now, playlists: [pending])
+    let memory = RolesStoreMemory()
+    let model = withDependencies {
+      $0.librarySnapshotStore.read = { snapshot }
+      $0.playlistRolesStore.read = { existing }
+      $0.playlistRolesStore.write = { await memory.write($0) }
+    } operation: { PlaylistRolesModel(initialFilter: "missing") }
+    await model.load()
+    #expect(model.missingEntries.isEmpty)
+    #expect(model.pendingEntries == [pending])
+    await model.save()
+    #expect(await memory.value?.playlists == [pending])
+  }
 }
 
 private actor RolesStoreMemory {

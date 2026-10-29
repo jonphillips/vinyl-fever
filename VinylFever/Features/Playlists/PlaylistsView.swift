@@ -147,10 +147,10 @@ struct PlaylistsView: View {
     VStack(alignment: .leading, spacing: 12) {
       if let created = model.createdPlaylist {
         Label(
-          "Created “\(created.name)” with \(created.trackCount) songs. It will appear in Music after iCloud sync.",
+          model.createdStatus ?? "Created “\(created.name)” with \(created.trackCount) songs. It will appear in Music after iCloud sync.",
           systemImage: "checkmark.circle.fill"
         )
-        .foregroundStyle(.green)
+        .foregroundStyle(model.createdStatus?.hasPrefix("Playlist created, but") == true ? .orange : .green)
       } else {
         TextField("Playlist name", text: $model.playlistName)
           .font(.title2.weight(.semibold))

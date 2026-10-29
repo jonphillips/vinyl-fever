@@ -70,20 +70,23 @@ final class PlaylistRoleBannerModel {
     announcement = nil
     do {
       let saved = try await rolesStore.read() ?? PlaylistRoles(updatedAt: .distantPast, playlists: [])
+      let adoption = PlaylistRoleAdoption.adopt(snapshot: snapshot, roles: saved, updatedAt: now)
       var createdNames = (try? inbox.processedNames()) ?? []
       createdNames.formUnion(try recommendationPlaylistNames())
       let result = PlaylistRoleAutoLabeling.applyVinylFeverRole(
-        snapshot: snapshot, roles: saved, createdNames: createdNames, updatedAt: now
+        snapshot: snapshot, roles: adoption.roles, createdNames: createdNames, updatedAt: now
       )
-      if !result.labeled.isEmpty {
+      if adoption.didWrite || !result.labeled.isEmpty {
         try await rolesStore.write(result.roles)
         roles = result.roles
+      } else {
+        roles = saved
+      }
+      if !result.labeled.isEmpty {
         let names = result.labeled.prefix(3).map(\.name)
         let remainder = result.labeled.count - names.count
         announcement = "Labeled \(result.labeled.count) Vinyl Fever playlist\(result.labeled.count == 1 ? "" : "s") `vinyl-fever`: "
           + names.joined(separator: ", ") + (remainder > 0 ? " and \(remainder) more" : "")
-      } else {
-        roles = saved
       }
       state = PlaylistRoleBannerState.make(snapshot: snapshot, roles: roles, dismissed: dismissed)
       errorMessage = nil

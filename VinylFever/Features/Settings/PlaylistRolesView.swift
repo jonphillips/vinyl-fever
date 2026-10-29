@@ -24,6 +24,7 @@ final class PlaylistRolesModel {
     guard let snapshot, let savedRoles else { return [] }
     return PlaylistRoleMatcher.missing(snapshot: snapshot, roles: savedRoles)
   }
+  var pendingEntries: [PlaylistRoleEntry] { savedRoles.map(PlaylistRoleMatcher.pending(roles:)) ?? [] }
   var rows: [LibraryPlaylist] { snapshot?.playlists ?? [] }
 
   func load() async {
@@ -61,7 +62,9 @@ final class PlaylistRolesModel {
     let current = snapshot.playlists.compactMap { playlist in
       selections[playlist.persistentID].map { PlaylistRoleEntry(persistentID: playlist.persistentID, name: playlist.name, role: $0) }
     }
-    let roles = PlaylistRoles(updatedAt: .now, playlists: current + unresolvedExisting)
+    let adoptedNames = Set(current.map(\.name))
+    let stillPending = pendingEntries.filter { !adoptedNames.contains($0.name) }
+    let roles = PlaylistRoles(updatedAt: .now, playlists: current + unresolvedExisting + stillPending)
     do { try await rolesStore.write(roles); savedRoles = roles; errorMessage = nil }
     catch { errorMessage = error.localizedDescription }
   }
@@ -86,7 +89,7 @@ struct PlaylistRolesView: View {
   }
   private var visibleMissing: [PlaylistRoleEntry] {
     guard model.filter == "all" || model.filter == "missing" else { return [] }
-    return model.missingEntries
+    return model.pendingEntries + model.missingEntries
   }
 
   var body: some View {
@@ -130,7 +133,15 @@ struct PlaylistRolesView: View {
           Section("Missing from this library") {
             ForEach(visibleMissing, id: \.persistentID) { entry in
               HStack {
-                VStack(alignment: .leading) { Text(entry.name); Text(entry.role.rawValue).font(.caption).foregroundStyle(.secondary) }
+                VStack(alignment: .leading) {
+                  Text(entry.name)
+                  if let pendingSince = entry.pendingSince {
+                    Text("Waiting for sync since \(pendingSince.formatted(date: .abbreviated, time: .omitted))")
+                      .font(.caption).foregroundStyle(.secondary)
+                  } else {
+                    Text(entry.role.rawValue).font(.caption).foregroundStyle(.secondary)
+                  }
+                }
                 Spacer()
                 Button("Remove", role: .destructive) { model.removeMissing(entry) }
               }

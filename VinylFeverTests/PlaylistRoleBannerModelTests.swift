@@ -69,6 +69,62 @@ struct PlaylistRoleBannerModelTests {
     #expect(await store.writeCount == 1)
   }
 
+  @Test("snapshot adopts pending role silently and writes only once")
+  func adoptionIsSilent() async {
+    let createdAt = Date(timeIntervalSince1970: 100)
+    let store = BannerRolesMemory(value: PlaylistRoles(updatedAt: createdAt, playlists: [
+      PlaylistRoleEntry(persistentID: "catalog-id", name: "Staged batch", role: .vinylFever, pendingSince: createdAt),
+    ]))
+    let model = withDependencies {
+      $0.playlistRolesStore.read = { await store.read() }
+      $0.playlistRolesStore.write = { await store.write($0) }
+      $0.playlistInboxClient.processedNames = { [] }
+      $0.listeningStore.listeningFolder = { URL(fileURLWithPath: "/tmp/vf-banner-test/Listening") }
+      $0.date.now = Date(timeIntervalSince1970: 200)
+    } operation: {
+      PlaylistRoleBannerModel()
+    }
+    let snapshot = LibrarySnapshot(generatedAt: createdAt, tracks: [], playlists: [
+      LibraryPlaylist(persistentID: "music-id", name: "Staged batch", kind: .user, members: []),
+      LibraryPlaylist(persistentID: "ordinary", name: "Ordinary", kind: .user, members: []),
+    ])
+    await model.snapshotLoaded(snapshot)
+    #expect(await store.value?.playlists == [PlaylistRoleEntry(
+      persistentID: "music-id", name: "Staged batch", role: .vinylFever)])
+    #expect(await store.writeCount == 1)
+    #expect(model.announcement == nil)
+    #expect(model.state == .unlabeled(names: ["Ordinary"], remaining: 0))
+  }
+
+  @Test("a reused name adopts the newly synced playlist without an S5 announcement")
+  func reusedNameAdoptsUnheldPlaylist() async {
+    let createdAt = Date(timeIntervalSince1970: 100)
+    let oldRole = PlaylistRoleEntry(persistentID: "old", name: "Selections", role: .keepers)
+    let pending = PlaylistRoleEntry(
+      persistentID: "catalog", name: "Selections", role: .vinylFever, pendingSince: createdAt)
+    let store = BannerRolesMemory(value: PlaylistRoles(updatedAt: createdAt, playlists: [oldRole, pending]))
+    let model = withDependencies {
+      $0.playlistRolesStore.read = { await store.read() }
+      $0.playlistRolesStore.write = { await store.write($0) }
+      $0.playlistInboxClient.processedNames = { ["Selections"] }
+      $0.listeningStore.listeningFolder = { URL(fileURLWithPath: "/tmp/vf-banner-test/Listening") }
+      $0.date.now = Date(timeIntervalSince1970: 200)
+    } operation: {
+      PlaylistRoleBannerModel()
+    }
+    let snapshot = LibrarySnapshot(generatedAt: createdAt, tracks: [], playlists: [
+      LibraryPlaylist(persistentID: "old", name: "Selections", kind: .user, members: []),
+      LibraryPlaylist(persistentID: "new", name: "Selections", kind: .user, members: []),
+    ])
+    await model.snapshotLoaded(snapshot)
+    #expect(await store.value?.playlists == [
+      oldRole, PlaylistRoleEntry(persistentID: "new", name: "Selections", role: .vinylFever),
+    ])
+    #expect(await store.writeCount == 1)
+    #expect(model.announcement == nil)
+    #expect(PlaylistRoleMatcher.resolve(snapshot: snapshot, roles: await store.value!).map(\.role) == [.keepers, .vinylFever])
+  }
+
   @Test("ledger-only playlist name auto-labels when the inbox archive is empty")
   func labelsFromLedger() async throws {
     let root = FileManager.default.temporaryDirectory.appending(path: "vf-ledger-role-\(UUID().uuidString)", directoryHint: .isDirectory)
@@ -139,6 +195,7 @@ private enum BannerTestFailure: Error { case expected }
 private actor BannerRolesMemory {
   private(set) var value: PlaylistRoles?
   private(set) var writeCount = 0
+  init(value: PlaylistRoles? = nil) { self.value = value }
   func read() -> PlaylistRoles? { value }
   func write(_ roles: PlaylistRoles) { value = roles; writeCount += 1 }
 }

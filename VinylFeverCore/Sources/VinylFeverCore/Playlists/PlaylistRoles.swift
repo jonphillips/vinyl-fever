@@ -14,8 +14,9 @@ public struct PlaylistRoleEntry: Codable, Equatable, Sendable {
   public var persistentID: String
   public var name: String
   public var role: PlaylistRole
-  public init(persistentID: String, name: String, role: PlaylistRole) {
-    self.persistentID = persistentID; self.name = name; self.role = role
+  public var pendingSince: Date?
+  public init(persistentID: String, name: String, role: PlaylistRole, pendingSince: Date? = nil) {
+    self.persistentID = persistentID; self.name = name; self.role = role; self.pendingSince = pendingSince
   }
 }
 
@@ -85,8 +86,43 @@ public enum PlaylistRoleMatcher {
     let present = Set(snapshot.playlists.map(\.persistentID))
     let nameCounts = Dictionary(grouping: snapshot.playlists, by: \.name).mapValues(\.count)
     return roles.playlists.filter { entry in
-      !present.contains(entry.persistentID) && nameCounts[entry.name] != 1
+      entry.pendingSince == nil && !present.contains(entry.persistentID) && nameCounts[entry.name] != 1
     }
+  }
+
+  public static func pending(roles: PlaylistRoles) -> [PlaylistRoleEntry] {
+    roles.playlists.filter { $0.pendingSince != nil }
+  }
+}
+
+public struct PlaylistRoleAdoptionResult: Equatable, Sendable {
+  public var roles: PlaylistRoles
+  public var didWrite: Bool
+
+  public init(roles: PlaylistRoles, didWrite: Bool) {
+    self.roles = roles
+    self.didWrite = didWrite
+  }
+}
+
+public enum PlaylistRoleAdoption {
+  public static func adopt(snapshot: LibrarySnapshot, roles: PlaylistRoles, updatedAt: Date) -> PlaylistRoleAdoptionResult {
+    let byName = Dictionary(grouping: snapshot.playlists, by: \.name)
+    var heldIDs = Set(roles.playlists.filter { $0.pendingSince == nil }.map(\.persistentID))
+    var changed = false
+    let entries = roles.playlists.map { entry -> PlaylistRoleEntry in
+      guard entry.pendingSince != nil,
+        let matches = byName[entry.name]?.filter({ !heldIDs.contains($0.persistentID) }),
+        matches.count == 1
+      else { return entry }
+      heldIDs.insert(matches[0].persistentID)
+      changed = true
+      return PlaylistRoleEntry(persistentID: matches[0].persistentID, name: entry.name, role: entry.role)
+    }
+    guard changed else { return PlaylistRoleAdoptionResult(roles: roles, didWrite: false) }
+    return PlaylistRoleAdoptionResult(
+      roles: PlaylistRoles(updatedAt: updatedAt, playlists: entries, version: roles.version), didWrite: true
+    )
   }
 }
 

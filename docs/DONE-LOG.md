@@ -1,5 +1,17 @@
 # Done log
 
+## 2026-10-29 — M18 · Dispatch 7 S7 (`m18/s7-label-at-create`)
+
+Playlists created from the inbox receive a pending `vinyl-fever` role immediately, keyed by name
+until a unique name appears in a library snapshot. Snapshot adoption silently replaces the
+temporary catalog ID with Music.app's ID. Playlist Roles shows pending entries as waiting for sync,
+and a failed roles write leaves the created playlist intact with the fallback message.
+
+Core (300 tests), Listening (55 tests), and macOS app (93 tests) passed; Core and Listening also
+passed with `VF_PERF_TESTS=1`; `check-handoff` passed. Jon's S7 sync-and-adoption gate remains owed,
+along with the listening-settings two-Mac check, M17 S2, M17 S3, M18 S2, and M18 S6 gates. Advanced
+`NEXT_UP.md` to M18 · S8.
+
 ## 2026-10-29 — M18 · Dispatch 6 S6 (`m18/s6-open-questions`)
 
 `list_playlists` now returns up to three unresolved taste questions from the existing notes, using
