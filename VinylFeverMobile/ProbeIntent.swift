@@ -168,66 +168,34 @@ struct MusicFeedbackIntent: AppIntent {
       return .result(dialog: "No note saved.")
     }
 
-    do {
-      let evidenceWritten = try ProbeBookmarkStore.withFolder { folder in
-        let notesFolder = folder.appendingPathComponent("Taste Intelligence", isDirectory: true)
-        try TasteNotesCodec.appendFeedbackNote(tasteNote, device: deviceName, folder: notesFolder)
-        let record = ProbeRecord(
-          time: instant,
-          device: deviceName,
-          startedFrom: nil,
-          player: ProbeRecord.Player(
-            playbackStatus: playbackStatus,
-            playbackTime: player.playbackTime.isFinite ? player.playbackTime : nil,
-            currentEntry: entry.map {
-              ProbeRecord.Entry(title: $0.title, artist: currentSong?.artistName, album: currentSong?.albumTitle, catalogID: currentSong?.id.rawValue)
-            },
-            entryMissing: entry == nil,
-            itemMissing: entry != nil && currentSong == nil
-          ),
-          recentlyPlayed: recent.map { ProbeRecord.RecentSong(title: $0.title, artist: $0.artist, catalogID: $0.catalogID ?? "") },
-          recentlyPlayedError: recentlyPlayedError,
-          previousWriteFailure: nil,
-          staleReason: identification.staleReason?.rawValue,
-          offeredChoices: identification.choices.map { "\($0.title) by \($0.artist)" },
-          savedSong: selected.map { ProbeRecord.Entry(title: $0.title, artist: $0.artist, album: $0.album, catalogID: $0.catalogID) }
-        )
-        do {
-          try ProbeLogWriter().write(record, to: folder.appendingPathComponent("Probes", isDirectory: true)
-            .appendingPathComponent(ProbeRecord.feedbackFilename(for: deviceName)))
-          return true
-        } catch {
-          return false
-        }
-      }
-      FeedbackLastNote.save(note: tasteNote)
-      return .result(dialog: evidenceWritten ? "Saved your note." : "Saved your note, but couldn't save its diagnostic record.")
-    } catch ProbeBookmarkError.folderNotSelected, ProbeBookmarkError.accessRefused {
-      return .result(dialog: "Open Vinyl Fever to grant folder access.")
-    } catch {
-      return .result(dialog: "The note could not be saved: \(error.localizedDescription)")
+    let record = ProbeRecord(
+      time: instant,
+      device: deviceName,
+      startedFrom: nil,
+      player: ProbeRecord.Player(
+        playbackStatus: playbackStatus,
+        playbackTime: player.playbackTime.isFinite ? player.playbackTime : nil,
+        currentEntry: entry.map {
+          ProbeRecord.Entry(title: $0.title, artist: currentSong?.artistName, album: currentSong?.albumTitle, catalogID: currentSong?.id.rawValue)
+        },
+        entryMissing: entry == nil,
+        itemMissing: entry != nil && currentSong == nil
+      ),
+      recentlyPlayed: recent.map { ProbeRecord.RecentSong(title: $0.title, artist: $0.artist, catalogID: $0.catalogID ?? "") },
+      recentlyPlayedError: recentlyPlayedError,
+      previousWriteFailure: nil,
+      staleReason: identification.staleReason?.rawValue,
+      offeredChoices: identification.choices.map { "\($0.title) by \($0.artist)" },
+      savedSong: selected.map { ProbeRecord.Entry(title: $0.title, artist: $0.artist, album: $0.album, catalogID: $0.catalogID) }
+    )
+    let dialog = FeedbackNoteSaver.save(note: tasteNote, evidence: record, deviceName: deviceName) { write in
+      try ProbeBookmarkStore.withFolder(write)
     }
+    return .result(dialog: IntentDialog(stringLiteral: dialog))
   }
 
   private static func durationString(_ duration: TimeInterval) -> String {
     let seconds = Int(duration.rounded())
     return "\(seconds / 60):\(String(format: "%02d", seconds % 60))"
-  }
-}
-
-struct FeedbackLastNote: Codable {
-  var title: String?
-  var artist: String?
-  var notedAt: Date
-  var source: String
-
-  static func save(note: TasteNote, defaults: UserDefaults = .standard) {
-    let value = FeedbackLastNote(title: note.title, artist: note.artist, notedAt: note.notedAt, source: note.source)
-    if let data = try? JSONEncoder().encode(value) { defaults.set(data, forKey: "feedback-last-note") }
-  }
-
-  static func load(defaults: UserDefaults = .standard) -> FeedbackLastNote? {
-    guard let data = defaults.data(forKey: "feedback-last-note") else { return nil }
-    return try? JSONDecoder().decode(FeedbackLastNote.self, from: data)
   }
 }

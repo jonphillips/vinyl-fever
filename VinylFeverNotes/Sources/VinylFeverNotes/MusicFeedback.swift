@@ -71,7 +71,10 @@ public enum MusicFeedback {
   public static func makeNote(
     _ text: String, selected: FeedbackSong?, source: String, at date: Date, device: String
   ) -> TasteNote? {
-    guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+    let withoutTrailingPunctuation = trimmed.trimmingCharacters(in: .punctuationCharacters)
+    guard withoutTrailingPunctuation.caseInsensitiveCompare("cancel") != .orderedSame else { return nil }
     return TasteNote(
       notedAt: date,
       note: text,

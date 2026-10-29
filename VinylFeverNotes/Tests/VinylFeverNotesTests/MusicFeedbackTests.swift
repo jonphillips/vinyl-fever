@@ -75,4 +75,13 @@ struct MusicFeedbackTests {
     #expect(MusicFeedback.makeNote(" \n", selected: nil, source: "time-only", at: .distantPast, device: "iPad") == nil)
     #expect(MusicFeedback.makeNote("word for word", selected: nil, source: "time-only", at: .distantPast, device: "iPad")?.note == "word for word")
   }
+
+  @Test func spokenCancelDoesNotBecomeANote() {
+    for text in ["Cancel", "cancel.", " CANCEL "] {
+      #expect(MusicFeedback.makeNote(text, selected: nil, source: "time-only", at: .distantPast, device: "iPad") == nil)
+    }
+    #expect(MusicFeedback.makeNote(
+      "Cancel culture is a bad name for a band", selected: nil, source: "time-only", at: .distantPast, device: "iPad"
+    )?.note == "Cancel culture is a bad name for a band")
+  }
 }
