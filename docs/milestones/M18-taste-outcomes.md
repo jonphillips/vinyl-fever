@@ -118,7 +118,8 @@ advances `NEXT_UP.md` to S4. **Dispatch 4: S5** (app; Jon's gate; added 2026-10-
 completing PR advances `NEXT_UP.md` to S5. **Dispatch 5: S6** (`vf-mcp`; Jon's gate; added
 2026-10-28). S5's completing PR advances `NEXT_UP.md` to S6. **Dispatch 6: S7** (app + Core;
 Jon's gate; added 2026-10-29). S6's completing PR advances `NEXT_UP.md` to S7. **Dispatch 7: S8**
-(`vf-mcp`; Jon's gate; added 2026-10-29). S7's completing PR advances `NEXT_UP.md` to S8.
+(`vf-mcp`; Jon's gate; added 2026-10-29). S7's completing PR advances `NEXT_UP.md` to S8. S8's
+completing PR advances `NEXT_UP.md` to [M20](M20-music-feedback-intent.md) · S0.
 
 - [x] **S1 — The recommendation ledger (Core + `vf-mcp`).** Done in `m18/s1-recommendation-ledger`.
   - **Ledger file:** `Taste Intelligence/recommendations/<host>.jsonl`, one line per batch:

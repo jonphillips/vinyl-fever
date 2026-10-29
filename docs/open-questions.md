@@ -87,6 +87,10 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   album and artist," and get more than a bio: where the artist sits against his own evidence,
   and particular tracks to try. Then he wants those tracks queued without making a playlist.
   **The iPhone companion is decided. The features aren't planned yet; the probes come first.**
+  **Planned 2026-10-29:** Music Feedback, the first intent, is
+  [M20](milestones/M20-music-feedback-intent.md). The app runs on iPhone and iPad (M20 Decision 3),
+  and it identifies the song without ShazamKit (M20 Decision 2), because Siri pauses the music
+  for dictation. The rest of this entry is still unplanned.
   - **The brief.** A new read-only vf-mcp tool, working name `album_brief(artist, album,
     track?)`, returns everything in one call so the phone isn't waiting on several round trips:
     - **From the Apple Music catalog:** a search that resolves the title, artist, and album to

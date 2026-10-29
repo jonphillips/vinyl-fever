@@ -24,6 +24,7 @@ Related source material:
 - [Listening](listening/README.md)
 - [Taste Intelligence (design; built in M17, outcomes in M18)](taste-intelligence.md)
 - [Backups (M19)](milestones/M19-backups.md)
+- [Music Feedback in the iPhone and iPad app (M20)](milestones/M20-music-feedback-intent.md)
 - [reference/MusicWorkbench_Codex_Handoff.md](reference/MusicWorkbench_Codex_Handoff.md)
 - [reference/apple_music_library_strategy.md](reference/apple_music_library_strategy.md)
 - [reference/duplicate-detection-strategy.md](reference/duplicate-detection-strategy.md)
