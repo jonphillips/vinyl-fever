@@ -59,15 +59,12 @@ struct VinylFeverProbeIntent: AppIntent {
     )
 
     do {
-      let folder = try ProbeBookmarkStore.resolve()
-      guard folder.startAccessingSecurityScopedResource() else {
-        throw ProbeBookmarkError.accessRefused
+      try ProbeBookmarkStore.withFolder { folder in
+        try ProbeLogWriter().write(
+          record,
+          to: folder.appendingPathComponent("Probes", isDirectory: true).appendingPathComponent(filename)
+        )
       }
-      defer { folder.stopAccessingSecurityScopedResource() }
-      try ProbeLogWriter().write(
-        record,
-        to: folder.appendingPathComponent("Probes", isDirectory: true).appendingPathComponent(filename)
-      )
       return .result(dialog: "Probe recorded on \(deviceName).")
     } catch {
       ProbeLogWriter.saveFailure(time: now, error: error.localizedDescription)

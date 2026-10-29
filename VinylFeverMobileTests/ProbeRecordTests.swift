@@ -33,10 +33,10 @@ struct ProbeRecordTests {
     defer { defaults.removePersistentDomain(forName: suiteName) }
 
     try ProbeBookmarkStore.save(folder, defaults: defaults)
-    let resolved = try ProbeBookmarkStore.resolve(defaults: defaults)
+    let resolved = try ProbeBookmarkStore.resolve(defaults: defaults).folder
     #expect(resolved.standardizedFileURL == folder.standardizedFileURL)
     try ProbeBookmarkStore.save(resolved, defaults: defaults)
-    #expect(try ProbeBookmarkStore.resolve(defaults: defaults).standardizedFileURL == folder.standardizedFileURL)
+    #expect(try ProbeBookmarkStore.resolve(defaults: defaults).folder.standardizedFileURL == folder.standardizedFileURL)
   }
 
   @Test func probeFilenameDoesNotLookLikeATasteNotesFile() {

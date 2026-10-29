@@ -6,6 +6,7 @@
 - Added the iOS 27 `VinylFeverMobile` app (bundle ID `com.jonphillips.vinylfever`): a setup screen for folder access and MusicKit authorization, and the "Vinyl Fever Probe" App Intent. Each run appends one line to `Vinyl Fever/Probes/m20-s0-<device>.jsonl` through the folder bookmark, with file coordination. The line holds the player snapshot, the newest 5 recently played songs, any recently played error, and the previous failed write's time and error.
 - `VinylFeverCore` is unchanged and stays macOS-only; the app doesn't link it. S1 adds a small cross-platform package for the note format.
 - The iOS Simulator build and 4 mobile tests, Core, Listening, and macOS app tests passed. A signed device build passed. Jon's device runs on the iPad and iPhone remain owed, along with the gates listed in `NEXT_UP.md`. `NEXT_UP.md` stays on S0 until the architect records the probe results.
+- Fix (`m20/s0-bookmark-scope`): the first iPad device run lost folder access on the second probe. The stale-bookmark refresh saved a copy outside the folder's access, which carries no access. The refresh now happens inside the access, and the setup screen opens access before saving the bookmark it picked. Device check: three probes in a row on the iPad, with no re-grant.
 
 ## 2026-10-29 — M18 · S8: The tools enforce the year and carry the questions
 
