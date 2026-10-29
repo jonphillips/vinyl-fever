@@ -6,7 +6,6 @@ let package = Package(
   name: "VinylFeverCore",
   platforms: [
     .macOS(.v26),
-    .iOS(.v27),
   ],
   products: [
     .library(name: "VinylFeverCore", targets: ["VinylFeverCore"]),
@@ -28,7 +27,7 @@ let package = Package(
     .target(
       name: "VinylFeverCore",
       dependencies: [
-        .product(name: "VinylFeverListening", package: "VinylFeverListening", condition: .when(platforms: [.macOS])),
+        .product(name: "VinylFeverListening", package: "VinylFeverListening"),
         .product(name: "Dependencies", package: "swift-dependencies"),
         .product(name: "DependenciesMacros", package: "swift-dependencies"),
         .product(name: "SQLiteData", package: "sqlite-data"),

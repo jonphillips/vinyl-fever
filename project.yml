@@ -162,9 +162,6 @@ targets:
     deploymentTarget: "27.0"
     sources:
       - VinylFeverMobile
-    dependencies:
-      - package: VinylFeverCore
-        product: VinylFeverCore
     info:
       path: VinylFeverMobile/Info.plist
       properties:
@@ -172,8 +169,8 @@ targets:
         NSAppleMusicUsageDescription: Vinyl Fever reads the current song and recently played songs for a diagnostic probe.
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.jonphillips.VinylFever
-        PRODUCT_NAME: Vinyl Fever
+        PRODUCT_BUNDLE_IDENTIFIER: com.jonphillips.vinylfever
+        PRODUCT_NAME: VinylFeverMobile
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "Apple Development"
@@ -191,7 +188,10 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
-        PRODUCT_BUNDLE_IDENTIFIER: com.jonphillips.VinylFeverTests
+        PRODUCT_BUNDLE_IDENTIFIER: com.jonphillips.VinylFeverMobileTests
+        PRODUCT_NAME: VinylFeverMobileTests
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/VinylFeverMobile.app/VinylFeverMobile"
+        BUNDLE_LOADER: "$(TEST_HOST)"
         CODE_SIGN_STYLE: Automatic
   VinylFeverTests:
     type: bundle.unit-test

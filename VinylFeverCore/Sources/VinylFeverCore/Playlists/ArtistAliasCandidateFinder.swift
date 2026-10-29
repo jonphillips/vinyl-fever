@@ -1,4 +1,3 @@
-#if os(macOS)
 import Foundation
 import SQLiteData
 import VinylFeverListening
@@ -204,4 +203,3 @@ public enum ArtistAliasesCodec {
     return document.aliases
   }
 }
-#endif

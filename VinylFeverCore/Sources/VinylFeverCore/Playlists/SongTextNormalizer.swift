@@ -1,4 +1,3 @@
-#if os(macOS)
 import VinylFeverListening
 
 /// Compatibility facade for library matching; `VinylFeverListening` owns the shared rules.
@@ -9,4 +8,3 @@ enum SongTextNormalizer {
   static func album(_ raw: String) -> String { ListeningTextNormalizer.album(raw) }
   static func text(_ raw: String) -> String { ListeningTextNormalizer.text(raw) }
 }
-#endif

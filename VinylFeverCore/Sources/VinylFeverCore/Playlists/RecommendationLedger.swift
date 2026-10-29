@@ -1,4 +1,3 @@
-#if os(macOS)
 import Foundation
 import VinylFeverListening
 
@@ -292,4 +291,3 @@ public enum RecommendationLedgerEvidence {
     RecommendationLedgerEvidenceIndex(ledger: ledger, identity: identity).forSong(artist: artist, title: title)
   }
 }
-#endif

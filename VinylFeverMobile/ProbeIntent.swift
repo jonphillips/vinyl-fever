@@ -12,14 +12,18 @@ struct VinylFeverProbeIntent: AppIntent {
     let now = Date()
     let player = SystemMusicPlayer.shared
     let entry = player.queue.currentEntry
+    let playbackStatus = String(describing: player.state.playbackStatus)
+    let playbackTime = player.playbackTime.isFinite ? player.playbackTime : nil
     let song: Song?
     if case let .song(value)? = entry?.item {
       song = value
     } else {
       song = nil
     }
+    let deviceName = await UIDevice.current.name
 
     var recentSongs: [ProbeRecord.RecentSong] = []
+    var recentlyPlayedError: String?
     do {
       var request = MusicRecentlyPlayedRequest<Song>()
       request.limit = 5
@@ -27,17 +31,17 @@ struct VinylFeverProbeIntent: AppIntent {
         ProbeRecord.RecentSong(title: $0.title, artist: $0.artistName, catalogID: $0.id.rawValue)
       }
     } catch {
-      // Keep the player snapshot even when recently played is unavailable.
+      recentlyPlayedError = error.localizedDescription
     }
 
-    let filename = ProbeRecord.filename(for: UIDevice.current.name)
+    let filename = ProbeRecord.filename(for: deviceName)
     let record = ProbeRecord(
       time: now,
-      device: UIDevice.current.name,
+      device: deviceName,
       startedFrom: nil,
       player: ProbeRecord.Player(
-        playbackStatus: String(describing: player.state.playbackStatus),
-        playbackTime: player.playbackTime.isFinite ? player.playbackTime : nil,
+        playbackStatus: playbackStatus,
+        playbackTime: playbackTime,
         currentEntry: entry.map {
           ProbeRecord.Entry(
             title: $0.title,
@@ -50,46 +54,26 @@ struct VinylFeverProbeIntent: AppIntent {
         itemMissing: entry != nil && song == nil
       ),
       recentlyPlayed: recentSongs,
-      folderWriteSucceeded: true,
-      folderWriteError: nil
+      recentlyPlayedError: recentlyPlayedError,
+      previousWriteFailure: nil
     )
 
     do {
       let folder = try ProbeBookmarkStore.resolve()
       guard folder.startAccessingSecurityScopedResource() else {
-        throw ProbeBookmarkError.folderNotSelected
+        throw ProbeBookmarkError.accessRefused
       }
       defer { folder.stopAccessingSecurityScopedResource() }
-      try Self.append(try ProbeRecord.encodeLine(record), to: folder.appendingPathComponent("Probes", isDirectory: true).appendingPathComponent(filename))
-      return .result(dialog: "Probe recorded on \(UIDevice.current.name).")
+      try ProbeLogWriter().write(
+        record,
+        to: folder.appendingPathComponent("Probes", isDirectory: true).appendingPathComponent(filename)
+      )
+      return .result(dialog: "Probe recorded on \(deviceName).")
     } catch {
+      ProbeLogWriter.saveFailure(time: now, error: error.localizedDescription)
       return .result(dialog: "Probe could not write: \(error.localizedDescription)")
     }
   }
-
-  private static func append(_ data: Data, to url: URL) throws {
-    let directory = url.deletingLastPathComponent()
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    var coordinationError: NSError?
-    var writeError: Error?
-    NSFileCoordinator().coordinate(writingItemAt: url, options: .forMerging, error: &coordinationError) { coordinatedURL in
-      do {
-        if FileManager.default.fileExists(atPath: coordinatedURL.path) {
-          let handle = try FileHandle(forWritingTo: coordinatedURL)
-          defer { try? handle.close() }
-          try handle.seekToEnd()
-          try handle.write(contentsOf: data)
-        } else {
-          try data.write(to: coordinatedURL, options: .atomic)
-        }
-      } catch {
-        writeError = error
-      }
-    }
-    if let coordinationError { throw coordinationError }
-    if let writeError { throw writeError }
-  }
-
 }
 
 struct VinylFeverShortcuts: AppShortcutsProvider {

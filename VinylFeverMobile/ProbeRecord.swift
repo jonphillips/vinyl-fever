@@ -33,8 +33,8 @@ struct ProbeRecord: Codable, Equatable {
   var startedFrom: String?
   var player: Player
   var recentlyPlayed: [RecentSong]
-  var folderWriteSucceeded: Bool
-  var folderWriteError: String?
+  var recentlyPlayedError: String?
+  var previousWriteFailure: String?
 
   static func encodeLine(_ record: ProbeRecord) throws -> Data {
     let encoder = JSONEncoder()

@@ -5,7 +5,7 @@ enum ProbeBookmarkStore {
 
   static func save(_ folder: URL, defaults: UserDefaults = .standard) throws {
     let bookmark = try folder.bookmarkData(
-      options: [.withSecurityScope],
+      options: [],
       includingResourceValuesForKeys: nil,
       relativeTo: nil
     )
@@ -19,23 +19,23 @@ enum ProbeBookmarkStore {
     var stale = false
     let folder = try URL(
       resolvingBookmarkData: bookmark,
-      options: [.withSecurityScope],
+      options: [],
       relativeTo: nil,
       bookmarkDataIsStale: &stale
     )
-    guard !stale else { throw ProbeBookmarkError.bookmarkIsStale }
+    if stale { try save(folder, defaults: defaults) }
     return folder
   }
 }
 
 enum ProbeBookmarkError: LocalizedError {
   case folderNotSelected
-  case bookmarkIsStale
+  case accessRefused
 
   var errorDescription: String? {
     switch self {
     case .folderNotSelected: "Choose the Vinyl Fever folder first."
-    case .bookmarkIsStale: "Folder access expired. Choose the folder again."
+    case .accessRefused: "Folder access was refused. Choose the folder again."
     }
   }
 }

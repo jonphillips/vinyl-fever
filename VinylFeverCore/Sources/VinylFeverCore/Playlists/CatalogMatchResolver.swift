@@ -1,4 +1,3 @@
-#if os(macOS)
 import Dependencies
 import DependenciesMacros
 import Foundation
@@ -155,4 +154,3 @@ extension DependencyValues {
     set { self[CatalogMatchResolver.self] = newValue }
   }
 }
-#endif

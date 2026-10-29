@@ -1,4 +1,3 @@
-#if os(macOS)
 import Foundation
 import LLMHandoffKit
 import MCPServerKit
@@ -1218,4 +1217,3 @@ private enum ArgumentError: LocalizedError {
     }
   }
 }
-#endif

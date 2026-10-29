@@ -16,12 +16,12 @@ struct ProbeRecordTests {
         itemMissing: false
       ),
       recentlyPlayed: [ProbeRecord.RecentSong(title: "Recent", artist: "Band", catalogID: "456")],
-      folderWriteSucceeded: true,
-      folderWriteError: nil
+      recentlyPlayedError: "Music unavailable",
+      previousWriteFailure: "Earlier write failed"
     )
 
     let json = String(decoding: try ProbeRecord.encodeLine(record), as: UTF8.self)
-    #expect(json == #"{"device":"iPhone","folderWriteError":null,"folderWriteSucceeded":true,"player":{"currentEntry":{"album":"Album","artist":"Artist","catalogID":"123","title":"Song"},"entryMissing":false,"itemMissing":false,"playbackStatus":"playing","playbackTime":12.5},"recentlyPlayed":[{"artist":"Band","catalogID":"456","title":"Recent"}],"startedFrom":null,"time":"1970-01-01T00:00:00Z"}"# + "\n")
+    #expect(json == #"{"device":"iPhone","player":{"currentEntry":{"album":"Album","artist":"Artist","catalogID":"123","title":"Song"},"entryMissing":false,"itemMissing":false,"playbackStatus":"playing","playbackTime":12.5},"previousWriteFailure":"Earlier write failed","recentlyPlayed":[{"artist":"Band","catalogID":"456","title":"Recent"}],"recentlyPlayedError":"Music unavailable","time":"1970-01-01T00:00:00Z"}"# + "\n")
   }
 
   @Test func bookmarkStoreSavesAndResolvesATemporaryFolder() throws {
@@ -33,11 +33,61 @@ struct ProbeRecordTests {
     defer { defaults.removePersistentDomain(forName: suiteName) }
 
     try ProbeBookmarkStore.save(folder, defaults: defaults)
+    let resolved = try ProbeBookmarkStore.resolve(defaults: defaults)
+    #expect(resolved.standardizedFileURL == folder.standardizedFileURL)
+    try ProbeBookmarkStore.save(resolved, defaults: defaults)
     #expect(try ProbeBookmarkStore.resolve(defaults: defaults).standardizedFileURL == folder.standardizedFileURL)
   }
 
   @Test func probeFilenameDoesNotLookLikeATasteNotesFile() {
-    #expect(ProbeRecord.filename(for: "Jon’s iPhone") == "m20-s0-Jon--s-iPhone.jsonl")
+    #expect(ProbeRecord.filename(for: "Jon’s iPhone") == "m20-s0-Jon-s-iPhone.jsonl")
     #expect(!ProbeRecord.filename(for: "iPhone").hasPrefix("notes"))
+  }
+
+  @Test func failedWriteIsRecordedOnTheNextSuccessfulLine() throws {
+    let suiteName = UUID().uuidString
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let blocker = root.appendingPathComponent("not-a-directory")
+    try Data("blocker".utf8).write(to: blocker)
+    let writer = ProbeLogWriter(defaults: defaults)
+    var didThrow = false
+    do {
+      try writer.write(record(), to: blocker.appendingPathComponent("probe.jsonl"))
+    } catch {
+      didThrow = true
+    }
+    #expect(didThrow)
+
+    let successfulURL = root.appendingPathComponent("Probes/m20-s0-test.jsonl")
+    let written = try writer.write(record(), to: successfulURL)
+    #expect(written.previousWriteFailure != nil)
+    let line = String(decoding: try Data(contentsOf: successfulURL), as: UTF8.self)
+    #expect(line.contains("\"previousWriteFailure\":\"\(written.previousWriteFailure!)\""))
+
+    let nextLine = try writer.write(record(), to: successfulURL)
+    #expect(nextLine.previousWriteFailure == nil)
+  }
+
+  private func record() -> ProbeRecord {
+    ProbeRecord(
+      time: Date(timeIntervalSince1970: 0),
+      device: "iPhone",
+      startedFrom: nil,
+      player: ProbeRecord.Player(
+        playbackStatus: "playing",
+        playbackTime: nil,
+        currentEntry: nil,
+        entryMissing: true,
+        itemMissing: false
+      ),
+      recentlyPlayed: [],
+      recentlyPlayedError: nil,
+      previousWriteFailure: nil
+    )
   }
 }

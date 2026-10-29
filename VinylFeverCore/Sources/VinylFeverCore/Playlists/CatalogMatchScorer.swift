@@ -1,4 +1,3 @@
-#if os(macOS)
 import Foundation
 import VinylFeverListening
 
@@ -160,4 +159,3 @@ public enum CatalogMatchScorer {
     }
   }
 }
-#endif
