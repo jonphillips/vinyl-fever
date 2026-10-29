@@ -247,6 +247,7 @@ struct LibraryMCPServerTests {
     let rows = try #require(result["tracks"] as? [[String: Any]])
     #expect(rows.count == 1)
     #expect(rows.first?["notes"] == nil)
+    #expect(result["openQuestions"] == nil)
   }
 
   @Test("listening calls report setup guidance when no listening log exists")
@@ -382,6 +383,46 @@ struct LibraryMCPServerTests {
     let (resolvedServer, _) = try makeServer(snapshot: snapshot, tasteRootURL: resolvedTasteRoot, now: { now })
     let resolved = try #require(await resultJSON(resolvedServer, id: 3, name: "list_playlists", arguments: "{}"))
     #expect(try canonicalJSON(resolved) == emptyJSON)
+  }
+
+  @Test("check_tracks omits openQuestions when absent or unreadable")
+  func checkTracksOmitsUnavailableOpenQuestions() async throws {
+    let root = temporaryDirectory()
+    let snapshot = s0Fixture()
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    let arguments = #"{"tracks":[]}"#
+
+    let emptyTasteRoot = root.appending(path: "Empty Check Taste", directoryHint: .isDirectory)
+    let (emptyServer, _) = try makeServer(snapshot: snapshot, tasteRootURL: emptyTasteRoot, now: { now })
+    let empty = try #require(await resultJSON(emptyServer, id: 1, name: "check_tracks", arguments: arguments))
+    let emptyJSON = try canonicalJSON(empty)
+    #expect(!emptyJSON.contains("openQuestions"))
+
+    let unreadableTasteRoot = root.appending(path: "Unreadable Check Taste", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: unreadableTasteRoot.appending(path: "notes x.jsonl", directoryHint: .isDirectory), withIntermediateDirectories: true)
+    let (unreadableServer, _) = try makeServer(snapshot: snapshot, tasteRootURL: unreadableTasteRoot, now: { now })
+    let unreadable = try #require(await resultJSON(unreadableServer, id: 2, name: "check_tracks", arguments: arguments))
+    let unreadableJSON = try canonicalJSON(unreadable)
+    #expect(!unreadableJSON.contains("openQuestions"))
+    #expect(unreadableJSON == emptyJSON)
+
+    let resolvedTasteRoot = root.appending(path: "Resolved Check Taste", directoryHint: .isDirectory)
+    let answeredQuestion = TasteNote(notedAt: now.addingTimeInterval(-60), note: "Vocal or groove?", source: "chat",
+      kind: "question", id: "answered-id", about: .init(playlists: ["Selections"]))
+    let answer = TasteNote(notedAt: now.addingTimeInterval(-30), note: "The vocals.", source: "chat",
+      kind: "answer", id: "answer-id", answers: "answered-id")
+    let skippedQuestion = TasteNote(notedAt: now.addingTimeInterval(-50), note: "Bright or dreamy?", source: "chat",
+      kind: "question", id: "skipped-id", about: .init(playlists: ["Keepers"]))
+    let skip = TasteNote(notedAt: now.addingTimeInterval(-10), note: "not now", source: "chat",
+      kind: "answer", id: "skip-id", answers: "skipped-id", skipped: true)
+    for note in [answeredQuestion, answer, skippedQuestion, skip] {
+      try TasteNotesCodec.appendChatNote(note, host: "Fixture", folder: resolvedTasteRoot)
+    }
+    let (resolvedServer, _) = try makeServer(snapshot: snapshot, tasteRootURL: resolvedTasteRoot, now: { now })
+    let resolved = try #require(await resultJSON(resolvedServer, id: 3, name: "check_tracks", arguments: arguments))
+    let resolvedJSON = try canonicalJSON(resolved)
+    #expect(!resolvedJSON.contains("openQuestions"))
+    #expect(resolvedJSON == emptyJSON)
   }
 
   @Test("heard index matches duet credits and retains local play days")
