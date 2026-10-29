@@ -79,6 +79,89 @@ struct PlaylistRolesTests {
     }
   }
 
+  @Test("pending role dates round-trip and older files decode without them")
+  func pendingSinceCodec() throws {
+    let pendingSince = Date(timeIntervalSince1970: 1_798_000_000)
+    let roles = PlaylistRoles(updatedAt: pendingSince, playlists: [
+      PlaylistRoleEntry(persistentID: "catalog-id", name: "New Playlist", role: .vinylFever, pendingSince: pendingSince),
+    ])
+    let decoded = try PlaylistRolesCodec.decode(PlaylistRolesCodec.encode(roles))
+    #expect(decoded.playlists.first?.pendingSince == pendingSince)
+
+    let oldData = Data(#"{"format":"vf-playlist-roles","version":1,"updatedAt":"2026-10-23T00:00:00Z","playlists":[{"persistentID":"old","name":"Old","role":"keepers"}]}"#.utf8)
+    #expect(try PlaylistRolesCodec.decode(oldData).playlists.first?.pendingSince == nil)
+  }
+
+  @Test("pending roles resolve by unique name and adopt the Music ID once")
+  func pendingAdoption() {
+    let now = Date(timeIntervalSince1970: 1_798_000_000)
+    let snapshot = LibrarySnapshot(generatedAt: now, tracks: [], playlists: [
+      LibraryPlaylist(persistentID: "music-id", name: "Created Playlist", kind: .user, members: []),
+    ])
+    let pending = PlaylistRoleEntry(
+      persistentID: "catalog-id", name: "Created Playlist", role: .vinylFever, pendingSince: now)
+    let roles = PlaylistRoles(updatedAt: now, playlists: [pending])
+    #expect(PlaylistRoleMatcher.resolve(snapshot: snapshot, roles: roles).first?.role == .vinylFever)
+    #expect(PlaylistRoleMatcher.missing(snapshot: snapshot, roles: roles).isEmpty)
+    #expect(PlaylistRoleMatcher.pending(roles: roles) == [pending])
+
+    let adopted = PlaylistRoleAdoption.adopt(snapshot: snapshot, roles: roles, updatedAt: now.addingTimeInterval(1))
+    #expect(adopted.didWrite)
+    #expect(adopted.roles.playlists == [PlaylistRoleEntry(
+      persistentID: "music-id", name: "Created Playlist", role: .vinylFever)])
+    #expect(!PlaylistRoleAdoption.adopt(snapshot: snapshot, roles: adopted.roles, updatedAt: now).didWrite)
+  }
+
+  @Test("pending adoption waits for unique names and does not write without a match")
+  func pendingAdoptionAmbiguity() {
+    let now = Date(timeIntervalSince1970: 1_798_000_000)
+    let pending = PlaylistRoleEntry(persistentID: "catalog-id", name: "Same", role: .vinylFever, pendingSince: now)
+    let roles = PlaylistRoles(updatedAt: now, playlists: [pending])
+    let duplicate = LibrarySnapshot(generatedAt: now, tracks: [], playlists: [
+      LibraryPlaylist(persistentID: "one", name: "Same", kind: .user, members: []),
+      LibraryPlaylist(persistentID: "two", name: "Same", kind: .user, members: []),
+    ])
+    let noMatch = LibrarySnapshot(generatedAt: now, tracks: [], playlists: [])
+    #expect(!PlaylistRoleAdoption.adopt(snapshot: duplicate, roles: roles, updatedAt: now).didWrite)
+    #expect(!PlaylistRoleAdoption.adopt(snapshot: noMatch, roles: roles, updatedAt: now).didWrite)
+    #expect(PlaylistRoleMatcher.pending(roles: roles) == [pending])
+  }
+
+  @Test("pending adoption skips IDs held by other roles and assigns each ID once")
+  func pendingAdoptionSkipsHeldIDs() {
+    let now = Date(timeIntervalSince1970: 1_798_000_000)
+    let existing = PlaylistRoleEntry(persistentID: "old", name: "Same", role: .keepers)
+    let pending = PlaylistRoleEntry(persistentID: "catalog", name: "Same", role: .vinylFever, pendingSince: now)
+    let roles = PlaylistRoles(updatedAt: now, playlists: [existing, pending])
+    let oldOnly = LibrarySnapshot(generatedAt: now, tracks: [], playlists: [
+      LibraryPlaylist(persistentID: "old", name: "Same", kind: .user, members: []),
+    ])
+    #expect(!PlaylistRoleAdoption.adopt(snapshot: oldOnly, roles: roles, updatedAt: now).didWrite)
+    #expect(PlaylistRoleMatcher.pending(roles: roles) == [pending])
+
+    let synced = LibrarySnapshot(generatedAt: now, tracks: [], playlists: [
+      LibraryPlaylist(persistentID: "old", name: "Same", kind: .user, members: []),
+      LibraryPlaylist(persistentID: "new", name: "Same", kind: .user, members: []),
+    ])
+    let adopted = PlaylistRoleAdoption.adopt(snapshot: synced, roles: roles, updatedAt: now)
+    #expect(adopted.didWrite)
+    #expect(adopted.roles.playlists == [
+      existing, PlaylistRoleEntry(persistentID: "new", name: "Same", role: .vinylFever),
+    ])
+    #expect(Set(adopted.roles.playlists.map(\.persistentID)).count == adopted.roles.playlists.count)
+
+    let twoPending = PlaylistRoles(updatedAt: now, playlists: [
+      pending, PlaylistRoleEntry(persistentID: "catalog-2", name: "Same", role: .vinylFever, pendingSince: now),
+    ])
+    let onePlaylist = LibrarySnapshot(generatedAt: now, tracks: [], playlists: [
+      LibraryPlaylist(persistentID: "new", name: "Same", kind: .user, members: []),
+    ])
+    let oneAdopted = PlaylistRoleAdoption.adopt(snapshot: onePlaylist, roles: twoPending, updatedAt: now)
+    #expect(oneAdopted.didWrite)
+    #expect(oneAdopted.roles.playlists.filter { $0.pendingSince != nil }.count == 1)
+    #expect(Set(oneAdopted.roles.playlists.map(\.persistentID)).count == oneAdopted.roles.playlists.count)
+  }
+
   @Test("song evidence groups playlist roles and identifies shared-account plays")
   func songEvidence() {
     let beforeCutoff = ISO8601DateFormatter().date(from: "2017-06-01T12:00:00Z")!

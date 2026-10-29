@@ -21,6 +21,7 @@ struct PlaylistBuilderModelTests {
       StagedPlaylistSummary(handoff: older, name: "Older", trackCount: 1),
     ]
     let stub = InboxStub(summaries: summaries, contents: [newer.url: validPaste, older.url: validPaste])
+    let roleMemory = BuilderRolesMemory()
     let resolver: @Sendable (PlaylistRequest, ArtistIdentity) async -> [ResolvedPlaylistRow] = { request, _ in
       request.tracks.map { track in
         let candidate = CatalogSongCandidate(id: "\(track.artist)-\(track.title)", title: track.title, artistName: track.artist)
@@ -30,6 +31,8 @@ struct PlaylistBuilderModelTests {
     let opened = withDependencies {
       $0.date.now = Date(timeIntervalSince1970: 10)
       $0.playlistInboxClient = stub.client
+      $0.playlistRolesStore.read = { await roleMemory.value }
+      $0.playlistRolesStore.write = { await roleMemory.write($0) }
       $0.catalogMatchResolver.resolve = resolver
       $0.appleMusicCatalogClient = authorizedClient()
     } operation: { PlaylistBuilderModel() }
@@ -53,6 +56,10 @@ struct PlaylistBuilderModelTests {
     #expect(stub.processed.map(\.url) == [newer.url])
     #expect(opened.stagedPlaylists.map(\.name) == ["Older"])
     #expect(stub.listCallCount >= 2)
+    #expect(opened.createdStatus == "Created and labeled `vinyl-fever`.")
+    #expect(await roleMemory.value?.playlists == [PlaylistRoleEntry(
+      persistentID: "playlist", name: "Test Mix", role: .vinylFever,
+      pendingSince: Date(timeIntervalSince1970: 10))])
 
     let dismissStub = InboxStub(summaries: summaries, contents: [newer.url: validPaste])
     let dismiss = withDependencies {
@@ -69,9 +76,12 @@ struct PlaylistBuilderModelTests {
     let handoff = handoff("item-a")
     let summary = StagedPlaylistSummary(handoff: handoff, name: "Playlist A", trackCount: 1)
     let stub = InboxStub(summaries: [summary], contents: [handoff.url: validPaste])
+    let roleMemory = BuilderRolesMemory()
     let model = withDependencies {
       $0.date.now = Date(timeIntervalSince1970: 10)
       $0.playlistInboxClient = stub.client
+      $0.playlistRolesStore.read = { await roleMemory.value }
+      $0.playlistRolesStore.write = { await roleMemory.write($0) }
       $0.catalogMatchResolver.resolve = { request, _ in
         request.tracks.map { track in
           let candidate = CatalogSongCandidate(id: "B", title: track.title, artistName: track.artist)
@@ -89,6 +99,32 @@ struct PlaylistBuilderModelTests {
     #expect(stub.processed.isEmpty)
     #expect(model.stagedPlaylists.map(\.id) == [handoff.url])
     #expect(model.createdPlaylist?.name == "Playlist B")
+    #expect(await roleMemory.value == nil)
+  }
+
+  @Test("a roles write failure leaves the staged playlist created and explains the fallback")
+  func rolesWriteFailureAfterCreate() async {
+    let handoff = handoff("write-failure")
+    let summary = StagedPlaylistSummary(handoff: handoff, name: "Test Mix", trackCount: 1)
+    let stub = InboxStub(summaries: [summary], contents: [handoff.url: validPaste])
+    let model = withDependencies {
+      $0.date.now = Date(timeIntervalSince1970: 10)
+      $0.playlistInboxClient = stub.client
+      $0.playlistRolesStore.read = { nil }
+      $0.playlistRolesStore.write = { _ in throw BuilderRolesFailure.expected }
+      $0.catalogMatchResolver.resolve = { request, _ in
+        request.tracks.map { track in
+          ResolvedPlaylistRow(
+            request: track,
+            status: .matched(CatalogSongCandidate(id: "song", title: track.title, artistName: track.artist), score: 1))
+        }
+      }
+      $0.appleMusicCatalogClient = authorizedClient()
+    } operation: { PlaylistBuilderModel() }
+    await model.openStagedPlaylist(summary)
+    await model.createPlaylist()
+    #expect(model.createdPlaylist?.name == "Test Mix")
+    #expect(model.createdStatus == "Playlist created, but its role couldn't be saved: The operation could not be completed. It will be labeled when it syncs.")
   }
 
   @Test("library index arrival invalidates observed annotations")
@@ -1461,6 +1497,16 @@ private actor PlaylistAppendBarrier {
 private actor SearchTermLog {
   private(set) var terms: [String] = []
   func record(_ term: String) { terms.append(term) }
+}
+
+private actor BuilderRolesMemory {
+  private(set) var value: PlaylistRoles?
+  func write(_ roles: PlaylistRoles) { value = roles }
+}
+
+private enum BuilderRolesFailure: LocalizedError {
+  case expected
+  var errorDescription: String? { "The operation could not be completed." }
 }
 
 private actor RequestTrackLog {

@@ -532,7 +532,8 @@ completing PR advances `NEXT_UP.md` to [M20](M20-music-feedback-intent.md) · S0
     - **Step 3 wasn't run.** Both questions stay open for S8's gate. They expire on
       2026-11-19.
 
-- [ ] **S7 — Vinyl Fever labels its playlists when it creates them (app + Core).** *Added
+- [x] **S7 — Vinyl Fever labels its playlists when it creates them (app + Core).** Done in
+  `m18/s7-label-at-create`. *Added
   2026-10-29 from S5's gate. See Decision 17.*
   - **At Create.** When Create succeeds for a playlist opened from the inbox, Vinyl Fever adds
     a `vinyl-fever` entry to the roles file at once, through `PlaylistRolesStore`.
@@ -550,10 +551,12 @@ completing PR advances `NEXT_UP.md` to [M20](M20-music-feedback-intent.md) · S0
       label still covers it, because the inbox item is in `Processed`.
     - **A playlist built from pasted text gets no entry,** as today. S7 changes *when* Vinyl
       Fever's playlists are labeled, not *which* playlists.
-  - **Adoption.** At S5's snapshot check, a pending entry whose name matches exactly one
-    snapshot playlist takes that playlist's `persistentID`, and its `pendingSince` is removed.
-    Adoption is silent: it's not a new label, so S5's note doesn't appear. Write once, and only
-    when something changed. With two playlists of the same name, the entry stays pending.
+  - **Adoption.** At S5's snapshot check, a pending entry adopts a snapshot playlist with the same
+    name only when exactly one matching playlist has a `persistentID` no other role entry holds.
+    The pending entry's `pendingSince` is removed. Adoption is silent: it's not a new label, so
+    S5's note doesn't appear. Write once, and only when something changed. With two unheld
+    playlists of the same name, the entry stays pending. Process entries in order and reserve each
+    adopted ID so two pending entries cannot adopt one playlist.
   - **Settings → Playlist Roles.** Under the Missing filter, a pending entry reads "Waiting for
     sync since <date>" instead of "Missing". Nothing expires it, and Jon can remove it as he
     would a missing one.
@@ -564,8 +567,9 @@ completing PR advances `NEXT_UP.md` to [M20](M20-music-feedback-intent.md) · S0
   - **Core tests:**
     - the codec round-trips `pendingSince` and decodes a file without it;
     - before adoption, `resolve` gives the synced playlist `vinyl-fever` by name;
-    - adoption with a unique name sets the Music ID and removes `pendingSince`; with a duplicate
-      name, or no pending entries, it changes nothing and reports no write;
+    - adoption with a unique unheld name sets the Music ID and removes `pendingSince`; a held
+      playlist, two unheld same-name playlists, or no pending entries changes nothing and reports
+      no write; with two pending entries and one matching playlist, exactly one adopts;
     - `missing` leaves out pending entries, and a new `pending` lists them.
   - **App tests** (in-memory stores):
     - Create from an inbox item writes one pending `vinyl-fever` entry, with `pendingSince` set

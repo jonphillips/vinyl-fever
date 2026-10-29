@@ -18,6 +18,7 @@ final class PlaylistBuilderModel {
   @ObservationIgnored @Dependency(\.listeningStore) private var listeningStore
   @ObservationIgnored @Dependency(\.defaultDatabase) private var database
   @ObservationIgnored @Dependency(\.playlistInboxClient) private var playlistInbox
+  @ObservationIgnored @Dependency(\.playlistRolesStore) private var playlistRoles
   @ObservationIgnored @Dependency(\.date.now) private var now
 
   var pastedText = ""
@@ -31,6 +32,7 @@ final class PlaylistBuilderModel {
   var decodeError: String?
   var gate: PlaylistGate?
   var operationError: String?
+  var createdStatus: String?
   var isResolving = false
   var isCreating = false
   var isRetryingSearches = false
@@ -408,6 +410,7 @@ final class PlaylistBuilderModel {
     guard canCreate else { return }
     isCreating = true
     operationError = nil
+    createdStatus = nil
     defer { isCreating = false }
     let matched = visibleRows.compactMap { row -> PlaylistSongReference? in
       if case .matched(let candidate, _) = row.status {
@@ -435,14 +438,30 @@ final class PlaylistBuilderModel {
         } catch {
           self.openedStagedPlaylist = nil
           operationError = "Playlist created, but the inbox item couldn't be moved to Processed: \(error.localizedDescription)"
-          return
         }
-        self.openedStagedPlaylist = nil
+        if self.openedStagedPlaylist != nil {
+          self.openedStagedPlaylist = nil
+          do {
+            stagedPlaylists = try playlistInbox.list()
+          } catch {
+            operationError = "Playlist created and the inbox item moved to Processed, but the inbox list couldn't be refreshed: \(error.localizedDescription)"
+          }
+        }
         do {
-          stagedPlaylists = try playlistInbox.list()
+          var roles = try await playlistRoles.read() ?? PlaylistRoles(updatedAt: now, playlists: [])
+          roles.playlists.append(PlaylistRoleEntry(
+            persistentID: playlist.id, name: playlist.name, role: .vinylFever, pendingSince: now
+          ))
+          roles.updatedAt = now
+          try await playlistRoles.write(roles)
+          createdStatus = "Created and labeled `vinyl-fever`."
         } catch {
-          operationError = "Playlist created and the inbox item moved to Processed, but the inbox list couldn't be refreshed: \(error.localizedDescription)"
+          let reason = error.localizedDescription.hasSuffix(".")
+            ? String(error.localizedDescription.dropLast()) : error.localizedDescription
+          createdStatus = "Playlist created, but its role couldn't be saved: \(reason). It will be labeled when it syncs."
         }
+      } else {
+        createdStatus = "Created “\(playlist.name)” with \(playlist.trackCount) songs. It will appear in Music after iCloud sync."
       }
     } catch {
       operationError = error.localizedDescription
