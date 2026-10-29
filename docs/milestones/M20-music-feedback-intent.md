@@ -154,7 +154,7 @@ S1.
     trust, how to detect a stale answer, and whether the locked and CarPlay writes work. That
     plan PR sets S1's staleness rule and dispatches S1.
 
-- [ ] **S1 — The Music Feedback intent.** *Its staleness rule comes from S0's results.*
+- [x] **S1 — The Music Feedback intent.** *Implemented in `m20/s1-music-feedback-intent`; Jon's six-step iPhone and iPad gate remains owed.*
   - **The intent.** Name it "Music Feedback" and expose it through `AppShortcutsProvider`. Siri,
     CarPlay, the Action button, and Control Center can all start it.
     1. **Identify first, before any dialog.** Read `SystemMusicPlayer`'s current entry and the

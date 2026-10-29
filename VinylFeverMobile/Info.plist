@@ -21,6 +21,6 @@
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>NSAppleMusicUsageDescription</key>
-	<string>Vinyl Fever reads the current song and recently played songs for a diagnostic probe.</string>
+	<string>Vinyl Fever reads the current song and recently played songs for Music Feedback.</string>
 </dict>
 </plist>

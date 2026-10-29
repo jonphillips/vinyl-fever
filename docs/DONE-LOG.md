@@ -1,5 +1,11 @@
 # Done log
 
+## 2026-10-29 — M20 · S1: Music Feedback intent
+
+- Branch: `m20/s1-music-feedback-intent`.
+- Added the `VinylFeverNotes` Foundation package, moved the shared taste-note codec into it, and extended v1 notes with optional `catalogID`. Added Music Feedback identification with the S0 staleness rule, a Siri/App Shortcut intent with a short pick list and dictated note, coordinated per-device note and probe writes, and setup-screen last-note and identification-test surfaces.
+- Added package/MCP/mobile coverage and the package verification command. Package, Listening, Core (including `vf-mcp`), Mac app, iOS Simulator, and generic iOS device checks pass. Jon's six-step iPhone and iPad gate remains owed.
+
 ## 2026-10-29 — M20 · S0: The app target and the device probes
 
 - Branch: `m20/s0-mobile-probe`.

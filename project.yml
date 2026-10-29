@@ -18,6 +18,8 @@ packages:
     path: VinylFeverCore
   VinylFeverListening:
     path: VinylFeverListening
+  VinylFeverNotes:
+    path: VinylFeverNotes
   swift-dependencies:
     url: https://github.com/pointfreeco/swift-dependencies
     from: 1.0.0
@@ -162,11 +164,14 @@ targets:
     deploymentTarget: "27.0"
     sources:
       - VinylFeverMobile
+    dependencies:
+      - package: VinylFeverNotes
+        product: VinylFeverNotes
     info:
       path: VinylFeverMobile/Info.plist
       properties:
         CFBundleDisplayName: Vinyl Fever
-        NSAppleMusicUsageDescription: Vinyl Fever reads the current song and recently played songs for a diagnostic probe.
+        NSAppleMusicUsageDescription: Vinyl Fever reads the current song and recently played songs for Music Feedback.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jonphillips.vinylfever

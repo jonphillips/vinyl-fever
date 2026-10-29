@@ -13,6 +13,7 @@ let package = Package(
   ],
   dependencies: [
     .package(path: "../VinylFeverListening"),
+    .package(path: "../VinylFeverNotes"),
     .package(url: "https://github.com/pointfreeco/sqlite-data", from: "1.0.0"),
     .package(url: "https://github.com/pointfreeco/swift-custom-dump", from: "1.0.0"),
     .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.0.0"),
@@ -28,6 +29,7 @@ let package = Package(
       name: "VinylFeverCore",
       dependencies: [
         .product(name: "VinylFeverListening", package: "VinylFeverListening"),
+        .product(name: "VinylFeverNotes", package: "VinylFeverNotes"),
         .product(name: "Dependencies", package: "swift-dependencies"),
         .product(name: "DependenciesMacros", package: "swift-dependencies"),
         .product(name: "SQLiteData", package: "sqlite-data"),
@@ -42,6 +44,7 @@ let package = Package(
       dependencies: [
         "VinylFeverCore",
         .product(name: "VinylFeverListening", package: "VinylFeverListening"),
+        .product(name: "VinylFeverNotes", package: "VinylFeverNotes"),
         .product(name: "CustomDump", package: "swift-custom-dump"),
         .product(name: "DependenciesTestSupport", package: "swift-dependencies"),
         .product(name: "LLMClientKit", package: "LLMClientKit"),
