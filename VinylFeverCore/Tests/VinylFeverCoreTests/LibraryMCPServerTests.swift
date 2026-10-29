@@ -144,6 +144,25 @@ struct LibraryMCPServerTests {
     #expect(!FileManager.default.fileExists(atPath: tasteRoot.appending(path: "notes.jsonl").path))
   }
 
+  @Test("taste_notes reads a Music Feedback file with catalogID")
+  func readsFeedbackTasteNote() async throws {
+    let root = temporaryDirectory()
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let snapshotURL = root.appending(path: "snapshot.json")
+    try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
+    let feedback = TasteNote(
+      notedAt: Date(timeIntervalSince1970: 1_800_000_000), note: "The bass is warm.",
+      source: "now-playing", title: "Song", artist: "Artist", catalogID: "i.song"
+    )
+    try TasteNotesCodec.appendFeedbackNote(feedback, device: "iPad", folder: tasteRoot)
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), tasteRootURL: tasteRoot)
+
+    let result = try #require(await resultJSON(server, id: 1, name: "taste_notes", arguments: #"{"artist":"Artist","title":"Song"}"#) as? [String: Any])
+    let notes = try #require(result["notes"] as? [[String: Any]])
+    #expect(notes.count == 1)
+    #expect(notes.first?["note"] as? String == "The bass is warm.")
+  }
+
   @Test("questions can be answered verbatim and unknown question ids are refused")
   func tasteQuestionFlow() async throws {
     let root = temporaryDirectory()

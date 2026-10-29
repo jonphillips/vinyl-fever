@@ -1,6 +1,7 @@
 import Foundation
 import LLMHandoffKit
 import MCPServerKit
+import VinylFeverNotes
 import VinylFeverListening
 
 private struct PlaylistToolPayload: Decodable, Sendable {

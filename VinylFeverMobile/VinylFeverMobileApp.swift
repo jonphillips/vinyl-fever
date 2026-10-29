@@ -1,4 +1,5 @@
 import MusicKit
+import VinylFeverNotes
 import SwiftUI
 
 @main
@@ -15,6 +16,8 @@ private struct MobileSetupView: View {
   @State private var folderName: String?
   @State private var errorMessage: String?
   @State private var isImportingFolder = false
+  @State private var lastNote = FeedbackLastNote.load()
+  @State private var feedbackCheck: String?
 
   var body: some View {
     NavigationStack {
@@ -29,11 +32,26 @@ private struct MobileSetupView: View {
             Task { authorizationStatus = await MusicAuthorization.request() }
           }
         }
+        Section("Music Feedback") {
+          if let lastNote {
+            let song = [lastNote.title, lastNote.artist].compactMap { $0 }.joined(separator: " by ")
+            LabeledContent("Last note", value: song.isEmpty ? "Time only" : song)
+            LabeledContent("Saved", value: lastNote.notedAt.formatted(date: .abbreviated, time: .shortened))
+            LabeledContent("Source", value: lastNote.source)
+          } else {
+            Text("No note saved on this device yet.").foregroundStyle(.secondary)
+          }
+          Button("Test song identification") {
+            Task { await testSongIdentification() }
+          }
+          if let feedbackCheck { Text(feedbackCheck).foregroundStyle(.secondary) }
+        }
         if let errorMessage {
           Section { Text(errorMessage).foregroundStyle(.red) }
         }
       }
       .navigationTitle("Vinyl Fever")
+      .onAppear { lastNote = FeedbackLastNote.load() }
       .fileImporter(isPresented: $isImportingFolder, allowedContentTypes: [.folder], allowsMultipleSelection: false) { result in
         do {
           let folder = try result.get().first ?? { throw ProbeBookmarkError.folderNotSelected }()
@@ -44,6 +62,38 @@ private struct MobileSetupView: View {
           errorMessage = error.localizedDescription
         }
       }
+    }
+  }
+
+  @MainActor
+  private func testSongIdentification() async {
+    let player = SystemMusicPlayer.shared
+    let entry = player.queue.currentEntry
+    let song: Song?
+    if case let .song(value)? = entry?.item { song = value } else { song = nil }
+    let current = entry.map {
+      FeedbackSong(title: $0.title, artist: song?.artistName ?? "", album: song?.albumTitle, catalogID: song?.id.rawValue)
+    }
+    var recent: [FeedbackSong] = []
+    do {
+      var request = MusicRecentlyPlayedRequest<Song>()
+      request.limit = 5
+      recent = try await request.response().items.map {
+        FeedbackSong(title: $0.title, artist: $0.artistName, catalogID: $0.id.rawValue)
+      }
+    } catch {
+      feedbackCheck = "Recently played could not be read: \(error.localizedDescription)"
+      return
+    }
+    let result = MusicFeedback.identify(
+      entry: current,
+      playbackStatus: String(describing: player.state.playbackStatus),
+      recentlyPlayed: recent
+    )
+    if result.isTrusted, let current {
+      feedbackCheck = "Trusted: \(current.title) by \(current.artist). Nothing was saved."
+    } else {
+      feedbackCheck = "Needs a song choice (\(result.staleReason?.rawValue ?? "unknown")). Nothing was saved."
     }
   }
 }
