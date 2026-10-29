@@ -22,6 +22,24 @@ struct RecommendationLedgerTests {
     #expect(result.skippedLines == 1)
   }
 
+  @Test("playlist names load from every host and skip batches without a playlist")
+  func playlistNamesInFolder() throws {
+    let folder = FileManager.default.temporaryDirectory
+      .appending(path: "recommendation-playlist-names-\(UUID().uuidString)", directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+
+    let first = RecommendationBatch(recordedAt: .now, host: "Mac one", playlist: "First batch", tracks: [])
+    let second = RecommendationBatch(recordedAt: .now, host: "Mac two", playlist: "Second batch", tracks: [])
+    let noPlaylist = RecommendationBatch(recordedAt: .now, host: "Mac two", tracks: [])
+    let firstData = try RecommendationLedgerCodec.encode(first)
+    let secondData = try RecommendationLedgerCodec.encode(second) + RecommendationLedgerCodec.encode(noPlaylist)
+    try firstData.write(to: folder.appending(path: "Mac-one.jsonl"))
+    try (secondData + Data("{malformed}\n".utf8)).write(to: folder.appending(path: "Mac-two.jsonl"))
+
+    #expect(try RecommendationLedgerCodec.playlistNames(inFolder: folder) == ["First batch", "Second batch"])
+  }
+
   @Test("familiarity records each evidence source and excludes ignored and followed playlists")
   func familiarityEvidence() {
     let now = Date(timeIntervalSince1970: 1_800_000_000)

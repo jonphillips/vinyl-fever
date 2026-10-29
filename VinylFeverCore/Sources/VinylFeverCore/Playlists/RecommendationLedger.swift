@@ -171,6 +171,15 @@ public enum RecommendationLedgerCodec {
     if let coordinationError { throw coordinationError }
     if let writeError { throw writeError }
   }
+
+  public static func playlistNames(inFolder folder: URL) throws -> Set<String> {
+    guard FileManager.default.fileExists(atPath: folder.path) else { return [] }
+    let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
+      .filter { $0.pathExtension == "jsonl" }
+      .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    let data = try files.map { try Data(contentsOf: $0) }
+    return Set(readFiles(data).batches.compactMap(\.playlist).filter { !$0.isEmpty })
+  }
 }
 
 /// One-pass index of unfamiliar songs in the recommendation ledger.
