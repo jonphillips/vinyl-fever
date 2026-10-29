@@ -1,5 +1,18 @@
 # Done log
 
+## 2026-10-29 — M18 · Dispatch 6 S6 (`m18/s6-open-questions`)
+
+`list_playlists` now returns up to three unresolved taste questions from the existing notes, using
+the `taste_notes` projection. It reads notes once and omits `openQuestions` when none remain or
+the notes cannot be read. Updated the connector instructions to use those questions, show each
+staged song's year and rationale, call out missing years or unverified references, and avoid
+restaging a batch to fix a year.
+
+Core (297 tests) and the `vf-mcp` build passed from a clean checkout. The read-only laptop check
+against a copy of the live taste notes and snapshot returned no `openQuestions`. `check-handoff`
+passed. Jon's S6 gate remains owed, as do the listening-settings two-Mac check, M17 S2, M17 S3,
+M18 S2, and M18 S5 step 2 gates. Advanced `NEXT_UP.md` to M18 · S7.
+
 ## 2026-10-27 — M18 · Dispatch 4 S5 (`m18/s5-playlist-roles`)
 
 The app now checks every loaded or refreshed library snapshot for unlabeled user, smart, and
