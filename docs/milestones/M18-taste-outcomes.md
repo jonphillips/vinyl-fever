@@ -7,7 +7,7 @@ design conflict, this doc's Decisions win. Rules in
 [../technical-architecture.md](../technical-architecture.md) and
 `/Users/jon/code/jon-platform/AGENTS.md` apply.*
 
-Summary: Five slices are dispatched, and a sixth is decided at S2's gate.
+Summary: Six slices are dispatched, and a seventh is decided at S2's gate.
 - **S1** starts the recommendation ledger now. Every `stage_playlist` records which songs were
   new to Jon, and `check_tracks` reports "recommended before". It's a log that can't be rebuilt
   later, so it goes first.
@@ -25,6 +25,9 @@ Summary: Five slices are dispatched, and a sixth is decided at S2's gate.
 - **S6** puts the open questions where the chat already looks, in `list_playlists`, because at
   S4's gate the chat never asked one until Jon prompted it. It also stops the chat from staging a
   batch a second time to fix a year. Added 2026-10-28; it runs after S5.
+- **S7** labels a staged batch's playlist `vinyl-fever` the moment Vinyl Fever creates it,
+  instead of after iCloud syncs it back and the library snapshot is refreshed. Added 2026-10-29
+  from S5's gate; it runs after S6.
 
 Vinyl Fever still makes no model calls and stores no scores. [M19](M19-backups.md)'s backup
 slice runs between S1 and S2 (M19 Decision 7).
@@ -110,7 +113,8 @@ needs New Music weeks). **Dispatch 3: S4** (Core + `vf-mcp`; Jon's gate). **S3**
 S2's gate. Every slice edits `vf-mcp`, so they run one after another. S2's completing PR
 advances `NEXT_UP.md` to S4. **Dispatch 4: S5** (app; Jon's gate; added 2026-10-25). S4's
 completing PR advances `NEXT_UP.md` to S5. **Dispatch 5: S6** (`vf-mcp`; Jon's gate; added
-2026-10-28). S5's completing PR advances `NEXT_UP.md` to S6.
+2026-10-28). S5's completing PR advances `NEXT_UP.md` to S6. **Dispatch 6: S7** (app + Core;
+Jon's gate; added 2026-10-29). S6's completing PR advances `NEXT_UP.md` to S7.
 
 - [x] **S1 — The recommendation ledger (Core + `vf-mcp`).** Done in `m18/s1-recommendation-ledger`.
   - **Ledger file:** `Taste Intelligence/recommendations/<host>.jsonl`, one line per batch:
@@ -448,6 +452,14 @@ completing PR advances `NEXT_UP.md` to S5. **Dispatch 5: S6** (`vf-mcp`; Jon's g
        role, with no action from Jon, and the one-time note says so.
     2. Make an ordinary playlist in Music. After a refresh, the banner names it. **Not now**
        hides the banner, and **Label…** opens the sheet filtered to Unlabeled.
+  - **Gate record.** Step 1 passed on 2026-10-29. Step 2 is owed.
+    - **Step 1.** The chat staged "Sam Fender — Manchester 2027 Catch-Up", and Jon created it
+      from the inbox at 09:53 EDT. It reached Music on the laptop only after iCloud synced it.
+      After a manual Refresh Library Snapshot, the green note appeared. The roles file
+      (`updatedAt` 15:42:43Z) has the playlist's Music ID, `13BDBBB374564174`, with
+      `vinyl-fever`.
+    - **What it showed.** Waiting for iCloud and then refreshing, just to label a playlist
+      Vinyl Fever had made a minute earlier, is awkward. S7 labels it at creation instead.
 
 - [ ] **S6 — The chat finds its open questions (`vf-mcp`).** *Added 2026-10-28 from S4's and
   S2's gates. See Decisions 14 and 15.*
@@ -492,6 +504,53 @@ completing PR advances `NEXT_UP.md` to S5. **Dispatch 5: S6** (`vf-mcp`; Jon's g
        skipped.
     4. When the chat stages a batch, its reply shows each song's year and why. If the result
        lists a missing year, the chat names the song.
+
+- [ ] **S7 — Vinyl Fever labels its playlists when it creates them (app + Core).** *Added
+  2026-10-29 from S5's gate. See Decision 17.*
+  - **At Create.** When Create succeeds for a playlist opened from the inbox, Vinyl Fever adds
+    a `vinyl-fever` entry to the roles file at once, through `PlaylistRolesStore`.
+    - **The entry is keyed by name.** The Apple Music API's ID isn't the ID Music.app uses on
+      the Mac. `PlaylistRoleMatcher.resolve` already matches by name when the name is unique in
+      the library, and `vf-mcp` uses the same matcher. So the playlist arrives labeled whenever
+      it syncs, on either Mac.
+    - **The entry gains an optional `pendingSince` (ISO 8601).** It's still `vf-playlist-roles`
+      v1: the key is additive, and older builds ignore it. `persistentID` holds the
+      `CreatedPlaylistRef` ID until the playlist is adopted.
+    - **The note is shown on Create:** "Created and labeled `vinyl-fever`." It appears in the
+      Playlists view's post-create status, not the banner.
+    - **If the roles write fails,** the playlist is still created. Show "Playlist created, but
+      its role couldn't be saved: <error>. It will be labeled when it syncs." S5's automatic
+      label still covers it, because the inbox item is in `Processed`.
+    - **A playlist built from pasted text gets no entry,** as today. S7 changes *when* Vinyl
+      Fever's playlists are labeled, not *which* playlists.
+  - **Adoption.** At S5's snapshot check, a pending entry whose name matches exactly one
+    snapshot playlist takes that playlist's `persistentID`, and its `pendingSince` is removed.
+    Adoption is silent: it's not a new label, so S5's note doesn't appear. Write once, and only
+    when something changed. With two playlists of the same name, the entry stays pending.
+  - **Settings → Playlist Roles.** Under the Missing filter, a pending entry reads "Waiting for
+    sync since <date>" instead of "Missing". Nothing expires it, and Jon can remove it as he
+    would a missing one.
+  - **S5's automatic labeling stays** as the fallback for playlists created on the other Mac or
+    before S7.
+
+  **DoD:**
+  - **Core tests:**
+    - the codec round-trips `pendingSince` and decodes a file without it;
+    - before adoption, `resolve` gives the synced playlist `vinyl-fever` by name;
+    - adoption with a unique name sets the Music ID and removes `pendingSince`; with a duplicate
+      name, or no pending entries, it changes nothing and reports no write;
+    - `missing` leaves out pending entries, and a new `pending` lists them.
+  - **App tests** (in-memory stores):
+    - Create from an inbox item writes one pending `vinyl-fever` entry, with `pendingSince` set
+      to the injected now, and shows the note;
+    - Create from pasted text writes nothing;
+    - a failed roles write leaves the playlist created and shows the message;
+    - a snapshot containing the playlist adopts it once, with no S5 note and no banner.
+  - **Jon's gate (after install, owed until done):**
+    1. Stage a batch and create it. The note says it's labeled at once, and Playlist Roles shows
+       it as waiting for sync.
+    2. After it syncs and the snapshot refreshes, it's listed with `vinyl-fever`, with no
+       banner and no S5 note. The roles file has its Music ID and no `pendingSince`.
 
 ## Prerequisites (Jon, not the executor's)
 
@@ -644,3 +703,16 @@ Added 2026-10-28 with S6. Merging that plan PR approves them.
     - **Two setup-day lines from 2026-10-22 stay:** "Cancel" and "This is just a test". The
       alternative is to remove them once, after a backup, with no device writing; Jon decides
       at merge.
+
+Added 2026-10-29 with S7. Merging that plan PR approves it.
+
+17. **Vinyl Fever labels a playlist when it creates it, keyed by name until the playlist syncs**
+    (S7, Jon, 2026-10-29).
+    - **Why:** at S5's gate, a playlist Vinyl Fever had just made needed an iCloud sync and a
+      manual refresh before it got its role. Vinyl Fever knew both facts, that the playlist is
+      its own and what it's called, at Create.
+    - **Name is the bridge.** The API's ID can't be matched to Music.app's, and name matching
+      already exists for exactly this reason. Adoption then stores the real ID, so a later
+      rename keeps the role.
+    - **Same scope as S5.** Only playlists created from the inbox. A playlist built from pasted
+      text is Jon's own list and keeps waiting for his role.
