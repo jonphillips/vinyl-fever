@@ -412,14 +412,15 @@ S1. **Dispatch 3: S2** ("Why this song?"; Jon's device gate). Jon moved it ahead
 - **Catalog IDs on new ledger lines** (fewer misses on live versions and remasters). → Only if
   S2's evidence file shows misses. It's an optional field in `vf-mcp`; the ledger stays v1.
 - **The audition view** (recent batches with each song's `why`, `like`, and `request`; Vinyl
-  Fever plays the picks and pairs, so it knows the song). → After S2. It needs no
-  identification at all, and its feedback goes through Music Feedback's notes file.
+  Fever plays the picks and pairs, so it knows the song). → Planned as
+  [M21](M21-playlists-view.md) (Jon, 2026-10-30).
 - **Removing the probe intent.** → The first slice after S1's gate (Decision 10).
 - **Album brief and Play Next.** → Their probes in open-questions.md (the chat route, the queue,
   and who calls the catalog) come first.
 - **ShazamKit.** → Only if S0 shows a start that keeps the music playing and a case that the
   player and recently played both miss.
-- **A native iPad layout.** → The setup screen is the only UI. It needs no iPad design.
+- **A native iPad layout.** → The setup screen is M20's only UI. M21's playlists view uses a
+  split view on iPad.
 - **A Control Center control widget.** → Only if the Shortcut control fails S1's gate
   (Decision 9).
 

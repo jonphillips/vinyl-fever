@@ -29,6 +29,7 @@ Related source material:
 - [ChatGPT playlist contract (`VF-PLAYLIST: v1`)](chatgpt/PLAYLIST-CONTRACT.md)
 - [Taste Intelligence (design; built in M17, outcomes in M18)](taste-intelligence.md)
 - [Music Feedback in the iPhone and iPad app (M20)](milestones/M20-music-feedback-intent.md)
+- [The Vinyl Fever playlists in the iPhone and iPad app (M21)](milestones/M21-playlists-view.md)
 - [reference/MusicWorkbench_Codex_Handoff.md](reference/MusicWorkbench_Codex_Handoff.md)
 - [reference/apple_music_library_strategy.md](reference/apple_music_library_strategy.md)
 - [reference/duplicate-detection-strategy.md](reference/duplicate-detection-strategy.md)
