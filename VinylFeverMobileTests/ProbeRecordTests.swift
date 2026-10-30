@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import VinylFeverNotes
 @testable import VinylFeverMobile
 
 struct ProbeRecordTests {
@@ -72,6 +73,25 @@ struct ProbeRecordTests {
     )
     #expect(timedOut.filesRead == 0)
     #expect(timedOut.unreadableFileCount == 2)
+  }
+
+  @Test func missingOrEmptyRecommendationFolderIsUnavailable() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let song = FeedbackSong(title: "Song", artist: "Artist")
+
+    let missing = RecommendationLedgerFolderReader.read(folder: root)
+    #expect(missing.unreadableFileCount > 0)
+    #expect(WhyThisSong.answer(for: song, ledger: missing.ledger,
+      unreadableFileCount: missing.unreadableFileCount) == .recommendationsUnavailable)
+
+    let emptyFolder = root.appendingPathComponent("Taste Intelligence/recommendations", isDirectory: true)
+    try FileManager.default.createDirectory(at: emptyFolder, withIntermediateDirectories: true)
+    let empty = RecommendationLedgerFolderReader.read(folder: root)
+    #expect(empty.unreadableFileCount > 0)
+    #expect(WhyThisSong.answer(for: song, ledger: empty.ledger,
+      unreadableFileCount: empty.unreadableFileCount) == .recommendationsUnavailable)
   }
 
   @Test func feedbackEvidenceLineIsGoldenJSON() throws {

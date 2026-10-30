@@ -22,9 +22,18 @@ enum RecommendationLedgerFolderReader {
     coordinatedRead: @escaping @Sendable (URL) throws -> Data = coordinatedRead
   ) -> RecommendationLedgerFolderRead {
     let directory = folder.appendingPathComponent("Taste Intelligence/recommendations", isDirectory: true)
-    let candidates = (try? FileManager.default.contentsOfDirectory(
-      at: directory, includingPropertiesForKeys: nil, options: [.skipsSubdirectoryDescendants]
-    )) ?? []
+    let candidates: [URL]
+    do {
+      candidates = try FileManager.default.contentsOfDirectory(
+        at: directory, includingPropertiesForKeys: nil, options: [.skipsSubdirectoryDescendants]
+      )
+    } catch {
+      return RecommendationLedgerFolderRead(
+        ledger: RecommendationLedgerReadResult(batches: [], skippedLines: 0),
+        filesRead: 0,
+        unreadableFileCount: 1
+      )
+    }
     let urls = candidates.compactMap { candidate -> URL? in
       let name = candidate.lastPathComponent
       if name.hasSuffix(".jsonl") { return candidate }
@@ -33,6 +42,14 @@ enum RecommendationLedgerFolderReader {
       guard actualName.hasSuffix(".jsonl") else { return nil }
       return directory.appendingPathComponent(actualName)
     }.sorted { $0.lastPathComponent < $1.lastPathComponent }
+
+    guard !urls.isEmpty else {
+      return RecommendationLedgerFolderRead(
+        ledger: RecommendationLedgerReadResult(batches: [], skippedLines: 0),
+        filesRead: 0,
+        unreadableFileCount: 1
+      )
+    }
 
     let group = DispatchGroup()
     let results = Results()

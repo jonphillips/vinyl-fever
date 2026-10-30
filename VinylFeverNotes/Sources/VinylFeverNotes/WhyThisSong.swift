@@ -3,6 +3,7 @@ import Foundation
 public enum WhyThisSongAnswer: Equatable, Sendable {
   case withReason(batch: RecommendationBatch, track: RecommendationTrack)
   case stagedWithoutReason(batch: RecommendationBatch, track: RecommendationTrack)
+  case notPicked(batch: RecommendationBatch, track: RecommendationTrack)
   case notRecommended
   case recommendationsUnavailable
 }
@@ -15,16 +16,24 @@ public enum WhyThisSong {
   ) -> WhyThisSongAnswer {
     let matches = ledger.batches.flatMap { batch in
       batch.tracks.filter {
-        normalized($0.title) == normalized(song.title) && normalized($0.artist) == normalized(song.artist)
+        MusicFeedback.matches(
+          FeedbackSong(title: $0.title, artist: $0.artist),
+          FeedbackSong(title: song.title, artist: song.artist)
+        )
       }.map { (batch, $0) }
     }
-    let newestWithWhy = matches.filter { nonempty($0.1.why) != nil }
+    let recommendations = matches.filter { $0.1.picked != false }
+    let unpicked = matches.filter { $0.0.kind == "new-music-picks" && $0.1.picked == false }
+    let newestWithWhy = recommendations.filter { nonempty($0.1.why) != nil }
       .max { $0.0.recordedAt < $1.0.recordedAt }
     if let (batch, track) = newestWithWhy {
       return .withReason(batch: batch, track: track)
     }
-    if let (batch, track) = matches.max(by: { $0.0.recordedAt < $1.0.recordedAt }) {
+    if let (batch, track) = recommendations.max(by: { $0.0.recordedAt < $1.0.recordedAt }) {
       return .stagedWithoutReason(batch: batch, track: track)
+    }
+    if let (batch, track) = unpicked.max(by: { $0.0.recordedAt < $1.0.recordedAt }) {
+      return .notPicked(batch: batch, track: track)
     }
     return unreadableFileCount == 0 ? .notRecommended : .recommendationsUnavailable
   }
@@ -38,9 +47,14 @@ public enum WhyThisSong {
   ) -> String {
     switch answer {
     case let .withReason(batch, track):
-      let playlist = playlistPhrase(batch)
       let date = datePhrase(batch.recordedAt, now: now, calendar: calendar, timeZone: timeZone)
-      var text = "\(song.title) by \(song.artist) was in \(playlist), staged \(date). \(nonempty(track.why) ?? "")"
+      let intro: String
+      if batch.kind == "new-music-picks" {
+        intro = "\(song.title) by \(song.artist) was one of the chat's New Music picks on \(date)."
+      } else {
+        intro = "\(song.title) by \(song.artist) was in \(playlistPhrase(batch)), staged \(date)."
+      }
+      var text = "\(intro) \(nonempty(track.why) ?? "")"
       let likes = Array((track.like ?? []).prefix(3))
       if !likes.isEmpty {
         let names = likes.map { "\($0.title) by \($0.artist)" }
@@ -48,9 +62,14 @@ public enum WhyThisSong {
       }
       return text
     case let .stagedWithoutReason(batch, _):
-      let playlist = playlistPhrase(batch)
       let date = datePhrase(batch.recordedAt, now: now, calendar: calendar, timeZone: timeZone)
-      return "\(song.title) by \(song.artist) was in \(playlist), staged \(date), without a reason."
+      if batch.kind == "new-music-picks" {
+        return "\(song.title) by \(song.artist) was one of the chat's New Music picks on \(date), without a reason."
+      }
+      return "\(song.title) by \(song.artist) was in \(playlistPhrase(batch)), staged \(date), without a reason."
+    case let .notPicked(batch, _):
+      let date = datePhrase(batch.recordedAt, now: now, calendar: calendar, timeZone: timeZone)
+      return "The chat saw \(song.title) by \(song.artist) in New Music on \(date) and didn't pick it."
     case .notRecommended:
       return "Vinyl Fever didn't recommend \(song.title) by \(song.artist)."
     case .recommendationsUnavailable:
@@ -82,11 +101,6 @@ public enum WhyThisSong {
     case 2: "\(values[0]) and \(values[1])"
     default: "\(values.dropLast().joined(separator: ", ")) and \(values[values.count - 1])"
     }
-  }
-
-  private static func normalized(_ value: String) -> String {
-    value.trimmingCharacters(in: .whitespacesAndNewlines)
-      .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
   }
 
   private static func nonempty(_ value: String?) -> String? {

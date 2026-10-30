@@ -35,6 +35,59 @@ struct WhyThisSongTests {
     if case .withReason = result {} else { Issue.record("Expected normalized match") }
   }
 
+  @Test func newMusicPickedAndUnpickedSpokenGoldens() {
+    let picked = musicBatch(picked: true, why: "The chorus has a bright, loose energy.")
+    let answer = WhyThisSong.answer(for: song,
+      ledger: RecommendationLedgerReadResult(batches: [picked], skippedLines: 0), unreadableFileCount: 0)
+    guard case let .withReason(batch, track) = answer else { Issue.record("Expected the picked track's reason"); return }
+    let pickedText = WhyThisSong.spokenText(for: song, answer: .withReason(batch: batch, track: track),
+      now: Date(timeIntervalSince1970: 1_790_000_000), calendar: utcCalendar, timeZone: utc)
+    #expect(pickedText == "Starry Eyes by The Records was one of the chat's New Music picks on October 30. The chorus has a bright, loose energy.")
+
+    let unpicked = musicBatch(picked: false, why: "This reason must not be spoken.")
+    let unpickedAnswer = WhyThisSong.answer(for: song,
+      ledger: RecommendationLedgerReadResult(batches: [unpicked], skippedLines: 0), unreadableFileCount: 0)
+    guard case let .notPicked(unpickedBatch, unpickedTrack) = unpickedAnswer else {
+      Issue.record("Expected an unpicked outcome"); return
+    }
+    let unpickedText = WhyThisSong.spokenText(for: song,
+      answer: .notPicked(batch: unpickedBatch, track: unpickedTrack),
+      now: Date(timeIntervalSince1970: 1_790_000_000), calendar: utcCalendar, timeZone: utc)
+    #expect(unpickedText == "The chat saw Starry Eyes by The Records in New Music on October 30 and didn't pick it.")
+  }
+
+  @Test func pickedNewMusicWithoutReasonSpokenGolden() {
+    let picked = musicBatch(picked: true, why: nil)
+    let answer = WhyThisSong.answer(for: song,
+      ledger: RecommendationLedgerReadResult(batches: [picked], skippedLines: 0), unreadableFileCount: 0)
+    guard case let .stagedWithoutReason(batch, track) = answer else {
+      Issue.record("Expected the picked New Music track without a reason"); return
+    }
+    let spoken = WhyThisSong.spokenText(for: song,
+      answer: .stagedWithoutReason(batch: batch, track: track),
+      now: Date(timeIntervalSince1970: 1_790_000_000), calendar: utcCalendar, timeZone: utc)
+    #expect(spoken == "Starry Eyes by The Records was one of the chat's New Music picks on October 30, without a reason.")
+  }
+
+  @Test func stagedReasonBeatsNewMusicUnpickedAndUnreadableDoesNotHideNotPicked() {
+    let unpicked = musicBatch(picked: false, why: nil)
+    let staged = batch("Prior picks", day: 10, why: "An older staged recommendation.")
+    let preferred = WhyThisSong.answer(for: song,
+      ledger: RecommendationLedgerReadResult(batches: [unpicked, staged], skippedLines: 0), unreadableFileCount: 1)
+    if case .withReason = preferred {} else { Issue.record("Expected the staged recommendation reason") }
+
+    let onlyUnpicked = WhyThisSong.answer(for: song,
+      ledger: RecommendationLedgerReadResult(batches: [unpicked], skippedLines: 0), unreadableFileCount: 1)
+    if case .notPicked = onlyUnpicked {} else { Issue.record("Unreadable files must not hide a known unpicked result") }
+  }
+
+  @Test func matchingRecommendationStillAnswersWhenAnotherFileIsUnreadable() {
+    let recommendation = batch("Earlier", day: 1, why: "A reason.")
+    let answer = WhyThisSong.answer(for: song,
+      ledger: RecommendationLedgerReadResult(batches: [recommendation], skippedLines: 0), unreadableFileCount: 1)
+    if case .withReason = answer {} else { Issue.record("Expected the readable match to answer") }
+  }
+
   @Test func spokenTextFormatsLikeListsPlaylistAndLocalDate() {
     let batch = RecommendationBatch(recordedAt: date(1), host: "Mac", playlist: "New finds",
       tracks: [RecommendationTrack(artist: "The Records", title: "Starry Eyes", familiar: false,
@@ -113,4 +166,18 @@ struct WhyThisSongTests {
   }
 
   private func date(_ day: TimeInterval) -> Date { Date(timeIntervalSince1970: day * 86_400) }
+
+  private var utc: TimeZone { TimeZone(secondsFromGMT: 0)! }
+
+  private var utcCalendar: Calendar {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = utc
+    return calendar
+  }
+
+  private func musicBatch(picked: Bool, why: String?) -> RecommendationBatch {
+    RecommendationBatch(kind: "new-music-picks", recordedAt: Date(timeIntervalSince1970: 1_793_318_400),
+      host: "Mac", tracks: [RecommendationTrack(artist: "The Records", title: "Starry Eyes",
+        familiar: false, reasons: [], artistKnown: true, why: why, picked: picked)])
+  }
 }

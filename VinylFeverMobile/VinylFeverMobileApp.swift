@@ -18,6 +18,7 @@ private struct MobileSetupView: View {
   @State private var isImportingFolder = false
   @State private var lastNote = FeedbackLastNote.load()
   @State private var feedbackCheck: String?
+  @State private var whyCheck: String?
   @State private var whyPreviewChoices: [FeedbackSong] = []
   @State private var isPickingWhyPreview = false
 
@@ -52,7 +53,7 @@ private struct MobileSetupView: View {
           Button("Test Why This Song") {
             Task { await testWhyThisSong() }
           }
-          if let feedbackCheck { Text(feedbackCheck).foregroundStyle(.secondary) }
+          if let whyCheck { Text(whyCheck).foregroundStyle(.secondary) }
         }
         if let errorMessage {
           Section { Text(errorMessage).foregroundStyle(.red) }
@@ -74,7 +75,7 @@ private struct MobileSetupView: View {
         ForEach(Array(whyPreviewChoices.enumerated()), id: \.offset) { _, song in
           Button("\(song.title) by \(song.artist)") { Task { await previewWhyThisSong(for: song) } }
         }
-        Button("None of these", role: .cancel) { feedbackCheck = "No song picked. Nothing was saved." }
+        Button("None of these", role: .cancel) { whyCheck = "No song picked. Nothing was saved." }
       }
     }
   }
@@ -96,7 +97,7 @@ private struct MobileSetupView: View {
         FeedbackSong(title: $0.title, artist: $0.artistName, catalogID: $0.id.rawValue)
       }
     } catch {
-      feedbackCheck = "Recently played could not be read: \(error.localizedDescription)"
+      whyCheck = "Recently played could not be read: \(error.localizedDescription)"
       return
     }
     let result = MusicFeedback.identify(
@@ -152,11 +153,11 @@ private struct MobileSetupView: View {
           for: song, answer: answer, now: .now, calendar: .current, timeZone: .current
         )
       }
-      feedbackCheck = "\(text) Nothing was saved."
+      whyCheck = "\(text) Nothing was saved."
     } catch ProbeBookmarkError.folderNotSelected, ProbeBookmarkError.accessRefused {
-      feedbackCheck = "Open Vinyl Fever to grant folder access."
+      whyCheck = "Open Vinyl Fever to grant folder access."
     } catch {
-      feedbackCheck = "Recommendations could not be read: \(error.localizedDescription)"
+      whyCheck = "Recommendations could not be read: \(error.localizedDescription)"
     }
   }
 }

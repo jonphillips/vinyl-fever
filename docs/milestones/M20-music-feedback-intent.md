@@ -285,8 +285,9 @@ S1. **Dispatch 3: S2** ("Why this song?"; Jon's device gate). Jon moved it ahead
        `.<name>.icloud` placeholder. Stop waiting at the read deadline (Constants). Decode with
        `RecommendationLedgerCodec.readFiles`.
     4. **Find the song.** Match title and artist with `MusicFeedback.matches`, never IDs, across
-       all batches. Use the newest batch whose line has a `why`; if none has one, the newest
-       batch.
+       all batches. A line with `picked: false` is not a recommendation. Use this precedence:
+       newest recommended line with a `why`, newest recommended line, newest unpicked New Music
+       line, then not found.
     5. **Speak the answer** as the intent's dialog. The texts are fixed (golden tests):
        - **With a reason:** "*Title* by *Artist* was in *playlist*, staged *October 28*.
          *why*" and, when there are `like` songs, "The chat compared it with *Heaven or Not* by
@@ -295,10 +296,17 @@ S1. **Dispatch 3: S2** ("Why this song?"; Jon's device gate). Jon moved it ahead
        - **Staged without a reason:** "*Title* by *Artist* was in *playlist*, staged *October
          29*, without a reason."
        - A batch with no `playlist` says "in a staged batch".
+       - **Picked New Music, with a reason:** "*Title* by *Artist* was one of the chat's New
+         Music picks on *October 30*. *why*"; include `like` songs as above.
+       - **Picked New Music, without a reason:** "*Title* by *Artist* was one of the chat's New
+         Music picks on *October 30*, without a reason."
+       - **Only an unpicked New Music match:** "The chat saw *Title* by *Artist* in New Music on
+         *October 30* and didn't pick it." A known unpicked result answers even if another file
+         was unreadable.
        - **Not in the ledger, and every file was read:** "Vinyl Fever didn't recommend *Title*
          by *Artist*."
-       - **Not found, and a file couldn't be read in time:** "I can't read the recommendations
-         yet. Try again in a minute." Never "didn't recommend" (Decision 12).
+       - **Not found, and a file couldn't be read or no ledger file is listed:** "I can't read
+         the recommendations yet. Try again in a minute." Never "didn't recommend" (Decision 12).
        - **No folder access:** S1's "Open Vinyl Fever to grant folder access".
 
        The `request` isn't spoken (Decision 13). The date is in the device's time zone, with the
@@ -308,7 +316,7 @@ S1. **Dispatch 3: S2** ("Why this song?"; Jon's device gate). Jon moved it ahead
        the choices offered, the song asked about, the answer's kind, the batch's `recordedAt`
        and `playlist` when found, and how many ledger files were read and unreadable. The file
        name doesn't start with `notes`. If a live version or a remaster misses, this file shows
-       what the player said.
+       what the player said. A failed evidence write doesn't suppress the spoken answer.
   - **The ledger format moves to `VinylFeverNotes` (Decision 11).** Move `RecommendationTrack`,
     `RecommendationLike`, `RecommendationBatch`, `RecommendationCoverage`,
     `RecommendationLedgerReadResult`, and `RecommendationLedgerCodec` out of Core's
@@ -334,16 +342,18 @@ S1. **Dispatch 3: S2** ("Why this song?"; Jon's device gate). Jon moved it ahead
     - the lookup: a song with a `why`; a song only in a batch without a `why`; a newer batch
       without a `why` and an older one with it (the older one answers); not in the ledger; not
       found with an unreadable file (the "can't read" answer, never "didn't recommend"); found
-      even when another file is unreadable; title and artist matching across case and
-      diacritics;
+      even when another file is unreadable; an unpicked New Music line with an older staged
+      reason (the staged reason wins); an unpicked-only match with an unreadable file (the
+      `notPicked` answer); title and artist matching across case and diacritics;
     - the spoken text's golden strings: zero, one, two, and three `like` songs; no `playlist`;
       a date in this year and one in last year; a date near midnight UTC in a US time zone;
     - the Cancel guard: "Cancel cancel" and "cancel, cancel." write nothing; "Cancel culture is a
       bad name for a band" is still saved.
   - **App tests (`VinylFeverMobileTests`):** reading a temp folder with two ledger files, one
     named as a `.icloud` placeholder; a file that can't be read before the deadline (injected)
-    counts as unreadable; a missing bookmark returns the folder message; the evidence line's
-    golden JSON; the evidence file name doesn't start with `notes`.
+    counts as unreadable; missing or empty recommendations folders are unavailable; a missing
+    bookmark returns the folder message; a failed evidence write still returns the spoken answer;
+    the evidence line's golden JSON; the evidence file name doesn't start with `notes`.
   - **Core and `vf-mcp`:** the suites pass unchanged. `recommendationLedger()` reads a fixture
     folder through the moved codec with the same result.
   - **Builds:** iOS Simulator and device. The Mac app, Core, Listening, and `VinylFeverNotes`
@@ -357,6 +367,7 @@ S1. **Dispatch 3: S2** ("Why this song?"; Jon's device gate). Jon moved it ahead
     5. Once from the locked iPhone or through CarPlay.
     6. Music Feedback, saying "Cancel cancel": no note is saved. This also rechecks S1's gate
        step 4.
+    7. A New Music song the chat didn't pick: "The chat saw … and didn't pick it."
 
 ## Prerequisites (Jon, not the executor's)
 
@@ -384,6 +395,7 @@ S1. **Dispatch 3: S2** ("Why this song?"; Jon's device gate). Jon moved it ahead
 | Recently played read | newest 5 | One more than the pick list, for deduplication |
 | Staleness rule | missing or blank, not playing, or below a newer song in recently played | S0's 11 lines (Decision 8) |
 | Song match | title and artist, trimmed, case- and diacritic-insensitive | IDs switch between catalog and library (S0) |
+| Unpicked New Music (S2) | not a recommendation; answer after recommended matches | A chat pass isn't a recommendation (Decision 14) |
 | Ledger read deadline (S2) | 8 seconds, all files together | Siri waits on the intent; past this, "can't read yet" beats silence |
 | Which ledger line answers (S2) | newest batch whose line has a `why`, else newest batch | A later restaging without a reason shouldn't hide the reason |
 | Spoken `like` songs (S2) | all of them (the ledger keeps at most 3) | Two names read aloud in about five seconds |
@@ -464,3 +476,7 @@ Added 2026-10-30 with S2. Merging that plan PR approves them.
 13. **The batch's `request` isn't spoken.** Requests run about 200 characters and read as
     instructions to the chat. The playlist name and the date place the batch, and the `why`
     carries the reason. The audition view will show the request.
+14. **Unpicked New Music songs aren't recommendations.** `picked: false` records songs the chat
+    heard but passed over. They cannot answer as recommendations; if no recommended line matches,
+    say the chat saw the song in New Music and didn't pick it. This known result takes precedence
+    over unreadable files.

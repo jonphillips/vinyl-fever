@@ -4,7 +4,7 @@
 
 - Branch: `m20/s2-why-this-song`.
 - Moved recommendation ledger records and codec into `VinylFeverNotes`, added Foundation-only answer selection and spoken text, and exposed the “Why This Song” App Intent and setup preview. The intent shares S1 song identification, reads coordinated recommendation files including iCloud placeholders with an eight-second deadline, and appends per-device evidence under `Probes/why-<device>.jsonl`. Music Feedback now rejects notes made only of repeated “cancel” words.
-- VinylFeverNotes (19 tests), Core (299), Listening (55), Mac app (94), and iOS Simulator (10) passed; iOS Simulator and generic iOS device builds passed. `check-handoff` passes. Jon's six-step post-install iPhone/iPad gate remains owed. The next dispatch awaits the architect's plan PR.
+- VinylFeverNotes (23 tests), Core (299), Listening (55), Mac app (94), and iOS Simulator (14) passed; iOS Simulator and generic iOS device builds passed. `check-handoff` passes. Jon's seven-step post-install iPhone/iPad gate remains owed. The next dispatch awaits the architect's plan PR.
 
 ## 2026-10-29 — M20 · S1: Music Feedback intent
 
