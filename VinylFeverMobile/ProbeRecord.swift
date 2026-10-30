@@ -13,6 +13,12 @@ struct ProbeRecord: Codable, Equatable {
     return "feedback-\(safeName.isEmpty ? "device" : safeName).jsonl"
   }
 
+  static func whyFilename(for device: String) -> String {
+    let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+    let safeName = device.unicodeScalars.map { allowed.contains($0) ? String($0) : "-" }.joined()
+    return "why-\(safeName.isEmpty ? "device" : safeName).jsonl"
+  }
+
   struct Player: Codable, Equatable {
     var playbackStatus: String
     var playbackTime: Double?
@@ -49,6 +55,12 @@ struct ProbeRecord: Codable, Equatable {
   var staleReason: String? = nil
   var offeredChoices: [String]? = nil
   var savedSong: Entry? = nil
+  var askedSong: Entry? = nil
+  var recommendationAnswerKind: String? = nil
+  var recommendationRecordedAt: Date? = nil
+  var recommendationPlaylist: String? = nil
+  var recommendationFilesRead: Int? = nil
+  var recommendationFilesUnreadable: Int? = nil
 
   static func encodeLine(_ record: ProbeRecord) throws -> Data {
     let encoder = JSONEncoder()

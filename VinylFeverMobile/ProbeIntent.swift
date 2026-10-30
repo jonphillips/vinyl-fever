@@ -88,6 +88,12 @@ struct VinylFeverShortcuts: AppShortcutsProvider {
       shortTitle: "Music Feedback",
       systemImageName: "waveform"
     )
+    AppShortcut(
+      intent: WhyThisSongIntent(),
+      phrases: ["Why this song in \(.applicationName)", "Why did \(.applicationName) pick this"],
+      shortTitle: "Why This Song",
+      systemImageName: "questionmark.circle"
+    )
   }
 }
 

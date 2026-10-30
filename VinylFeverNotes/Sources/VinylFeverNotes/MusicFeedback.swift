@@ -73,8 +73,12 @@ public enum MusicFeedback {
   ) -> TasteNote? {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
-    let withoutTrailingPunctuation = trimmed.trimmingCharacters(in: .punctuationCharacters)
-    guard withoutTrailingPunctuation.caseInsensitiveCompare("cancel") != .orderedSame else { return nil }
+    let words = trimmed.split(whereSeparator: \.isWhitespace)
+    let isOnlyCancel = !words.isEmpty && words.allSatisfy { word in
+      let letters = word.unicodeScalars.filter { !CharacterSet.punctuationCharacters.contains($0) }
+      return String(String.UnicodeScalarView(letters)).caseInsensitiveCompare("cancel") == .orderedSame
+    }
+    guard !isOnlyCancel else { return nil }
     return TasteNote(
       notedAt: date,
       note: text,
