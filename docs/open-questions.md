@@ -114,7 +114,8 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
     `queue_tracks` vf-mcp tool resolves catalog IDs, logs the picks to the ledger, and writes a
     disposable queue request to iCloud Drive (the PlaylistInbox pattern); an iPhone intent then
     inserts the songs.
-  - **Why this song, and auditioning picks** (Jon, 2026-10-29). Two miles into a walk, a
+  - **Why this song, and auditioning picks** (Jon, 2026-10-29). *"Why this song?" is planned as
+    [M20 S2](milestones/M20-music-feedback-intent.md) (2026-10-30); the audition view comes after it.* Two miles into a walk, a
     recommended song comes on and Jon wants to know why the chat picked it. The answer is
     already on iCloud Drive: since M18 S2, each staged song's ledger line carries the chat's
     `why`, up to three `like` songs it was explained against (with `found`), and the batch's
