@@ -9,20 +9,22 @@ M20's shared rules still apply except where Decision 1 replaces one. Rules in
 `docs/ios/ui-and-platforms.md`. Where this doc and those conflict, stop and flag it.*
 
 Status: Dispatched
-Summary: S1 lists the staged playlists with their reasons, S2 plays them from the app, and S3 adds notes; Jon's gates can run together after S3.
+Summary: S1 lists the staged playlists with their reasons, S2 plays them, S3 files keepers into Jon's keepers playlists, and S4 adds notes; Jon's gates can run together after S4.
 
 M20 made the app a voice surface: "Why this song?" answers in the car, with the screen off.
 This milestone adds the surface for sitting down with a playlist. Jon opens Vinyl Fever and
 sees what the chat staged, what he asked for, and why each song is there. He taps a song to
 play the playlist from it, or taps a "sounds like" song to hear the comparison. When a song
-misses, he leaves a note from that row. The data is already on iCloud Drive, and the app
-already reads it (M20 S2). Three slices. They don't change `vf-mcp`, the Mac app, or any file
-format.
+misses, he leaves a note from that row. When one is a keeper, he files it from the same row
+into Vinyl Fever Keepers and its year's Selections, which is the keep signal the Mac already
+counts. The data is already on iCloud Drive, and the app already reads it (M20 S2). Four
+slices. They don't change `vf-mcp`, the Mac app, or any file format.
 
 ## The milestone in one sentence
 
 Jon opens Vinyl Fever on the iPad, picks a playlist the chat made, reads why each song is there,
-plays it from any song, and leaves a note on the one that missed, without opening the chat.
+plays it from any song, files the keepers, and leaves a note on the one that missed, without
+opening the chat or Music.
 
 ## What's true today (architect, read-only, 2026-10-30)
 
@@ -57,13 +59,22 @@ plays it from any song, and leaves a note on the one that missed, without openin
   in `project.yml` (the Mac app uses it), but the mobile target doesn't link it.
 - **Note sources are free text.** `taste_notes` and `check_tracks` read any `source`, so a new
   value needs no Mac change.
+- **Jon's keepers playlists accept added songs (read-only probe, 2026-10-30).** A scratch Mac
+  build ran `GET /v1/me/library/playlists` through `MusicDataRequest`. Of 146 playlists, 68
+  report `canEdit: true`, including all seven `<year>: Jon's Selections` (2020–2026), Vinyl
+  Fever Keepers, and the staged playlists. Subscription and Apple playlists report false.
+  `playlist-roles.json` labels 11 playlists `keepers`: the seven Selections, Vinyl Fever
+  Keepers, Alternative JP, Power Secret 80s, and Undeniable. The Mac already appends songs with
+  `POST /v1/me/library/playlists/{id}/tracks` (`appendToLibraryPlaylist`), but only to playlists
+  it created. Nothing was written.
 
 ## Shared rules (every slice)
 
 - **Nothing on the Mac changes.** No `vf-mcp`, Mac app, or format change. The ledger is read
   only; nothing on the phone writes it.
-- **The library doesn't change.** The view never adds, removes, or edits a song or a playlist.
-  From S2 on, it drives the player (Decision 1).
+- **The library changes only through Keep.** From S3 on, the view adds a song to the keepers
+  playlists Jon checks (Decision 5). It never removes a song, and it never creates, renames, or
+  edits a playlist. From S2 on, it drives the player (Decision 1).
 - **New Music picks aren't listed** (Decision 4). Only `staged-playlist` batches appear.
 - **M20's intents don't change.** Music Feedback and Why This Song behave exactly as they do
   today. The probe intent stays until M20 S1's gate passes (M20 Decision 10).
@@ -81,9 +92,9 @@ plays it from any song, and leaves a note on the one that missed, without openin
 ## Slices
 
 **Dispatch 1: S1** (the list and the reasons). **Dispatch 2: S2** (artwork and playback).
-**Dispatch 3: S3** (notes). Each completing PR advances `NEXT_UP.md` to the next slice. They
-don't wait on Jon's gates. The gates can run in one sitting after S3, or one at a time if Jon
-wants to see S1 sooner.
+**Dispatch 3: S3** (Keep; added by Jon 2026-10-30). **Dispatch 4: S4** (notes). Each completing
+PR advances `NEXT_UP.md` to the next slice. They don't wait on Jon's gates. The gates can run in
+one sitting after S4, or one at a time if Jon wants to see a slice sooner.
 
 - [ ] **S1 — The playlists and their reasons.**
   - **The home screen.** The app opens on **Playlists**, in a `NavigationSplitView`: the
@@ -197,7 +208,74 @@ wants to see S1 sooner.
     6. After the next hourly poll, `recent_listening` in a new chat shows the songs played from
        the app.
 
-- [ ] **S3 — Notes from the playlist.**
+- [ ] **S3 — Keep: file a song into Jon's keepers playlists.** *(Jon, 2026-10-30.)*
+  - **The Keep button.** Each song row that S2 resolved has a **Keep** button. It opens a sheet
+    headed with the song's title and artist, listing Jon's keepers playlists, each with a
+    checkmark:
+    1. **Vinyl Fever Keepers**, checked.
+    2. **The Selections for the song's release year,** `<year>: Jon's Selections`, checked, when
+       the year is 2020 or later and that playlist is listed. The year is the ledger's `year`,
+       else the resolved song's release date. With no year, no Selections is checked.
+    3. The other keepers playlists, unchecked, by name.
+
+    **Save** adds the song to every checked playlist. **Cancel** writes nothing. This is the
+    feedback guide's filing rule for a chat playlist, built in.
+  - **Which playlists (Decision 10).** The `keepers` entries in
+    `Taste Intelligence/playlist-roles.json`, read through the bookmark with a coordinated read,
+    matched by exact name to a library playlist from `GET /v1/me/library/playlists` whose
+    `canEdit` is true. A keepers name with no editable match isn't listed. If the roles file
+    can't be read, list the editable playlists named "Vinyl Fever Keepers" or matching the
+    Selections pattern (`SelectionPlaylistName.pattern`), with the line "Couldn't read your
+    playlist roles, so only Selections and Vinyl Fever Keepers are shown."
+  - **Already there.** When the sheet opens, read the tracks of the listed playlists
+    (`GET /v1/me/library/playlists/{id}/tracks`, paged) and match title and artist. A playlist
+    that already holds the song shows "Already there", checked and disabled, and Save skips it.
+    Keep the playlist list and track lists in memory for the session, and re-read a playlist
+    after saving to it.
+  - **Adding (Decision 9).** `POST /v1/me/library/playlists/{id}/tracks` through
+    `MusicDataRequest`, with the body the Mac sends (`AppleMusicPlaylistRequestEncoder.appendBody`).
+    The reference is the resolved song's ID: type `songs` for a catalog ID, `library-songs` for a
+    library ID (`i.…`). One request per checked playlist. If one fails, the others stay done, and
+    the sheet says which failed and the API's reason.
+  - **After saving.** The row shows "Kept in Vinyl Fever Keepers and 2023: Jon's Selections" (the
+    playlists just saved to) for the rest of the session. The Mac counts the keep at its next
+    library snapshot refresh, exactly as if Jon had filed it in Music.
+  - **No undo in the app.** The API can add a song to a library playlist but not remove one. The
+    sheet's footer says "To take a song back out, use Music."
+  - **Shared code moves to `VinylFeverNotes`,** as M20 moved the note and ledger formats:
+    `AppleMusicPlaylistRequestEncoder`, `PlaylistSongReference`, and the source enum it uses;
+    `PlaylistRole`, `PlaylistRoleEntry`, `PlaylistRoles`, `PlaylistRolesCodec`, and
+    `SelectionPlaylistName`. Core re-exports the package, so no Mac or `vf-mcp` call site
+    changes. `PlaylistRoles.swift` also holds code that needs `VinylFeverListening`; that code
+    stays in Core. If a moved type turns out to need more than Foundation, stop and report what
+    blocks it.
+  - **Music access.** Without MusicKit authorization there's no Keep button, as with S2's play
+    buttons.
+
+  **DoD:**
+  - **Package tests:** the moved encoder's append body is byte-identical to before the move, for
+    a catalog and a library reference; the roles codec decodes a fixture shaped like the real
+    file; the sheet's list: Vinyl Fever Keepers first and checked, the year's Selections checked
+    for 2023 and absent for 2019, nothing pre-checked without a year, the other keepers by name,
+    a non-editable keepers playlist left out, and the fallback list when the roles file is
+    unreadable.
+  - **App tests,** with the API client stubbed: Save posts once to each checked playlist without
+    the song, with the right reference type for a catalog ID and a library ID; "Already there"
+    is disabled and skipped; one failed post reports that playlist and keeps the others;
+    Cancel posts nothing; no authorization, no Keep button.
+  - **Core and `vf-mcp`:** the suites pass unchanged, including the Mac's playlist-creation body
+    tests.
+  - **Builds:** iOS Simulator and device. All suites pass.
+  - **Jon's gate** (use songs you actually want to keep: these are real keeps):
+    1. In a staged playlist, Keep a song released in 2020 or later. Vinyl Fever Keepers and that
+       year's Selections are checked. Save, then check both playlists in Music.
+    2. Keep a song released before 2020: only Vinyl Fever Keepers is checked.
+    3. Open Keep on the first song again: both playlists say "Already there".
+    4. Subscription playlists and Apple's never appear in the sheet.
+    5. On the laptop, refresh the library snapshot. In a new chat, `kept_and_passed` lists both
+       songs as kept.
+
+- [ ] **S4 — Notes from the playlist.**
   - **Leave a note.** Each song row has a **Note** button. It opens a sheet with the song's
     title and artist and a text field. The keyboard's dictation works there. **Save** writes a
     `vf-taste-note` v1 line through `MusicFeedback.makeNote`, with `source: playlist`, to the
@@ -243,13 +321,13 @@ wants to see S1 sooner.
 | Catalog search results | first 5 | Enough for a remaster or a live version to sort below the original |
 | Resolve ahead | the visible rows plus one screenful | 200 songs shouldn't mean 200 requests up front |
 | Note `source` from the view | `playlist` | Tells a sit-down note from a voice note; any source is read |
+| Keep targets (S3) | the `keepers` entries in `playlist-roles.json`, editable, matched by exact name | The playlists the Mac counts as kept (Decision 10) |
+| Pre-checked (S3) | Vinyl Fever Keepers; the year's Selections when the year is 2020 or later | The feedback guide's filing rule; Selections start in 2020 |
 
 ## Out of scope — with destinations
 
-- **A Keep button** (file the song into Vinyl Fever Keepers or its year's Selections). → A
-  probe after S2's gate, if Jon wants it. Filing is the whole keep signal (feedback guide), so
-  it would be the best button here. But it writes the library, and it isn't known whether
-  MusicKit can add to a playlist the app didn't create.
+- **Taking a song back out of a keepers playlist.** → In Music. The API can't remove songs from
+  a library playlist (S3).
 - **Heard, kept, and passed on each song.** → After this milestone, if Jon wants it. It needs
   keepers membership and the listening log on the phone. M18's outcomes report it on the Mac
   today.
@@ -258,8 +336,8 @@ wants to see S1 sooner.
 - **Catalog IDs on new ledger lines.** → If S2's gate step 4 finds misses (M20's parked item).
 - **A note on a whole playlist** ("this one's too samey"). → If Jon wants it. It needs a
   `playlist` key on the note, which is a format change.
-- **Opening the view from Why This Song,** at the song Siri named. → After S3, if wanted.
-- **A Vinyl Fever look** (a mockup, then a theme and a visual slice). → After S3's gate
+- **Opening the view from Why This Song,** at the song Siri named. → After S4, if wanted.
+- **A Vinyl Fever look** (a mockup, then a theme and a visual slice). → After S4's gate
   (Decision 8).
 - **Removing the probe intent.** → Still M20's: the first slice after M20 S1's gate.
 
@@ -281,8 +359,11 @@ Added 2026-10-30 with M21. Merging this plan PR approves them.
 4. **New Music picks aren't listed.** The chat's picks are a blind test of its judgment on new
    releases (M18 Decision 1). A list would show every pick before Jon listens. Why This Song
    still answers about a picked song when Jon asks about that one song.
-5. **No library writes yet.** Filing in Music stays the keep signal. A Keep button waits for a
-   probe (Out of scope).
+5. **Keep writes the library, and only that way (Jon, 2026-10-30).** This replaces the first
+   plan's "no library writes yet". Filing a song in a keepers playlist is the whole keep signal
+   (the feedback guide), and Jon wants to file from the playlist he's auditioning. Keep only
+   adds a song to playlists Jon checks. The Mac sees it at the next snapshot, the same as a keep
+   made in Music.
 6. **Notes from the view go in the device's existing `notes-feedback-<device>.jsonl`.** One
    app on one device appends to it, with coordination, so M20 Decision 1's one writer per file
    still holds. `source: playlist` tells these notes from voice notes, and the Mac reads any
@@ -292,3 +373,10 @@ Added 2026-10-30 with M21. Merging this plan PR approves them.
 8. **Structure first, look later.** House process (`ui-and-platforms.md`, *Visual craft*):
    build the behavior in default styling, prove it on device, then make a mockup and a
    Vinyl Fever theme. Polishing a screen whose structure may still move is wasted.
+9. **Keep goes through the Apple Music API, as the Mac's playlist code does.** The read-only
+   probe shows every Selections playlist and Vinyl Fever Keepers as `canEdit: true`, and the
+   Mac already appends with the same request and body. MusicKit's `MusicLibrary.add(_:to:)`
+   hasn't been tried on a playlist the app didn't create, so it isn't used.
+10. **Jon's playlist roles decide where Keep can file.** `keepers` is the label the Mac counts
+    as kept, so a keep from the phone always counts, and a new keepers playlist appears in the
+    sheet as soon as Jon labels it on the Mac.
