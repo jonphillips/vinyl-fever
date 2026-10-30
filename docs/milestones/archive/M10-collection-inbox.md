@@ -8,9 +8,9 @@ out of the Inbox once the append certifies. This is dogfooding feedback from rea
 use (2026-07-10): compilation albums exist to keep one-hit-wonders off the Artists
 list, policies made appends "drop and don't look back," and the last friction is
 having to marshal each one-off song into a folder to append it. Rules in
-[../technical-architecture.md](../technical-architecture.md),
-[../metadata-policy-model.md](../metadata-policy-model.md),
-[../app-areas.md](../app-areas.md), and `/Users/jon/code/jon-platform/AGENTS.md`
+[../technical-architecture.md](../../technical-architecture.md),
+[../metadata-policy-model.md](../../metadata-policy-model.md),
+[../app-areas.md](../../app-areas.md), and `/Users/jon/code/jon-platform/AGENTS.md`
 apply; where this doc and those conflict, stop and flag it.*
 
 ## The milestone in one sentence
@@ -50,9 +50,9 @@ The groundwork makes this a wire, not a build:
   Inbox adds exactly one safe action there: trash the staged copies — safe *because
   the Inbox is app-owned*, unlike a user-picked source folder.
 - **`FileSystemClient` is the template for the store.**
-  ([FileSystemClient.swift](../../VinylFeverCore/Sources/VinylFeverCore/Clients/FileSystemClient.swift))
+  ([FileSystemClient.swift](../../../VinylFeverCore/Sources/VinylFeverCore/Clients/FileSystemClient.swift))
   — a `@DependencyClient` of pure filesystem ops, tested against temp dirs
-  ([FileSystemClientTests.swift](../../VinylFeverCore/Tests/VinylFeverCoreTests/FileSystemClientTests.swift)).
+  ([FileSystemClientTests.swift](../../../VinylFeverCore/Tests/VinylFeverCoreTests/FileSystemClientTests.swift)).
   The Inbox store is a sibling.
 
 ## The spine (load-bearing shape)
@@ -132,7 +132,7 @@ Everything lands in `VinylFeverCore`. `FileSystemClient` is the structural templ
 
 | File | Change | Template / anchor |
 | --- | --- | --- |
-| `Clients/CollectionInboxClient.swift` *(new)* | `@DependencyClient` with `stagingDirectory(albumID:) -> URL`, `stage(files:albumID:) -> [URL]`, `contents(albumID:) -> [URL]`, `summary() -> [InboxAlbumSummary]`, `drain(albumID:)`; live value resolves the root via `FileManager.default.url(for: .applicationSupportDirectory, …)` + `VinylFever/Inbox`, with an injectable root for tests | [FileSystemClient.swift](../../VinylFeverCore/Sources/VinylFeverCore/Clients/FileSystemClient.swift) shape + `DependencyValues` accessor |
+| `Clients/CollectionInboxClient.swift` *(new)* | `@DependencyClient` with `stagingDirectory(albumID:) -> URL`, `stage(files:albumID:) -> [URL]`, `contents(albumID:) -> [URL]`, `summary() -> [InboxAlbumSummary]`, `drain(albumID:)`; live value resolves the root via `FileManager.default.url(for: .applicationSupportDirectory, …)` + `VinylFever/Inbox`, with an injectable root for tests | [FileSystemClient.swift](../../../VinylFeverCore/Sources/VinylFeverCore/Clients/FileSystemClient.swift) shape + `DependencyValues` accessor |
 | same | `InboxAlbumSummary { albumID: CompilationAlbum.ID; fileCount: Int }` value type | — |
 | copy op | `FileManager.default.copyItem`; on collision append ` (2)`, ` (3)`… deterministically; return staged URLs | the collision rule is the one easy-to-get-wrong bit — call it out in review |
 | drain op | resolve album subfolder, assert it is under the Inbox root, `FileManager.default.trashItem` each entry (or the subfolder) | the "under-root only" guard is a safety assertion, tested |
@@ -149,7 +149,7 @@ end-to-end template.
 
 Edits:
 
-- **[CollectionsView.swift](../../VinylFever/Features/Collections/CollectionsView.swift)**
+- **[CollectionsView.swift](../../../VinylFever/Features/Collections/CollectionsView.swift)**
   — make the compilation-album a **drop destination** for audio file URLs. Primary
   gesture: dropping onto a `CompilationAlbumRow` in the list stages to *that* album and
   selects it (matches "drag a song onto one of the Collections"); at minimum, a drop
@@ -162,7 +162,7 @@ Edits:
   non-blocking notice in the drop zone ("No policy bound — dropped tracks get
   compilation identity but no recipe cleanup. Bind a policy to auto-tag."). The drop
   still works (compilation stamping applies regardless).
-- **[AppModel.swift](../../VinylFever/Features/AppShell/AppModel.swift)** — in the
+- **[AppModel.swift](../../../VinylFever/Features/AppShell/AppModel.swift)** — in the
   certified-append success branch of `appendCompilationToMusic`
   ([`:1054`](../../VinylFever/Features/AppShell/AppModel.swift:1054)), after
   `clearCompilationAppendScratch()`, if the just-appended `sourceFolder` is under the
@@ -180,14 +180,14 @@ the compilation-append test support. Pure-view/drop-plumbing code stays untested
 
 App layer only.
 
-- **[CollectionsView.swift](../../VinylFever/Features/Collections/CollectionsView.swift)**
+- **[CollectionsView.swift](../../../VinylFever/Features/Collections/CollectionsView.swift)**
   — an `InboxSummarySection` near the top of the Collections screen driven by
   `collectionInboxClient.summary()` (refresh on append/drain and on appear). Rows: album
   title (resolve `albumID` → registry entry) + pending count, with a per-row **Clear**
   calling `drain(albumID:)` behind a confirmation. Aggregate line: total staged / "Inbox
   empty." Orphan handling: a `summary` entry whose `albumID` no longer resolves renders
   as "Unknown album" with a Clear.
-- **[AppModel.swift](../../VinylFever/Features/AppShell/AppModel.swift)** — a
+- **[AppModel.swift](../../../VinylFever/Features/AppShell/AppModel.swift)** — a
   `refreshInboxSummary()` that loads `summary()` into observable state; call it after
   stage, after certified-append drain, and on the Collections `.task`.
 

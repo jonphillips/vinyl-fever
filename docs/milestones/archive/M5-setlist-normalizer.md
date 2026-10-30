@@ -1,7 +1,7 @@
 # Milestone 5 — Setlist Normalizer (raw notes → `setlist.txt`)
 
 *Build order for the executor. Architect/editor-in-chief: this doc is the contract.
-The resolved spec is in [../setlist-formatting-rules.md](../setlist-formatting-rules.md)
+The resolved spec is in [../setlist-formatting-rules.md](../../setlist-formatting-rules.md)
 (**Automation Implications** onward — the sandwich, the LLM output contract, the
 controlled source vocabulary, the resolved decisions), the model boundary is
 `/Users/jon/code/jon-platform/packages/LLMClientKit`, and the house stance is
@@ -273,7 +273,7 @@ pastes raw notes, sees the preview + dropped audit, approves, and a correct
 - **Controlled source vocabulary is fixed by the spec** (`(SBD)`, `(D-SBD)`,
   `(DSBD)`, `(AUD)`, `(FM)`, `(ALD)`, `(Matrix)`, `(SBD/ALD)`, `(SBD/AUD)`,
   `(unknown)`, …). The validator draws from it; do not extend it in code without
-  updating [../setlist-formatting-rules.md](../setlist-formatting-rules.md) first.
+  updating [../setlist-formatting-rules.md](../../setlist-formatting-rules.md) first.
 - **Grouping delimiter = ` | `** (inherited from the policy doc; a `|` *inside* a
   token is a validation failure, not a silent join).
 - **Source of truth = the media.** Use the structured numbered/disc list; drop

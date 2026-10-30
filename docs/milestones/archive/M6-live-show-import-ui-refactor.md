@@ -3,7 +3,7 @@
 *UX refactor of the existing live-show import surface (Phase 5 —
 [M1](M1-live-show-plan-preview.md)/[M2](M2-live-show-apply-convert.md)/[M3](M3-import-and-library-verify.md)).
 No new capability, no schema change, no core-logic change — this restructures
-`LiveShowsView` only. Rules in [../technical-architecture.md](../technical-architecture.md)
+`LiveShowsView` only. Rules in [../technical-architecture.md](../../technical-architecture.md)
 and `/Users/jon/code/jon-platform/AGENTS.md` still apply; where this doc and those
 conflict, stop and flag it.*
 

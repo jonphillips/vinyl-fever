@@ -1,7 +1,7 @@
 # Milestone 18 — Taste outcomes (what Jon keeps, by source)
 
 *Measure what happens to the songs Jon is shown: which ones he keeps, from which source, and how
-new they were. It builds on [M17](M17-taste-intelligence.md), whose shared rules still apply, and
+new they were. It builds on [M17](archive/M17-taste-intelligence.md), whose shared rules still apply, and
 on the design in [../taste-intelligence.md](../taste-intelligence.md). Where this doc and the
 design conflict, this doc's Decisions win. Rules in
 [../technical-architecture.md](../technical-architecture.md) and
@@ -32,7 +32,7 @@ Summary: Seven slices are dispatched, and an eighth is decided at S2's gate.
   song, and `check_tracks` also returns the open questions. At S6's gate the chat skipped both
   the years and the question. Added 2026-10-29; it runs after S7.
 
-Vinyl Fever still makes no model calls and stores no scores. [M19](M19-backups.md)'s backup
+Vinyl Fever still makes no model calls and stores no scores. [M19](archive/M19-backups.md)'s backup
 slice runs between S1 and S2 (M19 Decision 7).
 
 ## The milestone in one sentence

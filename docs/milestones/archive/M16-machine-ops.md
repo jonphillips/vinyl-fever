@@ -2,7 +2,7 @@
 
 *Give Vinyl Fever's database its own file that no build can erase, and turn the setup guide into
 two scripts. S0 runs as soon as M13 S3 merges, ahead of anything else; see Decision 5. Rules in
-[../technical-architecture.md](../technical-architecture.md) and
+[../technical-architecture.md](../../technical-architecture.md) and
 `/Users/jon/code/jon-platform/AGENTS.md` apply. Where this doc and those conflict, stop and flag
 it.*
 
@@ -14,7 +14,7 @@ Debug build. Launching any Debug build older than the newest migration silently 
 S0 moves the database to a Vinyl Fever path, adopts the old file without deleting it, and
 replaces silent erasure with a loud refusal and a backup. S1 adds `scripts/install-vinyl-fever`
 (build, verify, install, restart, smoke test). S2 adds `scripts/setup-mac`, which checks a Mac
-against [the setup guide](../setup/README.md) and applies the steps that can be automated. Three
+against [the setup guide](../../setup/README.md) and applies the steps that can be automated. Three
 slices in three dispatches.
 
 ## The milestone in one sentence
@@ -74,7 +74,7 @@ S4, and S4's advances it to M18 S2.
     - **Merged migrations are immutable.** Add a line to `technical-architecture.md` (Persistence).
       A migration being edited on a branch only meets temporary test databases.
   - Settings → Chat Access shows the database path under the snapshot path.
-  - Update [the setup guide](../setup/README.md) (*Moving to a replacement Mac*) to the new
+  - Update [the setup guide](../../setup/README.md) (*Moving to a replacement Mac*) to the new
     path.
 
   **DoD:**
@@ -134,7 +134,7 @@ S4, and S4's advances it to M18 S2.
 - [x] **S2 — `scripts/setup-mac` (check, then apply what can be automated).** Both device gates
   passed (laptop 2026-10-21, Intel mini 2026-10-22).
   - `setup-mac [--role build,chat,poll] [--apply]`. The default is a read-only report: one line
-    per step from [the setup guide](../setup/README.md), marked passed, failed, or manual, with
+    per step from [the setup guide](../../setup/README.md), marked passed, failed, or manual, with
     the guide's anchor for each one that isn't passed.
   - Constants live in `scripts/machine.conf` (not secret): the team ID, the profile names, the
     tunnel ID, the tunnel profile name, and the Homebrew packages. The guide points to it.

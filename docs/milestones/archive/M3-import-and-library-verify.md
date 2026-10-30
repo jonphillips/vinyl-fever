@@ -1,8 +1,8 @@
 # Milestone 3 — Import into Apple Music + library-level verify
 
 *Build order for Codex. Architect/editor-in-chief: this doc is the contract; the
-strategic arc is in [../implementation-plan.md](../implementation-plan.md)
-(Phase 5), the rules in [../technical-architecture.md](../technical-architecture.md)
+strategic arc is in [../implementation-plan.md](../../implementation-plan.md)
+(Phase 5), the rules in [../technical-architecture.md](../../technical-architecture.md)
 (see **Music.app Integration** + **Verification Surface**) and
 `/Users/jon/code/jon-platform/AGENTS.md`. Where this doc and those conflict, stop
 and flag it — don't silently diverge.*

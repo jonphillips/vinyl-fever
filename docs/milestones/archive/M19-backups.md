@@ -2,7 +2,7 @@
 
 *Keep a second copy of every file Vinyl Fever can't rebuild, made every day without Jon doing
 anything, in a place that fails differently from the original. Rules in
-[../technical-architecture.md](../technical-architecture.md) and
+[../technical-architecture.md](../../technical-architecture.md) and
 `/Users/jon/code/jon-platform/AGENTS.md` apply. Where this doc and those conflict, stop and flag
 it.*
 
@@ -107,7 +107,7 @@ completing PR advances `NEXT_UP.md` to M16 S4 (added 2026-10-25), which runs bef
   - **`scripts/setup-mac`:** add warn-only checks. Warn when Time Machine has no destination or
     its newest snapshot is older than 7 days, and when the newest daily set is older than 2
     days.
-  - **Docs:** add *Backups and restoring* to [the setup guide](../setup/README.md): what's in a
+  - **Docs:** add *Backups and restoring* to [the setup guide](../../setup/README.md): what's in a
     set, where the sets are, and how to restore.
     - **The database:** quit the app, turn off the agent, then copy the set's file over
       `VinylFever.sqlite` and remove its `-wal` and `-shm`.

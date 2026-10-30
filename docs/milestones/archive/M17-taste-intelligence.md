@@ -3,8 +3,8 @@
 *Turn the evidence Jon already produces into something the chat can reason from: his playlists
 with their roles, what Apple's New Music put in front of him each week and what he kept, and
 his own words about songs. The design, its evidence, and S0's probe results are in
-[../taste-intelligence.md](../taste-intelligence.md); this doc is the build order. Rules in
-[../technical-architecture.md](../technical-architecture.md) and
+[../taste-intelligence.md](../../taste-intelligence.md); this doc is the build order. Rules in
+[../technical-architecture.md](../../technical-architecture.md) and
 `/Users/jon/code/jon-platform/AGENTS.md` apply. Where this doc and those conflict, stop and flag
 it.*
 
@@ -383,7 +383,7 @@ next. S2 and S3 both edit `vf-mcp`, so they can't run side by side.
   Settings.
 - [ ] Keep adding to Selections, and use Favorite and Suggest Less. They feed S2.
 - [ ] After S2: rebuild the VF Listening Poller and install it on the mini
-  ([poller setup](../listening/POLLER-SETUP.md)) before Friday 2026-10-30, when New Music next
+  ([poller setup](../../listening/POLLER-SETUP.md)) before Friday 2026-10-30, when New Music next
   turns over. Until then, no week is saved. Then refresh the snapshot once in Vinyl Fever on the
   laptop, so the curation log writes its baseline line.
 
@@ -405,7 +405,7 @@ next. S2 and S3 both edit `vf-mcp`, so they can't run side by side.
 - **The outcomes milestone:** the recommendation ledger's familiarity field, discovery yield,
   Apple's recommendations and similar artists as candidate sources, `taste_evidence`,
   `neglected_keepers`, and reading ratings through the API. → Planned as
-  [M18](M18-taste-outcomes.md) (2026-10-25). The ledger goes first, and the comparison with New
+  [M18](../M18-taste-outcomes.md) (2026-10-25). The ledger goes first, and the comparison with New
   Music is redrawn (M18 Decision 1).
 - **"Recommended before" in `check_tracks`.** → M18 S1, with the ledger.
 - **Matching kept and passed by catalog ID.** → Only if `kept_and_passed` shows song-key misses

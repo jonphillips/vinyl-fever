@@ -3,7 +3,7 @@
 *Build a playlist with ChatGPT, paste its output into Vinyl Fever, review every
 catalog match, and create an Apple Music library playlist from the confirmed songs.
 Dispatch 1 is the current `NEXT_UP.md`. Rules in
-[../technical-architecture.md](../technical-architecture.md) and
+[../technical-architecture.md](../../technical-architecture.md) and
 `/Users/jon/code/jon-platform/AGENTS.md` apply. Where this doc and those
 conflict, stop and flag it.*
 

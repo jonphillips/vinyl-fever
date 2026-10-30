@@ -1,11 +1,11 @@
 # Milestone 7 — Collection Recipes
 
-*First implementation of the [Collection Recipes](../collection-recipes.md)
+*First implementation of the [Collection Recipes](../../collection-recipes.md)
 design: per-collection, user-authored metadata rules that emit a `ProposedTags`
 delta into the existing apply-with-preview rail. New schema (one table) and one
 new `VinylFeverCore` pipeline; no change to the write rail, the preview, or the
-live-show flow. Rules in [../technical-architecture.md](../technical-architecture.md),
-[../metadata-policy-model.md](../metadata-policy-model.md), and
+live-show flow. Rules in [../technical-architecture.md](../../technical-architecture.md),
+[../metadata-policy-model.md](../../metadata-policy-model.md), and
 `/Users/jon/code/jon-platform/AGENTS.md` apply; where this doc and those
 conflict, stop and flag it.*
 
@@ -24,9 +24,9 @@ model-off half first.**
 The compilation-album append policy and the setlist normalizer both landed, which
 means the two templates this milestone clones already exist and are proven: the
 `compilationAlbums` table
-([Schema.swift](../../VinylFeverCore/Sources/VinylFeverCore/Database/Schema.swift))
+([Schema.swift](../../../VinylFeverCore/Sources/VinylFeverCore/Database/Schema.swift))
 for a small per-collection registry, and
-[SetlistNormalizer.swift](../../VinylFeverCore/Sources/VinylFeverCore/Normalizing/SetlistNormalizer.swift)
+[SetlistNormalizer.swift](../../../VinylFeverCore/Sources/VinylFeverCore/Normalizing/SetlistNormalizer.swift)
 for the extract→classify→validate sandwich with its degrade-to-review floor.
 Critically, the anti-hallucination guard this feature needs — "the proposed value
 must appear verbatim in the filename" — is already written and tested as
@@ -37,7 +37,7 @@ class of rule into a first-class, previewable, per-collection app surface.
 
 ## Scope
 
-Full design in [../collection-recipes.md](../collection-recipes.md). The moving
+Full design in [../collection-recipes.md](../../collection-recipes.md). The moving
 parts:
 
 - **`collectionPolicies` table** (minimal: `id`, `name`, `details`) — the FK
@@ -47,7 +47,7 @@ parts:
   delete), name, pattern, captureName, targetField, op, affixTemplate,
   useModel, prompt, enabled }`.
 - **`CollectionRecipe`** model; `targetField` is the existing
-  [`ProposedTags.Field`](../../VinylFeverCore/Sources/VinylFeverCore/Model/ShowPlan.swift)
+  [`ProposedTags.Field`](../../../VinylFeverCore/Sources/VinylFeverCore/Model/ShowPlan.swift)
   so there is no translation layer to the write rail.
 - **`CollectionRecipeRunner`** client seam (one file in → optional
   `RecipeProposal` out), whose `liveValue` runs the four bookends. Stage 3 reuses
@@ -95,9 +95,9 @@ template already in the tree:
 
 | File | Contents | Template |
 | --- | --- | --- |
-| `Model/CollectionPolicy.swift` | `@Table struct CollectionPolicy { let id: UUID; var name; var details }` | [CompilationAlbum.swift](../../VinylFeverCore/Sources/VinylFeverCore/Model/CompilationAlbum.swift) |
+| `Model/CollectionPolicy.swift` | `@Table struct CollectionPolicy { let id: UUID; var name; var details }` | [CompilationAlbum.swift](../../../VinylFeverCore/Sources/VinylFeverCore/Model/CompilationAlbum.swift) |
 | `Model/CollectionRecipe.swift` | `@Table struct CollectionRecipe` (schema columns) + `Op` enum + `affixTemplate` `{value}` substitution | `CompilationAlbum.swift` |
-| `Recipes/CollectionRecipeRunner.swift` | `@DependencyClient` seam + `liveValue` **model-off path** (extract → validate → emit) | [SetlistNormalizer.swift](../../VinylFeverCore/Sources/VinylFeverCore/Normalizing/SetlistNormalizer.swift) minus `ModelClient` |
+| `Recipes/CollectionRecipeRunner.swift` | `@DependencyClient` seam + `liveValue` **model-off path** (extract → validate → emit) | [SetlistNormalizer.swift](../../../VinylFeverCore/Sources/VinylFeverCore/Normalizing/SetlistNormalizer.swift) minus `ModelClient` |
 
 Enum columns (`op`, `targetField`) store as raw text and expose a typed accessor,
 the way `CompilationAlbum.ruleset` projects onto flat columns — do **not** add
@@ -105,14 +105,14 @@ custom SQLite codecs.
 
 Two edits to existing files:
 
-- **[Schema.swift](../../VinylFeverCore/Sources/VinylFeverCore/Database/Schema.swift)**
+- **[Schema.swift](../../../VinylFeverCore/Sources/VinylFeverCore/Database/Schema.swift)**
   — two `registerMigration` blocks, `collectionPolicies` **before**
   `collectionRecipes` (FK order), each mirroring the `compilationAlbums`
   migration. `eraseDatabaseOnSchemaChange` (DEBUG) keeps this additive-safe in
   dev.
 - **Shared verbatim guard** — `evidenceAppears(_:in:)` is currently a `static
   func` on
-  [SetlistNormalizationValidator.swift:112](../../VinylFeverCore/Sources/VinylFeverCore/Normalizing/SetlistNormalizationValidator.swift).
+  [SetlistNormalizationValidator.swift:112](../../../VinylFeverCore/Sources/VinylFeverCore/Normalizing/SetlistNormalizationValidator.swift).
   Extract it to a small shared helper (e.g. a free function or `TextEvidence`
   type) so the recipe validator and the setlist validator share one
   implementation rather than duplicating the check. **This is the only refactor
@@ -142,9 +142,9 @@ and deliberately not implying a binding that isn't built.
 
 The flow mirrors compilation append end-to-end (registry → folder-pick → read tags →
 build plan → preview diffs → apply), so every step has a proven template in
-[CollectionsView.swift](../../VinylFever/Features/Collections/CollectionsView.swift)
+[CollectionsView.swift](../../../VinylFever/Features/Collections/CollectionsView.swift)
 and the `compilation*` methods in
-[AppModel.swift](../../VinylFever/Features/AppShell/AppModel.swift).
+[AppModel.swift](../../../VinylFever/Features/AppShell/AppModel.swift).
 
 New files:
 
@@ -154,7 +154,7 @@ New files:
 
 Edits to existing files:
 
-- **[AppModel.swift](../../VinylFever/Features/AppShell/AppModel.swift)** — add
+- **[AppModel.swift](../../../VinylFever/Features/AppShell/AppModel.swift)** — add
   `AppSection.policies` (title `"Policies"`, an SF Symbol) at the `AppSection` enum
   (`:1415`); recipe/policy UI state; and two methods cloned from the compilation
   counterparts: `buildRecipeSample(recipe:folder:)` (clone the append read loop at
@@ -162,7 +162,7 @@ Edits to existing files:
   `audioMetadataClient.read` → `collectionRecipeRunner.run(recipe:filename:current:)`,
   collecting non-`nil` proposals) and `applyRecipePlan(_:)` (clone
   `applyCompilationPlan` at `:784`).
-- **[AppShellView.swift](../../VinylFever/Features/AppShell/AppShellView.swift)** —
+- **[AppShellView.swift](../../../VinylFever/Features/AppShell/AppShellView.swift)** —
   route `.policies → PoliciesView(model:)` in the section `switch` (`:23`).
 
 The pieces:
@@ -191,7 +191,7 @@ The pieces:
   `copy → writeTags` operation pair as `ApplyPlan(compilationPlan:)`, then run
   `ApplyExecutor().apply(plan, toolPaths:)`. Correctness is already guaranteed by the
   rail: `AudioTaggingCommands.plan` emits a write command only for non-`nil` fields
-  ([:112](../../VinylFeverCore/Sources/VinylFeverCore/Tagging/AudioTaggingCommands.swift)),
+  ([:112](../../../VinylFeverCore/Sources/VinylFeverCore/Tagging/AudioTaggingCommands.swift)),
   so the delta changes its one field and leaves every other tag on the copied file
   intact. Like every other flow, this stages tagged copies under `Working/` — it is
   **not** an in-place library edit (that would touch the write rail; out of scope —

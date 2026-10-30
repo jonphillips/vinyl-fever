@@ -4,7 +4,7 @@
 local MCP server, and show the same knowledge in the playlist preview. **Closed 2026-10-18:**
 the effort, S0, S1, and S2 shipped with their device gates passed, S3 (Last.fm) was dropped
 (Decision 1), and listening history moves to [M13](M13-listening-history.md). Rules in
-[../technical-architecture.md](../technical-architecture.md),
+[../technical-architecture.md](../../technical-architecture.md),
 `/Users/jon/code/jon-platform/AGENTS.md`, and jon-platform
 [ADR-0007](/Users/jon/code/jon-platform/docs/adr/0007-app-data-over-local-mcp.md) apply. Where this
 doc and those conflict, stop and flag it.*
@@ -16,7 +16,7 @@ write tool, `stage_playlist`, drops a `VF-PLAYLIST: v1` playlist into an inbox t
 area shows for review, so the human Create in Vinyl Fever stays the only write to Apple Music. The
 preview also annotates every matched row with library stats. The protocol plumbing, the
 staging inbox, and the tunnel ops script are domain-free, so they're built once in jon-platform by
-the [mcp-server-kit](../efforts/mcp-server-kit.md) effort; Vinyl Fever owns only its snapshot and
+the [mcp-server-kit](../../efforts/archive/mcp-server-kit.md) effort; Vinyl Fever owns only its snapshot and
 tools. Four slices plus that effort, in four dispatches. No schema.
 
 ## The milestone in one sentence
@@ -146,11 +146,11 @@ the two can't drift.
 
 **Dispatch 1: S0 + S1.** They share the snapshot types and are valuable on their own: the
 preview annotations work with no MCP at all. **Dispatch 2: effort
-[mcp-server-kit](../efforts/mcp-server-kit.md)**, a single PR in **jon-platform**.
+[mcp-server-kit](../../efforts/archive/mcp-server-kit.md)**, a single PR in **jon-platform**.
 **Dispatch 3: S2**, which builds on that effort. **Dispatch 4: S3**, only if Jon approves
 Last.fm (see *Decisions*). Dispatches 1, 2, and 3 each owe a device gate on Jon's Mac.
 
-- [x] **Effort — mcp-server-kit (jon-platform).** See the [brief](../efforts/mcp-server-kit.md).
+- [x] **Effort — mcp-server-kit (jon-platform).** See the [brief](../../efforts/archive/mcp-server-kit.md).
   It builds `MCPServerKit`, `LLMHandoffKit.HandoffInbox`, and `scripts/mcp-tunnel`. Merged as
   jon-platform#74 (squash `b6f48d6`) on 2026-10-17, after Jon passed the `mcp-hello` iPad gate.
 

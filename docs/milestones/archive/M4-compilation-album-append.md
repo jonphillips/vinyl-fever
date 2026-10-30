@@ -1,9 +1,9 @@
 # Milestone 4 — Compilation-Album append (first Collection Policy)
 
 *Build order for Codex. Architect/editor-in-chief: this doc is the contract; the
-strategic arc is in [../implementation-plan.md](../implementation-plan.md)
+strategic arc is in [../implementation-plan.md](../../implementation-plan.md)
 (Phase 6, Collection Policy Metadata Prep), the policy in
-[../metadata-policy-model.md](../metadata-policy-model.md) (see **Compilation-Album
+[../metadata-policy-model.md](../../metadata-policy-model.md) (see **Compilation-Album
 (Append) Policy**), and `/Users/jon/code/jon-platform/AGENTS.md`. Where this doc
 and those conflict, stop and flag it — don't silently diverge.*
 
@@ -331,7 +331,7 @@ append shows how Apple Music mangles the strings):**
    - Preview shows track/disc as *cleared* even when `stripTrackAndDisc == false`
      (engine actually **preserves** them on that path). Fix
      `CompilationApplyPlan.diffs` so the off-strip preview reflects "kept," not
-     "→ —". ([CompilationApplyPlan.swift](../../VinylFeverCore/Sources/VinylFeverCore/Collection/CompilationApplyPlan.swift))
+     "→ —". ([CompilationApplyPlan.swift](../../../VinylFeverCore/Sources/VinylFeverCore/Collection/CompilationApplyPlan.swift))
    - Add a **real-tool** integration assertion that ffmpeg's `compilation=` /
      `track=` empty-value clearing on **m4a** (via `-map_metadata 0`) actually drops
      `cpil`/`trkn`, not writes an empty/zero atom.
