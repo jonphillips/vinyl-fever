@@ -413,7 +413,7 @@ S1. **Dispatch 3: S2** ("Why this song?"; Jon's device gate). Jon moved it ahead
   S2's evidence file shows misses. It's an optional field in `vf-mcp`; the ledger stays v1.
 - **The audition view** (recent batches with each song's `why`, `like`, and `request`; Vinyl
   Fever plays the picks and pairs, so it knows the song). → Planned as
-  [M21](M21-playlists-view.md) (Jon, 2026-10-30).
+  [M21](archive/M21-playlists-view.md) (Jon, 2026-10-30).
 - **Removing the probe intent.** → The first slice after S1's gate (Decision 10).
 - **Album brief and Play Next.** → Their probes in open-questions.md (the chat route, the queue,
   and who calls the catalog) come first.
