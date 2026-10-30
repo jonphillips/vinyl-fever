@@ -1,5 +1,11 @@
 # Done log
 
+## 2026-10-30 — M21 · S3: Keep a song in Jon's playlists
+
+- Branch: `m21/s3-keep-file-song`.
+- Moved playlist roles, the roles codec, playlist song references, and the Apple Music request encoder into Foundation-only `VinylFeverNotes`. Added pure keep-target selection, including the roles-file fallback and date-year handling. The iPhone app now lists editable keeper playlists, marks songs already present, and adds the resolved catalog or library song to selected playlists through paged Apple Music API calls. Each successful row shows where it was kept; failed playlists remain visible with the API reason.
+- VinylFeverNotes (29 tests), Listening (55), Core (299), Mac app (94), and iOS Simulator (38) passed. Generic iOS device build and `check-handoff` passed. The opt-in Core performance run still exceeds the one-second threshold for `recommendationOutcomesAtJonsScale`; this slice does not touch that code. Jon's M21 S3 real-keep gate remains owed with the M21 device checks.
+
 ## 2026-10-30 — M21 · S2: Artwork and playback
 
 - Branch: `m21/s2-artwork-playback`.

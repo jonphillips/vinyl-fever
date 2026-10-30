@@ -1,8 +1,9 @@
 import Foundation
 import VinylFeverListening
+import VinylFeverNotes
 
 public struct CatalogSongCandidate: Equatable, Sendable {
-  public enum Source: String, Equatable, Sendable { case catalog, libraryUpload }
+  public typealias Source = PlaylistSongSource
   public let id: String
   public let title: String
   public let artistName: String
