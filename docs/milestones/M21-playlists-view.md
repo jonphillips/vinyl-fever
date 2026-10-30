@@ -208,7 +208,7 @@ one sitting after S4, or one at a time if Jon wants to see a slice sooner.
     6. After the next hourly poll, `recent_listening` in a new chat shows the songs played from
        the app.
 
-- [ ] **S3 — Keep: file a song into Jon's keepers playlists.** *(Jon, 2026-10-30.)*
+- [x] **S3 — Keep: file a song into Jon's keepers playlists.** *(Jon, 2026-10-30.)*
   - **The Keep button.** Each song row that S2 resolved has a **Keep** button. It opens a sheet
     headed with the song's title and artist, listing Jon's keepers playlists, each with a
     checkmark:

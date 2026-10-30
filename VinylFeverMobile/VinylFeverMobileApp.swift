@@ -6,10 +6,11 @@ import VinylFeverNotes
 struct VinylFeverMobileApp: App {
   @State private var shelfModel = PlaylistShelfModel()
   @State private var playbackModel = PlaylistPlaybackModel()
+  @State private var keepModel = PlaylistKeepModel()
 
   var body: some Scene {
     WindowGroup {
-      PlaylistHomeView(model: shelfModel, playbackModel: playbackModel)
+      PlaylistHomeView(model: shelfModel, playbackModel: playbackModel, keepModel: keepModel)
     }
   }
 }
@@ -19,6 +20,7 @@ private struct PlaylistHomeView: View {
   @State private var didApplyInitialSelection = false
   @Bindable var model: PlaylistShelfModel
   let playbackModel: PlaylistPlaybackModel
+  @Bindable var keepModel: PlaylistKeepModel
 
   private var selectedPlaylist: PlaylistShelfPlaylist? {
     model.playlists.first { $0.id == model.selectedPlaylistID }
@@ -56,7 +58,7 @@ private struct PlaylistHomeView: View {
       Group {
         if let playlist = selectedPlaylist {
           PlaylistDetailView(playlist: playlist, hasUnreadableFiles: model.hasUnreadableFiles,
-            playbackModel: playbackModel) {
+            playbackModel: playbackModel, keepModel: keepModel) {
             await model.refresh()
           }
         } else if model.requiresFolderAccess {
@@ -87,6 +89,12 @@ private struct PlaylistHomeView: View {
       switch destination {
       case .setup:
         MobileSetupView()
+      }
+    }
+    .sheet(item: $keepModel.destination) { destination in
+      switch destination {
+      case .keep:
+        KeepSheetView(model: keepModel)
       }
     }
     .task {
@@ -128,6 +136,7 @@ private struct PlaylistDetailView: View {
   let playlist: PlaylistShelfPlaylist
   let hasUnreadableFiles: Bool
   let playbackModel: PlaylistPlaybackModel
+  let keepModel: PlaylistKeepModel
   let refresh: () async -> Void
 
   private var title: String {
@@ -191,7 +200,7 @@ private struct PlaylistDetailView: View {
 
         ForEach(Array(playlist.songs.enumerated()), id: \.element.id) { index, song in
           VStack(spacing: 18) {
-            PlaylistSongView(song: song, playbackModel: playbackModel)
+            PlaylistSongView(song: song, playbackModel: playbackModel, keepModel: keepModel)
             if song.id != playlist.songs.last?.id { Divider() }
           }
           .task {
@@ -216,6 +225,7 @@ private struct PlaylistDetailView: View {
 private struct PlaylistSongView: View {
   let song: PlaylistShelfSong
   let playbackModel: PlaylistPlaybackModel
+  let keepModel: PlaylistKeepModel
   var body: some View {
     HStack(alignment: .top, spacing: 14) {
       if let resolved = playbackModel.resolvedSongs[song.id], let artwork = resolved.artwork {
@@ -241,11 +251,19 @@ private struct PlaylistSongView: View {
           } else if playbackModel.resolvingSongIDs.contains(song.id) {
             ProgressView().accessibilityLabel("Finding \(song.title)")
           } else if playbackModel.resolvedSongs[song.id] != nil {
-            Button("Play", systemImage: "play.fill") {
-              Task { await playbackModel.play(song.id) }
+            HStack(spacing: 12) {
+              Button("Play", systemImage: "play.fill") {
+                Task { await playbackModel.play(song.id) }
+              }
+              .labelStyle(.iconOnly)
+              .accessibilityLabel("Play \(song.title) by \(song.artist)")
+              Button("Keep") {
+                if let resolved = playbackModel.resolvedSongs[song.id] {
+                  Task { await keepModel.keepButtonTapped(for: song, resolvedSong: resolved) }
+                }
+              }
+              .accessibilityLabel("Keep \(song.title) by \(song.artist)")
             }
-            .labelStyle(.iconOnly)
-            .accessibilityLabel("Play \(song.title) by \(song.artist)")
           }
         }
         Text(song.artist).foregroundStyle(.secondary)
@@ -255,6 +273,11 @@ private struct PlaylistSongView: View {
             .foregroundStyle(.secondary)
         }
         Text(song.familiarity).font(.subheadline.weight(.medium))
+        if let keptIn = keepModel.keptPlaylistsBySong[song.id], !keptIn.isEmpty {
+          Text("Kept in \(keptIn.joined(separator: " and "))")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+        }
         if let why = song.why {
           Text(why).fixedSize(horizontal: false, vertical: true)
         }
@@ -282,6 +305,70 @@ private struct PlaylistSongView: View {
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
+  }
+}
+
+private struct KeepSheetView: View {
+  @Environment(\.dismiss) private var dismiss
+  @Bindable var model: PlaylistKeepModel
+
+  var body: some View {
+    NavigationStack {
+      Form {
+        if let request = model.currentRequest {
+          Section {
+            LabeledContent("Artist", value: request.artist)
+          }
+        }
+        if model.rolesReadFallback {
+          Section { Text(PlaylistKeepOptions.rolesReadFallback).foregroundStyle(.secondary) }
+        }
+        Section("Keep in") {
+          if model.isLoading {
+            ProgressView("Loading playlists…")
+          } else {
+            ForEach(model.playlists) { playlist in
+              Toggle(isOn: Binding(
+                get: { playlist.isChecked },
+                set: { model.toggle(playlist.id, isChecked: $0) }
+              )) {
+                VStack(alignment: .leading, spacing: 3) {
+                  Text(playlist.name)
+                  if playlist.isAlreadyThere {
+                    Text("Already there").font(.caption).foregroundStyle(.secondary)
+                  }
+                }
+              }
+              .disabled(playlist.isDisabled || model.isSaving)
+            }
+          }
+        }
+        Section {
+          Text("To take a song back out, use Music.").font(.footnote).foregroundStyle(.secondary)
+        }
+        if !model.savedPlaylistNames.isEmpty {
+          Section { Text("Kept in \(model.savedPlaylistNames.joined(separator: " and "))") }
+        }
+        if let errorMessage = model.errorMessage {
+          Section { Text(errorMessage).foregroundStyle(.red) }
+        }
+      }
+      .navigationTitle(model.currentRequest?.title ?? "Keep song")
+      .interactiveDismissDisabled(model.isSaving)
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel") { model.cancel(); dismiss() }
+            .disabled(model.isSaving)
+        }
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Save") { Task { await model.save() } }
+            .disabled(model.isLoading || model.isSaving || model.playlists.isEmpty)
+        }
+      }
+      .onChange(of: model.destination == nil) { _, dismissed in
+        if dismissed { dismiss() }
+      }
+    }
   }
 }
 

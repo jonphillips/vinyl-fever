@@ -1,5 +1,6 @@
 import Dependencies
 import DependenciesMacros
+import VinylFeverNotes
 import Foundation
 
 @DependencyClient
@@ -21,12 +22,6 @@ public struct AppleMusicCatalogClient: Sendable {
     _ songs: [PlaylistSongReference]
   ) async throws -> CreatedPlaylistRef
   public var appendToLibraryPlaylist: @Sendable (_ id: String, _ songs: [PlaylistSongReference]) async throws -> Void
-}
-
-public struct PlaylistSongReference: Equatable, Sendable {
-  public var id: String
-  public var source: CatalogSongCandidate.Source
-  public init(id: String, source: CatalogSongCandidate.Source) { self.id = id; self.source = source }
 }
 
 public struct LibraryAlbumCandidate: Equatable, Sendable {
