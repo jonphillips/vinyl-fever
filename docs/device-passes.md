@@ -1,0 +1,40 @@
+# Device passes
+
+**Status:** Jon's list of owed real-device gates and held setup steps (jon-platform ADR-0005 D1).
+**Summary:** Everything Jon owes before a slice counts as verified, in one place. `NEXT_UP.md`'s
+**Owed** line points here, and `jon-platform/scripts/outstanding` lists the sections.
+
+The executor never reads this file. A gate's full steps live in its milestone's slice section,
+and this list names it and says where. When a gate passes, its line is deleted here and the pass
+goes in `DONE-LOG.md`.
+
+## Device gates owed
+
+- **Listening settings: the two-Mac check.**
+- **M17 S2:** two mini-saved weeks, then Jon checks a finished week
+  ([M17](milestones/archive/M17-taste-intelligence.md)).
+- **M17 S3:** a Music Feedback note in the car, read back word for word, then a playlist note.
+  M18's prerequisites carry it too ([M18](milestones/M18-taste-outcomes.md)).
+- **M18 S2:** for two New Music weeks, chat picks before listening, then read `taste_baselines`
+  after 14 days. Staging passed 2026-10-28 ([M18](milestones/M18-taste-outcomes.md)).
+- **M18 S7:** create an inbox playlist, confirm it's pending immediately, then confirm its Music
+  ID is adopted after sync and refresh.
+- **M18 S8:** replaces S6's steps 2–4. It needs two open questions. The soft-vocal pair was
+  answered 2026-10-29, so it waits for the chat to record new ones.
+- **M20 S1:** six steps, after install on the iPad and iPhone. Step 5 covers S0's unprobed
+  CarPlay write ([M20](milestones/M20-music-feedback-intent.md)).
+- **M20 S2:** seven steps, after install on iPhone or iPad: the two why-with-reason songs, the
+  without-reason song, the unrecommended song, one locked/CarPlay run, the repeated-Cancel
+  check, and an unpicked New Music song.
+
+## Setup steps held for Jon
+
+- **Before M20 S1's gate:** the one-action "VF Music Feedback" shortcut, picked in Control
+  Center on both devices; and TestFlight for the iPhone companion (M20 *Prerequisites*).
+- **After M20 S1's gate:** point Siri's "Music Feedback" at the intent, and Control Center at
+  "Music Feedback" (M20 *Prerequisites*).
+- **Stop Music Feedback writing empty lines** (M18 Decision 16): in the shortcut, stop without
+  writing when the dictation is empty or "Cancel" (M18 *Prerequisites*).
+- **Fix the laptop's Time Machine:** the SMB share on `PhillipsWest` doesn't mount
+  ([M19](milestones/archive/M19-backups.md), its one unticked box). Delete this line if it's
+  already fixed.
