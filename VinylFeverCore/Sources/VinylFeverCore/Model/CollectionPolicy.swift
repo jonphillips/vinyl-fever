@@ -2,7 +2,7 @@ import Foundation
 import SQLiteData
 
 /// The first concrete instance of the Collection Policy primitive described in
-/// `docs/metadata-policy-model.md`: "because this song belongs here, what should
+/// `docs/archive/metadata-policy-model.md`: "because this song belongs here, what should
 /// we do to its metadata." M7 stands up the minimal identity (name + a free-text
 /// description) that a `CollectionRecipe` hangs off of via a foreign key.
 ///

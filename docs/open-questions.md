@@ -401,8 +401,8 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   complete?
 - Are the source labels in `setlist-formatting-rules.md` complete, or should
   additional defaults such as `WEB`, `MTX`, or others be added?
-- Resolved: see "Verified" in [App Areas](app-areas.md) and Source Of Truth And
-  Storage Ownership in [Metadata Policy Model](metadata-policy-model.md). A show
+- Resolved: see "Verified" in [App Areas](archive/app-areas.md) and Source Of Truth And
+  Storage Ownership in [Metadata Policy Model](archive/metadata-policy-model.md). A show
   is verified when its album appears in the Apple Music scan with a matching
   album title and a track count equal to the setlist, with an optional duration
   spot check.
@@ -410,7 +410,7 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   for the chronological artist view?
 - What should the local-model live-show label audit flag as "probably mislabeled"?
 - Resolved (2026-07-03 review): see *Automation Implications* in
-  [Setlist Formatting Rules](setlist-formatting-rules.md). The Normalizer is a
+  [Setlist Formatting Rules](archive/setlist-formatting-rules.md). The Normalizer is a
   sandwich — deterministic pre-segment (clean + region hints, no decisions) ->
   frontier LLM via `ModelClient` (all semantic judgment, emits structured JSON)
   -> deterministic validate (tags, ALBUM/DATE shape, controlled source vocab, no
@@ -435,7 +435,7 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
 ### Compilation-Album (Append) Policy
 
 - Resolved direction: see *Compilation-Album (Append) Policy* in
-  [Metadata Policy Model](metadata-policy-model.md). VF appends tracks to
+  [Metadata Policy Model](archive/metadata-policy-model.md). VF appends tracks to
   curated albums that already exist in Apple Music; it never creates albums or
   the silent cover-carrier track. A small SQLiteData registry (~10–20 entries),
   seeded by folder-drop / parent-folder discovery, is the workspace — not a
@@ -508,7 +508,7 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   BYO-key tier. The prose-inference, dirty-OCR, and multi-line-jam cases in the
   raw corpus lean on reasoning quality the on-device/Apple-cloud tier cannot yet
   be assumed to reach, so the feature is BYO-required. See *Automation
-  Implications* in [Setlist Formatting Rules](setlist-formatting-rules.md). A
+  Implications* in [Setlist Formatting Rules](archive/setlist-formatting-rules.md). A
   tiered on-device-then-escalate approach remains a possible later optimization.
 - Does AcoustID fingerprint lookup ever enter scope? If so, it is the only
   non-model credential; decide whether it reuses the shared Keychain key store.

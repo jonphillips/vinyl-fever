@@ -6,7 +6,7 @@ Status: **Design / ready to implement** · Scope: Collections registry (`Compila
 
 Registry covers today are auto-derived from the **first source file's embedded
 artwork** during seeding
-([`CompilationAlbumSeeding.deriveCandidate`](../VinylFeverCore/Sources/VinylFeverCore/Collection/CompilationAlbumSeeding.swift)):
+([`CompilationAlbumSeeding.deriveCandidate`](../../VinylFeverCore/Sources/VinylFeverCore/Collection/CompilationAlbumSeeding.swift)):
 
 ```swift
 let artwork = metadata.lazy.compactMap(\.1.embeddedArtwork).first
@@ -28,14 +28,14 @@ auto-derived art stays as the prefill default.
 ## What already exists (no new plumbing)
 
 - **Model:** `CompilationAlbum.displayImage: Data?` and `fallbackArtwork: Data?`
-  ([`CompilationAlbum.swift`](../VinylFeverCore/Sources/VinylFeverCore/Model/CompilationAlbum.swift)).
+  ([`CompilationAlbum.swift`](../../VinylFeverCore/Sources/VinylFeverCore/Model/CompilationAlbum.swift)).
 - **DB column:** `"displayImage" BLOB`, `"fallbackArtwork" BLOB`
-  ([`Schema.swift`](../VinylFeverCore/Sources/VinylFeverCore/Database/Schema.swift)).
+  ([`Schema.swift`](../../VinylFeverCore/Sources/VinylFeverCore/Database/Schema.swift)).
 - **Render:** `ArtworkThumbnail(data:)` → `NSImage(data:)`
-  ([`CollectionsView.swift`](../VinylFever/Features/Collections/CollectionsView.swift)).
+  ([`CollectionsView.swift`](../../VinylFever/Features/Collections/CollectionsView.swift)).
 - **Upsert:** `CompilationAlbumRegistry.upsert(_:in:)` and the
   `database.write { … }` pattern in
-  [`AppModel.swift`](../VinylFever/Features/AppShell/AppModel.swift)
+  [`AppModel.swift`](../../VinylFever/Features/AppShell/AppModel.swift)
   (`persistSelectedCompilationSeedCandidates`).
 - **Image sniffing:** `AppModel.imageFileExtension(for:)` already fingerprints
   PNG/JPEG/GIF magic bytes — reuse for validation.
@@ -59,7 +59,7 @@ separate "list-only" thumbnail decoupled from the art written to files.
 ## UI sketch
 
 Add a "Set Cover…" affordance to the selected-album context in
-[`CollectionsView`](../VinylFever/Features/Collections/CollectionsView.swift).
+[`CollectionsView`](../../VinylFever/Features/Collections/CollectionsView.swift).
 The view already tracks `selectedAlbumID` and fetches `albums` via `@FetchAll`.
 
 Placement options (pick one):

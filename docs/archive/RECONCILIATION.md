@@ -14,7 +14,7 @@ three sessions below are dispatched.
 ## The one real seam: LLMClientKit isn't closed
 
 `vinyl-fever` took a `path:` dependency on `../../jon-platform/packages/LLMClientKit`
-([Package.swift:20](../VinylFeverCore/Package.swift)) and built the **entire** M5
+([Package.swift:20](../../VinylFeverCore/Package.swift)) and built the **entire** M5
 normalizer against it — Core `Normalizing/*`, the preview sheet, the prompts, 101
 green tests — *before* LLMClientKit was finished and *without* wiring it into the live
 app. That is the "vinyl-fever got out over its skis" instinct, made concrete: a
@@ -25,7 +25,7 @@ fully-built, unit-tested feature sitting inert on a dependency that isn't done.
 The most important finding from dogfooding. There are **two** setlist surfaces and
 they look alike but only one is meant to be smart:
 
-- **Parse Setlist** → [`SetlistParser().parse()`](../VinylFever/Features/AppShell/AppModel.swift)
+- **Parse Setlist** → [`SetlistParser().parse()`](../../VinylFever/Features/AppShell/AppModel.swift)
   (`parseSetlistInput`, ~line 106). 100% deterministic regex, no model, never reads
   the Anthropic key. This is the "Parsed Setlist" surface Jon saw and read as "dumb" —
   it is dumb *by design*; it parses the **output** shape, not raw notes.
@@ -33,7 +33,7 @@ they look alike but only one is meant to be smart:
   `normalizeSetlistInput()` → `setlistNormalizer.normalize()` → LLMClientKit
   `ModelClient`. This is the real transform.
 
-But [`VinylFeverApp.swift`](../VinylFever/VinylFeverApp.swift) `prepareDependencies`
+But [`VinylFeverApp.swift`](../../VinylFever/VinylFeverApp.swift) `prepareDependencies`
 sets only six live clients (`scriptClient`, `audioMetadataClient`, `toolPathClient`,
 `runLogClient`, `fileOperationClient`, `musicAppClient`). It **never** sets
 `$0.setlistNormalizer` or `$0.modelClient`. So `setlistNormalizer` resolves to its
@@ -47,7 +47,7 @@ the handoff's "GUI unrun" note — the wiring gap is why.
 - **Tier is hardcoded, not resolved.** M5's ledger promises `.frontierPreferred` via
   `FrontierResolver`, degrading to on-device when no key is set. The engine instead
   hardcodes `tier: .frontier(.anthropic)`
-  ([SetlistNormalizer.swift:48](../VinylFeverCore/Sources/VinylFeverCore/Normalizing/SetlistNormalizer.swift)).
+  ([SetlistNormalizer.swift:48](../../VinylFeverCore/Sources/VinylFeverCore/Normalizing/SetlistNormalizer.swift)).
   Resolve in the integration session — this is also the "move to any frontier" intent
   from commit `7fe58fc`.
 - **Parse vs Normalize is a UX trap.** The two buttons are visually peers with no cue
@@ -59,18 +59,18 @@ the handoff's "GUI unrun" note — the wiring gap is why.
 Independent of the LLM work except where noted.
 
 1. **Compilations folder "hangs" — it's serial, not hung.**
-   [`CompilationAlbumSeeder.candidates`](../VinylFeverCore/Sources/VinylFeverCore/Collection/CompilationAlbumSeeding.swift)
+   [`CompilationAlbumSeeder.candidates`](../../VinylFeverCore/Sources/VinylFeverCore/Collection/CompilationAlbumSeeding.swift)
    walks folders one at a time and reads every file's tags one at a time, each
    spawning an `ffprobe`/`metaflac` subprocess. No concurrency, one indeterminate
    spinner, no per-album progress. Two aggravators: (a) **all-or-nothing** — a single
    unreadable file `throw`s and aborts the whole seed, unlike the show-folder path
    which catches per-file; (b) the show-folder read already uses a `TaskGroup`
-   ([`refreshCurrentMetadata`](../VinylFever/Features/AppShell/AppModel.swift), ~line
+   ([`refreshCurrentMetadata`](../../VinylFever/Features/AppShell/AppModel.swift), ~line
    483) — seeding just never got that treatment. Fix: concurrency + progress +
    per-file partial failure.
 
 2. **Append one-at-a-time "hangs" at "Importing into Music."**
-   [`readAlbumTracks`](../VinylFever/Clients/MusicAppClient+Live.swift) enumerates the
+   [`readAlbumTracks`](../../VinylFever/Clients/MusicAppClient+Live.swift) enumerates the
    **entire** library's `fileTracks` over ScriptingBridge (`.get()` materializes all of
    them) and filters in Swift — and it runs **twice per append**, pre- and post-import
    for drift certification (`appendCompilationToMusic`, AppModel ~lines 712/715). On a
@@ -83,7 +83,7 @@ Independent of the LLM work except where noted.
    the real path is unwired. Not a model-quality problem.
 
 4. **Album is a compilation but tracks aren't — by design.**
-   [`proposedTags`](../VinylFeverCore/Sources/VinylFeverCore/Collection/CompilationApplyPlan.swift)
+   [`proposedTags`](../../VinylFeverCore/Sources/VinylFeverCore/Collection/CompilationApplyPlan.swift)
    (~line 117) always adds `.isCompilation` to `clearedFields` and sets it false unless
    `ruleset.setCompilationFlag`. The policy unifies the album via a single
    **albumArtist** + grouping tokens rather than the iTunes compilation checkbox

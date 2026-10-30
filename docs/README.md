@@ -6,9 +6,9 @@ It supersedes the older single-file handoff as the working source of truth.
 Read in this order:
 
 1. [Product Requirements](product-requirements.md)
-2. [App Areas](app-areas.md)
-3. [Metadata Policy Model](metadata-policy-model.md)
-4. [Setlist Formatting Rules](setlist-formatting-rules.md)
+2. [App Areas](archive/app-areas.md)
+3. [Metadata Policy Model](archive/metadata-policy-model.md)
+4. [Setlist Formatting Rules](archive/setlist-formatting-rules.md)
 5. [Technical Architecture](technical-architecture.md)
 6. [Implementation Plan](implementation-plan.md)
 7. [Open Questions](open-questions.md)
@@ -24,7 +24,7 @@ Related source material:
   [milestones/archive/](milestones/archive/) (ADR-0005 D10)
 - [Efforts](efforts/README.md): live briefs only; finished ones are in [efforts/archive/](efforts/archive/)
 - [Listening](listening/README.md)
-- [Collection Recipes (design; built in M7–M8)](collection-recipes.md)
+- [Collection Recipes (design; built in M7–M8)](archive/collection-recipes.md)
 - [ChatGPT playlist contract (`VF-PLAYLIST: v1`)](chatgpt/PLAYLIST-CONTRACT.md)
 - [Taste Intelligence (design; built in M17, outcomes in M18)](taste-intelligence.md)
 - [Backups (M19)](milestones/archive/M19-backups.md)

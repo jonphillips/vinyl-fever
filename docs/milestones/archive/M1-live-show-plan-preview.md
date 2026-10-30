@@ -83,7 +83,7 @@ numbered/plain track lists, disc/set/encore header stripping). Prose-heavy,
 footnote-semantic, spelling-fix cases are **manual-edit-now, LLM-later** — the UI
 must let the user fix anything the parser gets wrong. Do not attempt to make the
 deterministic parser smart; per
-[../setlist-formatting-rules.md](../../setlist-formatting-rules.md) the normalizer is
+[../setlist-formatting-rules.md](../../archive/setlist-formatting-rules.md) the normalizer is
 ultimately LLM-first with the deterministic layer as validator.
 
 ## Architecture & module layout
@@ -247,7 +247,7 @@ a folder, see its classified contents.
 strip unnumbered disc/set/encore headers; keep numbered intros/banter; preserve
 `>` and `/` segues without splitting/joining. App: a paste box + `.txt` loader
 showing the parsed draft with inline editing. **Tests:** a fixture table built from
-[../setlist-formatting-rules.md](../../setlist-formatting-rules.md) (numbered-track
+[../setlist-formatting-rules.md](../../archive/setlist-formatting-rules.md) (numbered-track
 rule, segue non-split/non-join, header removal, unknown-field fallbacks). **Done
 when:** parser passes the suite; draft is visible and editable.
 
@@ -275,7 +275,7 @@ house rule is "obey the sharing laws from day one," jon-platform
   inserting a duplicate `SBD`. A random-UUID seed is a latent duplicate generator.
 
 Album-title token mapping (pin these exact strings; from
-[../setlist-formatting-rules.md](../../setlist-formatting-rules.md) — note the album
+[../setlist-formatting-rules.md](../../archive/setlist-formatting-rules.md) — note the album
 string's unknown-location token differs from the `LOCATION` tag's):
 
 - `Field.unknown` → `Unknown Date` / `Unknown City` / `Unknown Venue` (the album uses
@@ -290,7 +290,7 @@ string's unknown-location token differs from the `LOCATION` tag's):
 `NN - Title.ext` (zero-pad width derived from track count) and `ProposedTags`;
 collect `PlanIssue`s; compute readiness. The Preview screen surfaces the relevant
 subset of the Preview Requirements in
-[../metadata-policy-model.md](../../metadata-policy-model.md): proposed
+[../metadata-policy-model.md](../../archive/metadata-policy-model.md): proposed
 title/album/artist/albumArtist/filename, the issue list, readiness. **Apply is a
 disabled control labeled "M2."** **Tests:** plan over fixtures; count-mismatch
 issue; filename formatting (incl. ≥100 tracks); readiness logic. **Done when:** the

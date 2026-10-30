@@ -9,8 +9,8 @@ use (2026-07-10): compilation albums exist to keep one-hit-wonders off the Artis
 list, policies made appends "drop and don't look back," and the last friction is
 having to marshal each one-off song into a folder to append it. Rules in
 [../technical-architecture.md](../../technical-architecture.md),
-[../metadata-policy-model.md](../../metadata-policy-model.md),
-[../app-areas.md](../../app-areas.md), and `/Users/jon/code/jon-platform/AGENTS.md`
+[../metadata-policy-model.md](../../archive/metadata-policy-model.md),
+[../app-areas.md](../../archive/app-areas.md), and `/Users/jon/code/jon-platform/AGENTS.md`
 apply; where this doc and those conflict, stop and flag it.*
 
 ## The milestone in one sentence

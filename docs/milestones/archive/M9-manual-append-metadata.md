@@ -7,7 +7,7 @@ collection-owned identity and (when a policy is bound, M8) recipe edits, but the
 no way to attach a one-off human note — a source label, a session tag — to *this*
 append without editing the registry entry or a policy first. Rules in
 [../technical-architecture.md](../../technical-architecture.md),
-[../metadata-policy-model.md](../../metadata-policy-model.md), and
+[../metadata-policy-model.md](../../archive/metadata-policy-model.md), and
 `/Users/jon/code/jon-platform/AGENTS.md` apply; where this doc and those conflict,
 stop and flag it.*
 

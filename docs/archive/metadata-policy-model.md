@@ -183,7 +183,7 @@ existing verification step:
 
 ## Apple Music Field Defaults
 
-Follow [reference/apple_music_library_strategy.md](reference/apple_music_library_strategy.md).
+Follow [reference/apple_music_library_strategy.md](../reference/apple_music_library_strategy.md).
 
 Default principles:
 
