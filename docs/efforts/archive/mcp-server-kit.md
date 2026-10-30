@@ -10,7 +10,7 @@ recipe). One jon-platform PR. Vinyl Fever M12 · S2 is the first consumer; Yes C
 second.
 **Related:** jon-platform [ADR-0007](/Users/jon/code/jon-platform/docs/adr/0007-app-data-over-local-mcp.md)
 (the decision; D1, D3, D4, D7) · jon-platform `docs/ios/mcp-access.md` (the manual recipe this
-script automates) · [M12](../milestones/M12-library-context-mcp.md) · [Efforts index](README.md)
+script automates) · [M12](../../milestones/archive/M12-library-context-mcp.md) · [Efforts index](../README.md)
 
 Branch `effort/mcp-server-kit` **in jon-platform**, starting from a fresh `main`. It adds a
 package and a script, with no schema and no sync. ADR-0007 must be merged before this starts.

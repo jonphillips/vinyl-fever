@@ -20,10 +20,14 @@ Setup and operations:
 
 Related source material:
 
-- [Efforts](efforts/README.md)
+- [Milestones](milestones/): live build orders only; shipped ones are in
+  [milestones/archive/](milestones/archive/) (ADR-0005 D10)
+- [Efforts](efforts/README.md): live briefs only; finished ones are in [efforts/archive/](efforts/archive/)
 - [Listening](listening/README.md)
+- [Collection Recipes (design; built in M7–M8)](collection-recipes.md)
+- [ChatGPT playlist contract (`VF-PLAYLIST: v1`)](chatgpt/PLAYLIST-CONTRACT.md)
 - [Taste Intelligence (design; built in M17, outcomes in M18)](taste-intelligence.md)
-- [Backups (M19)](milestones/M19-backups.md)
+- [Backups (M19)](milestones/archive/M19-backups.md)
 - [Music Feedback in the iPhone and iPad app (M20)](milestones/M20-music-feedback-intent.md)
 - [reference/MusicWorkbench_Codex_Handoff.md](reference/MusicWorkbench_Codex_Handoff.md)
 - [reference/apple_music_library_strategy.md](reference/apple_music_library_strategy.md)

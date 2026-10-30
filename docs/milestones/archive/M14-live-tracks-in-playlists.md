@@ -2,7 +2,7 @@
 
 *Let a playlist mix Apple Music catalog songs with Jon's own uploaded recordings, such as the live
 shows from his drives. S0 starts after M13 S1, and S1 after M15 S0; see Decision 3. Rules in
-[../technical-architecture.md](../technical-architecture.md) and
+[../technical-architecture.md](../../technical-architecture.md) and
 `/Users/jon/code/jon-platform/AGENTS.md` apply. Where this doc and those conflict, stop and flag
 it.*
 

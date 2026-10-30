@@ -387,5 +387,5 @@ M9 manual append metadata (#51–#53), M10 collection inbox (#55/#56 and follow-
 ## 2026-09-29 — Adopt the ADR-0005 document shape (`chore/token-discipline`)
 
 Retired `CURRENT_HANDOFF.md` (last touched 2026-07-10; its M10 front had since shipped). Split it into
-`docs/NEXT_UP.md` (M6 · S2 remainder), `docs/efforts/one-true-import-folder.md`, and the
+`docs/NEXT_UP.md` (M6 · S2 remainder), `docs/efforts/archive/one-true-import-folder.md`, and the
 parked/pending items in `docs/open-questions.md`; added `docs/verification.md`.

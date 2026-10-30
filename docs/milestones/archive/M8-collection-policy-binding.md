@@ -1,13 +1,13 @@
 # Milestone 8 — Collection Policy Binding
 
-*Bind a [Collection Policy](../metadata-policy-model.md) to a compilation album so
+*Bind a [Collection Policy](../../metadata-policy-model.md) to a compilation album so
 that appending a folder runs the policy's recipes **and** the compilation
 tag-stamping in one previewed, one-applied pass. This is the deferred "fuse the two
 runs" question from M7 S1, now answered from real use: no new pipeline and no write-rail
 change — it merges two `ProposedTags` producers that already converge on the same
 `ApplyPlan` / `writeTags` rail. Rules in
-[../technical-architecture.md](../technical-architecture.md),
-[../metadata-policy-model.md](../metadata-policy-model.md), and
+[../technical-architecture.md](../../technical-architecture.md),
+[../metadata-policy-model.md](../../metadata-policy-model.md), and
 `/Users/jon/code/jon-platform/AGENTS.md` apply; where this doc and those conflict,
 stop and flag it.*
 
@@ -32,9 +32,9 @@ The groundwork makes this a merge, not a build:
 
 - **Both producers already emit `ProposedTags`.** The compilation delta
   (`CompilationApplyPlan.proposedTags(entry:current:)`,
-  [CompilationApplyPlan.swift](../../VinylFeverCore/Sources/VinylFeverCore/Collection/CompilationApplyPlan.swift))
+  [CompilationApplyPlan.swift](../../../VinylFeverCore/Sources/VinylFeverCore/Collection/CompilationApplyPlan.swift))
   and the recipe delta (`RecipeProposal.delta`,
-  [CollectionRecipeRunner.swift](../../VinylFeverCore/Sources/VinylFeverCore/Recipes/CollectionRecipeRunner.swift))
+  [CollectionRecipeRunner.swift](../../../VinylFeverCore/Sources/VinylFeverCore/Recipes/CollectionRecipeRunner.swift))
   are the same type feeding the same rail. There is no translation layer to write.
 - **The FK anchor already exists.** M7 stood up `collectionPolicies` precisely as the
   reusable Collection Policy primitive; this milestone adds the *other half* of the
@@ -117,9 +117,9 @@ Everything lands in `VinylFeverCore`. Edits, each with a template already in the
 
 | File | Change | Template / anchor |
 | --- | --- | --- |
-| [Schema.swift](../../VinylFeverCore/Sources/VinylFeverCore/Database/Schema.swift) | one `registerMigration` block: `ALTER TABLE "compilationAlbums" ADD COLUMN "collectionPolicyID" TEXT REFERENCES "collectionPolicies"("id") ON DELETE SET NULL` | the `collectionRecipes` FK migration (`:117`), but nullable + `SET NULL` |
-| [CompilationAlbum.swift](../../VinylFeverCore/Sources/VinylFeverCore/Model/CompilationAlbum.swift) | add `var collectionPolicyID: CollectionPolicy.ID?` (nil default in `init`) | its own existing optional columns (`seedFolderPath`) |
-| [CompilationApplyPlan.swift](../../VinylFeverCore/Sources/VinylFeverCore/Collection/CompilationApplyPlan.swift) | new init param `recipeDeltasByFileID: [ScannedAudioFile.ID: [ProposedTags]]` (default `[:]`); fold into each track's `proposed` via the merge before computing `diffs` | the existing `currentTagsByFileID` param it mirrors |
+| [Schema.swift](../../../VinylFeverCore/Sources/VinylFeverCore/Database/Schema.swift) | one `registerMigration` block: `ALTER TABLE "compilationAlbums" ADD COLUMN "collectionPolicyID" TEXT REFERENCES "collectionPolicies"("id") ON DELETE SET NULL` | the `collectionRecipes` FK migration (`:117`), but nullable + `SET NULL` |
+| [CompilationAlbum.swift](../../../VinylFeverCore/Sources/VinylFeverCore/Model/CompilationAlbum.swift) | add `var collectionPolicyID: CollectionPolicy.ID?` (nil default in `init`) | its own existing optional columns (`seedFolderPath`) |
+| [CompilationApplyPlan.swift](../../../VinylFeverCore/Sources/VinylFeverCore/Collection/CompilationApplyPlan.swift) | new init param `recipeDeltasByFileID: [ScannedAudioFile.ID: [ProposedTags]]` (default `[:]`); fold into each track's `proposed` via the merge before computing `diffs` | the existing `currentTagsByFileID` param it mirrors |
 | `Collection/RecipeTagMerge.swift` *(new)* | pure `static func merge(compilation: ProposedTags, recipes: [ProposedTags]) -> ProposedTags` implementing the precedence | `CompilationApplyPlan.mergedGrouping` (reuse it for the grouping leg) |
 
 Enum/precedence stays in one pure function so it is fixture-testable in isolation.
@@ -140,7 +140,7 @@ template in the compilation-append methods.
 
 Edits:
 
-- **[AppModel.swift](../../VinylFever/Features/AppShell/AppModel.swift)** — in
+- **[AppModel.swift](../../../VinylFever/Features/AppShell/AppModel.swift)** — in
   `buildCompilationAppendPlan` (`:747`), after reading `currentTagsByFileID`, if
   `entry.collectionPolicyID != nil` load that policy's enabled recipes
   (`@FetchAll`-style read via `defaultDatabase`), then for each file `await`
@@ -149,7 +149,7 @@ Edits:
   into `recipeDeltasByFileID`; pass that into the `CompilationApplyPlan` init. Reuse
   the read loop already in place at `:761`–`:774`. An unbound album skips the whole
   block and builds exactly as today.
-- **[CollectionsView.swift](../../VinylFever/Features/Collections/CollectionsView.swift)**
+- **[CollectionsView.swift](../../../VinylFever/Features/Collections/CollectionsView.swift)**
   — a policy picker on the selected-album detail (`@FetchAll(CollectionPolicy…)` for
   the options; write `collectionPolicyID` through the same registry upsert path as the
   cover/ruleset edits); render recipe-driven rows + review flags inside
@@ -213,7 +213,7 @@ work on the S1 branch; they were not slice blockers and do not create an S2.
 
 - [x] **Recipe preview renders the raw delta, not the merge result (load-bearing).**
   `RecipeProposalPreview.diffs` in
-  [CollectionsView.swift](../../VinylFever/Features/Collections/CollectionsView.swift)
+  [CollectionsView.swift](../../../VinylFever/Features/Collections/CollectionsView.swift)
   shows every string-valued field in `proposal.delta`, but apply runs the delta through
   `RecipeTagMerge.merge`, which **drops** recipe `album`/`albumArtist` (collection wins)
   and **unions** `grouping`. So a recipe targeting `album`/`albumArtist` previews an
@@ -253,7 +253,7 @@ work on the S1 branch; they were not slice blockers and do not create an S2.
 - Running an unbound folder's recipes from the Collections screen — that is what the
   Policies workbench (M7 S1) is for; the two surfaces stay distinct.
 - The one-true-import-folder fix (converted-FLAC vs passthrough mp3/m4a landing in
-  different folders) — a separate, ungated slice tracked in `docs/efforts/one-true-import-folder.md`, not
+  different folders) — a separate, ungated slice tracked in `docs/efforts/archive/one-true-import-folder.md`, not
   part of this milestone.
 
 ## Decisions (open — resolve before/at S0 review)

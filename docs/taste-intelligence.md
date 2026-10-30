@@ -1,6 +1,6 @@
 # Taste Intelligence — design (v1)
 
-*The design behind [M17](milestones/M17-taste-intelligence.md), which holds the build order and
+*The design behind [M17](milestones/archive/M17-taste-intelligence.md), which holds the build order and
 the decisions that amend this doc. It builds on M11, M12, and M13. Written 2026-10-20 from a
 conversation between Jon and the architect, starting from a Codex brief. Every number below was
 measured from Jon's library that day unless it carries another date.*
@@ -234,7 +234,7 @@ doesn't imitate it; it **collects what Apple's recommenders produce**:
 
 ## Phasing (candidate)
 
-*Planned as [M17](milestones/M17-taste-intelligence.md) on 2026-10-23. M17 runs exposure and
+*Planned as [M17](milestones/archive/M17-taste-intelligence.md) on 2026-10-23. M17 runs exposure and
 curation before feedback, and lets the chat resolve time-only notes instead of a Mac screen; its
 Decisions list every change. This section is kept as the candidate it was.*
 

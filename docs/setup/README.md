@@ -140,7 +140,7 @@ Settings → Chat Access (MCP) copies each client's configuration with the helpe
 
 ## Polling Mac (Apple silicon)
 
-After [M13 S3](../milestones/M13-listening-history.md), Vinyl Fever polls by itself on any
+After [M13 S3](../milestones/archive/M13-listening-history.md), Vinyl Fever polls by itself on any
 Apple-silicon Mac. A new Mac mini needs Vinyl Fever, not the separate poller app.
 
 1. Do [Every Mac](#every-mac). Add the mini to **Vinyl Fever Dev Profile**, then rebuild on the

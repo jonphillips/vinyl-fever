@@ -3,7 +3,7 @@
 *Jon's manual for the listening side of Taste Intelligence: what to do with Apple's New Music
 each week, what to do with a playlist the chat made, and when a Music Feedback note is worth
 leaving. The design is in [taste-intelligence.md](taste-intelligence.md). How outcomes are
-counted is in [M17](milestones/M17-taste-intelligence.md) and
+counted is in [M17](milestones/archive/M17-taste-intelligence.md) and
 [M18](milestones/M18-taste-outcomes.md). If this guide and those milestones disagree, the
 milestones are right, and this guide needs fixing.*
 

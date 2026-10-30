@@ -5,7 +5,7 @@
 listening section when the window comes forward and on Re-probe, in both apps. Also record a
 failed poll's full error, with its domain, code, file path, and underlying error, so the next
 "The file couldn't be saved." says which file failed and why.
-**Related:** [M13](../milestones/M13-listening-history.md) (S5 gate result) · [Efforts index](README.md)
+**Related:** [M13](../../milestones/archive/M13-listening-history.md) (S5 gate result) · [Efforts index](../README.md)
 
 Branch `effort/listening-settings-refresh`, from a fresh `main`. One PR: no schema, no sync, and
 no change to the log format.

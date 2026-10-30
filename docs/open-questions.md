@@ -8,24 +8,24 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
 
 - **M4 Reconcile fast-follow** — re-point the registry entry when identity drift is found, and sharpen
   same-title/different-owner duplicate detection
-  ([ledger](milestones/M4-compilation-album-append.md)). **Evidence-gated by design:** build it only when
+  ([ledger](milestones/archive/M4-compilation-album-append.md)). **Evidence-gated by design:** build it only when
   a real append spawns a `Great Covers 2` drift. None observed in daily use yet.
 - **Pending Jon decision — M4 identity-drift (#2/#3).** Decide identity-match forgiveness and no-match
   behavior *when* a real append mangles a title. Parked until the evidence appears.
-- **LLM song list → Apple Music playlist** — [M11](milestones/M11-song-list-playlist.md) shipped
+- **LLM song list → Apple Music playlist** — [M11](milestones/archive/M11-song-list-playlist.md) shipped
   in #66 (S0) and #67 (S1 + S2, merged 2026-10-15). Jon passed the on-device gate on
   2026-10-17. Settled in the feasibility pass: hand-roll the Apple
   Music API create call rather than depend on MusadoraKit; catalog-only for v1; input is a
   pinned ChatGPT Project contract (`VF-PLAYLIST: v1`, Yes Chef/Galavant pattern), not free-text
   parsing.
-- **Library context for the playlist chat** — [M12](milestones/M12-library-context-mcp.md)
+- **Library context for the playlist chat** — [M12](milestones/archive/M12-library-context-mcp.md)
   **closed 2026-10-18.** The shared `MCPServerKit` effort (jon-platform#74), S0 + S1 (#72), and
   S2 (#76, `vf-mcp` and the playlist inbox) shipped with their device gates passed, and the
   close-out PR folded in the gate's fixes. Decision 1 is **no**: Last.fm (S3) is dropped in
-  favor of Apple's recently-played feed ([M13](milestones/M13-listening-history.md)). A Yes
+  favor of Apple's recently-played feed ([M13](milestones/archive/M13-listening-history.md)). A Yes
   Chef MCP server, reading its synced database read-only, is the likely second `MCPServerKit`
   consumer and starts by spiking app-group container access (ADR-0007 *Open*). Galavant waits.
-- **Listening history** — planned as [M13](milestones/M13-listening-history.md) (2026-10-18):
+- **Listening history** — planned as [M13](milestones/archive/M13-listening-history.md) (2026-10-18):
   an hourly poller of Apple's recently-played feed. It runs as a separate macOS 26 app on the
   Intel Mac mini, with the same engine inside Vinyl Fever for the laptop now and an
   Apple-silicon mini later. The log lives in iCloud Drive, and `vf-mcp` gains
@@ -49,8 +49,8 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   starts.
 
   The analytical strategy is now *Taste Intelligence*, planned as
-  [M17](milestones/M17-taste-intelligence.md) (2026-10-23).
-- **Taste Intelligence** — **planned as [M17](milestones/M17-taste-intelligence.md)
+  [M17](milestones/archive/M17-taste-intelligence.md) (2026-10-23).
+- **Taste Intelligence** — **planned as [M17](milestones/archive/M17-taste-intelligence.md)
   (2026-10-23)** from the v1 design in [taste-intelligence.md](taste-intelligence.md)
   (Jon and the architect, 2026-10-20, from a Codex brief). Vinyl Fever learns Jon's taste from
   evidence he already produces and lets the chat do the reasoning, aiming at "15 songs I
@@ -195,7 +195,7 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   leave out batches recorded without listening evidence, or mark them. Decide before S2 is
   dispatched. **Decided 2026-10-25:** added to M18 S2 as Decision 12 (coverage on every batch,
   and an uncovered batch is listed but not scored).
-- **Backups** — planned as [M19](milestones/M19-backups.md) (2026-10-25). Jon asked about data
+- **Backups** — planned as [M19](milestones/archive/M19-backups.md) (2026-10-25). Jon asked about data
   loss. The logs live only in iCloud Drive, the database only on the laptop, and the laptop's
   Time Machine last finished on 2026-02-15 (its SMB destination doesn't mount). S1 makes a
   daily set from the hourly agent: the iCloud logs go to local disk, the database goes to local
@@ -206,7 +206,7 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   Jon's `gh` keyring login. Later comments came from the bot. **For Jon:** check which shell or
   tool Codex used for that comment, and make sure only the bot's token is available to it. The
   split between the two identities is what makes native reviews work.
-- **Live tracks in playlists** — planned as [M14](milestones/M14-live-tracks-in-playlists.md)
+- **Live tracks in playlists** — planned as [M14](milestones/archive/M14-live-tracks-in-playlists.md)
   (2026-10-18). It interleaves with M13: S0 after M13 S1, S1 after M15 S0 (order amended
   2026-10-20, M14 Decision 3). Probes on 2026-10-18 showed:
   - One API create call mixes catalog songs with Jon's uploaded live tracks, in order, and they
@@ -222,11 +222,11 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
     on the library route, artists match by whole-word prefix, because most of Jon's uploads
     carry variants such as `… & The E Street Band (Live)`. S1's `uploadedAlbums` uses the same
     rule.
-  - **Decision 5 is superseded by [M15](milestones/M15-artist-identity.md)** (2026-10-20), which
+  - **Decision 5 is superseded by [M15](milestones/archive/M15-artist-identity.md)** (2026-10-20), which
     gives every artist comparison one `ArtistIdentity`.
   - **S1 merged as #97, and its device gate passed (2026-10-20). M14 is complete.** The gate's
     Tunnel of Love mix led to the library duplicates report below.
-- **Artist identity** — planned as [M15](milestones/M15-artist-identity.md) (2026-10-20), after
+- **Artist identity** — planned as [M15](milestones/archive/M15-artist-identity.md) (2026-10-20), after
   Jon asked why artist matching kept coming back. A probe of his 87,115-track library found
   three kinds of mismatch: band and live suffixes (34,909 tracks across 293 keys), spelling
   noise ("The" and apostrophes), and true aliases (44 overlap candidates, about half real). S0
@@ -329,7 +329,7 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   builds and archives today. **Recommendation:** watch it. If archives get frequent, cache the
   scratch path across builds, or build the helper as an Xcode target in the same build graph.
 
-- **Machine ops** — planned as [M16](milestones/M16-machine-ops.md) (2026-10-21). The app's
+- **Machine ops** — planned as [M16](milestones/archive/M16-machine-ops.md) (2026-10-21). The app's
   database is SQLiteData's default `~/Library/Application Support/SQLiteData.db`, and Debug
   builds erase it on any unknown migration, so opening an older Debug build wipes Jon's aliases.
   S0 moves the database to `VinylFever/VinylFever.sqlite`, refuses instead of erasing, and backs
@@ -343,7 +343,7 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
 - **The chat ran on an old connector for two days** (2026-10-25). #125's playlist tools merged
   on 10-24, but nothing installed the build, and ChatGPT.app's Codex kept an old `vf-mcp`
   running with a cached list of 7 tools. M17 S1's gate ran without the tools it was testing.
-  The fix is planned as [M16](milestones/M16-machine-ops.md) S4 (a build stamp the chat can
+  The fix is planned as [M16](milestones/archive/M16-machine-ops.md) S4 (a build stamp the chat can
   report, and an installer warning about old helpers), plus a rule that every chat gate starts
   with an install and a tool refresh. Telling Jon to "re-copy the Project instructions" was
   also wrong: that text is only the paste fallback (corrected in M18 and the feedback guide).

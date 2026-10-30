@@ -8,7 +8,10 @@ brief, and the iPhone companion*). Rules in
 `/Users/jon/code/jon-platform/AGENTS.md` apply. Where this doc and those conflict, stop and flag
 it.*
 
-Summary: The Music Feedback shortcut puts notes on the wrong song. Get Current Song can stay
+Status: Blocked
+Summary: S0–S2 shipped; next are Jon's S1 and S2 device gates and his setup steps (shortcut, TestFlight, Siri).
+
+The Music Feedback shortcut puts notes on the wrong song. Get Current Song can stay
 stuck on an earlier song until Jon restarts Music, and the Shazam fallback hears nothing because
 Siri pauses the music for dictation. S0 adds the app target and probes on Jon's devices what
 MusicKit and recently played report when the shortcut is wrong. S1 builds the Music Feedback

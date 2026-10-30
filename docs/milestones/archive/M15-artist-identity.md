@@ -3,7 +3,7 @@
 *Give every artist comparison in Vinyl Fever one shared rule, so a play, an upload, a library
 copy, and a catalog song by the same artist all match. S0 runs between M13 S2 and M14 S1, and
 S1 between M14 S1 and M13 S3; see Decision 5. Rules in
-[../technical-architecture.md](../technical-architecture.md) and
+[../technical-architecture.md](../../technical-architecture.md) and
 `/Users/jon/code/jon-platform/AGENTS.md` apply. Where this doc and those conflict, stop and flag
 it.*
 

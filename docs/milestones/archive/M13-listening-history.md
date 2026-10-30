@@ -1,7 +1,7 @@
 # Milestone 13 — Listening History (Apple's recently-played feed)
 
 *Record what Jon actually listens to on every device, and let the chat ask about it. Rules in
-[../technical-architecture.md](../technical-architecture.md), `/Users/jon/code/jon-platform/AGENTS.md`,
+[../technical-architecture.md](../../technical-architecture.md), `/Users/jon/code/jon-platform/AGENTS.md`,
 and jon-platform [ADR-0007](/Users/jon/code/jon-platform/docs/adr/0007-app-data-over-local-mcp.md)
 apply. Where this doc and those conflict, stop and flag it.*
 
@@ -583,7 +583,7 @@ can produce on handback, and adds **Poll now**. Same files as S4, so it goes nex
       collapsed, and the mini as the polling Mac. Every Tom Petty play landed once, in its own
       window.
     - **Found at the gate, and dispatched as an effort**
-      ([listening-settings-refresh](../efforts/listening-settings-refresh.md)):
+      ([listening-settings-refresh](../../efforts/archive/listening-settings-refresh.md)):
       - Vinyl Fever's Settings kept saying "This Mac holds the lease" after the mini took over,
         even after closing and reopening Settings.
       - The laptop's hourly run at 8:27 pm (still the S4 build) failed with "The file couldn't be

@@ -1,9 +1,9 @@
 # Milestone 2 — Apply the plan: Working copies, ALAC conversion, file-level verify
 
 *Build order for Codex. Architect/editor-in-chief: this doc is the contract; the
-strategic arc is in [../implementation-plan.md](../implementation-plan.md)
+strategic arc is in [../implementation-plan.md](../../implementation-plan.md)
 (Phase 1.5 / Phase 4–5), the rules in
-[../technical-architecture.md](../technical-architecture.md) and
+[../technical-architecture.md](../../technical-architecture.md) and
 `/Users/jon/code/jon-platform/AGENTS.md`. Where this doc and those conflict, stop
 and flag it — don't silently diverge.*
 
@@ -114,10 +114,10 @@ Invariants that must hold at merge:
 
 ## Relationship to `music_pipeline.sh` (the evidence)
 
-[`../../scripts/shell/music_pipeline.sh`](../../scripts/shell/music_pipeline.sh)
+[`../../scripts/shell/music_pipeline.sh`](../../../scripts/shell/music_pipeline.sh)
 is the source of truth for *what the operations are*, not *how the app is
 structured*. Per the Script Reassessment rule in
-[../technical-architecture.md](../technical-architecture.md), M2 **reimplements**
+[../technical-architecture.md](../../technical-architecture.md), M2 **reimplements**
 its durable intent in Swift-first logic and keeps only the audio-tool calls
 outside Swift. Mapping:
 

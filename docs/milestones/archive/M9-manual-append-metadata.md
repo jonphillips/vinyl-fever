@@ -6,8 +6,8 @@ dogfooding feedback from real use (2026-07-10): the append preview stamps
 collection-owned identity and (when a policy is bound, M8) recipe edits, but there is
 no way to attach a one-off human note — a source label, a session tag — to *this*
 append without editing the registry entry or a policy first. Rules in
-[../technical-architecture.md](../technical-architecture.md),
-[../metadata-policy-model.md](../metadata-policy-model.md), and
+[../technical-architecture.md](../../technical-architecture.md),
+[../metadata-policy-model.md](../../metadata-policy-model.md), and
 `/Users/jon/code/jon-platform/AGENTS.md` apply; where this doc and those conflict,
 stop and flag it.*
 
@@ -35,11 +35,11 @@ reading of "enter text *when appending*" and keeps the slice off the schema.
 The asymmetry that sets the two slices:
 
 - **Grouping already has a merge rail.** `CompilationApplyPlan.mergedGrouping(existing:addedTokens:)`
-  ([CompilationApplyPlan.swift](../../VinylFeverCore/Sources/VinylFeverCore/Collection/CompilationApplyPlan.swift))
+  ([CompilationApplyPlan.swift](../../../VinylFeverCore/Sources/VinylFeverCore/Collection/CompilationApplyPlan.swift))
   already unions and de-dupes tokens from the ruleset, recipes, and the file's existing
   grouping. A manual token is just **one more `addedTokens` source** — no new model.
 - **Comments does not exist as a tag.** `AudioTags` has no `comments` field
-  ([AudioTags.swift](../../VinylFeverCore/Sources/VinylFeverCore/Model/AudioTags.swift));
+  ([AudioTags.swift](../../../VinylFeverCore/Sources/VinylFeverCore/Model/AudioTags.swift));
   the only `comment=` strings in the tree are the artwork-stream `comment=Cover (front)`
   markers, unrelated. So Comments is a **net-new tag field threaded end-to-end**: read
   in both parsers, written by both taggers, surfaced in the diff. That lift — not the UI
@@ -104,7 +104,7 @@ The asymmetry that sets the two slices:
   S1 also folded in a **process-launch crash fix** surfaced by the debounced preview
   rebuild: `Process.terminate()` before `Process.run()` raises an ObjC exception, so
   `ProcessLaunchController` now serializes launch against cancellation
-  ([ToolPathClient+Live.swift](../../VinylFever/Clients/ToolPathClient+Live.swift)).
+  ([ToolPathClient+Live.swift](../../../VinylFever/Clients/ToolPathClient+Live.swift)).
 
 *Ungated — no device dependency. Comment read/write is deterministic file tagging
 (ffprobe / metaflac / ffmpeg), not the Music.app live-read that gates M3/M4.*
@@ -116,12 +116,12 @@ every touch point — follow it line for line and add the `comments` sibling.
 
 | File | Change | Template / anchor |
 | --- | --- | --- |
-| [AudioTags.swift](../../VinylFeverCore/Sources/VinylFeverCore/Model/AudioTags.swift) | add `public var comments: String?` (+ init param, nil default) | the `grouping` property/param right above it |
-| [ShowPlan.swift](../../VinylFeverCore/Sources/VinylFeverCore/Model/ShowPlan.swift) | `ProposedTags`: add `public var comments: String?` (init, nil default) and a `case comments` to `Field` (`:125`, `:164`) | the `grouping` var + `case grouping` |
-| [FLACMetadataParser.swift](../../VinylFeverCore/Sources/VinylFeverCore/Tagging/FLACMetadataParser.swift) | map the Vorbis `COMMENT` field → `comments` in `VorbisCommentParser` | the `GROUPING` mapping |
-| [FFProbeMetadataParser.swift](../../VinylFeverCore/Sources/VinylFeverCore/Tagging/FFProbeMetadataParser.swift) | map the `comment` format/stream tag → `comments` | the `grouping` mapping |
-| [AudioTaggingCommands.swift](../../VinylFeverCore/Sources/VinylFeverCore/Tagging/AudioTaggingCommands.swift) | FLAC: `appendFLACTag("COMMENT", value: tags.comments, field: .comments, …)` (`:73`); ffmpeg: `appendFFmpegMetadata("comment", value: track.tags.comments, field: .comments, …)` (`:218`) | the adjacent `GROUPING` / `grouping` append calls |
-| [CompilationApplyPlan.swift](../../VinylFeverCore/Sources/VinylFeverCore/Collection/CompilationApplyPlan.swift) | a **conditional** `CompilationTagDiff(field: "Comments", …)` row emitted only when a note is present, so empty-note plans stay byte-identical; a pure `appendedComment(source:note:)` helper for the merge | the conditional title/artist rows M8 added; `mergedGrouping` for the "pure helper" shape |
+| [AudioTags.swift](../../../VinylFeverCore/Sources/VinylFeverCore/Model/AudioTags.swift) | add `public var comments: String?` (+ init param, nil default) | the `grouping` property/param right above it |
+| [ShowPlan.swift](../../../VinylFeverCore/Sources/VinylFeverCore/Model/ShowPlan.swift) | `ProposedTags`: add `public var comments: String?` (init, nil default) and a `case comments` to `Field` (`:125`, `:164`) | the `grouping` var + `case grouping` |
+| [FLACMetadataParser.swift](../../../VinylFeverCore/Sources/VinylFeverCore/Tagging/FLACMetadataParser.swift) | map the Vorbis `COMMENT` field → `comments` in `VorbisCommentParser` | the `GROUPING` mapping |
+| [FFProbeMetadataParser.swift](../../../VinylFeverCore/Sources/VinylFeverCore/Tagging/FFProbeMetadataParser.swift) | map the `comment` format/stream tag → `comments` | the `grouping` mapping |
+| [AudioTaggingCommands.swift](../../../VinylFeverCore/Sources/VinylFeverCore/Tagging/AudioTaggingCommands.swift) | FLAC: `appendFLACTag("COMMENT", value: tags.comments, field: .comments, …)` (`:73`); ffmpeg: `appendFFmpegMetadata("comment", value: track.tags.comments, field: .comments, …)` (`:218`) | the adjacent `GROUPING` / `grouping` append calls |
+| [CompilationApplyPlan.swift](../../../VinylFeverCore/Sources/VinylFeverCore/Collection/CompilationApplyPlan.swift) | a **conditional** `CompilationTagDiff(field: "Comments", …)` row emitted only when a note is present, so empty-note plans stay byte-identical; a pure `appendedComment(source:note:)` helper for the merge | the conditional title/artist rows M8 added; `mergedGrouping` for the "pure helper" shape |
 
 The append helper (`appendedComment(source:note:) -> String?`) is the one genuinely new
 piece of logic — keep it a free-standing pure function so it is fixture-testable in
@@ -146,7 +146,7 @@ end-to-end template.
 
 Edits:
 
-- **[AppModel.swift](../../VinylFever/Features/AppShell/AppModel.swift)** — add ephemeral
+- **[AppModel.swift](../../../VinylFever/Features/AppShell/AppModel.swift)** — add ephemeral
   append-scratch state (`compilationAppendGrouping`, `compilationAppendComments`,
   both `String`, default `""`). In `buildCompilationAppendPlan` (`:751`), pass the typed
   grouping token in as an extra grouping source and the comments note into the plan
@@ -154,7 +154,7 @@ Edits:
   folder is dropped (mirror the `compilationAppendFolder = nil` sites at `:989` and the
   selection-change rebuild at `:861`). Ephemeral: never read from or written to
   `AppSetting` / the DB.
-- **[CollectionsView.swift](../../VinylFever/Features/Collections/CollectionsView.swift)**
+- **[CollectionsView.swift](../../../VinylFever/Features/Collections/CollectionsView.swift)**
   — two labelled `TextField`s in `CompilationAppendSection` (near the folder path /
   policy picker), bound to the AppModel scratch state, that trigger a plan rebuild on
   commit so the preview reflects them. Keep them disabled/hidden until a folder is
