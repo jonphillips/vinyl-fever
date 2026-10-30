@@ -4,14 +4,18 @@ import VinylFeverNotes
 
 @main
 struct VinylFeverMobileApp: App {
+  @State private var shelfModel = PlaylistShelfModel()
+
   var body: some Scene {
     WindowGroup {
-      PlaylistHomeView(model: PlaylistShelfModel())
+      PlaylistHomeView(model: shelfModel)
     }
   }
 }
 
 private struct PlaylistHomeView: View {
+  @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+  @State private var didApplyInitialSelection = false
   @Bindable var model: PlaylistShelfModel
 
   private var selectedPlaylist: PlaylistShelfPlaylist? {
@@ -79,7 +83,14 @@ private struct PlaylistHomeView: View {
         MobileSetupView()
       }
     }
-    .task { await model.refresh() }
+    .task {
+      await model.refresh()
+      guard !didApplyInitialSelection else { return }
+      didApplyInitialSelection = true
+      if horizontalSizeClass == .regular, model.selectedPlaylistID == nil {
+        model.selectedPlaylistID = model.playlists.first?.id
+      }
+    }
   }
 }
 
@@ -180,7 +191,7 @@ private struct PlaylistSongView: View {
       if !song.like.isEmpty {
         VStack(alignment: .leading, spacing: 5) {
           Text("Sounds like").font(.subheadline.weight(.semibold))
-          ForEach(Array(song.like.enumerated()), id: \.element.title) { _, like in
+          ForEach(Array(song.like.enumerated()), id: \.offset) { _, like in
             Text("\(like.title) · \(like.artist)")
               .font(.subheadline)
               .foregroundStyle(.secondary)

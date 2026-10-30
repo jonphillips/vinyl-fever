@@ -58,8 +58,9 @@ final class PlaylistShelfModel {
       requiresFolderAccess = false
       playlists = PlaylistShelf.make(from: result.ledger, now: now, calendar: .current, timeZone: .current)
       hasUnreadableFiles = result.totalFileCount > 0 && result.unreadableFileCount > 0
-      if let selectedPlaylistID, playlists.contains(where: { $0.id == selectedPlaylistID }) { return }
-      selectedPlaylistID = playlists.first?.id
+      if let selectedPlaylistID, !playlists.contains(where: { $0.id == selectedPlaylistID }) {
+        self.selectedPlaylistID = nil
+      }
     } catch ProbeBookmarkError.folderNotSelected, ProbeBookmarkError.accessRefused {
       requiresFolderAccess = true
       playlists = []

@@ -29,7 +29,38 @@ struct PlaylistShelfModelTests {
     #expect(model.playlists.map { $0.batch.playlist } == ["Power Pop"])
     #expect(model.hasUnreadableFiles)
     #expect(!model.requiresFolderAccess)
-    #expect(model.selectedPlaylistID == model.playlists.first?.id)
+    #expect(model.selectedPlaylistID == nil)
+  }
+
+  @Test @MainActor
+  func refreshKeepsAnExistingSelectionAndClearsOneThatDisappears() async {
+    let first = RecommendationBatch(recordedAt: Date(timeIntervalSince1970: 2), host: "Test", playlist: "First", tracks: [])
+    let second = RecommendationBatch(recordedAt: Date(timeIntervalSince1970: 1), host: "Test", playlist: "Second", tracks: [])
+    let rows = PlaylistShelf.make(
+      from: RecommendationLedgerReadResult(batches: [first, second], skippedLines: 0),
+      now: Date(timeIntervalSince1970: 3), calendar: Calendar.current, timeZone: .current
+    )
+    let model = withDependencies({ dependencies in
+      dependencies.date.now = Date(timeIntervalSince1970: 3)
+      dependencies.playlistShelfClient.read = {
+        RecommendationLedgerFolderRead(
+          ledger: RecommendationLedgerReadResult(batches: [first, second], skippedLines: 0),
+          filesRead: 1,
+          unreadableFileCount: 0,
+          totalFileCount: 1
+        )
+      }
+    }) {
+      PlaylistShelfModel()
+    }
+
+    model.selectedPlaylistID = rows[1].id
+    await model.refresh()
+    #expect(model.selectedPlaylistID == rows[1].id)
+
+    model.selectedPlaylistID = "removed-playlist"
+    await model.refresh()
+    #expect(model.selectedPlaylistID == nil)
   }
 
   @Test @MainActor

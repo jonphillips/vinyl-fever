@@ -56,6 +56,20 @@ struct RecommendationLedgerTests {
     #expect(shelf[0].songs[7].like.isEmpty)
     #expect(PlaylistShelf.noReasonsText(for: shelf[0]) == nil)
     #expect(PlaylistShelf.noReasonsText(for: shelf[2]) == "No reasons were recorded for this playlist.")
+
+    let inserted = RecommendationBatch(
+      recordedAt: ISO8601DateFormatter().date(from: "2024-01-01T12:00:00Z")!,
+      host: "Another Mac", playlist: "Earlier batch", tracks: [
+        RecommendationTrack(artist: "Band", title: "Inserted song", familiar: false, reasons: [], artistKnown: true),
+      ])
+    let expanded = PlaylistShelf.make(from: RecommendationLedgerReadResult(
+      batches: [inserted, old, recent, earlierRecent, picks], skippedLines: 0),
+      now: now, calendar: calendar, timeZone: calendar.timeZone)
+    for original in shelf {
+      let matching = try #require(expanded.first { $0.batch == original.batch })
+      #expect(matching.id == original.id)
+      #expect(matching.songs.map(\.id) == original.songs.map(\.id))
+    }
   }
 
   @Test("JSONL round-trips and tolerates blank lines, unsupported records, partial tails and no final newline")

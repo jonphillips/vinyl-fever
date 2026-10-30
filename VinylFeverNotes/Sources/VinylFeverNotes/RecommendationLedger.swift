@@ -114,14 +114,15 @@ public enum PlaylistShelf {
     calendar: Calendar,
     timeZone: TimeZone
   ) -> [PlaylistShelfPlaylist] {
-    let batches = ledger.batches.enumerated()
-      .filter { $0.element.kind == "staged-playlist" }
-      .sorted { $0.element.recordedAt > $1.element.recordedAt }
+    let batches = ledger.batches
+      .filter { $0.kind == "staged-playlist" }
+      .sorted { $0.recordedAt > $1.recordedAt }
 
-    return batches.map { index, batch in
+    return batches.map { batch in
+      let playlistID = "\(batch.host)|\(batch.recordedAt.timeIntervalSince1970)"
       let songs = batch.tracks.enumerated().map { songIndex, track in
         PlaylistShelfSong(
-          id: "\(index)-\(songIndex)",
+          id: "\(playlistID)|\(songIndex)",
           title: track.title,
           artist: track.artist,
           album: track.album,
@@ -132,7 +133,7 @@ public enum PlaylistShelf {
         )
       }
       return PlaylistShelfPlaylist(
-        id: "\(batch.host)|\(batch.recordedAt.timeIntervalSince1970)|\(index)",
+        id: playlistID,
         batch: batch,
         stagedDate: RecommendationDatePhrase.format(batch.recordedAt, relativeTo: now,
           calendar: calendar, timeZone: timeZone),
