@@ -10,7 +10,7 @@ final class PlaylistPlaybackModel {
   private(set) var resolvedSongs: [String: Song] = [:]
   private(set) var notFoundSongIDs: Set<String> = []
   private(set) var resolvingSongIDs: Set<String> = []
-  private(set) var isResolving = false
+  private(set) var isPreparingPlayback = false
   private(set) var errorMessage: String?
   private(set) var matchedPlaylist: Playlist?
   private(set) var nowPlayingSongID: String?
@@ -78,8 +78,6 @@ final class PlaylistPlaybackModel {
   func resolveSongs(through index: Int) async {
     guard isAuthorized, !songs.isEmpty, index >= 0 else { return }
     await waitForStagedPlaylistLookup()
-    isResolving = true
-    defer { isResolving = false }
     for song in songs.prefix(index + 1) {
       _ = await resolveSong(song.id)
     }
@@ -125,8 +123,8 @@ final class PlaylistPlaybackModel {
   func play(_ songID: String) async {
     guard songs.contains(where: { $0.id == songID }) else { return }
     await waitForStagedPlaylistLookup()
-    isResolving = true
-    defer { isResolving = false }
+    isPreparingPlayback = true
+    defer { isPreparingPlayback = false }
     guard let startingSong = await resolveSong(songID) else { return }
     do {
       if let matchedPlaylist {

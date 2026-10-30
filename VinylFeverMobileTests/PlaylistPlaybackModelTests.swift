@@ -191,6 +191,7 @@ struct PlaylistPlaybackModelTests {
 
     #expect(librarySearches == 4)
     #expect(model.resolvedSongs.count == 4)
+    #expect(!model.isPreparingPlayback)
   }
 
   @Test @MainActor
@@ -297,6 +298,7 @@ struct PlaylistPlaybackModelTests {
       dependencies.playlistMusicClient.playSongs = { _, _ in actions.append("queue-and-play") }
     }) {
       let model = PlaylistPlaybackModel()
+      await model.prepare(stagedPlaylist(tracks: [(title: "Song", artist: "Artist")]))
       await model.playLike(RecommendationLike(artist: "Artist", title: "Like"), afterCurrent: true)
       hasCurrentEntry = false
       await model.playLike(RecommendationLike(artist: "Artist", title: "Empty"), afterCurrent: true)

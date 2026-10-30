@@ -175,14 +175,14 @@ private struct PlaylistDetailView: View {
               guard let first = playlist.songs.first else { return }
               Task { await playbackModel.play(first.id) }
             } label: {
-              if playbackModel.isResolving {
+              if playbackModel.isPreparingPlayback {
                 ProgressView().accessibilityLabel("Preparing playlist")
               } else {
                 Label("Play All", systemImage: "play.fill")
               }
             }
             .buttonStyle(.borderedProminent)
-            .disabled(playbackModel.isResolving)
+            .disabled(playbackModel.isPreparingPlayback)
           }
           if let errorMessage = playbackModel.errorMessage {
             Text(errorMessage).font(.callout).foregroundStyle(.red)
