@@ -1,17 +1,201 @@
 import MusicKit
-import VinylFeverNotes
 import SwiftUI
+import VinylFeverNotes
 
 @main
 struct VinylFeverMobileApp: App {
   var body: some Scene {
     WindowGroup {
-      MobileSetupView()
+      PlaylistHomeView(model: PlaylistShelfModel())
     }
   }
 }
 
+private struct PlaylistHomeView: View {
+  @Bindable var model: PlaylistShelfModel
+
+  private var selectedPlaylist: PlaylistShelfPlaylist? {
+    model.playlists.first { $0.id == model.selectedPlaylistID }
+  }
+
+  var body: some View {
+    NavigationSplitView {
+      List(selection: $model.selectedPlaylistID) {
+        Section {
+          if model.hasUnreadableFiles {
+            Label("Some recommendations are still downloading from iCloud. Pull to refresh.",
+              systemImage: "icloud.and.arrow.down")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+          ForEach(model.playlists) { playlist in
+            NavigationLink(value: playlist.id) {
+              PlaylistRow(playlist: playlist)
+            }
+            .tag(playlist.id)
+          }
+        } header: {
+          Text("Playlists")
+        }
+      }
+      .listStyle(.sidebar)
+      .navigationTitle("Playlists")
+      .refreshable { await model.refresh() }
+      .toolbar {
+        ToolbarItem(placement: .topBarTrailing) {
+          Button("Setup", systemImage: "gearshape") { model.setupButtonTapped() }
+        }
+      }
+    } detail: {
+      Group {
+        if let playlist = selectedPlaylist {
+          PlaylistDetailView(playlist: playlist, hasUnreadableFiles: model.hasUnreadableFiles) {
+            await model.refresh()
+          }
+        } else if model.requiresFolderAccess {
+          ContentUnavailableView {
+            Label("Grant folder access in Setup", systemImage: "folder.badge.questionmark")
+          } actions: {
+            Button("Open Setup") { model.setupButtonTapped() }
+              .buttonStyle(.borderedProminent)
+          }
+        } else if model.isLoading {
+          ProgressView("Loading playlists…")
+        } else {
+          ContentUnavailableView("No Vinyl Fever playlists yet. Ask the chat for some.", systemImage: "music.note.list")
+        }
+      }
+      .toolbar {
+        ToolbarItem(placement: .topBarTrailing) {
+          Button("Setup", systemImage: "gearshape") { model.setupButtonTapped() }
+        }
+      }
+    }
+    .sheet(item: $model.destination, onDismiss: {
+      Task { await model.refresh() }
+    }) { destination in
+      switch destination {
+      case .setup:
+        MobileSetupView()
+      }
+    }
+    .task { await model.refresh() }
+  }
+}
+
+private struct PlaylistRow: View {
+  let playlist: PlaylistShelfPlaylist
+
+  private var title: String {
+    guard let name = playlist.batch.playlist?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else {
+      return "Staged playlist"
+    }
+    return name
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      Text(title).font(.headline).lineLimit(2)
+      Text("\(playlist.stagedDate) · \(playlist.songCount) songs · \(playlist.newSongCount) new")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+    }
+    .padding(.vertical, 4)
+    .accessibilityElement(children: .combine)
+  }
+}
+
+private struct PlaylistDetailView: View {
+  let playlist: PlaylistShelfPlaylist
+  let hasUnreadableFiles: Bool
+  let refresh: () async -> Void
+
+  private var title: String {
+    guard let name = playlist.batch.playlist?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else {
+      return "Staged playlist"
+    }
+    return name
+  }
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 24) {
+        if hasUnreadableFiles {
+          Label("Some recommendations are still downloading from iCloud. Pull to refresh.", systemImage: "icloud.and.arrow.down")
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+
+        VStack(alignment: .leading, spacing: 10) {
+          Text(title).font(.largeTitle.bold())
+          Text("\(playlist.stagedDate) · \(playlist.songCount) songs · \(playlist.newSongCount) new to you")
+            .foregroundStyle(.secondary)
+          if let request = playlist.batch.request, !request.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+              Text("You asked").font(.headline)
+              Text(request)
+            }
+            .padding(.top, 8)
+          }
+          if let noReasons = PlaylistShelf.noReasonsText(for: playlist) {
+            Text(noReasons).foregroundStyle(.secondary).padding(.top, 4)
+          }
+        }
+
+        ForEach(playlist.songs) { song in
+          VStack(spacing: 18) {
+            PlaylistSongView(song: song)
+            if song.id != playlist.songs.last?.id { Divider() }
+          }
+        }
+      }
+      .padding()
+      .frame(maxWidth: 760, alignment: .leading)
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .refreshable { await refresh() }
+    .navigationTitle(title)
+    .navigationBarTitleDisplayMode(.inline)
+  }
+}
+
+private struct PlaylistSongView: View {
+  let song: PlaylistShelfSong
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 9) {
+      Text(song.title).font(.title3.weight(.semibold))
+      Text(song.artist).foregroundStyle(.secondary)
+      if song.album != nil || song.year != nil {
+        Text([song.album, song.year.map(String.init)].compactMap { $0 }.joined(separator: " · "))
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
+      }
+      Text(song.familiarity).font(.subheadline.weight(.medium))
+      if let why = song.why {
+        Text(why).fixedSize(horizontal: false, vertical: true)
+      }
+      if !song.like.isEmpty {
+        VStack(alignment: .leading, spacing: 5) {
+          Text("Sounds like").font(.subheadline.weight(.semibold))
+          ForEach(Array(song.like.enumerated()), id: \.element.title) { _, like in
+            Text("\(like.title) · \(like.artist)")
+              .font(.subheadline)
+              .foregroundStyle(.secondary)
+          }
+        }
+        .padding(.top, 4)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .accessibilityElement(children: .combine)
+  }
+}
+
 private struct MobileSetupView: View {
+  @Environment(\.dismiss) private var dismiss
   @State private var authorizationStatus = MusicAuthorization.currentStatus
   @State private var folderName: String?
   @State private var errorMessage: String?
@@ -59,7 +243,12 @@ private struct MobileSetupView: View {
           Section { Text(errorMessage).foregroundStyle(.red) }
         }
       }
-      .navigationTitle("Vinyl Fever")
+      .navigationTitle("Setup")
+      .toolbar {
+        ToolbarItem(placement: .topBarTrailing) {
+          Button("Done") { dismiss() }
+        }
+      }
       .onAppear { lastNote = FeedbackLastNote.load() }
       .fileImporter(isPresented: $isImportingFolder, allowedContentTypes: [.folder], allowsMultipleSelection: false) { result in
         do {

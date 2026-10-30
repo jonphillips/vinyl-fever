@@ -47,7 +47,7 @@ public enum WhyThisSong {
   ) -> String {
     switch answer {
     case let .withReason(batch, track):
-      let date = datePhrase(batch.recordedAt, now: now, calendar: calendar, timeZone: timeZone)
+      let date = RecommendationDatePhrase.format(batch.recordedAt, relativeTo: now, calendar: calendar, timeZone: timeZone)
       let intro: String
       if batch.kind == "new-music-picks" {
         intro = "\(song.title) by \(song.artist) was one of the chat's New Music picks on \(date)."
@@ -62,13 +62,13 @@ public enum WhyThisSong {
       }
       return text
     case let .stagedWithoutReason(batch, _):
-      let date = datePhrase(batch.recordedAt, now: now, calendar: calendar, timeZone: timeZone)
+      let date = RecommendationDatePhrase.format(batch.recordedAt, relativeTo: now, calendar: calendar, timeZone: timeZone)
       if batch.kind == "new-music-picks" {
         return "\(song.title) by \(song.artist) was one of the chat's New Music picks on \(date), without a reason."
       }
       return "\(song.title) by \(song.artist) was in \(playlistPhrase(batch)), staged \(date), without a reason."
     case let .notPicked(batch, _):
-      let date = datePhrase(batch.recordedAt, now: now, calendar: calendar, timeZone: timeZone)
+      let date = RecommendationDatePhrase.format(batch.recordedAt, relativeTo: now, calendar: calendar, timeZone: timeZone)
       return "The chat saw \(song.title) by \(song.artist) in New Music on \(date) and didn't pick it."
     case .notRecommended:
       return "Vinyl Fever didn't recommend \(song.title) by \(song.artist)."
@@ -80,18 +80,6 @@ public enum WhyThisSong {
   private static func playlistPhrase(_ batch: RecommendationBatch) -> String {
     guard let playlist = nonempty(batch.playlist) else { return "a staged batch" }
     return playlist
-  }
-
-  private static func datePhrase(_ date: Date, now: Date, calendar: Calendar, timeZone: TimeZone) -> String {
-    var calendar = calendar
-    calendar.timeZone = timeZone
-    let formatter = DateFormatter()
-    formatter.calendar = calendar
-    formatter.timeZone = timeZone
-    formatter.locale = Locale(identifier: "en_US_POSIX")
-    formatter.dateFormat = calendar.component(.year, from: date) == calendar.component(.year, from: now)
-      ? "MMMM d" : "MMMM d, yyyy"
-    return formatter.string(from: date)
   }
 
   private static func joined(_ values: [String]) -> String {

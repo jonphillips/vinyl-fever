@@ -5,6 +5,7 @@ struct RecommendationLedgerFolderRead: Equatable {
   var ledger: RecommendationLedgerReadResult
   var filesRead: Int
   var unreadableFileCount: Int
+  var totalFileCount: Int = 0
 }
 
 enum RecommendationLedgerFolderReader {
@@ -31,7 +32,8 @@ enum RecommendationLedgerFolderReader {
       return RecommendationLedgerFolderRead(
         ledger: RecommendationLedgerReadResult(batches: [], skippedLines: 0),
         filesRead: 0,
-        unreadableFileCount: 1
+        unreadableFileCount: 1,
+        totalFileCount: 0
       )
     }
     let urls = candidates.compactMap { candidate -> URL? in
@@ -47,7 +49,8 @@ enum RecommendationLedgerFolderReader {
       return RecommendationLedgerFolderRead(
         ledger: RecommendationLedgerReadResult(batches: [], skippedLines: 0),
         filesRead: 0,
-        unreadableFileCount: 1
+        unreadableFileCount: 1,
+        totalFileCount: 0
       )
     }
 
@@ -72,7 +75,8 @@ enum RecommendationLedgerFolderReader {
     return RecommendationLedgerFolderRead(
       ledger: RecommendationLedgerCodec.readFiles(files),
       filesRead: files.count,
-      unreadableFileCount: unreadable
+      unreadableFileCount: unreadable,
+      totalFileCount: urls.count
     )
   }
 

@@ -85,7 +85,7 @@ plays it from any song, and leaves a note on the one that missed, without openin
 don't wait on Jon's gates. The gates can run in one sitting after S3, or one at a time if Jon
 wants to see S1 sooner.
 
-- [ ] **S1 — The playlists and their reasons.**
+- [x] **S1 — The playlists and their reasons.**
   - **The home screen.** The app opens on **Playlists**, in a `NavigationSplitView`: the
     playlists are the sidebar list, and the selected playlist is the detail. On iPhone it
     collapses to a stack. Today's setup `Form` moves, unchanged, into a **Setup** sheet opened

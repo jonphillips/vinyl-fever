@@ -1,5 +1,11 @@
 # Done log
 
+## 2026-10-30 — M21 · S1: The playlists and their reasons
+
+- Branch: `m21/s1-playlists-view`.
+- Replaced the mobile setup landing screen with a Playlists `NavigationSplitView`; moved the M20 setup form and its tests into a Setup sheet. Added Foundation-only shelf projections for staged playlist batches, song familiarity and reasons, counts, and the shared staged-date formatter. Added injected ledger-folder and date dependencies, partial-download and folder-access states, pull-to-refresh, and shelf model coverage.
+- VinylFeverNotes (24 tests), Listening (55), Core (299), Mac app (94), and iOS Simulator (17) passed. Generic iOS Simulator build passed; `check-handoff` passed. Jon's iPad and iPhone S1 gate remains to run with the M21 device checks.
+
 ## 2026-10-30 — M20 · S2: Why This Song
 
 - Branch: `m20/s2-why-this-song`.
