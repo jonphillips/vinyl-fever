@@ -97,6 +97,7 @@ private struct PlaylistHomeView: View {
         model.selectedPlaylistID = model.playlists.first?.id
       }
     }
+    .task { await playbackModel.observeCurrentEntry() }
   }
 }
 
@@ -138,7 +139,7 @@ private struct PlaylistDetailView: View {
 
   var body: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: 24) {
+      LazyVStack(alignment: .leading, spacing: 24) {
         if hasUnreadableFiles {
           Label("Some recommendations are still downloading from iCloud. Pull to refresh.", systemImage: "icloud.and.arrow.down")
             .font(.callout)
@@ -170,11 +171,18 @@ private struct PlaylistDetailView: View {
               .font(.callout)
               .foregroundStyle(.secondary)
           } else {
-            Button("Play All", systemImage: "play.fill") {
+            Button {
               guard let first = playlist.songs.first else { return }
               Task { await playbackModel.play(first.id) }
+            } label: {
+              if playbackModel.isResolving {
+                ProgressView().accessibilityLabel("Preparing playlist")
+              } else {
+                Label("Play All", systemImage: "play.fill")
+              }
             }
             .buttonStyle(.borderedProminent)
+            .disabled(playbackModel.isResolving)
           }
           if let errorMessage = playbackModel.errorMessage {
             Text(errorMessage).font(.callout).foregroundStyle(.red)
@@ -186,7 +194,9 @@ private struct PlaylistDetailView: View {
             PlaylistSongView(song: song, playbackModel: playbackModel)
             if song.id != playlist.songs.last?.id { Divider() }
           }
-          .onAppear { Task { await playbackModel.resolveSongs(through: index + 8) } }
+          .task {
+            await playbackModel.resolveSongs(through: index + PlaylistPlaybackModel.resolveAheadCount)
+          }
         }
       }
       .padding()
@@ -194,7 +204,10 @@ private struct PlaylistDetailView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
     }
     .refreshable { await refresh() }
-    .task { await playbackModel.prepare(playlist) }
+    .task(id: playlist.id) {
+      await playbackModel.prepare(playlist)
+      await playbackModel.resolveSongs(through: PlaylistPlaybackModel.resolveAheadCount)
+    }
     .navigationTitle(title)
     .navigationBarTitleDisplayMode(.inline)
   }
@@ -203,19 +216,6 @@ private struct PlaylistDetailView: View {
 private struct PlaylistSongView: View {
   let song: PlaylistShelfSong
   let playbackModel: PlaylistPlaybackModel
-  @ObservedObject private var playerQueue = SystemMusicPlayer.shared.queue
-
-  private var isPlaying: Bool {
-    guard let entry = playerQueue.currentEntry else { return false }
-    let current: FeedbackSong
-    if case let .song(value)? = entry.item {
-      current = FeedbackSong(title: entry.title, artist: value.artistName)
-    } else {
-      current = FeedbackSong(title: entry.title, artist: entry.subtitle ?? "")
-    }
-    return MusicFeedback.matches(current, FeedbackSong(title: song.title, artist: song.artist))
-  }
-
   var body: some View {
     HStack(alignment: .top, spacing: 14) {
       if let resolved = playbackModel.resolvedSongs[song.id], let artwork = resolved.artwork {
@@ -232,10 +232,14 @@ private struct PlaylistSongView: View {
       VStack(alignment: .leading, spacing: 9) {
         HStack {
           Text(song.title).font(.title3.weight(.semibold))
-          if isPlaying { Image(systemName: "waveform").foregroundStyle(.tint).accessibilityLabel("Now playing") }
+          if playbackModel.nowPlayingSongID == song.id {
+            Image(systemName: "waveform").foregroundStyle(.tint).accessibilityLabel("Now playing")
+          }
           Spacer()
           if playbackModel.notFoundSongIDs.contains(song.id) {
             Text("Not in Apple Music").font(.caption).foregroundStyle(.secondary)
+          } else if playbackModel.resolvingSongIDs.contains(song.id) {
+            ProgressView().accessibilityLabel("Finding \(song.title)")
           } else if playbackModel.resolvedSongs[song.id] != nil {
             Button("Play", systemImage: "play.fill") {
               Task { await playbackModel.play(song.id) }

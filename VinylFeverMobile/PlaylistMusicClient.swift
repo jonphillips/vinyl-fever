@@ -1,16 +1,21 @@
 import Dependencies
 import DependenciesMacros
+import Combine
 import MusicKit
 import VinylFeverNotes
 
 @DependencyClient
 struct PlaylistMusicClient {
   var isAuthorized: @MainActor @Sendable () -> Bool = { false }
+  var hasCurrentEntry: @MainActor @Sendable () -> Bool = { false }
+  var currentEntry: @MainActor @Sendable () -> AsyncStream<FeedbackSong?> = {
+    AsyncStream { $0.finish() }
+  }
   var playlists: @MainActor @Sendable () async throws -> [Playlist]
   var playlistDetails: @MainActor @Sendable (Playlist) async throws -> Playlist
   var librarySongs: @MainActor @Sendable (String) async throws -> [Song]
   var catalogSongs: @MainActor @Sendable (String, Int) async throws -> [Song]
-  var playPlaylist: @MainActor @Sendable (Playlist, Song) async throws -> Void
+  var playPlaylist: @MainActor @Sendable (Playlist, Playlist.Entry) async throws -> Void
   var playSongs: @MainActor @Sendable ([Song], Song) async throws -> Void
   var insertSong: @MainActor @Sendable (Song, Bool) async throws -> Void
   var play: @MainActor @Sendable () async throws -> Void
@@ -23,6 +28,30 @@ extension PlaylistMusicClient: TestDependencyKey {
 private enum PlaylistMusicClientKey: DependencyKey {
   static let liveValue = PlaylistMusicClient(
     isAuthorized: { MusicAuthorization.currentStatus == .authorized },
+    hasCurrentEntry: { SystemMusicPlayer.shared.queue.currentEntry != nil },
+    currentEntry: {
+      AsyncStream { continuation in
+        let queue = SystemMusicPlayer.shared.queue
+        let observation = Task { @MainActor in
+          func currentSong() -> FeedbackSong? {
+            guard let entry = queue.currentEntry else { return nil }
+            let artist: String
+            if case let .song(song)? = entry.item {
+              artist = song.artistName
+            } else {
+              artist = entry.subtitle ?? ""
+            }
+            return FeedbackSong(title: entry.title, artist: artist)
+          }
+          continuation.yield(currentSong())
+          for await _ in queue.objectWillChange.values {
+            await Task.yield()
+            continuation.yield(currentSong())
+          }
+        }
+        continuation.onTermination = { _ in observation.cancel() }
+      }
+    },
     playlists: {
       var request = MusicLibraryRequest<Playlist>()
       request.limit = 1_000
@@ -41,16 +70,7 @@ private enum PlaylistMusicClientKey: DependencyKey {
       request.limit = limit
       return Array(try await request.response().songs)
     },
-    playPlaylist: { playlist, song in
-      guard let entries = playlist.entries,
-        let entry = entries.first(where: { entry in
-          guard case let .song(candidate)? = entry.item else { return false }
-          return MusicFeedback.matches(
-            FeedbackSong(title: candidate.title, artist: candidate.artistName),
-            FeedbackSong(title: song.title, artist: song.artistName)
-          )
-        })
-      else { throw PlaylistMusicError.playlistEntryNotFound }
+    playPlaylist: { playlist, entry in
       let player = SystemMusicPlayer.shared
       player.queue = MusicPlayer.Queue(playlist: playlist, startingAt: entry)
       try await player.play()
@@ -74,8 +94,4 @@ extension DependencyValues {
     get { self[PlaylistMusicClientKey.self] }
     set { self[PlaylistMusicClientKey.self] = newValue }
   }
-}
-
-enum PlaylistMusicError: Error {
-  case playlistEntryNotFound
 }

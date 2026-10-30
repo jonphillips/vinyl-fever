@@ -28,7 +28,7 @@ goes in `DONE-LOG.md`.
   check, and an unpicked New Music song.
 
 - **M21 S1:** four steps on the iPad and the iPhone: the list, *2023 Selections*, *Rolling Stone's 200…*, and Setup still working. It can run with S2 and S3's gates ([M21](milestones/M21-playlists-view.md)).
-- **M21 S2:** six steps on the iPad or iPhone: artwork and starting playback from a tapped song; playing a “Sounds like” song then resuming the playlist; Lock Screen continuation; scroll performance and unavailable songs; renamed staged playlist fallback; and confirming plays appear in `recent_listening` after the next hourly poll ([M21](milestones/M21-playlists-view.md)).
+- **M21 S2:** six steps on the iPad or iPhone: artwork, starting playback from a tapped song, and switching between two playlists on iPad; playing a “Sounds like” song then resuming the playlist; Lock Screen continuation; scroll performance and unavailable songs; renamed staged playlist fallback; and confirming plays appear in `recent_listening` after the next hourly poll ([M21](milestones/M21-playlists-view.md)).
 ## Setup steps held for Jon
 
 - **Before M20 S1's gate:** the one-action "VF Music Feedback" shortcut, picked in Control
