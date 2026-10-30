@@ -167,6 +167,10 @@ targets:
     dependencies:
       - package: VinylFeverNotes
         product: VinylFeverNotes
+      - package: swift-dependencies
+        product: Dependencies
+      - package: swift-dependencies
+        product: DependenciesMacros
     info:
       path: VinylFeverMobile/Info.plist
       properties:

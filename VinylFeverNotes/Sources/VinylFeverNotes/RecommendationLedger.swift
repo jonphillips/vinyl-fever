@@ -74,6 +74,115 @@ public struct RecommendationLedgerReadResult: Equatable, Sendable {
   }
 }
 
+public struct PlaylistShelfSong: Equatable, Sendable, Identifiable {
+  public var id: String
+  public var title: String
+  public var artist: String
+  public var album: String?
+  public var year: Int?
+  public var familiarity: String
+  public var why: String?
+  public var like: [RecommendationLike]
+
+  public init(id: String, title: String, artist: String, album: String?, year: Int?, familiarity: String,
+    why: String?, like: [RecommendationLike]) {
+    self.id = id; self.title = title; self.artist = artist; self.album = album; self.year = year
+    self.familiarity = familiarity; self.why = why; self.like = like
+  }
+}
+
+public struct PlaylistShelfPlaylist: Equatable, Sendable, Identifiable {
+  public var id: String
+  public var batch: RecommendationBatch
+  public var stagedDate: String
+  public var songCount: Int
+  public var newSongCount: Int
+  public var songs: [PlaylistShelfSong]
+  public var hasReasons: Bool { songs.contains { $0.why != nil } }
+
+  public init(id: String, batch: RecommendationBatch, stagedDate: String, songCount: Int,
+    newSongCount: Int, songs: [PlaylistShelfSong]) {
+    self.id = id; self.batch = batch; self.stagedDate = stagedDate
+    self.songCount = songCount; self.newSongCount = newSongCount; self.songs = songs
+  }
+}
+
+public enum PlaylistShelf {
+  public static func make(
+    from ledger: RecommendationLedgerReadResult,
+    now: Date,
+    calendar: Calendar,
+    timeZone: TimeZone
+  ) -> [PlaylistShelfPlaylist] {
+    let batches = ledger.batches
+      .filter { $0.kind == "staged-playlist" }
+      .sorted { $0.recordedAt > $1.recordedAt }
+
+    return batches.map { batch in
+      let playlistID = "\(batch.host)|\(batch.recordedAt.timeIntervalSince1970)"
+      let songs = batch.tracks.enumerated().map { songIndex, track in
+        PlaylistShelfSong(
+          id: "\(playlistID)|\(songIndex)",
+          title: track.title,
+          artist: track.artist,
+          album: track.album,
+          year: track.year,
+          familiarity: familiarity(for: track),
+          why: nonempty(track.why),
+          like: track.like ?? []
+        )
+      }
+      return PlaylistShelfPlaylist(
+        id: playlistID,
+        batch: batch,
+        stagedDate: RecommendationDatePhrase.format(batch.recordedAt, relativeTo: now,
+          calendar: calendar, timeZone: timeZone),
+        songCount: batch.tracks.count,
+        newSongCount: batch.tracks.filter { !$0.familiar }.count,
+        songs: songs
+      )
+    }
+  }
+
+  public static func noReasonsText(for playlist: PlaylistShelfPlaylist) -> String? {
+    playlist.hasReasons ? nil : "No reasons were recorded for this playlist."
+  }
+
+  private static func familiarity(for track: RecommendationTrack) -> String {
+    guard track.familiar else { return "New to you" }
+    if track.reasons.contains("playlist:keepers") { return "You kept it" }
+    if track.reasons.contains("owned") { return "In your library" }
+    if let playlist = track.reasons.first(where: { $0.hasPrefix("playlist:") }) {
+      let role = String(playlist.dropFirst("playlist:".count))
+      return role == "unlabeled" ? "In one of your playlists" : "In a \(role) playlist"
+    }
+    if track.reasons.contains("heard") { return "You've heard it" }
+    if track.reasons.contains("noted") { return "You left a note on it" }
+    if track.reasons.contains("recommended") { return "Recommended before" }
+    return "You knew it"
+  }
+
+  private static func nonempty(_ value: String?) -> String? {
+    guard let value else { return nil }
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+  }
+}
+
+public enum RecommendationDatePhrase {
+  public static func format(_ date: Date, relativeTo now: Date, calendar: Calendar, timeZone: TimeZone) -> String {
+    var calendar = calendar
+    calendar.timeZone = timeZone
+    let formatter = DateFormatter()
+    formatter.calendar = calendar
+    formatter.timeZone = timeZone
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = calendar.component(.year, from: date) == calendar.component(.year, from: now)
+      ? "MMMM d" : "MMMM d, yyyy"
+    return formatter.string(from: date)
+  }
+}
+
 public enum RecommendationLedgerCodec {
   public static func encode(_ batch: RecommendationBatch) throws -> Data {
     let encoder = JSONEncoder()

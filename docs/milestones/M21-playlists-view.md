@@ -96,7 +96,7 @@ opening the chat or Music.
 PR advances `NEXT_UP.md` to the next slice. They don't wait on Jon's gates. The gates can run in
 one sitting after S4, or one at a time if Jon wants to see a slice sooner.
 
-- [ ] **S1 — The playlists and their reasons.**
+- [x] **S1 — The playlists and their reasons.**
   - **The home screen.** The app opens on **Playlists**, in a `NavigationSplitView`: the
     playlists are the sidebar list, and the selected playlist is the detail. On iPhone it
     collapses to a stack. Today's setup `Form` moves, unchanged, into a **Setup** sheet opened
