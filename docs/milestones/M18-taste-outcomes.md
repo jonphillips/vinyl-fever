@@ -7,7 +7,10 @@ design conflict, this doc's Decisions win. Rules in
 [../technical-architecture.md](../technical-architecture.md) and
 `/Users/jon/code/jon-platform/AGENTS.md` apply.*
 
-Summary: Seven slices are dispatched, and an eighth is decided at S2's gate.
+Status: Blocked
+Summary: S1, S2, and S4–S8 shipped; S3 waits on S2's gate (about four finished New Music weeks).
+
+Seven slices are dispatched, and an eighth is decided at S2's gate.
 - **S1** starts the recommendation ledger now. Every `stage_playlist` records which songs were
   new to Jon, and `check_tracks` reports "recommended before". It's a log that can't be rebuilt
   later, so it goes first.

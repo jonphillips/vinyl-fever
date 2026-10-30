@@ -2,7 +2,8 @@
 
 This plan starts after Jon reviews and adjusts the product docs.
 
-Concrete, Codex-ready build orders live in [milestones/](milestones/). The phases
+Concrete, Codex-ready build orders live in [milestones/](milestones/), and shipped ones in
+[milestones/archive/](milestones/archive/). The phases
 below are the strategic arc; the milestone docs are the slices to implement.
 Milestone 1 realizes the start of Phase 1.5 (the vertical slice) as a read-only,
 no-writes plan preview — see
