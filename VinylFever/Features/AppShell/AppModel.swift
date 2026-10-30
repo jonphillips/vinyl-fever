@@ -751,7 +751,7 @@ final class AppModel {
   /// Sets a curated cover for a registry album from a picked image file. The
   /// uploaded image becomes both the registry tile (`displayImage`) and the
   /// artwork stamped onto appended tracks (`fallbackArtwork`) — see
-  /// docs/album-cover-upload.md for why both fields update.
+  /// docs/archive/album-cover-upload.md for why both fields update.
   func setCompilationAlbumCover(album: CompilationAlbum, imageURL: URL) async {
     do {
       let data = try Data(contentsOf: imageURL)

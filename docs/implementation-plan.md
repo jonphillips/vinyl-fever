@@ -185,7 +185,7 @@ Goal: support track-level collection/playlist metadata workflows.
 The first concrete instance is the compilation-album append flow — see
 [milestones/archive/M4-compilation-album-append.md](milestones/archive/M4-compilation-album-append.md)
 and the *Compilation-Album (Append) Policy* in
-[metadata-policy-model.md](metadata-policy-model.md). The broader tasks below
+[metadata-policy-model.md](archive/metadata-policy-model.md). The broader tasks below
 (general policy editor, Grouping matching, MusicBrainz, artwork selection) come
 after that narrow slice proves the area.
 

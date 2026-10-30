@@ -105,7 +105,7 @@ Do not use SwiftData.
 
 For the source-of-truth split between the local files, the Apple Music library,
 and SQLiteData, see the Source Of Truth And Storage Ownership section in
-[Metadata Policy Model](metadata-policy-model.md). In short: SQLiteData holds
+[Metadata Policy Model](archive/metadata-policy-model.md). In short: SQLiteData holds
 policies, run logs, queues, decisions, app-owned fields Apple Music cannot carry,
 and a rebuildable cache/index of the Apple Music scan. It is not the source of
 truth for file contents or library presence. Folder scans and the live-show

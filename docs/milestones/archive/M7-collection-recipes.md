@@ -1,11 +1,11 @@
 # Milestone 7 — Collection Recipes
 
-*First implementation of the [Collection Recipes](../../collection-recipes.md)
+*First implementation of the [Collection Recipes](../../archive/collection-recipes.md)
 design: per-collection, user-authored metadata rules that emit a `ProposedTags`
 delta into the existing apply-with-preview rail. New schema (one table) and one
 new `VinylFeverCore` pipeline; no change to the write rail, the preview, or the
 live-show flow. Rules in [../technical-architecture.md](../../technical-architecture.md),
-[../metadata-policy-model.md](../../metadata-policy-model.md), and
+[../metadata-policy-model.md](../../archive/metadata-policy-model.md), and
 `/Users/jon/code/jon-platform/AGENTS.md` apply; where this doc and those
 conflict, stop and flag it.*
 
@@ -37,7 +37,7 @@ class of rule into a first-class, previewable, per-collection app surface.
 
 ## Scope
 
-Full design in [../collection-recipes.md](../../collection-recipes.md). The moving
+Full design in [../collection-recipes.md](../../archive/collection-recipes.md). The moving
 parts:
 
 - **`collectionPolicies` table** (minimal: `id`, `name`, `details`) — the FK

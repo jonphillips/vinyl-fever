@@ -1,13 +1,13 @@
 # Milestone 8 — Collection Policy Binding
 
-*Bind a [Collection Policy](../../metadata-policy-model.md) to a compilation album so
+*Bind a [Collection Policy](../../archive/metadata-policy-model.md) to a compilation album so
 that appending a folder runs the policy's recipes **and** the compilation
 tag-stamping in one previewed, one-applied pass. This is the deferred "fuse the two
 runs" question from M7 S1, now answered from real use: no new pipeline and no write-rail
 change — it merges two `ProposedTags` producers that already converge on the same
 `ApplyPlan` / `writeTags` rail. Rules in
 [../technical-architecture.md](../../technical-architecture.md),
-[../metadata-policy-model.md](../../metadata-policy-model.md), and
+[../metadata-policy-model.md](../../archive/metadata-policy-model.md), and
 `/Users/jon/code/jon-platform/AGENTS.md` apply; where this doc and those conflict,
 stop and flag it.*
 

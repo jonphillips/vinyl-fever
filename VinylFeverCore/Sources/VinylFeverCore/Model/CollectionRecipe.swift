@@ -3,7 +3,7 @@ import SQLiteData
 
 /// A small, user-authored, per-collection rule that proposes a metadata edit from
 /// evidence on a file (its filename, or the target field itself). Full design in
-/// `docs/collection-recipes.md`. This is the S0 (model-off) shape: a deterministic
+/// `docs/archive/collection-recipes.md`. This is the S0 (model-off) shape: a deterministic
 /// regex rule. The `useModel`/`prompt` columns exist now but are inert until the
 /// S2 classify stage reads them.
 ///

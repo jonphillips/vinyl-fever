@@ -31,7 +31,7 @@ write.
 
 This splits cleanly onto the existing setlist "sandwich": deterministic extract
 → optional model judgment → deterministic validate → always preview. See
-[SetlistNormalizer.swift](../VinylFeverCore/Sources/VinylFeverCore/Normalizing/SetlistNormalizer.swift).
+[SetlistNormalizer.swift](../../VinylFeverCore/Sources/VinylFeverCore/Normalizing/SetlistNormalizer.swift).
 
 ## The Two Exposed Knobs
 
@@ -75,7 +75,7 @@ cleanly when no key is configured, exactly as the Normalizer relies on.
 ## Data Model
 
 Stored in SQLiteData, mirroring the `compilationAlbums` table conventions in
-[Schema.swift](../VinylFeverCore/Sources/VinylFeverCore/Database/Schema.swift)
+[Schema.swift](../../VinylFeverCore/Sources/VinylFeverCore/Database/Schema.swift)
 (STRICT, TEXT primary key defaulting to `uuid()`):
 
 ```sql
@@ -101,7 +101,7 @@ stands up a minimal one as the anchor.
 
 The Swift model speaks the field vocabulary the write rail already uses —
 `targetField` is
-[`ProposedTags.Field`](../VinylFeverCore/Sources/VinylFeverCore/Model/ShowPlan.swift),
+[`ProposedTags.Field`](../../VinylFeverCore/Sources/VinylFeverCore/Model/ShowPlan.swift),
 so there is no translation layer between a recipe and the tags it edits:
 
 ```swift

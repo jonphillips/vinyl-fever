@@ -144,7 +144,7 @@ A live show is verified after import when:
 Verification is required because writing tags to files does not guarantee
 Music.app reflected them. The local-model "is this album mislabeled?" audit is a
 separate, later nicety and is not part of this yes/no verification. See
-Verification Surface in [Technical Architecture](technical-architecture.md) for
+Verification Surface in [Technical Architecture](../technical-architecture.md) for
 how the library is read.
 
 ## Area 2: Collection Management

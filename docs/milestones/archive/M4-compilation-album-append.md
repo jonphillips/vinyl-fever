@@ -3,7 +3,7 @@
 *Build order for Codex. Architect/editor-in-chief: this doc is the contract; the
 strategic arc is in [../implementation-plan.md](../../implementation-plan.md)
 (Phase 6, Collection Policy Metadata Prep), the policy in
-[../metadata-policy-model.md](../../metadata-policy-model.md) (see **Compilation-Album
+[../metadata-policy-model.md](../../archive/metadata-policy-model.md) (see **Compilation-Album
 (Append) Policy**), and `/Users/jon/code/jon-platform/AGENTS.md`. Where this doc
 and those conflict, stop and flag it — don't silently diverge.*
 
