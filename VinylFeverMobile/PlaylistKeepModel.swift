@@ -65,14 +65,21 @@ final class PlaylistKeepModel {
   func prepare(_ request: PlaylistKeepRequest) async {
     self.request = request
     currentRequest = request
+    playlists = []
+    rolesReadFallback = false
     errorMessage = nil
     isLoading = true
     defer { isLoading = false }
     do {
       if cachedEditablePlaylists == nil { cachedEditablePlaylists = try await client.editablePlaylists() }
       if !didReadRoles {
-        cachedRoles = try? await client.readRoles()
-        didReadRoles = true
+        do {
+          cachedRoles = try await client.readRoles()
+          didReadRoles = cachedRoles != nil
+        } catch {
+          cachedRoles = nil
+          didReadRoles = false
+        }
       }
       let choices = PlaylistKeepOptions.make(roles: cachedRoles,
         editablePlaylists: (cachedEditablePlaylists ?? []).map { (id: $0.id, name: $0.name) }, year: request.year)
@@ -110,6 +117,7 @@ final class PlaylistKeepModel {
           tracksByPlaylist[playlist.id] = try await client.tracks(playlist.id)
           loadedTrackPlaylists.insert(playlist.id)
         } catch {
+          loadedTrackPlaylists.remove(playlist.id)
           tracksByPlaylist[playlist.id, default: []].append(KeepLibraryTrack(title: request.title, artist: request.artist))
         }
         if let index = playlists.firstIndex(where: { $0.id == playlist.id }) {

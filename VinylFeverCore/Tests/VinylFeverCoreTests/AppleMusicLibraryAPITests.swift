@@ -24,9 +24,9 @@ struct AppleMusicLibraryAPITests {
   @Test("create body interleaves catalog and upload resource types in row order")
   func createBodyMixedSources() throws {
     let songs = [
-      PlaylistSongReference(id: "one", source: PlaylistSongSource.catalog),
-      PlaylistSongReference(id: "two", source: PlaylistSongSource.libraryUpload),
-      PlaylistSongReference(id: "three", source: PlaylistSongSource.catalog),
+      PlaylistSongReference(id: "one", source: .catalog),
+      PlaylistSongReference(id: "two", source: .libraryUpload),
+      PlaylistSongReference(id: "three", source: .catalog),
     ]
     let body = try AppleMusicPlaylistRequestEncoder.createBody(
       name: "Mix", description: nil, songs: songs)

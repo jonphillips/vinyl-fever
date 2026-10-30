@@ -31,22 +31,7 @@ private enum KeepLibraryClientKey: DependencyKey {
   static let liveValue = KeepLibraryClient(
     isAuthorized: { MusicAuthorization.currentStatus == .authorized },
     readRoles: {
-      try await Task.detached {
-        try ProbeBookmarkStore.withFolder { folder in
-          let url = folder.appending(path: "Taste Intelligence/playlist-roles.json")
-          let coordinator = NSFileCoordinator(filePresenter: nil)
-          var coordinationError: NSError?
-          var readError: Error?
-          var data: Data?
-          coordinator.coordinate(readingItemAt: url, options: [], error: &coordinationError) { coordinatedURL in
-            do { data = try Data(contentsOf: coordinatedURL) } catch { readError = error }
-          }
-          if let coordinationError { throw coordinationError }
-          if let readError { throw readError }
-          guard let data else { return nil }
-          return try PlaylistRolesCodec.decode(data)
-        }
-      }.value
+      try await Task.detached { try PlaylistRolesFolderReader.read() }.value
     },
     editablePlaylists: {
       var next: String? = "/v1/me/library/playlists"
@@ -126,6 +111,61 @@ private enum KeepLibraryClientKey: DependencyKey {
     }
     return response
   }
+}
+
+private enum PlaylistRolesFolderReader {
+  // Match RecommendationLedgerFolderReader's established iCloud read deadline.
+  private static let deadline: TimeInterval = 8
+
+  private final class ResultBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var result: Result<PlaylistRoles?, Error>?
+
+    func store(_ result: Result<PlaylistRoles?, Error>) {
+      lock.lock(); self.result = result; lock.unlock()
+    }
+
+    func load() -> Result<PlaylistRoles?, Error>? {
+      lock.lock(); defer { lock.unlock() }; return result
+    }
+  }
+
+  static func read() throws -> PlaylistRoles? {
+    let group = DispatchGroup()
+    let result = ResultBox()
+    group.enter()
+    DispatchQueue.global(qos: .userInitiated).async {
+      defer { group.leave() }
+      do {
+        let roles = try ProbeBookmarkStore.withFolder { folder -> PlaylistRoles? in
+          let url = folder.appending(path: "Taste Intelligence/playlist-roles.json")
+          try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+          let coordinator = NSFileCoordinator(filePresenter: nil)
+          var coordinationError: NSError?
+          var readError: Error?
+          var data: Data?
+          coordinator.coordinate(readingItemAt: url, options: [], error: &coordinationError) { coordinatedURL in
+            do { data = try Data(contentsOf: coordinatedURL) } catch { readError = error }
+          }
+          if let coordinationError { throw coordinationError }
+          if let readError { throw readError }
+          guard let data else { return nil }
+          return try PlaylistRolesCodec.decode(data)
+        }
+        result.store(.success(roles))
+      } catch {
+        result.store(.failure(error))
+      }
+    }
+
+    let timeout = DispatchTimeInterval.milliseconds(Int(deadline * 1_000))
+    guard group.wait(timeout: .now() + timeout) == .success else { throw RolesReadTimedOut() }
+    return try result.load()?.get()
+  }
+}
+
+private struct RolesReadTimedOut: LocalizedError {
+  var errorDescription: String? { "Playlist roles did not finish loading before the deadline." }
 }
 
 private struct PlaylistPage: Decodable {

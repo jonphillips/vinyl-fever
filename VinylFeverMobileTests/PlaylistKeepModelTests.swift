@@ -67,6 +67,62 @@ struct PlaylistKeepModelTests {
   }
 
   @Test @MainActor
+  func failedLoadForNextSongClearsPreviousChoicesAndCannotPostThem() async throws {
+    let appended = AppendRecorder()
+    let trackReads = TrackReadRecorder()
+    let model = withDependencies({ dependencies in
+      dependencies.keepLibraryClient.isAuthorized = { true }
+      dependencies.keepLibraryClient.readRoles = { try rolesIncludingYears() }
+      dependencies.keepLibraryClient.editablePlaylists = { [
+        KeepLibraryPlaylist(id: "keepers", name: "Vinyl Fever Keepers"),
+        KeepLibraryPlaylist(id: "2023", name: "2023: Jon's Selections"),
+        KeepLibraryPlaylist(id: "2024", name: "2024: Jon's Selections"),
+      ] }
+      dependencies.keepLibraryClient.tracks = { id in try await trackReads.read(id) }
+      dependencies.keepLibraryClient.append = { id, reference in await appended.add(id, reference) }
+    }) { PlaylistKeepModel() }
+
+    await model.keepButtonTapped(for: shelfSong(year: 2023), resolvedSong: try song(id: "catalog-a"))
+    #expect(model.errorMessage == nil)
+    #expect(model.playlists.map(\.name) == ["Vinyl Fever Keepers", "2023: Jon's Selections", "2024: Jon's Selections"])
+    #expect(model.playlists.map(\.isChecked) == [true, true, false])
+    await model.save()
+    let writesAfterSongA = await appended.values.count
+    #expect(writesAfterSongA == 2)
+
+    await model.keepButtonTapped(for: shelfSong(title: "Second", year: 2024), resolvedSong: try song(id: "catalog-b"))
+    #expect(model.playlists.isEmpty)
+    #expect(model.errorMessage?.contains("Unavailable") == true)
+    await model.save()
+    #expect(await appended.values.count == writesAfterSongA)
+  }
+
+  @Test @MainActor
+  func failedRolesReadIsRetriedOnTheNextOpen() async throws {
+    let sequence = RolesReadSequence(roles: PlaylistRoles(updatedAt: .now, playlists: [
+      PlaylistRoleEntry(persistentID: "keepers", name: "Vinyl Fever Keepers", role: .keepers),
+      PlaylistRoleEntry(persistentID: "alternative", name: "Alternative JP", role: .keepers),
+    ]))
+    let model = withDependencies({ dependencies in
+      dependencies.keepLibraryClient.isAuthorized = { true }
+      dependencies.keepLibraryClient.readRoles = { try await sequence.read() }
+      dependencies.keepLibraryClient.editablePlaylists = { [
+        KeepLibraryPlaylist(id: "keepers", name: "Vinyl Fever Keepers"),
+        KeepLibraryPlaylist(id: "alternative", name: "Alternative JP"),
+      ] }
+      dependencies.keepLibraryClient.tracks = { _ in [] }
+    }) { PlaylistKeepModel() }
+
+    await model.prepare(keepRequest(songID: "first", year: nil))
+    #expect(model.rolesReadFallback)
+    #expect(model.playlists.map(\.name) == ["Vinyl Fever Keepers"])
+
+    await model.prepare(keepRequest(songID: "second", year: nil))
+    #expect(!model.rolesReadFallback)
+    #expect(model.playlists.map(\.name) == ["Vinyl Fever Keepers", "Alternative JP"])
+  }
+
+  @Test @MainActor
   func partialAppendFailureKeepsOtherResultAndReportsPlaylistAndReason() async throws {
     let appended = AppendRecorder()
     let model = withDependencies({ dependencies in
@@ -122,6 +178,19 @@ struct PlaylistKeepModelTests {
     ])
   }
 
+  private func rolesIncludingYears() throws -> PlaylistRoles {
+    PlaylistRoles(updatedAt: .now, playlists: [
+      PlaylistRoleEntry(persistentID: "keepers", name: "Vinyl Fever Keepers", role: .keepers),
+      PlaylistRoleEntry(persistentID: "2023", name: "2023: Jon's Selections", role: .keepers),
+      PlaylistRoleEntry(persistentID: "2024", name: "2024: Jon's Selections", role: .keepers),
+    ])
+  }
+
+  private func keepRequest(songID: String, year: Int?) -> PlaylistKeepRequest {
+    PlaylistKeepRequest(songID: songID, title: songID, artist: "Artist",
+      reference: PlaylistSongReference(id: songID, source: .catalog), year: year)
+  }
+
   private func song(id: String) throws -> Song {
     let type = id.hasPrefix("i.") ? "library-songs" : "songs"
     let data = try JSONSerialization.data(withJSONObject: ["id": id, "type": type,
@@ -138,4 +207,33 @@ struct PlaylistKeepModelTests {
 private actor AppendRecorder {
   private(set) var values: [(String, PlaylistSongReference)] = []
   func add(_ id: String, _ reference: PlaylistSongReference) { values.append((id, reference)) }
+}
+
+private actor RolesReadSequence {
+  private(set) var didFailOnce = false
+  let roles: PlaylistRoles
+
+  init(roles: PlaylistRoles) { self.roles = roles }
+
+  func read() throws -> PlaylistRoles {
+    guard didFailOnce else {
+      didFailOnce = true
+      throw NSError(domain: "Roles", code: 1, userInfo: [NSLocalizedDescriptionKey: "Temporarily unavailable"])
+    }
+    return roles
+  }
+}
+
+private actor TrackReadRecorder {
+  private var keeperReads = 0
+
+  func read(_ playlistID: String) throws -> [KeepLibraryTrack] {
+    if playlistID == "keepers" {
+      keeperReads += 1
+      if keeperReads >= 2 {
+        throw NSError(domain: "Music", code: 503, userInfo: [NSLocalizedDescriptionKey: "Unavailable"])
+      }
+    }
+    return []
+  }
 }
