@@ -1,5 +1,11 @@
 # Done log
 
+## 2026-10-30 — M21 · S2: Artwork and playback
+
+- Branch: `m21/s2-artwork-playback`.
+- Added injectable MusicKit library, catalog, and system-player clients. Playlist rows resolve on demand as they become visible, preferring the uniquely named staged playlist before library and catalog matches; results stay cached for the app session. Resolved songs and the staged playlist show artwork, song rows show current playback, and Play, Play All, “Sounds like”, and Play Next drive `SystemMusicPlayer`. Music access remains optional, with reasons visible when access is unavailable.
+- VinylFeverNotes (24 tests), Listening (55), Core (299), Mac app (94), and iOS Simulator (18) passed. Generic iOS Simulator and device builds passed; `check-handoff` passed. Jon's six-step M21 S2 device gate remains owed.
+
 ## 2026-10-30 — M21 · S1: The playlists and their reasons
 
 - Branch: `m21/s1-playlists-view`.

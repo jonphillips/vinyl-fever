@@ -5,10 +5,11 @@ import VinylFeverNotes
 @main
 struct VinylFeverMobileApp: App {
   @State private var shelfModel = PlaylistShelfModel()
+  @State private var playbackModel = PlaylistPlaybackModel()
 
   var body: some Scene {
     WindowGroup {
-      PlaylistHomeView(model: shelfModel)
+      PlaylistHomeView(model: shelfModel, playbackModel: playbackModel)
     }
   }
 }
@@ -17,6 +18,7 @@ private struct PlaylistHomeView: View {
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
   @State private var didApplyInitialSelection = false
   @Bindable var model: PlaylistShelfModel
+  let playbackModel: PlaylistPlaybackModel
 
   private var selectedPlaylist: PlaylistShelfPlaylist? {
     model.playlists.first { $0.id == model.selectedPlaylistID }
@@ -53,7 +55,8 @@ private struct PlaylistHomeView: View {
     } detail: {
       Group {
         if let playlist = selectedPlaylist {
-          PlaylistDetailView(playlist: playlist, hasUnreadableFiles: model.hasUnreadableFiles) {
+          PlaylistDetailView(playlist: playlist, hasUnreadableFiles: model.hasUnreadableFiles,
+            playbackModel: playbackModel) {
             await model.refresh()
           }
         } else if model.requiresFolderAccess {
@@ -76,7 +79,10 @@ private struct PlaylistHomeView: View {
       }
     }
     .sheet(item: $model.destination, onDismiss: {
-      Task { await model.refresh() }
+      Task {
+        await model.refresh()
+        if let selectedPlaylist { await playbackModel.prepare(selectedPlaylist) }
+      }
     }) { destination in
       switch destination {
       case .setup:
@@ -91,6 +97,7 @@ private struct PlaylistHomeView: View {
         model.selectedPlaylistID = model.playlists.first?.id
       }
     }
+    .task { await playbackModel.observeCurrentEntry() }
   }
 }
 
@@ -120,6 +127,7 @@ private struct PlaylistRow: View {
 private struct PlaylistDetailView: View {
   let playlist: PlaylistShelfPlaylist
   let hasUnreadableFiles: Bool
+  let playbackModel: PlaylistPlaybackModel
   let refresh: () async -> Void
 
   private var title: String {
@@ -131,7 +139,7 @@ private struct PlaylistDetailView: View {
 
   var body: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: 24) {
+      LazyVStack(alignment: .leading, spacing: 24) {
         if hasUnreadableFiles {
           Label("Some recommendations are still downloading from iCloud. Pull to refresh.", systemImage: "icloud.and.arrow.down")
             .font(.callout)
@@ -140,6 +148,11 @@ private struct PlaylistDetailView: View {
         }
 
         VStack(alignment: .leading, spacing: 10) {
+          if let artwork = playbackModel.matchedPlaylist?.artwork {
+            ArtworkImage(artwork, width: 180)
+              .clipShape(.rect(cornerRadius: 8))
+              .accessibilityLabel("\(title) artwork")
+          }
           Text(title).font(.largeTitle.bold())
           Text("\(playlist.stagedDate) · \(playlist.songCount) songs · \(playlist.newSongCount) new to you")
             .foregroundStyle(.secondary)
@@ -153,12 +166,36 @@ private struct PlaylistDetailView: View {
           if let noReasons = PlaylistShelf.noReasonsText(for: playlist) {
             Text(noReasons).foregroundStyle(.secondary).padding(.top, 4)
           }
+          if !playbackModel.isAuthorized {
+            Label("Allow Apple Music access in Setup", systemImage: "music.note")
+              .font(.callout)
+              .foregroundStyle(.secondary)
+          } else {
+            Button {
+              guard let first = playlist.songs.first else { return }
+              Task { await playbackModel.play(first.id) }
+            } label: {
+              if playbackModel.isPreparingPlayback {
+                ProgressView().accessibilityLabel("Preparing playlist")
+              } else {
+                Label("Play All", systemImage: "play.fill")
+              }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(playbackModel.isPreparingPlayback)
+          }
+          if let errorMessage = playbackModel.errorMessage {
+            Text(errorMessage).font(.callout).foregroundStyle(.red)
+          }
         }
 
-        ForEach(playlist.songs) { song in
+        ForEach(Array(playlist.songs.enumerated()), id: \.element.id) { index, song in
           VStack(spacing: 18) {
-            PlaylistSongView(song: song)
+            PlaylistSongView(song: song, playbackModel: playbackModel)
             if song.id != playlist.songs.last?.id { Divider() }
+          }
+          .task {
+            await playbackModel.resolveSongs(through: index + PlaylistPlaybackModel.resolveAheadCount)
           }
         }
       }
@@ -167,6 +204,10 @@ private struct PlaylistDetailView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
     }
     .refreshable { await refresh() }
+    .task(id: playlist.id) {
+      await playbackModel.prepare(playlist)
+      await playbackModel.resolveSongs(through: PlaylistPlaybackModel.resolveAheadCount)
+    }
     .navigationTitle(title)
     .navigationBarTitleDisplayMode(.inline)
   }
@@ -174,34 +215,73 @@ private struct PlaylistDetailView: View {
 
 private struct PlaylistSongView: View {
   let song: PlaylistShelfSong
-
+  let playbackModel: PlaylistPlaybackModel
   var body: some View {
-    VStack(alignment: .leading, spacing: 9) {
-      Text(song.title).font(.title3.weight(.semibold))
-      Text(song.artist).foregroundStyle(.secondary)
-      if song.album != nil || song.year != nil {
-        Text([song.album, song.year.map(String.init)].compactMap { $0 }.joined(separator: " · "))
-          .font(.subheadline)
+    HStack(alignment: .top, spacing: 14) {
+      if let resolved = playbackModel.resolvedSongs[song.id], let artwork = resolved.artwork {
+        ArtworkImage(artwork, width: 68)
+          .clipShape(.rect(cornerRadius: 6))
+          .accessibilityHidden(true)
+      } else {
+        Image(systemName: "music.note")
+          .font(.title2)
           .foregroundStyle(.secondary)
+          .frame(width: 68, height: 68)
+          .background(.quaternary, in: .rect(cornerRadius: 6))
       }
-      Text(song.familiarity).font(.subheadline.weight(.medium))
-      if let why = song.why {
-        Text(why).fixedSize(horizontal: false, vertical: true)
-      }
-      if !song.like.isEmpty {
-        VStack(alignment: .leading, spacing: 5) {
-          Text("Sounds like").font(.subheadline.weight(.semibold))
-          ForEach(Array(song.like.enumerated()), id: \.offset) { _, like in
-            Text("\(like.title) · \(like.artist)")
-              .font(.subheadline)
-              .foregroundStyle(.secondary)
+      VStack(alignment: .leading, spacing: 9) {
+        HStack {
+          Text(song.title).font(.title3.weight(.semibold))
+          if playbackModel.nowPlayingSongID == song.id {
+            Image(systemName: "waveform").foregroundStyle(.tint).accessibilityLabel("Now playing")
+          }
+          Spacer()
+          if playbackModel.notFoundSongIDs.contains(song.id) {
+            Text("Not in Apple Music").font(.caption).foregroundStyle(.secondary)
+          } else if playbackModel.resolvingSongIDs.contains(song.id) {
+            ProgressView().accessibilityLabel("Finding \(song.title)")
+          } else if playbackModel.resolvedSongs[song.id] != nil {
+            Button("Play", systemImage: "play.fill") {
+              Task { await playbackModel.play(song.id) }
+            }
+            .labelStyle(.iconOnly)
+            .accessibilityLabel("Play \(song.title) by \(song.artist)")
           }
         }
-        .padding(.top, 4)
+        Text(song.artist).foregroundStyle(.secondary)
+        if song.album != nil || song.year != nil {
+          Text([song.album, song.year.map(String.init)].compactMap { $0 }.joined(separator: " · "))
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+        }
+        Text(song.familiarity).font(.subheadline.weight(.medium))
+        if let why = song.why {
+          Text(why).fixedSize(horizontal: false, vertical: true)
+        }
+        if !song.like.isEmpty {
+          VStack(alignment: .leading, spacing: 5) {
+            Text("Sounds like").font(.subheadline.weight(.semibold))
+            ForEach(Array(song.like.enumerated()), id: \.offset) { _, like in
+              Button {
+                Task { await playbackModel.playLike(like, afterCurrent: true) }
+              } label: {
+                Label("\(like.title) · \(like.artist)", systemImage: "play.fill")
+                  .font(.subheadline)
+                  .foregroundStyle(.secondary)
+              }
+              .buttonStyle(.plain)
+              .contextMenu {
+                Button("Play Next", systemImage: "text.insert") {
+                  Task { await playbackModel.playLike(like, afterCurrent: false) }
+                }
+              }
+            }
+          }
+          .padding(.top, 4)
+        }
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .accessibilityElement(children: .combine)
   }
 }
 

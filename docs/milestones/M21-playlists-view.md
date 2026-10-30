@@ -155,7 +155,7 @@ one sitting after S4, or one at a time if Jon wants to see a slice sooner.
        library", and "No reasons were recorded for this playlist."
     4. Setup opens from the toolbar, and Test Why This Song still answers.
 
-- [ ] **S2 — Artwork and playback.**
+- [x] **S2 — Artwork and playback.**
   - **Find the songs (Decision 3).** When a playlist opens, resolve each ledger song to a
     MusicKit `Song`, in this order:
     1. **The staged playlist.** A library playlist whose name equals `playlist` exactly. If
