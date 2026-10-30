@@ -175,7 +175,7 @@ targets:
       path: VinylFeverMobile/Info.plist
       properties:
         CFBundleDisplayName: Vinyl Fever
-        NSAppleMusicUsageDescription: Vinyl Fever reads the current song and recently played songs for Music Feedback.
+        NSAppleMusicUsageDescription: Vinyl Fever finds playlist songs, shows their artwork, and plays them through Apple Music. It also reads the current and recently played songs for Music Feedback.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jonphillips.vinylfever

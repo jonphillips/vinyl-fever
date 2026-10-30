@@ -21,6 +21,6 @@
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>NSAppleMusicUsageDescription</key>
-	<string>Vinyl Fever reads the current song and recently played songs for Music Feedback.</string>
+	<string>Vinyl Fever finds playlist songs, shows their artwork, and plays them through Apple Music. It also reads the current and recently played songs for Music Feedback.</string>
 </dict>
 </plist>
