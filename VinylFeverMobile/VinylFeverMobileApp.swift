@@ -18,6 +18,8 @@ private struct MobileSetupView: View {
   @State private var isImportingFolder = false
   @State private var lastNote = FeedbackLastNote.load()
   @State private var feedbackCheck: String?
+  @State private var whyPreviewChoices: [FeedbackSong] = []
+  @State private var isPickingWhyPreview = false
 
   var body: some View {
     NavigationStack {
@@ -46,6 +48,12 @@ private struct MobileSetupView: View {
           }
           if let feedbackCheck { Text(feedbackCheck).foregroundStyle(.secondary) }
         }
+        Section("Why This Song") {
+          Button("Test Why This Song") {
+            Task { await testWhyThisSong() }
+          }
+          if let feedbackCheck { Text(feedbackCheck).foregroundStyle(.secondary) }
+        }
         if let errorMessage {
           Section { Text(errorMessage).foregroundStyle(.red) }
         }
@@ -61,6 +69,12 @@ private struct MobileSetupView: View {
         } catch {
           errorMessage = error.localizedDescription
         }
+      }
+      .confirmationDialog("Which song?", isPresented: $isPickingWhyPreview) {
+        ForEach(Array(whyPreviewChoices.enumerated()), id: \.offset) { _, song in
+          Button("\(song.title) by \(song.artist)") { Task { await previewWhyThisSong(for: song) } }
+        }
+        Button("None of these", role: .cancel) { feedbackCheck = "No song picked. Nothing was saved." }
       }
     }
   }
@@ -94,6 +108,55 @@ private struct MobileSetupView: View {
       feedbackCheck = "Trusted: \(current.title) by \(current.artist). Nothing was saved."
     } else {
       feedbackCheck = "Needs a song choice (\(result.staleReason?.rawValue ?? "unknown")). Nothing was saved."
+    }
+  }
+
+  @MainActor
+  private func testWhyThisSong() async {
+    let player = SystemMusicPlayer.shared
+    let entry = player.queue.currentEntry
+    let currentSong: Song?
+    if case let .song(song)? = entry?.item { currentSong = song } else { currentSong = nil }
+    let current = entry.map {
+      FeedbackSong(title: $0.title, artist: currentSong?.artistName ?? "", album: currentSong?.albumTitle,
+        catalogID: currentSong?.id.rawValue)
+    }
+    var recent: [FeedbackSong] = []
+    do {
+      var request = MusicRecentlyPlayedRequest<Song>()
+      request.limit = 5
+      recent = try await request.response().items.map {
+        FeedbackSong(title: $0.title, artist: $0.artistName, catalogID: $0.id.rawValue)
+      }
+    } catch {}
+    let identification = MusicFeedback.identify(
+      entry: current, playbackStatus: String(describing: player.state.playbackStatus), recentlyPlayed: recent
+    )
+    guard identification.isTrusted, let current else {
+      whyPreviewChoices = identification.choices
+      isPickingWhyPreview = true
+      return
+    }
+    await previewWhyThisSong(for: current)
+  }
+
+  @MainActor
+  private func previewWhyThisSong(for song: FeedbackSong) async {
+    do {
+      let text = try ProbeBookmarkStore.withFolder { folder in
+        let read = RecommendationLedgerFolderReader.read(folder: folder)
+        let answer = WhyThisSong.answer(
+          for: song, ledger: read.ledger, unreadableFileCount: read.unreadableFileCount
+        )
+        return WhyThisSong.spokenText(
+          for: song, answer: answer, now: .now, calendar: .current, timeZone: .current
+        )
+      }
+      feedbackCheck = "\(text) Nothing was saved."
+    } catch ProbeBookmarkError.folderNotSelected, ProbeBookmarkError.accessRefused {
+      feedbackCheck = "Open Vinyl Fever to grant folder access."
+    } catch {
+      feedbackCheck = "Recommendations could not be read: \(error.localizedDescription)"
     }
   }
 }

@@ -43,6 +43,35 @@ struct ProbeRecordTests {
     #expect(ProbeRecord.filename(for: "Jon’s iPhone") == "m20-s0-Jon-s-iPhone.jsonl")
     #expect(!ProbeRecord.filename(for: "iPhone").hasPrefix("notes"))
     #expect(ProbeRecord.feedbackFilename(for: "Jon’s iPhone") == "feedback-Jon-s-iPhone.jsonl")
+    #expect(ProbeRecord.whyFilename(for: "Jon’s iPhone") == "why-Jon-s-iPhone.jsonl")
+    #expect(!ProbeRecord.whyFilename(for: "iPhone").hasPrefix("notes"))
+  }
+
+  @Test func recommendationReaderIncludesCloudPlaceholderAndUnreadableDeadline() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let recommendations = root.appendingPathComponent("Taste Intelligence/recommendations", isDirectory: true)
+    try FileManager.default.createDirectory(at: recommendations, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try Data().write(to: recommendations.appendingPathComponent("one.jsonl"))
+    try Data().write(to: recommendations.appendingPathComponent(".two.jsonl.icloud"))
+
+    let payload = Data("ledger".utf8)
+    let read = RecommendationLedgerFolderReader.read(
+      folder: root, deadline: .now.addingTimeInterval(2), startDownload: { _ in },
+      coordinatedRead: { url in
+        #expect(["one.jsonl", "two.jsonl"].contains(url.lastPathComponent))
+        return payload
+      }
+    )
+    #expect(read.filesRead == 2)
+    #expect(read.unreadableFileCount == 0)
+
+    let timedOut = RecommendationLedgerFolderReader.read(
+      folder: root, deadline: .now.addingTimeInterval(0.01), startDownload: { _ in },
+      coordinatedRead: { _ in Thread.sleep(forTimeInterval: 0.1); return payload }
+    )
+    #expect(timedOut.filesRead == 0)
+    #expect(timedOut.unreadableFileCount == 2)
   }
 
   @Test func feedbackEvidenceLineIsGoldenJSON() throws {

@@ -249,7 +249,7 @@ S1. **Dispatch 3: S2** ("Why this song?"; Jon's device gate). Jon moved it ahead
     5. On the iPhone, locked, and through CarPlay, a note is saved.
     6. In a new chat, `taste_notes` shows these notes word for word, on the right songs.
 
-- [ ] **S2 — "Why this song?"** *(Jon, 2026-10-30, from the candidate in
+- [x] **S2 — "Why this song?"** *(Jon, 2026-10-30, from the candidate in
   [open-questions.md](../open-questions.md), recorded in #147.)*
 
   A recommended song comes on during a walk, and Jon asks why the chat picked it. The answer is
