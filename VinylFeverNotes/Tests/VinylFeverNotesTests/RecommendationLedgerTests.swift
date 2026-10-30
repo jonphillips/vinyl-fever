@@ -25,29 +25,37 @@ struct RecommendationLedgerTests {
           reasons: ["recommended"], artistKnown: true),
         RecommendationTrack(artist: "Unknown Artist", title: "Unknown song", familiar: true,
           reasons: [], artistKnown: true),
+        RecommendationTrack(artist: "Reason Artist", title: "Reason only", familiar: true,
+          reasons: ["owned"], artistKnown: true, why: "Recorded without a comparison"),
       ], request: "Find more power pop")
+    let earlierRecent = RecommendationBatch(recordedAt: ISO8601DateFormatter().date(from: "2026-10-27T12:00:00Z")!,
+      host: "Mac", playlist: "Recent", tracks: [])
     let old = RecommendationBatch(recordedAt: ISO8601DateFormatter().date(from: "2025-10-29T12:00:00Z")!,
       host: "Mac", tracks: [RecommendationTrack(artist: "Artist", title: "No reason", familiar: true,
         reasons: [], artistKnown: true)])
     let picks = RecommendationBatch(kind: "new-music-picks", recordedAt: now, host: "Mac", playlist: "Picks", tracks: [])
-    let shelf = PlaylistShelf.make(from: RecommendationLedgerReadResult(batches: [old, recent, picks], skippedLines: 0),
+    let shelf = PlaylistShelf.make(from: RecommendationLedgerReadResult(
+      batches: [old, recent, earlierRecent, picks], skippedLines: 0),
       now: now, calendar: calendar, timeZone: calendar.timeZone)
 
-    #expect(shelf.map(\.batch) == [recent, old])
-    #expect(shelf.map(\.batch.playlist) == ["Recent", nil])
-    #expect(shelf[0].songCount == 7)
+    #expect(shelf.map(\.batch) == [recent, earlierRecent, old])
+    #expect(shelf.map(\.batch.playlist) == ["Recent", "Recent", nil])
+    #expect(shelf[0].songCount == 8)
     #expect(shelf[0].newSongCount == 1)
     #expect(shelf[0].stagedDate == "October 28")
-    #expect(shelf[1].stagedDate == "October 29, 2025")
+    #expect(shelf[1].stagedDate == "October 27")
+    #expect(shelf[2].stagedDate == "October 29, 2025")
     #expect(shelf[0].songs.map(\.familiarity) == [
       "New to you", "You kept it", "In one of your playlists", "You've heard it",
-      "You left a note on it", "Recommended before", "You knew it",
+      "You left a note on it", "Recommended before", "You knew it", "In your library",
     ])
     #expect(shelf[0].songs[0].why == "Because it sparkles")
     #expect(shelf[0].songs[0].like.count == 1)
     #expect(shelf[0].songs[1].why == nil)
+    #expect(shelf[0].songs[7].why == "Recorded without a comparison")
+    #expect(shelf[0].songs[7].like.isEmpty)
     #expect(PlaylistShelf.noReasonsText(for: shelf[0]) == nil)
-    #expect(PlaylistShelf.noReasonsText(for: shelf[1]) == "No reasons were recorded for this playlist.")
+    #expect(PlaylistShelf.noReasonsText(for: shelf[2]) == "No reasons were recorded for this playlist.")
   }
 
   @Test("JSONL round-trips and tolerates blank lines, unsupported records, partial tails and no final newline")
