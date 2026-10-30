@@ -13,8 +13,10 @@ stuck on an earlier song until Jon restarts Music, and the Shazam fallback hears
 Siri pauses the music for dictation. S0 adds the app target and probes on Jon's devices what
 MusicKit and recently played report when the shortcut is wrong. S1 builds the Music Feedback
 intent. It identifies the song without listening, offers a short pick list when the answer looks
-stale, and writes the same note format to a file of its own, so nothing on the Mac changes. Two
-slices, after M18 S8. They don't touch `vf-mcp`.
+stale, and writes the same note format to a file of its own, so nothing on the Mac changes. S2
+adds "Why this song?": it identifies the song the same way and speaks the reason the chat gave
+when it staged it, read from the recommendation ledger. Three slices, after M18 S8. They don't
+change `vf-mcp`.
 
 ## The milestone in one sentence
 
@@ -107,7 +109,8 @@ else. It rests on one stuck sample, so S1's gate keeps the stuck case.
 **Dispatch 1: S0** (new iOS target + probe; Jon's device runs). **Dispatch 2: S1** (the intent;
 Jon's device gate). M18 S8's completing PR advances `NEXT_UP.md` to S0. The architect records
 S0's results in this doc, including S1's staleness rule. That plan PR advances `NEXT_UP.md` to
-S1.
+S1. **Dispatch 3: S2** ("Why this song?"; Jon's device gate). Jon moved it ahead of S1's gate on
+2026-10-30 (Decision 10); its plan PR advances `NEXT_UP.md` to S2.
 
 - [x] **S0 — The app target and the device probes.** *Done in #154 and #155; results above.*
   - **The target.** Add `VinylFeverMobile` to `project.yml`. It's a SwiftUI app for iPhone and
@@ -196,7 +199,8 @@ S1.
     depends on the package and re-exports it, so no Mac or `vf-mcp` call site changes. The app
     links only `VinylFeverNotes`. Core stays macOS-only.
   - **The probe stays** through S1's gate, in case the stuck case needs another look. S2
-    removes it.
+    removes it. *(S2 now comes before S1's gate, so the first slice after the gate removes it;
+    Decision 10.)*
   - **The line.** A `vf-taste-note` v1 line through `TasteNotesCodec`:
     - The keys are the shortcut's: `format`, `version`, `notedAt`, `title`, `artist`, `album`,
       `playCount`, `releaseDate`, `duration`, `note`, `source`, `device`. `TasteNotesCodec.encode`
@@ -245,6 +249,115 @@ S1.
     5. On the iPhone, locked, and through CarPlay, a note is saved.
     6. In a new chat, `taste_notes` shows these notes word for word, on the right songs.
 
+- [ ] **S2 — "Why this song?"** *(Jon, 2026-10-30, from the candidate in
+  [open-questions.md](../open-questions.md), recorded in #147.)*
+
+  A recommended song comes on during a walk, and Jon asks why the chat picked it. The answer is
+  already on iCloud Drive: since M18 S2, each staged song's ledger line carries the chat's `why`
+  and up to three `like` songs. The intent reads it and speaks it. No chat round trip, no new
+  `vf-mcp` tool, and nothing is written except the evidence line.
+
+  **What S2 starts from (architect, read-only, 2026-10-30).** The laptop's ledger,
+  `recommendations/Jon_MBP.jsonl`, has 5 batches and 252 songs, no song in two batches:
+  - *2023 Selections: 15 New Discoveries* (2026-10-28): 15 songs, each with a `why` and two
+    `like` songs, all `found: library`.
+  - *Sam Fender — Manchester 2027 Catch-Up* (10) and *Soft Vocals: Where's the Edge?* (12):
+    every song has a `why`, none has `like`.
+  - *Rolling Stone's 200 Best Rock Songs of the 21st Century* (200) and *2024 Selections: 15
+    New Discoveries* (15, staged before M18 S2): no `why`.
+  - The longest `why` is 167 characters. Every `request` is about 200 characters.
+  - The iPhone's two Music Feedback notes on 2026-10-29 both identified the song as
+    `now-playing`, and the evidence file agrees. The second note's text is "Cancel cancel": S1's
+    guard catches "Cancel" but not a repeat, so the note was saved. It stays in the file (M18
+    Decision 16); S2 fixes the guard.
+
+  - **The intent.** Name it "Why This Song" and expose it through `AppShortcutsProvider`, with
+    phrases such as "Why this song in Vinyl Fever" and "Why did Vinyl Fever pick this". Siri,
+    CarPlay, and the Action button start it; Control Center through its Shortcut control
+    (Decision 9).
+    1. **Identify the song as S1 does:** `MusicFeedback.identify` with the same player, recently
+       played, and staleness rule (Decision 8). No new identification code.
+    2. **When it's trusted,** look up the entry. **When it's stale,** ask "Which song?" with S1's
+       choices. "None of these" answers "No song picked." and stops.
+    3. **Read the ledger.** Every `*.jsonl` in `Taste Intelligence/recommendations/`, through
+       S0's `ProbeBookmarkStore.withFolder`, each with a coordinated read. Before reading, ask
+       iCloud to download each file. Include evicted files that show only as a
+       `.<name>.icloud` placeholder. Stop waiting at the read deadline (Constants). Decode with
+       `RecommendationLedgerCodec.readFiles`.
+    4. **Find the song.** Match title and artist with `MusicFeedback.matches`, never IDs, across
+       all batches. Use the newest batch whose line has a `why`; if none has one, the newest
+       batch.
+    5. **Speak the answer** as the intent's dialog. The texts are fixed (golden tests):
+       - **With a reason:** "*Title* by *Artist* was in *playlist*, staged *October 28*.
+         *why*" and, when there are `like` songs, "The chat compared it with *Heaven or Not* by
+         *White Reaper* and *Something We Are Overcoming* by *DMA'S*." Join two with "and",
+         three with commas and "and".
+       - **Staged without a reason:** "*Title* by *Artist* was in *playlist*, staged *October
+         29*, without a reason."
+       - A batch with no `playlist` says "in a staged batch".
+       - **Not in the ledger, and every file was read:** "Vinyl Fever didn't recommend *Title*
+         by *Artist*."
+       - **Not found, and a file couldn't be read in time:** "I can't read the recommendations
+         yet. Try again in a minute." Never "didn't recommend" (Decision 12).
+       - **No folder access:** S1's "Open Vinyl Fever to grant folder access".
+
+       The `request` isn't spoken (Decision 13). The date is in the device's time zone, with the
+       year only when it isn't this year.
+    6. **Keep the evidence.** After each run that reaches an answer, append one line to
+       `Vinyl Fever/Probes/why-<device>.jsonl`: S0's probe line, plus the stale reason (or none),
+       the choices offered, the song asked about, the answer's kind, the batch's `recordedAt`
+       and `playlist` when found, and how many ledger files were read and unreadable. The file
+       name doesn't start with `notes`. If a live version or a remaster misses, this file shows
+       what the player said.
+  - **The ledger format moves to `VinylFeverNotes` (Decision 11).** Move `RecommendationTrack`,
+    `RecommendationLike`, `RecommendationBatch`, `RecommendationCoverage`,
+    `RecommendationLedgerReadResult`, and `RecommendationLedgerCodec` out of Core's
+    `RecommendationLedger.swift`, as S1 moved the note format. `RecommendationEvidence` and
+    `RecommendationLedgerEvidenceIndex` stay in Core, because the index needs `ArtistIdentity`.
+    Core already re-exports the package, so no Mac or `vf-mcp` call site changes. No format
+    change: the ledger stays `vf-recommendation-batch` v1, and nothing on the phone writes it.
+  - **The answer logic lives in the package,** Foundation only, so it's tested on macOS: a
+    lookup from a song and a read result (with an unreadable-file count) to an answer, and the
+    spoken text from the answer, with the clock, calendar, and time zone injected. The app does
+    the reading and the dialog.
+  - **The Cancel guard.** `MusicFeedback.makeNote` writes nothing when every word of the note,
+    with punctuation stripped, is "cancel": "Cancel cancel" and "Cancel. Cancel." included. A
+    note that only starts with "cancel" is still saved.
+  - **The setup screen** gains a "Test Why This Song" button that runs steps 1 to 5 and shows
+    the text it would speak. It writes nothing, not even the evidence line.
+  - **The probe intent stays** until S1's gate passes (Decision 10).
+
+  **DoD:**
+  - **Package tests (`VinylFeverNotes`):**
+    - the moved ledger tests pass unchanged, and an encoded batch is byte-identical to before
+      the move;
+    - the lookup: a song with a `why`; a song only in a batch without a `why`; a newer batch
+      without a `why` and an older one with it (the older one answers); not in the ledger; not
+      found with an unreadable file (the "can't read" answer, never "didn't recommend"); found
+      even when another file is unreadable; title and artist matching across case and
+      diacritics;
+    - the spoken text's golden strings: zero, one, two, and three `like` songs; no `playlist`;
+      a date in this year and one in last year; a date near midnight UTC in a US time zone;
+    - the Cancel guard: "Cancel cancel" and "cancel, cancel." write nothing; "Cancel culture is a
+      bad name for a band" is still saved.
+  - **App tests (`VinylFeverMobileTests`):** reading a temp folder with two ledger files, one
+    named as a `.icloud` placeholder; a file that can't be read before the deadline (injected)
+    counts as unreadable; a missing bookmark returns the folder message; the evidence line's
+    golden JSON; the evidence file name doesn't start with `notes`.
+  - **Core and `vf-mcp`:** the suites pass unchanged. `recommendationLedger()` reads a fixture
+    folder through the moved codec with the same result.
+  - **Builds:** iOS Simulator and device. The Mac app, Core, Listening, and `VinylFeverNotes`
+    suites pass.
+  - **Jon's gate (after install on the iPhone or iPad, owed until done):**
+    1. A song from *2023 Selections: 15 New Discoveries*, by voice: Siri speaks the playlist,
+       the date, the `why`, and both `like` songs.
+    2. A song from *Soft Vocals: Where's the Edge?*: the `why`, and no "compared it with".
+    3. A song from *Rolling Stone's 200 Best Rock Songs…*: "without a reason".
+    4. A library song the chat never staged: "Vinyl Fever didn't recommend…".
+    5. Once from the locked iPhone or through CarPlay.
+    6. Music Feedback, saying "Cancel cancel": no note is saved. This also rechecks S1's gate
+       step 4.
+
 ## Prerequisites (Jon, not the executor's)
 
 - [x] **Before S0's device runs:** add the iOS platform to the App ID
@@ -271,13 +384,22 @@ S1.
 | Recently played read | newest 5 | One more than the pick list, for deduplication |
 | Staleness rule | missing or blank, not playing, or below a newer song in recently played | S0's 11 lines (Decision 8) |
 | Song match | title and artist, trimmed, case- and diacritic-insensitive | IDs switch between catalog and library (S0) |
+| Ledger read deadline (S2) | 8 seconds, all files together | Siri waits on the intent; past this, "can't read yet" beats silence |
+| Which ledger line answers (S2) | newest batch whose line has a `why`, else newest batch | A later restaging without a reason shouldn't hide the reason |
+| Spoken `like` songs (S2) | all of them (the ledger keeps at most 3) | Two names read aloud in about five seconds |
+| Spoken `request` (S2) | never | About 200 characters each; the playlist name carries it (Decision 13) |
 
 ## Out of scope — with destinations
 
-- **"Why this song?"** (speaks the ledger's `why` and `like`). → M20 S2, planned after S1's gate.
-  It reuses S1's identification.
-- **The audition view** (Vinyl Fever plays the chat's picks and pairs, so it knows the song).
-  → After S2. It needs no identification at all.
+- **Leaving a note right after the answer** (one run: "why", then "what do you think?"). →
+  After S2's gate, if Jon wants it. Today he says "Music Feedback" next, and the same
+  identification finds the same song.
+- **Catalog IDs on new ledger lines** (fewer misses on live versions and remasters). → Only if
+  S2's evidence file shows misses. It's an optional field in `vf-mcp`; the ledger stays v1.
+- **The audition view** (recent batches with each song's `why`, `like`, and `request`; Vinyl
+  Fever plays the picks and pairs, so it knows the song). → After S2. It needs no
+  identification at all, and its feedback goes through Music Feedback's notes file.
+- **Removing the probe intent.** → The first slice after S1's gate (Decision 10).
 - **Album brief and Play Next.** → Their probes in open-questions.md (the chat route, the queue,
   and who calls the catalog) come first.
 - **ShazamKit.** → Only if S0 shows a start that keeps the music playing and a case that the
@@ -325,3 +447,20 @@ Added 2026-10-29 with S0's results. Merging that plan PR approves them.
    widget extension. The Shortcut control runs a one-action shortcut instead: "VF Music
    Feedback" for the gate, then "Music Feedback" once it points at the intent. Jon ran the probe
    that way, and the music kept playing. S1's gate tests it.
+
+Added 2026-10-30 with S2. Merging that plan PR approves them.
+
+10. **S2 goes before S1's gate (Jon, 2026-10-30).** S2 only reads and speaks: if the
+    identification misjudges a song, Jon hears a wrong answer, not a note filed on the wrong
+    song. The iPhone's two notes on 2026-10-29 identified the song correctly. S2 fixes the
+    Cancel guard that one of them got past, and its gate rechecks it. The probe stays until S1's
+    gate passes.
+11. **The ledger's model and codec move to `VinylFeverNotes`,** for the same reason as the note
+    format (Decision 7): the phone needs them, they use only Foundation, and Core stays
+    macOS-only. The evidence index stays in Core.
+12. **An unreadable ledger is never "not recommended".** iCloud evicts the ledger on both the
+    laptop and the phones. Telling Jon a recommended song wasn't recommended would be wrong in
+    a way he can't see, so a song not found while any file is unread gets "can't read yet".
+13. **The batch's `request` isn't spoken.** Requests run about 200 characters and read as
+    instructions to the chat. The playlist name and the date place the batch, and the `why`
+    carries the reason. The audition view will show the request.
