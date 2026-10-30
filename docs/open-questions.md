@@ -257,9 +257,9 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
 
 ## iPad Companion
 
-- The iPhone companion comes first (approved 2026-10-27; see *Now-playing album brief, and the
-  iPhone companion* above). Its packages would serve an iPad later.
-- Which screens would be useful away from the Mac?
+- The iPhone and iPad app is M20 (voice) and M21 (the playlists view). Its packages would serve
+  a larger iPad surface later.
+- Which other screens would be useful away from the Mac?
 - Should work queues and metadata policies sync through CloudKit eventually?
 
 ## Shared Components
