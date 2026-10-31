@@ -25,10 +25,7 @@ struct KeepLibraryClient {
 }
 
 extension KeepLibraryClient: TestDependencyKey {
-  static var testValue: Self {
-    Self(isAuthorized: { false }, readRoles: { nil }, libraryPlaylists: { [] },
-      editablePlaylists: { [] }, tracks: { _ in [] }, append: { _, _ in })
-  }
+  static var testValue: Self { Self() }
 }
 
 private enum KeepLibraryClientKey: DependencyKey {

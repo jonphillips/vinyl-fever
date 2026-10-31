@@ -50,14 +50,8 @@ private struct PlaylistHomeView: View {
               .font(.caption)
               .foregroundStyle(.secondary)
           }
-          if model.displayedPlaylists.isEmpty {
-            if model.selectedSegment == .archived {
-              ContentUnavailableView("No archived playlists", systemImage: "archivebox",
-                description: Text(model.emptyArchiveMessage ?? ""))
-            } else {
-              ContentUnavailableView("No Vinyl Fever playlists yet. Ask the chat for some.",
-                systemImage: "music.note.list")
-            }
+          if let message = model.emptyMessage {
+            PlaylistShelfEmptyView(segment: model.selectedSegment, message: message)
           }
           ForEach(model.displayedPlaylists) { playlist in
             NavigationLink(value: playlist.id) {
@@ -99,13 +93,12 @@ private struct PlaylistHomeView: View {
             Button("Open Setup") { model.setupButtonTapped() }
               .buttonStyle(.borderedProminent)
           }
-        } else if model.selectedSegment == .archived {
-          ContentUnavailableView("No archived playlists", systemImage: "archivebox",
-            description: Text(model.emptyArchiveMessage ?? ""))
         } else if model.isLoading {
           ProgressView("Loading playlists…")
+        } else if let message = model.emptyMessage {
+          PlaylistShelfEmptyView(segment: model.selectedSegment, message: message)
         } else {
-          ContentUnavailableView("No Vinyl Fever playlists yet. Ask the chat for some.", systemImage: "music.note.list")
+          ContentUnavailableView("Select a playlist", systemImage: "music.note.list")
         }
       }
       .toolbar {
@@ -157,6 +150,20 @@ private struct PlaylistHomeView: View {
     .task { await playbackModel.observeCurrentEntry() }
     .onChange(of: notesModel.notes) { _, notes in progressModel.updateSavedNotes(notes) }
     .onChange(of: keepModel.keptPlaylistsBySong) { _, keeps in progressModel.updateSavedKeeps(keeps) }
+  }
+}
+
+private struct PlaylistShelfEmptyView: View {
+  let segment: PlaylistShelfSegment
+  let message: String
+
+  var body: some View {
+    switch segment {
+    case .archived:
+      ContentUnavailableView("No archived playlists", systemImage: "archivebox", description: Text(message))
+    case .active:
+      ContentUnavailableView(message, systemImage: "music.note.list")
+    }
   }
 }
 

@@ -74,10 +74,14 @@ final class PlaylistShelfModel {
     playlists(in: selectedSegment)
   }
 
-  var emptyArchiveMessage: String? {
-    selectedSegment == .archived && displayedPlaylists.isEmpty
-      ? "Playlists you delete in Music move here."
-      : nil
+  /// The empty segment's message, only once the ledger has been read with folder access.
+  var emptyMessage: String? {
+    guard !isLoading, !requiresFolderAccess, displayedPlaylists.isEmpty else { return nil }
+    switch selectedSegment {
+    case .archived: return "Playlists you delete in Music move here."
+    case .active where !playlists.isEmpty: return "No active playlists. Ask the chat for a new one."
+    case .active: return "No Vinyl Fever playlists yet. Ask the chat for some."
+    }
   }
 
   func playlists(in segment: PlaylistShelfSegment) -> [PlaylistShelfPlaylist] {

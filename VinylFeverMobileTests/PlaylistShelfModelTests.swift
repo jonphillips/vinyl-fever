@@ -12,7 +12,7 @@ struct PlaylistShelfModelTests {
     ])
     let model = await withDependencies({ dependencies in
       dependencies.date.now = Date(timeIntervalSince1970: 0)
-      dependencies.keepLibraryClient = KeepLibraryClient.testValue
+      dependencies.keepLibraryClient.isAuthorized = { false }
       dependencies.playlistShelfClient.read = {
         RecommendationLedgerFolderRead(
           ledger: RecommendationLedgerReadResult(batches: [batch], skippedLines: 0),
@@ -43,7 +43,7 @@ struct PlaylistShelfModelTests {
     )
     let model = withDependencies({ dependencies in
       dependencies.date.now = Date(timeIntervalSince1970: 3)
-      dependencies.keepLibraryClient = KeepLibraryClient.testValue
+      dependencies.keepLibraryClient.isAuthorized = { false }
       dependencies.playlistShelfClient.read = {
         RecommendationLedgerFolderRead(
           ledger: RecommendationLedgerReadResult(batches: [first, second], skippedLines: 0),
@@ -79,10 +79,11 @@ struct PlaylistShelfModelTests {
     #expect(noAccess.playlists.isEmpty)
     noAccess.setupButtonTapped()
     #expect(noAccess.destination == PlaylistShelfModel.Destination.setup)
+    #expect(noAccess.emptyMessage == nil)
 
     let empty = await withDependencies({ dependencies in
       dependencies.date.now = Date(timeIntervalSince1970: 0)
-      dependencies.keepLibraryClient = KeepLibraryClient.testValue
+      dependencies.keepLibraryClient.isAuthorized = { false }
       dependencies.playlistShelfClient.read = {
         RecommendationLedgerFolderRead(
           ledger: RecommendationLedgerReadResult(batches: [], skippedLines: 0),
@@ -99,6 +100,31 @@ struct PlaylistShelfModelTests {
     #expect(!empty.requiresFolderAccess)
     #expect(empty.playlists.isEmpty)
     #expect(!empty.hasUnreadableFiles)
+    #expect(empty.emptyMessage == "No Vinyl Fever playlists yet. Ask the chat for some.")
+  }
+
+  @Test @MainActor
+  func noEmptyMessageWhileTheLedgerIsLoading() async {
+    let gate = ReadGate()
+    let model = withDependencies({ dependencies in
+      dependencies.date.now = Date(timeIntervalSince1970: 0)
+      dependencies.keepLibraryClient.isAuthorized = { false }
+      dependencies.playlistShelfClient.read = {
+        await gate.wait()
+        return RecommendationLedgerFolderRead(
+          ledger: RecommendationLedgerReadResult(batches: [], skippedLines: 0),
+          filesRead: 0, unreadableFileCount: 0, totalFileCount: 0)
+      }
+    }) {
+      PlaylistShelfModel()
+    }
+
+    let refresh = Task { await model.refresh() }
+    while !model.isLoading { await Task.yield() }
+    #expect(model.emptyMessage == nil)
+    await gate.open()
+    await refresh.value
+    #expect(model.emptyMessage == "No Vinyl Fever playlists yet. Ask the chat for some.")
   }
 
   @Test @MainActor
@@ -106,7 +132,7 @@ struct PlaylistShelfModelTests {
     let counter = ReadCounter()
     let model = await withDependencies({ dependencies in
       dependencies.date.now = Date(timeIntervalSince1970: 0)
-      dependencies.keepLibraryClient = KeepLibraryClient.testValue
+      dependencies.keepLibraryClient.isAuthorized = { false }
       dependencies.playlistShelfClient.read = {
         await counter.increment()
         return RecommendationLedgerFolderRead(
@@ -177,7 +203,26 @@ struct PlaylistShelfModelTests {
     #expect(model.count(in: .active) == 1)
     #expect(model.count(in: .archived) == 0)
     model.selectSegment(.archived)
-    #expect(model.emptyArchiveMessage == "Playlists you delete in Music move here.")
+    #expect(model.emptyMessage == "Playlists you delete in Music move here.")
+  }
+
+  @Test @MainActor
+  func activeWithEveryPlaylistArchivedPointsToANewOne() async {
+    let model = await withDependencies({ dependencies in
+      dependencies.date.now = Date(timeIntervalSince1970: 100_000)
+      dependencies.playlistShelfClient.read = { folderRead([batch(name: "Old Mix", stagedAt: 0)]) }
+      dependencies.keepLibraryClient.isAuthorized = { true }
+      dependencies.keepLibraryClient.libraryPlaylists = { [] }
+    }) {
+      let model = PlaylistShelfModel()
+      await model.refresh()
+      return model
+    }
+
+    #expect(model.count(in: .archived) == 1)
+    #expect(model.emptyMessage == "No active playlists. Ask the chat for a new one.")
+    model.selectSegment(.archived)
+    #expect(model.emptyMessage == nil)
   }
 
   private func batch(name: String?, stagedAt: TimeInterval) -> RecommendationBatch {
@@ -188,6 +233,22 @@ struct PlaylistShelfModelTests {
   private func folderRead(_ batches: [RecommendationBatch]) -> RecommendationLedgerFolderRead {
     RecommendationLedgerFolderRead(ledger: RecommendationLedgerReadResult(batches: batches, skippedLines: 0),
       filesRead: batches.count, unreadableFileCount: 0, totalFileCount: batches.count)
+  }
+}
+
+private actor ReadGate {
+  private var isOpen = false
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+
+  func wait() async {
+    guard !isOpen else { return }
+    await withCheckedContinuation { waiters.append($0) }
+  }
+
+  func open() {
+    isOpen = true
+    waiters.forEach { $0.resume() }
+    waiters = []
   }
 }
 
