@@ -9,7 +9,7 @@ Shared rules still apply except where Decision 3 adds a library read. Rules in
 `docs/ios/ui-and-platforms.md`. Where this doc and those conflict, stop and flag it.*
 
 Status: Planned
-Summary: S1 gives the song actions their own row and sets Jon's words in serif italic, S2 shows heard, kept, and passed on every song and a progress bar on every playlist, and S3 moves playlists deleted in Music into an Archived segment.
+Summary: S1 gives the song actions their own row and sets Jon's words in serif italic, S2 shows heard, kept, and passed on every song and a progress bar on every playlist, S3 moves playlists deleted in Music into an Archived segment, and S4 tells Jon's words from the chat's: the request is recorded word for word, and the chat's own description shows in its own type.
 
 M21 built the audition view in default styling and parked "heard, kept, and passed on each song"
 for after it. Jon used it and asked for four things (2026-10-31):
@@ -56,8 +56,9 @@ and the playlists he's deleted in Music wait under Archived.
 
 ## Shared rules (every slice)
 
-- **Nothing on the Mac changes.** No `vf-mcp`, Mac app, or format change. Nothing new is written
-  anywhere. Status and the archive are worked out on each load, never stored (Decision 3).
+- **Nothing on the Mac changes,** except in S4 (Decision 8). No `vf-mcp`, Mac app, or format
+  change. Nothing new is written anywhere. Status and the archive are worked out on each load,
+  never stored (Decision 3).
 - **The library changes only through Keep,** as in M21. Reading playlists, keepers' tracks, and
   the listening log is read-only.
 - **Same matching as M21:** title and artist through `MusicFeedback.matches`.
@@ -71,7 +72,8 @@ and the playlists he's deleted in Music wait under Archived.
 ## Slices
 
 **Dispatch 1: S1** (the look). **Dispatch 2: S2** (heard, kept, and passed). **Dispatch 3: S3**
-(the archive). Each completing PR advances `NEXT_UP.md`. They don't wait on Jon's gates.
+(the archive). **Dispatch 4: S4** (whose words; added by Jon 2026-10-31). Each completing PR
+advances `NEXT_UP.md`. They don't wait on Jon's gates.
 
 - [x] **S1 — Room for the actions, and Jon's words in his own type.** *(Mockups 3A and 4A.)*
   - **The action row (3A).** The title line holds only the title and the now-playing indicator.
@@ -204,6 +206,49 @@ and the playlists he's deleted in Music wait under Archived.
        brings it to the phone.
     3. Active opens by default, and the counts on the control are right.
 
+- [ ] **S4 — Jon's words and the chat's, told apart.** *(Jon, 2026-10-31.)*
+  - **Why.** S1 set the `request` under "You asked" in Jon's serif italic. On S1's review Jon
+    saw the chat's words in his style. Of the four requests in the ledger, only *2023
+    Selections* is his ("Find me 15 new discoveries…"). The other three are the chat's summary
+    of its own plan, in the third person: "Find 10 Sam Fender songs Jon has not listened to yet
+    …", "Cross-checked against … Blunt Magazine", "Build a diagnostic range …". The server
+    instructions say "Jon's request as request", never word for word, and the `request` field
+    has no description in `stage_playlist`'s schema.
+  - **`vf-mcp` (Decision 8).**
+    - `request`: the schema says "Jon's message asking for this playlist, word for word,
+      including how he said it. Never a summary or your plan." The server instructions say
+      "Jon's request word for word as request".
+    - `description` becomes required, and the ledger line records it as `description`, beside
+      `request`. It's already the chat's one sentence about the music, the one that becomes the
+      playlist's description in Music (`stageDescriptionGuidance`). It's an added optional key,
+      so the format version stays 1, and older readers ignore it.
+    - A test that a staged batch's ledger line holds both, word for word.
+  - **The app.**
+    - **A line with `description`** (recorded by the new `vf-mcp`): "You asked" with the
+      `request` in Jon's style, as in S1. Above it, under the name, the `description` in the
+      chat's style: the body font, secondary, no rule and no italic, as the `why` is.
+    - **A line without `description`** (older lines): the `request` shows under the label
+      "Request", in the body font with no rule. Nothing says whose words they were, so nothing
+      claims they were Jon's.
+    - Notes stay in Jon's style. Every note is meant to be his words. The chat records them
+      word for word by its instructions.
+  - **The shared logic (`VinylFeverNotes`):** `RecommendationBatch` gains `description:
+    String?`. A function decides which header the batch gets, so the rule is tested on macOS.
+
+  **DoD:**
+  - **Package tests:** a batch with `description` decodes it; a line without it still decodes;
+    the header rule for both.
+  - **Core tests:** `stage_playlist` without `description` is refused with a message saying
+    it's required; with it, the ledger line holds `request` and `description` as sent.
+  - **App:** the two header styles, with the S1 styling for Jon's words.
+  - **Builds:** iOS Simulator and device, and the Mac app. All suites pass.
+  - **Jon's gate:**
+    1. Install the Mac build and start a new chat (it caches the tool list). Ask it for a
+       playlist. In the app, "You asked" reads exactly what you typed, and the chat's sentence
+       sits above it in plain type.
+    2. *Sam Fender — Manchester 2027 Catch-Up* shows its request under "Request", in plain
+       type.
+
 ## Constants register (starting values)
 
 | Constant | Value | Why |
@@ -250,3 +295,11 @@ Added 2026-10-31 with M22. Merging this plan PR approves them.
    stays in the staged playlist and can still be kept.
 7. **S1 is dispatched before M21's gates,** as M21 Decision 7 did. It changes layout only, and
    M21's gates can run on the new layout.
+8. **S4 changes `vf-mcp` and adds a ledger key (Jon, 2026-10-31).** The app can't tell from the
+   text whose words a request is. So the source records the difference: the request word for
+   word, and the chat's own sentence as `description`. The key is optional and additive, so
+   the ledger stays version 1, and M18's outcomes read the file unchanged.
+9. **Older requests aren't attributed.** Sorting them by whether they name "Jon" would misplace
+   the Rolling Stone line, whose wording could be either speaker's. So without `description`, a
+   request shows plainly under "Request". The one real loss is *2023 Selections*, whose request
+   was Jon's and now loses his style.
