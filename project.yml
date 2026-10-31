@@ -164,6 +164,8 @@ targets:
     deploymentTarget: "27.0"
     sources:
       - VinylFeverMobile
+      # One Icon Composer file serves both apps; it lives with the Mac app's sources.
+      - VinylFever/AppIcon.icon
     dependencies:
       - package: VinylFeverNotes
         product: VinylFeverNotes
