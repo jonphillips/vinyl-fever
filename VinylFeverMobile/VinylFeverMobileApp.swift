@@ -34,6 +34,15 @@ private struct PlaylistHomeView: View {
   var body: some View {
     NavigationSplitView {
       List(selection: $model.selectedPlaylistID) {
+        Picker("Playlist status", selection: Binding(
+          get: { model.selectedSegment },
+          set: { model.selectSegment($0) }
+        )) {
+          Text("Active \(model.count(in: .active))").tag(PlaylistShelfSegment.active)
+          Text("Archived \(model.count(in: .archived))").tag(PlaylistShelfSegment.archived)
+        }
+        .pickerStyle(.segmented)
+
         Section {
           if model.hasUnreadableFiles || progressModel.hasUnreadableListeningLog {
             Label("Some recommendation or listening data is still downloading from iCloud. Pull to refresh.",
@@ -41,7 +50,10 @@ private struct PlaylistHomeView: View {
               .font(.caption)
               .foregroundStyle(.secondary)
           }
-          ForEach(model.playlists) { playlist in
+          if let message = model.emptyMessage {
+            PlaylistShelfEmptyView(segment: model.selectedSegment, message: message)
+          }
+          ForEach(model.displayedPlaylists) { playlist in
             NavigationLink(value: playlist.id) {
               PlaylistRow(playlist: playlist, progress: progressModel.results[playlist.id])
             }
@@ -55,7 +67,7 @@ private struct PlaylistHomeView: View {
       .navigationTitle("Playlists")
       .refreshable {
         await model.refresh()
-        await progressModel.refresh(model.playlists)
+        await progressModel.refresh(model.playlists, libraryPlaylists: model.libraryPlaylists)
       }
       .toolbar {
         ToolbarItem(placement: .topBarTrailing) {
@@ -66,12 +78,13 @@ private struct PlaylistHomeView: View {
       Group {
         if let playlist = selectedPlaylist {
           PlaylistDetailView(playlist: playlist,
+            archiveStatus: model.archiveStatusText(for: playlist),
             hasUnreadableFiles: model.hasUnreadableFiles || notesModel.hasUnreadableFiles || progressModel.hasUnreadableListeningLog,
             playbackModel: playbackModel, keepModel: keepModel, notesModel: notesModel,
             progressModel: progressModel) {
             await model.refresh()
             await notesModel.refresh()
-            await progressModel.refresh(model.playlists)
+            await progressModel.refresh(model.playlists, libraryPlaylists: model.libraryPlaylists)
           }
         } else if model.requiresFolderAccess {
           ContentUnavailableView {
@@ -82,8 +95,10 @@ private struct PlaylistHomeView: View {
           }
         } else if model.isLoading {
           ProgressView("Loading playlists…")
+        } else if let message = model.emptyMessage {
+          PlaylistShelfEmptyView(segment: model.selectedSegment, message: message)
         } else {
-          ContentUnavailableView("No Vinyl Fever playlists yet. Ask the chat for some.", systemImage: "music.note.list")
+          ContentUnavailableView("Select a playlist", systemImage: "music.note.list")
         }
       }
       .toolbar {
@@ -95,7 +110,7 @@ private struct PlaylistHomeView: View {
     .sheet(item: $model.destination, onDismiss: {
       Task {
         await model.refresh()
-        await progressModel.refresh(model.playlists)
+        await progressModel.refresh(model.playlists, libraryPlaylists: model.libraryPlaylists)
         if let selectedPlaylist { await playbackModel.prepare(selectedPlaylist) }
       }
     }) { destination in
@@ -119,16 +134,36 @@ private struct PlaylistHomeView: View {
     .task {
       await model.refresh()
       await notesModel.refresh()
-      await progressModel.refresh(model.playlists)
+      await progressModel.refresh(model.playlists, libraryPlaylists: model.libraryPlaylists)
       guard !didApplyInitialSelection else { return }
       didApplyInitialSelection = true
       if horizontalSizeClass == .regular, model.selectedPlaylistID == nil {
-        model.selectedPlaylistID = model.playlists.first?.id
+        model.selectFirstPlaylistIfNeeded()
       }
+    }
+    .onChange(of: model.selectedSegment) { _, _ in
+      if horizontalSizeClass == .regular { model.selectFirstPlaylistIfNeeded() }
+    }
+    .onChange(of: model.displayedPlaylists.map(\.id)) { _, _ in
+      if horizontalSizeClass == .regular { model.selectFirstPlaylistIfNeeded() }
     }
     .task { await playbackModel.observeCurrentEntry() }
     .onChange(of: notesModel.notes) { _, notes in progressModel.updateSavedNotes(notes) }
     .onChange(of: keepModel.keptPlaylistsBySong) { _, keeps in progressModel.updateSavedKeeps(keeps) }
+  }
+}
+
+private struct PlaylistShelfEmptyView: View {
+  let segment: PlaylistShelfSegment
+  let message: String
+
+  var body: some View {
+    switch segment {
+    case .archived:
+      ContentUnavailableView("No archived playlists", systemImage: "archivebox", description: Text(message))
+    case .active:
+      ContentUnavailableView(message, systemImage: "music.note.list")
+    }
   }
 }
 
@@ -224,6 +259,7 @@ private struct PlaylistSongProgressPill: View {
 
 private struct PlaylistDetailView: View {
   let playlist: PlaylistShelfPlaylist
+  let archiveStatus: String?
   let hasUnreadableFiles: Bool
   let playbackModel: PlaylistPlaybackModel
   let keepModel: PlaylistKeepModel
@@ -257,6 +293,11 @@ private struct PlaylistDetailView: View {
           Text(title).font(.largeTitle.bold())
           Text("\(playlist.stagedDate) · \(playlist.songCount) songs · \(playlist.newSongCount) new to you")
             .foregroundStyle(.secondary)
+          if let archiveStatus {
+            Text(archiveStatus)
+              .font(.callout)
+              .foregroundStyle(.secondary)
+          }
           if let progress = progressModel.results[playlist.id] {
             PlaylistProgressBar(counts: progress.counts)
               .padding(.top, 2)

@@ -44,7 +44,7 @@ final class PlaylistProgressModel {
   private var playlists: [PlaylistShelfPlaylist] = []
   private var index: PlaylistProgressIndex?
 
-  func refresh(_ playlists: [PlaylistShelfPlaylist]) async {
+  func refresh(_ playlists: [PlaylistShelfPlaylist], libraryPlaylists suppliedLibrary: [KeepLibraryPlaylist]? = nil) async {
     self.playlists = playlists
     hasUnreadableListeningLog = false
     guard keepClient.isAuthorized() else {
@@ -56,7 +56,12 @@ final class PlaylistProgressModel {
     isLoading = true
     defer { isLoading = false }
     do {
-      let library = try await keepClient.libraryPlaylists()
+      let library: [KeepLibraryPlaylist]
+      if let suppliedLibrary {
+        library = suppliedLibrary
+      } else {
+        library = try await keepClient.libraryPlaylists()
+      }
       let roles = try await keepClient.readRoles()
       let names = Set(roles?.playlists.filter { $0.role == .keepers }.map(\.name)
         ?? library.map(\.name).filter { $0 == "Vinyl Fever Keepers" || $0.range(of: SelectionPlaylistName.pattern, options: .regularExpression) != nil })
