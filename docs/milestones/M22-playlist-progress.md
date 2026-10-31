@@ -173,7 +173,7 @@ advances `NEXT_UP.md`. They don't wait on Jon's gates.
     4. In a new chat, `kept_and_passed`'s kept songs for a recent week agree with the app's
        Kept, where the same song is in both.
 
-- [ ] **S3 — The archive.** *(Jon, 2026-10-31.)*
+- [x] **S3 — The archive.** *(Jon, 2026-10-31.)*
   - **Archived (Decision 3, 5).** A playlist is archived when all of these hold:
     - Music is authorized, and the library playlists were read;
     - the batch has a `playlist` name, and no library playlist has exactly that name;
