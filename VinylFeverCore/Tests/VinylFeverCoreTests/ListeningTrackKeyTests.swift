@@ -18,11 +18,18 @@ struct ListeningTrackKeyTests {
     }
   }
 
-  @Test("Taste Intelligence uses the shared Mac and mobile song key")
-  func tasteIntelligenceUsesSharedKey() {
-    let identity = ArtistIdentity(aliases: ["The Records": "Different Records"],
-      knownArtists: ["The Records", "Different Records"])
-    let shared = ListeningTrackKey.make(artist: "The Records", title: "Me & Magdalena")
-    #expect(TasteIntelligence.songKey(artist: "The Records", title: "Me & Magdalena", identity: identity) == shared)
+  @Test("Taste Intelligence applies artist aliases through the shared key")
+  func tasteIntelligenceAppliesAliases() {
+    let identity = ArtistIdentity(aliases: ["John Cougar Mellencamp": "John Mellencamp"],
+      knownArtists: ["John Mellencamp", "John Cougar Mellencamp"])
+    #expect(TasteIntelligence.songKey(artist: "John Cougar Mellencamp", title: "Small Town", identity: identity)
+      == TasteIntelligence.songKey(artist: "John Mellencamp", title: "Small Town", identity: identity))
+  }
+
+  @Test("Without aliases, Taste Intelligence's key is the mobile key")
+  func tasteIntelligenceMatchesMobileKeyWithoutAliases() {
+    let identity = ArtistIdentity(knownArtists: ["The Records"])
+    #expect(TasteIntelligence.songKey(artist: "The Records", title: "Me & Magdalena", identity: identity)
+      == ListeningTrackKey.make(artist: "The Records", title: "Me & Magdalena"))
   }
 }

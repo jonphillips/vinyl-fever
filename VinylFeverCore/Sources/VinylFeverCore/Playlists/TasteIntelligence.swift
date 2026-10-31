@@ -172,9 +172,7 @@ public enum TasteIntelligence {
   }
 
   public static func songKey(artist: String, title: String, identity: ArtistIdentity) -> String {
-    // M22 S2 deliberately shares the mobile key and does not apply artist aliases here.
-    _ = identity
-    return ListeningTrackKey.make(artist: artist, title: title)
+    ListeningTrackKey.make(artist: artist, title: title, identity: identity)
   }
 
   public static func keptAndPassed(weeks: [NewMusicWeek], snapshot: LibrarySnapshot,
