@@ -1,5 +1,11 @@
 # Done log
 
+## 2026-10-31 — M22 · S1 — Room for the actions, and Jon's words in his own type
+
+- Branch: `m22/s1-room-actions`
+- Result: gave playlist songs a dedicated row of labeled capsule actions and styled Jon's request and notes in serif italic with a leading rule.
+- Verification: Listening, Notes, Core, Mac app, iOS Simulator, and generic iOS device builds passed.
+
 ## 2026-10-30 — M21 · S4: Notes from the playlist
 
 - Branch: `m21/s4-playlist-notes`.

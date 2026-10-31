@@ -73,7 +73,7 @@ and the playlists he's deleted in Music wait under Archived.
 **Dispatch 1: S1** (the look). **Dispatch 2: S2** (heard, kept, and passed). **Dispatch 3: S3**
 (the archive). Each completing PR advances `NEXT_UP.md`. They don't wait on Jon's gates.
 
-- [ ] **S1 — Room for the actions, and Jon's words in his own type.** *(Mockups 3A and 4A.)*
+- [x] **S1 — Room for the actions, and Jon's words in his own type.** *(Mockups 3A and 4A.)*
   - **The action row (3A).** The title line holds only the title and the now-playing indicator.
     Below the album and year line, a row of capsule buttons with icon and label: **Play**
     (`play.fill`), **Keep** (`bookmark`), **Note** (`pencil`). Use `.buttonStyle(.bordered)`,
