@@ -241,6 +241,34 @@ private struct PlaylistSongView: View {
   let keepModel: PlaylistKeepModel
   let notesModel: PlaylistTasteNotesModel
 
+  @ViewBuilder
+  private var songActionContent: some View {
+    if !playbackModel.isAuthorized {
+      EmptyView()
+    } else if playbackModel.notFoundSongIDs.contains(song.id) {
+      Text("Not in Apple Music").font(.caption).foregroundStyle(.secondary)
+    } else if playbackModel.resolvingSongIDs.contains(song.id) {
+      ProgressView().accessibilityLabel("Finding \(song.title)")
+    } else if let resolved = playbackModel.resolvedSongs[song.id] {
+      Button("Play", systemImage: "play.fill") {
+        Task { await playbackModel.play(song.id) }
+      }
+      .accessibilityLabel("Play \(song.title) by \(song.artist)")
+
+      let isKept = !(keepModel.keptPlaylistsBySong[song.id]?.isEmpty ?? true)
+      Button(isKept ? "Kept" : "Keep", systemImage: isKept ? "checkmark" : "bookmark") {
+        Task { await keepModel.keepButtonTapped(for: song, resolvedSong: resolved) }
+      }
+      .tint(isKept ? .green : .accentColor)
+      .accessibilityLabel("Keep \(song.title) by \(song.artist)")
+    }
+
+    Button("Note", systemImage: "pencil") {
+      notesModel.noteButtonTapped(for: song, resolvedSong: playbackModel.resolvedSongs[song.id])
+    }
+    .accessibilityLabel("Note on \(song.title) by \(song.artist)")
+  }
+
   var body: some View {
     HStack(alignment: .top, spacing: 14) {
       if let resolved = playbackModel.resolvedSongs[song.id], let artwork = resolved.artwork {
@@ -269,35 +297,13 @@ private struct PlaylistSongView: View {
             .foregroundStyle(.secondary)
         }
 
-        HStack(spacing: 8) {
-          if !playbackModel.isAuthorized {
-            EmptyView()
-          } else if playbackModel.notFoundSongIDs.contains(song.id) {
-            Text("Not in Apple Music").font(.caption).foregroundStyle(.secondary)
-          } else if playbackModel.resolvingSongIDs.contains(song.id) {
-            ProgressView().accessibilityLabel("Finding \(song.title)")
-          } else if let resolved = playbackModel.resolvedSongs[song.id] {
-            Button("Play", systemImage: "play.fill") {
-              Task { await playbackModel.play(song.id) }
-            }
-            .accessibilityLabel("Play \(song.title) by \(song.artist)")
-
-            let isKept = !(keepModel.keptPlaylistsBySong[song.id]?.isEmpty ?? true)
-            Button(isKept ? "Kept" : "Keep", systemImage: isKept ? "checkmark" : "bookmark") {
-              Task { await keepModel.keepButtonTapped(for: song, resolvedSong: resolved) }
-            }
-            .tint(isKept ? .green : .accentColor)
-            .accessibilityLabel("Keep \(song.title) by \(song.artist)")
-          }
-
-          Button("Note", systemImage: "pencil") {
-            notesModel.noteButtonTapped(for: song, resolvedSong: playbackModel.resolvedSongs[song.id])
-          }
-          .accessibilityLabel("Note on \(song.title) by \(song.artist)")
+        ViewThatFits(in: .horizontal) {
+          HStack(spacing: 8) { songActionContent }
+          HStack(spacing: 8) { songActionContent }
+            .labelStyle(.iconOnly)
         }
         .buttonStyle(.bordered)
         .buttonBorderShape(.capsule)
-        .controlSize(.large)
         .padding(.top, 4)
 
         Text(song.familiarity).font(.subheadline.weight(.medium))

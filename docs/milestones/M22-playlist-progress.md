@@ -78,7 +78,9 @@ and the playlists he's deleted in Music wait under Archived.
     Below the album and year line, a row of capsule buttons with icon and label: **Play**
     (`play.fill`), **Keep** (`bookmark`), **Note** (`pencil`). Use `.buttonStyle(.bordered)`,
     `.buttonBorderShape(.capsule)`, 8 pt between buttons, and leave the row's top spacing
-    larger than the lines above it. Every button keeps a 44 pt hit target.
+    larger than the lines above it. Use the default control size: `.large` needs 317 pt on an
+    iPhone 18 Pro, where the row has 288 pt (architect's probe on #169). When the labeled row
+    doesn't fit, as at larger text sizes, fall back to the same buttons icon-only (`ViewThatFits`).
     - **Kept:** when the song is kept (this session in S1, for real from S2), Keep reads
       **Kept** with `checkmark`, tinted green. It still opens the Keep sheet, so Jon can file the
       song into another keepers playlist.
