@@ -73,12 +73,14 @@ and the playlists he's deleted in Music wait under Archived.
 **Dispatch 1: S1** (the look). **Dispatch 2: S2** (heard, kept, and passed). **Dispatch 3: S3**
 (the archive). Each completing PR advances `NEXT_UP.md`. They don't wait on Jon's gates.
 
-- [ ] **S1 — Room for the actions, and Jon's words in his own type.** *(Mockups 3A and 4A.)*
+- [x] **S1 — Room for the actions, and Jon's words in his own type.** *(Mockups 3A and 4A.)*
   - **The action row (3A).** The title line holds only the title and the now-playing indicator.
     Below the album and year line, a row of capsule buttons with icon and label: **Play**
     (`play.fill`), **Keep** (`bookmark`), **Note** (`pencil`). Use `.buttonStyle(.bordered)`,
     `.buttonBorderShape(.capsule)`, 8 pt between buttons, and leave the row's top spacing
-    larger than the lines above it. Every button keeps a 44 pt hit target.
+    larger than the lines above it. Use the default control size: `.large` needs 317 pt on an
+    iPhone 18 Pro, where the row has 288 pt (architect's probe on #169). When the labeled row
+    doesn't fit, as at larger text sizes, fall back to the same buttons icon-only (`ViewThatFits`).
     - **Kept:** when the song is kept (this session in S1, for real from S2), Keep reads
       **Kept** with `checkmark`, tinted green. It still opens the Keep sheet, so Jon can file the
       song into another keepers playlist.

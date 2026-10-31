@@ -180,7 +180,7 @@ private struct PlaylistDetailView: View {
           if let request = playlist.batch.request, !request.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             VStack(alignment: .leading, spacing: 6) {
               Text("You asked").font(.headline)
-              Text(request)
+              JonWordsView(text: request)
             }
             .padding(.top, 8)
           }
@@ -240,6 +240,35 @@ private struct PlaylistSongView: View {
   let playbackModel: PlaylistPlaybackModel
   let keepModel: PlaylistKeepModel
   let notesModel: PlaylistTasteNotesModel
+
+  @ViewBuilder
+  private var songActionContent: some View {
+    if !playbackModel.isAuthorized {
+      EmptyView()
+    } else if playbackModel.notFoundSongIDs.contains(song.id) {
+      Text("Not in Apple Music").font(.caption).foregroundStyle(.secondary)
+    } else if playbackModel.resolvingSongIDs.contains(song.id) {
+      ProgressView().accessibilityLabel("Finding \(song.title)")
+    } else if let resolved = playbackModel.resolvedSongs[song.id] {
+      Button("Play", systemImage: "play.fill") {
+        Task { await playbackModel.play(song.id) }
+      }
+      .accessibilityLabel("Play \(song.title) by \(song.artist)")
+
+      let isKept = !(keepModel.keptPlaylistsBySong[song.id]?.isEmpty ?? true)
+      Button(isKept ? "Kept" : "Keep", systemImage: isKept ? "checkmark" : "bookmark") {
+        Task { await keepModel.keepButtonTapped(for: song, resolvedSong: resolved) }
+      }
+      .tint(isKept ? .green : .accentColor)
+      .accessibilityLabel("Keep \(song.title) by \(song.artist)")
+    }
+
+    Button("Note", systemImage: "pencil") {
+      notesModel.noteButtonTapped(for: song, resolvedSong: playbackModel.resolvedSongs[song.id])
+    }
+    .accessibilityLabel("Note on \(song.title) by \(song.artist)")
+  }
+
   var body: some View {
     HStack(alignment: .top, spacing: 14) {
       if let resolved = playbackModel.resolvedSongs[song.id], let artwork = resolved.artwork {
@@ -254,36 +283,12 @@ private struct PlaylistSongView: View {
           .background(.quaternary, in: .rect(cornerRadius: 6))
       }
       VStack(alignment: .leading, spacing: 9) {
-        HStack {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
           Text(song.title).font(.title3.weight(.semibold))
           if playbackModel.nowPlayingSongID == song.id {
             Image(systemName: "waveform").foregroundStyle(.tint).accessibilityLabel("Now playing")
           }
           Spacer()
-          Button("Note", systemImage: "pencil") {
-            notesModel.noteButtonTapped(for: song, resolvedSong: playbackModel.resolvedSongs[song.id])
-          }
-          .labelStyle(.iconOnly)
-          .accessibilityLabel("Note on \(song.title) by \(song.artist)")
-          if playbackModel.notFoundSongIDs.contains(song.id) {
-            Text("Not in Apple Music").font(.caption).foregroundStyle(.secondary)
-          } else if playbackModel.resolvingSongIDs.contains(song.id) {
-            ProgressView().accessibilityLabel("Finding \(song.title)")
-          } else if playbackModel.resolvedSongs[song.id] != nil {
-            HStack(spacing: 12) {
-              Button("Play", systemImage: "play.fill") {
-                Task { await playbackModel.play(song.id) }
-              }
-              .labelStyle(.iconOnly)
-              .accessibilityLabel("Play \(song.title) by \(song.artist)")
-              Button("Keep") {
-                if let resolved = playbackModel.resolvedSongs[song.id] {
-                  Task { await keepModel.keepButtonTapped(for: song, resolvedSong: resolved) }
-                }
-              }
-              .accessibilityLabel("Keep \(song.title) by \(song.artist)")
-            }
-          }
         }
         Text(song.artist).foregroundStyle(.secondary)
         if song.album != nil || song.year != nil {
@@ -291,6 +296,16 @@ private struct PlaylistSongView: View {
             .font(.subheadline)
             .foregroundStyle(.secondary)
         }
+
+        ViewThatFits(in: .horizontal) {
+          HStack(spacing: 8) { songActionContent }
+          HStack(spacing: 8) { songActionContent }
+            .labelStyle(.iconOnly)
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
+        .padding(.top, 4)
+
         Text(song.familiarity).font(.subheadline.weight(.medium))
         if let keptIn = keepModel.keptPlaylistsBySong[song.id], !keptIn.isEmpty {
           Text("Kept in \(keptIn.joined(separator: " and "))")
@@ -304,7 +319,7 @@ private struct PlaylistSongView: View {
           VStack(alignment: .leading, spacing: 3) {
             Text(note.notedAt.formatted(date: .abbreviated, time: .omitted))
               .font(.caption).foregroundStyle(.secondary)
-            Text(note.note).fixedSize(horizontal: false, vertical: true)
+            JonWordsView(text: note.note)
           }
           .padding(.top, 3)
         }
@@ -332,6 +347,23 @@ private struct PlaylistSongView: View {
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
+  }
+}
+
+private struct JonWordsView: View {
+  let text: String
+
+  var body: some View {
+    HStack(alignment: .top, spacing: 8) {
+      Rectangle()
+        .fill(.secondary)
+        .frame(width: 2)
+      Text(text)
+        .font(.body)
+        .fontDesign(.serif)
+        .italic()
+        .fixedSize(horizontal: false, vertical: true)
+    }
   }
 }
 
