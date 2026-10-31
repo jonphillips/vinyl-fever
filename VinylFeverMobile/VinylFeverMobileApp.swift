@@ -8,10 +8,12 @@ struct VinylFeverMobileApp: App {
   @State private var playbackModel = PlaylistPlaybackModel()
   @State private var keepModel = PlaylistKeepModel()
   @State private var notesModel = PlaylistTasteNotesModel()
+  @State private var progressModel = PlaylistProgressModel()
 
   var body: some Scene {
     WindowGroup {
-      PlaylistHomeView(model: shelfModel, playbackModel: playbackModel, keepModel: keepModel, notesModel: notesModel)
+      PlaylistHomeView(model: shelfModel, playbackModel: playbackModel, keepModel: keepModel,
+        notesModel: notesModel, progressModel: progressModel)
     }
   }
 }
@@ -23,6 +25,7 @@ private struct PlaylistHomeView: View {
   let playbackModel: PlaylistPlaybackModel
   @Bindable var keepModel: PlaylistKeepModel
   @Bindable var notesModel: PlaylistTasteNotesModel
+  @Bindable var progressModel: PlaylistProgressModel
 
   private var selectedPlaylist: PlaylistShelfPlaylist? {
     model.playlists.first { $0.id == model.selectedPlaylistID }
@@ -32,15 +35,15 @@ private struct PlaylistHomeView: View {
     NavigationSplitView {
       List(selection: $model.selectedPlaylistID) {
         Section {
-          if model.hasUnreadableFiles {
-            Label("Some recommendations are still downloading from iCloud. Pull to refresh.",
+          if model.hasUnreadableFiles || progressModel.hasUnreadableListeningLog {
+            Label("Some recommendation or listening data is still downloading from iCloud. Pull to refresh.",
               systemImage: "icloud.and.arrow.down")
               .font(.caption)
               .foregroundStyle(.secondary)
           }
           ForEach(model.playlists) { playlist in
             NavigationLink(value: playlist.id) {
-              PlaylistRow(playlist: playlist)
+              PlaylistRow(playlist: playlist, progress: progressModel.results[playlist.id])
             }
             .tag(playlist.id)
           }
@@ -50,7 +53,10 @@ private struct PlaylistHomeView: View {
       }
       .listStyle(.sidebar)
       .navigationTitle("Playlists")
-      .refreshable { await model.refresh() }
+      .refreshable {
+        await model.refresh()
+        await progressModel.refresh(model.playlists)
+      }
       .toolbar {
         ToolbarItem(placement: .topBarTrailing) {
           Button("Setup", systemImage: "gearshape") { model.setupButtonTapped() }
@@ -60,10 +66,12 @@ private struct PlaylistHomeView: View {
       Group {
         if let playlist = selectedPlaylist {
           PlaylistDetailView(playlist: playlist,
-            hasUnreadableFiles: model.hasUnreadableFiles || notesModel.hasUnreadableFiles,
-            playbackModel: playbackModel, keepModel: keepModel, notesModel: notesModel) {
+            hasUnreadableFiles: model.hasUnreadableFiles || notesModel.hasUnreadableFiles || progressModel.hasUnreadableListeningLog,
+            playbackModel: playbackModel, keepModel: keepModel, notesModel: notesModel,
+            progressModel: progressModel) {
             await model.refresh()
             await notesModel.refresh()
+            await progressModel.refresh(model.playlists)
           }
         } else if model.requiresFolderAccess {
           ContentUnavailableView {
@@ -87,6 +95,7 @@ private struct PlaylistHomeView: View {
     .sheet(item: $model.destination, onDismiss: {
       Task {
         await model.refresh()
+        await progressModel.refresh(model.playlists)
         if let selectedPlaylist { await playbackModel.prepare(selectedPlaylist) }
       }
     }) { destination in
@@ -110,6 +119,7 @@ private struct PlaylistHomeView: View {
     .task {
       await model.refresh()
       await notesModel.refresh()
+      await progressModel.refresh(model.playlists)
       guard !didApplyInitialSelection else { return }
       didApplyInitialSelection = true
       if horizontalSizeClass == .regular, model.selectedPlaylistID == nil {
@@ -117,11 +127,14 @@ private struct PlaylistHomeView: View {
       }
     }
     .task { await playbackModel.observeCurrentEntry() }
+    .onChange(of: notesModel.notes) { _, notes in progressModel.updateSavedNotes(notes) }
+    .onChange(of: keepModel.keptPlaylistsBySong) { _, keeps in progressModel.updateSavedKeeps(keeps) }
   }
 }
 
 private struct PlaylistRow: View {
   let playlist: PlaylistShelfPlaylist
+  let progress: PlaylistProgressResult?
 
   private var title: String {
     guard let name = playlist.batch.playlist?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else {
@@ -137,8 +150,74 @@ private struct PlaylistRow: View {
         .font(.caption)
         .foregroundStyle(.secondary)
         .lineLimit(1)
+      if let progress { PlaylistProgressBar(counts: progress.counts) }
     }
     .padding(.vertical, 4)
+    .accessibilityElement(children: .combine)
+  }
+}
+
+private struct PlaylistProgressBar: View {
+  let counts: PlaylistProgressCounts
+
+  private var accessibilityText: String {
+    "\(counts.heard) of \(counts.songCount) heard, \(counts.kept) kept, \(counts.withFeedback) with feedback"
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      GeometryReader { geometry in
+        let total = max(1, counts.songCount)
+        let segmentWidth = max(0, geometry.size.width - 3)
+        HStack(spacing: 1) {
+          segment(counts.kept, color: .green, width: segmentWidth, total: total)
+          segment(counts.passedWithFeedback, color: .red.opacity(0.55), width: segmentWidth, total: total)
+          segment(counts.passedWithoutFeedback, color: .secondary.opacity(0.55), width: segmentWidth, total: total)
+          segment(counts.notHeard, color: .secondary.opacity(0.12), width: segmentWidth, total: total)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 8)
+        .clipShape(Capsule())
+      }
+      .frame(height: 8)
+      Text("\(counts.heard) of \(counts.songCount) heard · \(counts.withFeedback) with feedback")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(accessibilityText)
+  }
+
+  private func segment(_ count: Int, color: Color, width: CGFloat, total: Int) -> some View {
+    Rectangle().fill(color).frame(width: width * CGFloat(count) / CGFloat(total))
+  }
+}
+
+private struct PlaylistSongProgressPill: View {
+  let progress: PlaylistSongProgress
+
+  var body: some View {
+    Group {
+      switch progress {
+      case .kept(let names):
+        Label("Kept · \(names.joined(separator: " and "))", systemImage: "checkmark")
+          .foregroundStyle(.green)
+          .padding(.horizontal, 9).padding(.vertical, 4)
+          .background(.green.opacity(0.12), in: Capsule())
+      case .passed:
+        Text("Passed")
+          .foregroundStyle(.red)
+          .padding(.horizontal, 9).padding(.vertical, 4)
+          .background(.red.opacity(0.1), in: Capsule())
+      case .notHeard:
+        Text("Not heard yet")
+          .foregroundStyle(.secondary)
+          .padding(.horizontal, 9).padding(.vertical, 4)
+          .overlay(Capsule().stroke(.secondary.opacity(0.35), lineWidth: 1))
+      }
+    }
+    .font(.caption.weight(.medium))
+    .fixedSize(horizontal: false, vertical: true)
     .accessibilityElement(children: .combine)
   }
 }
@@ -149,6 +228,7 @@ private struct PlaylistDetailView: View {
   let playbackModel: PlaylistPlaybackModel
   let keepModel: PlaylistKeepModel
   let notesModel: PlaylistTasteNotesModel
+  let progressModel: PlaylistProgressModel
   let refresh: () async -> Void
 
   private var title: String {
@@ -177,6 +257,10 @@ private struct PlaylistDetailView: View {
           Text(title).font(.largeTitle.bold())
           Text("\(playlist.stagedDate) · \(playlist.songCount) songs · \(playlist.newSongCount) new to you")
             .foregroundStyle(.secondary)
+          if let progress = progressModel.results[playlist.id] {
+            PlaylistProgressBar(counts: progress.counts)
+              .padding(.top, 2)
+          }
           if let request = playlist.batch.request, !request.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             VStack(alignment: .leading, spacing: 6) {
               Text("You asked").font(.headline)
@@ -212,7 +296,8 @@ private struct PlaylistDetailView: View {
 
         ForEach(Array(playlist.songs.enumerated()), id: \.element.id) { index, song in
           VStack(spacing: 18) {
-            PlaylistSongView(song: song, playbackModel: playbackModel, keepModel: keepModel, notesModel: notesModel)
+            PlaylistSongView(song: song, playbackModel: playbackModel, keepModel: keepModel,
+              notesModel: notesModel, progress: progressModel.results[playlist.id]?.songs[song.id])
             if song.id != playlist.songs.last?.id { Divider() }
           }
           .task {
@@ -240,6 +325,7 @@ private struct PlaylistSongView: View {
   let playbackModel: PlaylistPlaybackModel
   let keepModel: PlaylistKeepModel
   let notesModel: PlaylistTasteNotesModel
+  let progress: PlaylistSongProgress?
 
   @ViewBuilder
   private var songActionContent: some View {
@@ -255,7 +341,7 @@ private struct PlaylistSongView: View {
       }
       .accessibilityLabel("Play \(song.title) by \(song.artist)")
 
-      let isKept = !(keepModel.keptPlaylistsBySong[song.id]?.isEmpty ?? true)
+      let isKept = !(keepModel.keptPlaylistsBySong[song.id]?.isEmpty ?? true) || isKept(progress)
       Button(isKept ? "Kept" : "Keep", systemImage: isKept ? "checkmark" : "bookmark") {
         Task { await keepModel.keepButtonTapped(for: song, resolvedSong: resolved) }
       }
@@ -291,6 +377,7 @@ private struct PlaylistSongView: View {
           Spacer()
         }
         Text(song.artist).foregroundStyle(.secondary)
+        if let progress { PlaylistSongProgressPill(progress: progress) }
         if song.album != nil || song.year != nil {
           Text([song.album, song.year.map(String.init)].compactMap { $0 }.joined(separator: " · "))
             .font(.subheadline)
@@ -307,11 +394,6 @@ private struct PlaylistSongView: View {
         .padding(.top, 4)
 
         Text(song.familiarity).font(.subheadline.weight(.medium))
-        if let keptIn = keepModel.keptPlaylistsBySong[song.id], !keptIn.isEmpty {
-          Text("Kept in \(keptIn.joined(separator: " and "))")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-        }
         if let why = song.why {
           Text(why).fixedSize(horizontal: false, vertical: true)
         }
@@ -347,6 +429,11 @@ private struct PlaylistSongView: View {
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private func isKept(_ progress: PlaylistSongProgress?) -> Bool {
+    if case .kept? = progress { return true }
+    return false
   }
 }
 

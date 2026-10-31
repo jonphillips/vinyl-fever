@@ -1,5 +1,6 @@
 import Dependencies
 import Foundation
+import VinylFeverNotes
 
 public struct ListeningDiffResult: Equatable, Sendable {
   /// A `.failed` result must not replace the poller's saved `last-list.json` value.

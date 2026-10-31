@@ -18,6 +18,7 @@ struct KeepLibraryTrack: Equatable, Sendable {
 struct KeepLibraryClient {
   var isAuthorized: @MainActor @Sendable () -> Bool = { false }
   var readRoles: @Sendable () async throws -> PlaylistRoles?
+  var libraryPlaylists: @Sendable () async throws -> [KeepLibraryPlaylist]
   var editablePlaylists: @Sendable () async throws -> [KeepLibraryPlaylist]
   var tracks: @Sendable (String) async throws -> [KeepLibraryTrack]
   var append: @Sendable (String, PlaylistSongReference) async throws -> Void
@@ -32,6 +33,16 @@ private enum KeepLibraryClientKey: DependencyKey {
     isAuthorized: { MusicAuthorization.currentStatus == .authorized },
     readRoles: {
       try await Task.detached { try PlaylistRolesFolderReader.read() }.value
+    },
+    libraryPlaylists: {
+      var next: String? = "/v1/me/library/playlists"
+      var playlists: [KeepLibraryPlaylist] = []
+      while let page = next {
+        let response = try await Self.getPage(path: page)
+        playlists += response.data.map { KeepLibraryPlaylist(id: $0.id, name: $0.attributes.name) }
+        next = response.next
+      }
+      return playlists
     },
     editablePlaylists: {
       var next: String? = "/v1/me/library/playlists"

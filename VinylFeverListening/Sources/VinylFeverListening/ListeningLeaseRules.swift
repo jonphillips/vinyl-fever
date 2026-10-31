@@ -1,4 +1,5 @@
 import Foundation
+import VinylFeverNotes
 
 public enum ListeningLeaseDecision: Equatable, Sendable {
   case claimIfEmpty

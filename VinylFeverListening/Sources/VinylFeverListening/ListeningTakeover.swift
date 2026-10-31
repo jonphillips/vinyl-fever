@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import VinylFeverNotes
 
 public enum ListeningTakeover {
   /// Transfers the lease, registers the poller when needed, and asks launchd to start it.

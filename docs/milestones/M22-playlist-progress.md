@@ -107,7 +107,7 @@ advances `NEXT_UP.md`. They don't wait on Jon's gates.
     2. Keep a song: its button reads Kept, in green.
     3. "You asked" and a note read in serif italic beside a rule. The `why` doesn't.
 
-- [ ] **S2 — Heard, kept, and passed.** *(Mockups 2A and 1B.)*
+- [x] **S2 — Heard, kept, and passed.** *(Mockups 2A and 1B.)*
   - **Each song's status (Decision 1, 2, 6).** Worked out per playlist, from the playlist's
     `recordedAt`:
     - **Kept:** the song is in a keepers playlist, whenever it got there. The keepers playlists
