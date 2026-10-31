@@ -13,7 +13,7 @@ enum PlaylistListeningLogReader {
     coordinatedRead: @escaping @Sendable (URL) throws -> Data = coordinatedRead
   ) throws -> [ListeningPlay] {
     let root = folder.appending(path: "Listening/fetches", directoryHint: .isDirectory)
-    guard FileManager.default.fileExists(atPath: root.path) else { return [] }
+    guard FileManager.default.fileExists(atPath: root.path) else { throw CocoaError(.fileNoSuchFile) }
     let oldestMonth = monthKey(oldestDate)
     let latestMonth = monthKey(now)
     guard let enumerator = FileManager.default.enumerator(

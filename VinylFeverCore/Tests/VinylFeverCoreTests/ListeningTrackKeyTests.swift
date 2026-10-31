@@ -17,4 +17,12 @@ struct ListeningTrackKeyTests {
       #expect("\(ArtistIdentity.empty.key("The Records"))|\(SongTextNormalizer.libraryTitle(title))" == indexKey)
     }
   }
+
+  @Test("Taste Intelligence uses the shared Mac and mobile song key")
+  func tasteIntelligenceUsesSharedKey() {
+    let identity = ArtistIdentity(aliases: ["The Records": "Different Records"],
+      knownArtists: ["The Records", "Different Records"])
+    let shared = ListeningTrackKey.make(artist: "The Records", title: "Me & Magdalena")
+    #expect(TasteIntelligence.songKey(artist: "The Records", title: "Me & Magdalena", identity: identity) == shared)
+  }
 }

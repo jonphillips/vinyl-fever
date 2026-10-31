@@ -124,6 +124,31 @@ struct PlaylistProgressModelTests {
     #expect(failedLog.hasUnreadableListeningLog)
   }
 
+  @Test @MainActor
+  func missingListeningLogFolderThrowsAndHidesProgress() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let playlist = fixture()
+    #expect(throws: CocoaError.self) {
+      try PlaylistListeningLogReader.read(folder: root, from: date(100), now: date(200))
+    }
+    let model = withDependencies({ dependencies in
+      dependencies.date.now = date(101)
+      dependencies.keepLibraryClient.isAuthorized = { true }
+      dependencies.keepLibraryClient.libraryPlaylists = { [] }
+      dependencies.keepLibraryClient.readRoles = { try roles() }
+      dependencies.playlistTasteNotesClient.read = { emptyNotes() }
+      dependencies.playlistListeningLogClient.read = { oldest, now in
+        try PlaylistListeningLogReader.read(folder: root, from: oldest, now: now)
+      }
+    }) { PlaylistProgressModel() }
+
+    await model.refresh([playlist])
+    #expect(!model.isAvailable)
+    #expect(model.results.isEmpty)
+    #expect(model.hasUnreadableListeningLog)
+  }
+
   private func fixture() -> PlaylistShelfPlaylist {
     let songs = ["kept", "played", "unheard"].map { id in
       PlaylistShelfSong(id: id, title: id.capitalized, artist: "Artist", album: nil, year: nil,

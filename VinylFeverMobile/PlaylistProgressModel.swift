@@ -42,15 +42,14 @@ final class PlaylistProgressModel {
   @ObservationIgnored @Dependency(\.date.now) private var now
 
   private var playlists: [PlaylistShelfPlaylist] = []
-  private var keepers: [PlaylistKeeperTracks] = []
-  private var plays: [ListeningPlay] = []
-  private var notes: [TasteNote] = []
+  private var index: PlaylistProgressIndex?
 
   func refresh(_ playlists: [PlaylistShelfPlaylist]) async {
     self.playlists = playlists
     hasUnreadableListeningLog = false
     guard keepClient.isAuthorized() else {
       isAvailable = false
+      index = nil
       results = [:]
       return
     }
@@ -78,46 +77,48 @@ final class PlaylistProgressModel {
         throw error
       }
 
-      keepers = readKeepers
-      notes = TasteNotesCodec.uniqueNewestFirst(noteRead.result.notes)
-      plays = readPlays
+      let notes = TasteNotesCodec.uniqueNewestFirst(noteRead.result.notes)
+      let calculation = await Task.detached(priority: .userInitiated) {
+        var index = PlaylistProgressIndex(playlists: playlists, keepers: readKeepers,
+          plays: readPlays, notes: notes)
+        let results = Dictionary(uniqueKeysWithValues: playlists.map { ($0.id, index.result(for: $0)) })
+        return (index, results)
+      }.value
+      index = calculation.0
+      results = calculation.1
       isAvailable = true
-      recompute()
     } catch {
       isAvailable = false
+      index = nil
       results = [:]
     }
   }
 
   func updateSavedNotes(_ notes: [TasteNote]) {
-    guard isAvailable else { return }
-    self.notes = TasteNotesCodec.uniqueNewestFirst(notes)
+    guard isAvailable, var index else { return }
+    index.addNotes(TasteNotesCodec.uniqueNewestFirst(notes), playlists: playlists)
+    self.index = index
     recompute()
   }
 
   func updateSavedKeeps(_ keptPlaylistsBySong: [String: [String]]) {
-    guard isAvailable else { return }
+    guard isAvailable, var index else { return }
     for playlist in playlists {
       for song in playlist.songs {
         guard let names = keptPlaylistsBySong[song.id] else { continue }
-        for name in names where !keepers.contains(where: { $0.name == name && $0.tracks.contains(where: {
-          MusicFeedback.matches(FeedbackSong(title: $0.title, artist: $0.artist), FeedbackSong(title: song.title, artist: song.artist))
-        }) }) {
-          if let index = keepers.firstIndex(where: { $0.name == name }) {
-            keepers[index].tracks.append(PlaylistTrackIdentity(title: song.title, artist: song.artist))
-          } else {
-            keepers.append(PlaylistKeeperTracks(name: name, tracks: [.init(title: song.title, artist: song.artist)]))
-          }
+        for name in names {
+          index.addKeeper(name: name, artist: song.artist, title: song.title)
         }
       }
     }
+    self.index = index
     recompute()
   }
 
   private func recompute() {
-    results = Dictionary(uniqueKeysWithValues: playlists.map { playlist in
-      (playlist.id, PlaylistProgress.make(playlist: playlist, keepers: keepers, plays: plays, notes: notes))
-    })
+    guard var index else { return }
+    results = Dictionary(uniqueKeysWithValues: playlists.map { ($0.id, index.result(for: $0)) })
+    self.index = index
   }
 }
 
