@@ -179,7 +179,7 @@ private struct PlaylistDetailView: View {
             .foregroundStyle(.secondary)
           if let request = playlist.batch.request, !request.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-              Text("You asked").font(.body)
+              Text("You asked").font(.headline)
               JonWordsView(text: request)
             }
             .padding(.top, 8)
@@ -270,38 +270,34 @@ private struct PlaylistSongView: View {
         }
 
         HStack(spacing: 8) {
-          Button("Note", systemImage: "pencil") {
-            notesModel.noteButtonTapped(for: song, resolvedSong: playbackModel.resolvedSongs[song.id])
-          }
-          .frame(minHeight: 44)
-          .accessibilityLabel("Note on \(song.title) by \(song.artist)")
-
           if !playbackModel.isAuthorized {
             EmptyView()
           } else if playbackModel.notFoundSongIDs.contains(song.id) {
             Text("Not in Apple Music").font(.caption).foregroundStyle(.secondary)
           } else if playbackModel.resolvingSongIDs.contains(song.id) {
             ProgressView().accessibilityLabel("Finding \(song.title)")
-              .frame(minWidth: 44, minHeight: 44)
           } else if let resolved = playbackModel.resolvedSongs[song.id] {
             Button("Play", systemImage: "play.fill") {
               Task { await playbackModel.play(song.id) }
             }
-            .frame(minHeight: 44)
             .accessibilityLabel("Play \(song.title) by \(song.artist)")
 
             let isKept = !(keepModel.keptPlaylistsBySong[song.id]?.isEmpty ?? true)
             Button(isKept ? "Kept" : "Keep", systemImage: isKept ? "checkmark" : "bookmark") {
               Task { await keepModel.keepButtonTapped(for: song, resolvedSong: resolved) }
             }
-            .frame(minHeight: 44)
             .tint(isKept ? .green : .accentColor)
             .accessibilityLabel("Keep \(song.title) by \(song.artist)")
           }
+
+          Button("Note", systemImage: "pencil") {
+            notesModel.noteButtonTapped(for: song, resolvedSong: playbackModel.resolvedSongs[song.id])
+          }
+          .accessibilityLabel("Note on \(song.title) by \(song.artist)")
         }
         .buttonStyle(.bordered)
         .buttonBorderShape(.capsule)
-        .frame(minHeight: 44, alignment: .leading)
+        .controlSize(.large)
         .padding(.top, 4)
 
         Text(song.familiarity).font(.subheadline.weight(.medium))
@@ -316,7 +312,7 @@ private struct PlaylistSongView: View {
         ForEach(Array(notesModel.notes(for: song).enumerated()), id: \.offset) { _, note in
           VStack(alignment: .leading, spacing: 3) {
             Text(note.notedAt.formatted(date: .abbreviated, time: .omitted))
-              .font(.body).foregroundStyle(.secondary)
+              .font(.caption).foregroundStyle(.secondary)
             JonWordsView(text: note.note)
           }
           .padding(.top, 3)
