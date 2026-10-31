@@ -1,9 +1,12 @@
 # Done log
 
-## 2026-10-31 — M22 · S4
+## 2026-10-31 — M22 · S4 — Jon's words and the chat's, told apart
 
-Completed `m22/s4-chat-description`: `stage_playlist` records Jon's request and the chat's description verbatim, and the playlist view distinguishes attributed requests from older unattributed ones. The M22 brief is archived at `docs/milestones/archive/M22-playlist-progress.md`.
+- **Branch:** `m22/s4-chat-description`
+- **Result:** `stage_playlist` records Jon's request and the chat's description verbatim; the playlist view distinguishes newly attributed requests from older unattributed ones. The M22 brief is archived at `docs/milestones/archive/M22-playlist-progress.md`.
+- **Verification:** Notes (55), Core (302), Listening (51), Mac app (94), iPhone Simulator (55), generic iOS device build, and `check-handoff` passed.
 
+Jon's M22 S4 gate remains owed with the prior device gates.
 
 ## 2026-10-31 — M22 · S3 — The archive
 
