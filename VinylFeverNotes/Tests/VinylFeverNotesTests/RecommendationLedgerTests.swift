@@ -90,6 +90,39 @@ struct RecommendationLedgerTests {
     #expect(result.skippedLines == 1)
   }
 
+  @Test("staged playlist headers attribute Jon's request only when a description is recorded")
+  func playlistRequestHeader() {
+    let stagedAt = Date(timeIntervalSince1970: 1_800_000_000)
+    let attributed = RecommendationBatch(recordedAt: stagedAt, host: "Mac", playlist: "Selections",
+      tracks: [], request: "Find 15 discoveries, please.", description: "Bright songs for late nights.")
+    let legacy = RecommendationBatch(recordedAt: stagedAt, host: "Mac", playlist: "Old batch",
+      tracks: [], request: "Find 10 songs Jon has not heard.")
+
+    #expect(PlaylistRequestHeader.forBatch(attributed) == .jonWords)
+    #expect(PlaylistRequestHeader.forBatch(legacy) == .unattributed)
+  }
+
+  @Test("ledger lines decode with and without description")
+  func ledgerLineDescriptionCompatibility() throws {
+    let stagedAt = ISO8601DateFormatter().date(from: "2026-10-31T12:00:00Z")!
+    let attributed = RecommendationBatch(recordedAt: stagedAt, host: "Jon MBP", playlist: "2023 Selections",
+      tracks: [], request: "Find me 15 new discoveries…", description: "Bright new discoveries for the season.")
+    let legacy = RecommendationBatch(recordedAt: stagedAt, host: "Jon MBP",
+      playlist: "Sam Fender — Manchester 2027 Catch-Up", tracks: [
+        RecommendationTrack(artist: "Sam Fender", title: "Fixture Track", familiar: false, reasons: [], artistKnown: true),
+      ],
+      request: "Find 10 Sam Fender songs Jon has not listened to yet …")
+    let ledger = RecommendationLedgerCodec.readFiles([
+      try RecommendationLedgerCodec.encode(attributed) + RecommendationLedgerCodec.encode(legacy),
+    ])
+    let batches = ledger.batches
+    #expect(batches.count == 2)
+    #expect(batches[0].description == "Bright new discoveries for the season.")
+    #expect(PlaylistRequestHeader.forBatch(batches[0]) == .jonWords)
+    #expect(batches[1].description == nil)
+    #expect(PlaylistRequestHeader.forBatch(batches[1]) == .unattributed)
+  }
+
   @Test("playlist names load from every host and skip batches without a playlist")
   func playlistNamesInFolder() throws {
     let folder = FileManager.default.temporaryDirectory

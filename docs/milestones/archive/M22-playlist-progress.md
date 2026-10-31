@@ -2,9 +2,9 @@
 
 *Show Jon, in the app's playlist view, how far he's got with each playlist and what happened to
 each song, give the song actions room, and set his own words apart from the chat's. Playlists he
-deletes in Music move to an archive. It builds on [M21](archive/M21-playlists-view.md), whose
+deletes in Music move to an archive. It builds on [M21](M21-playlists-view.md), whose
 Shared rules still apply except where Decision 3 adds a library read. Rules in
-[../technical-architecture.md](../technical-architecture.md) and
+[../technical-architecture.md](../../technical-architecture.md) and
 `/Users/jon/code/jon-platform/AGENTS.md` apply, and the screens follow jon-platform
 `docs/ios/ui-and-platforms.md`. Where this doc and those conflict, stop and flag it.*
 
@@ -206,7 +206,7 @@ advances `NEXT_UP.md`. They don't wait on Jon's gates.
        brings it to the phone.
     3. Active opens by default, and the counts on the control are right.
 
-- [ ] **S4 — Jon's words and the chat's, told apart.** *(Jon, 2026-10-31.)*
+- [x] **S4 — Jon's words and the chat's, told apart.** *(Jon, 2026-10-31.)*
   - **Why.** S1 set the `request` under "You asked" in Jon's serif italic. On S1's review Jon
     saw the chat's words in his style. Of the four requests in the ledger, only *2023
     Selections* is his ("Find me 15 new discoveries…"). The other three are the chat's summary

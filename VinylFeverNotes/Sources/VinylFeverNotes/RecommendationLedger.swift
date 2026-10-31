@@ -43,17 +43,32 @@ public struct RecommendationBatch: Codable, Equatable, Sendable {
   public var playlist: String?
   public var tracks: [RecommendationTrack]
   public var request: String?
+  public var description: String?
   public var coverage: RecommendationCoverage?
   public var batchDate: Date?
 
   public init(kind: String = "staged-playlist", source: String = "chat", recordedAt: Date,
     host: String, playlist: String? = nil, tracks: [RecommendationTrack], version: Int = 1,
-    request: String? = nil, coverage: RecommendationCoverage? = nil, batchDate: Date? = nil) {
+    request: String? = nil, description: String? = nil, coverage: RecommendationCoverage? = nil,
+    batchDate: Date? = nil) {
     format = "vf-recommendation-batch"; self.version = version; self.kind = kind
     self.source = source; self.recordedAt = recordedAt; self.host = host
     self.playlist = playlist; self.tracks = tracks
-    self.request = request; self.coverage = coverage
+    self.request = request; self.description = description; self.coverage = coverage
     self.batchDate = batchDate
+  }
+}
+
+public enum PlaylistRequestHeader: Equatable, Sendable {
+  case jonWords
+  case unattributed
+
+  public static func forBatch(_ batch: RecommendationBatch) -> Self {
+    guard let description = batch.description,
+      !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      return .unattributed
+    }
+    return .jonWords
   }
 }
 

@@ -291,6 +291,12 @@ private struct PlaylistDetailView: View {
               .accessibilityLabel("\(title) artwork")
           }
           Text(title).font(.largeTitle.bold())
+          if let description = playlist.batch.description,
+            !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            Text(description)
+              .foregroundStyle(.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
           Text("\(playlist.stagedDate) · \(playlist.songCount) songs · \(playlist.newSongCount) new to you")
             .foregroundStyle(.secondary)
           if let archiveStatus {
@@ -303,11 +309,20 @@ private struct PlaylistDetailView: View {
               .padding(.top, 2)
           }
           if let request = playlist.batch.request, !request.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-              Text("You asked").font(.headline)
-              JonWordsView(text: request)
+            switch PlaylistRequestHeader.forBatch(playlist.batch) {
+            case .jonWords:
+              VStack(alignment: .leading, spacing: 6) {
+                Text("You asked").font(.headline)
+                JonWordsView(text: request)
+              }
+              .padding(.top, 8)
+            case .unattributed:
+              VStack(alignment: .leading, spacing: 6) {
+                Text("Request").font(.headline)
+                Text(request).fixedSize(horizontal: false, vertical: true)
+              }
+              .padding(.top, 8)
             }
-            .padding(.top, 8)
           }
           if let noReasons = PlaylistShelf.noReasonsText(for: playlist) {
             Text(noReasons).foregroundStyle(.secondary).padding(.top, 4)
