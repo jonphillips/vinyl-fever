@@ -29,6 +29,8 @@ goes in `DONE-LOG.md`.
 
 - **M21 S1:** four steps on the iPad and the iPhone: the list, *2023 Selections*, *Rolling Stone's 200…*, and Setup still working. It can run with S2 and S3's gates ([M21](milestones/archive/M21-playlists-view.md)).
 - **M21 S2:** six steps on the iPad or iPhone: artwork, starting playback from a tapped song, and switching between two playlists on iPad; playing a “Sounds like” song then resuming the playlist; Lock Screen continuation; scroll performance and unavailable songs; renamed staged playlist fallback; and confirming plays appear in `recent_listening` after the next hourly poll ([M21](milestones/archive/M21-playlists-view.md)).
+- **M21 S3:** five steps on the iPad or iPhone: Keep a 2020+ song and confirm Vinyl Fever Keepers and its year's Selections in Music; Keep a pre-2020 song and confirm only Vinyl Fever Keepers; open Keep again and confirm “Already there”; confirm subscription and Apple playlists never appear; refresh the laptop snapshot and confirm `kept_and_passed` lists both songs as kept in a new chat ([M21](milestones/archive/M21-playlists-view.md)).
+- **M21 S4:** four steps on the iPad or iPhone: leave typed and dictated notes on two songs in *2023 Selections* and confirm both appear under their songs; confirm `taste_notes` returns both word for word on the right songs in a new chat; confirm an earlier Music Feedback note appears under its song; confirm “Cancel” saves nothing ([M21](milestones/archive/M21-playlists-view.md)).
 ## Setup steps held for Jon
 
 - **Before M20 S1's gate:** the one-action "VF Music Feedback" shortcut, picked in Control

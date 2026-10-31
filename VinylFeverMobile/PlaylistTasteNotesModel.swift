@@ -57,6 +57,7 @@ final class PlaylistTasteNotesModel {
   var destination: Destination?
   var draft = ""
   private(set) var currentSong: FeedbackSong?
+  private var sessionSavedNotes: [TasteNote] = []
 
   @ObservationIgnored
   @Dependency(\.playlistTasteNotesClient) private var client
@@ -68,11 +69,11 @@ final class PlaylistTasteNotesModel {
     defer { isLoading = false }
     do {
       let read = try await client.read()
-      notes = read.result.notes
+      notes = TasteNotesCodec.uniqueNewestFirst(read.result.notes + sessionSavedNotes)
       hasUnreadableFiles = read.totalFileCount > 0 && read.unreadableFileCount > 0
       errorMessage = nil
     } catch ProbeBookmarkError.folderNotSelected, ProbeBookmarkError.accessRefused {
-      notes = []
+      notes = TasteNotesCodec.uniqueNewestFirst(sessionSavedNotes)
       hasUnreadableFiles = false
       errorMessage = nil
     } catch {
@@ -118,8 +119,8 @@ final class PlaylistTasteNotesModel {
     defer { isSaving = false }
     do {
       try await client.save(note, note.device ?? "device")
-      notes.append(note)
-      notes.sort { $0.notedAt > $1.notedAt }
+      sessionSavedNotes.append(note)
+      notes = TasteNotesCodec.uniqueNewestFirst(notes + [note])
       destination = nil
       currentSong = nil
       draft = ""

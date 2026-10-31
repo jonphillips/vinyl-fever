@@ -77,6 +77,28 @@ struct PlaylistTasteNotesModelTests {
   }
 
   @Test @MainActor
+  func noteSavedDuringInFlightRefreshStaysShown() async {
+    let gate = TasteNotesReadGate()
+    let model = withDependencies({ dependencies in
+      dependencies.date.now = Date(timeIntervalSince1970: 100)
+      dependencies.playlistTasteNotesClient.read = { await gate.read() }
+      dependencies.playlistTasteNotesClient.deviceName = { "Test" }
+      dependencies.playlistTasteNotesClient.save = { _, _ in }
+    }) { PlaylistTasteNotesModel() }
+
+    let refresh = Task { await model.refresh() }
+    await gate.waitUntilReadStarts()
+    let song = playlistSong()
+    model.noteButtonTapped(for: song, resolvedSong: nil)
+    model.draft = "Saved during refresh."
+    await model.save()
+    await gate.resume(with: emptyRead())
+    await refresh.value
+
+    #expect(model.notes(for: song).map(\.note) == ["Saved during refresh."])
+  }
+
+  @Test @MainActor
   func readsNotesFromMultipleFilesNewestFirst() async throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     let folder = root.appendingPathComponent("Taste Intelligence", isDirectory: true)
@@ -97,9 +119,40 @@ struct PlaylistTasteNotesModelTests {
     PlaylistShelfSong(id: "one", title: "Song", artist: "Artist", album: "Ledger Album", year: 2023,
       familiarity: "New", why: "A reason.", like: [])
   }
+
+  private func emptyRead() -> PlaylistTasteNotesFolderRead {
+    PlaylistTasteNotesFolderRead(
+      result: TasteNotesCodec.readFiles([]), unreadableFileCount: 0, totalFileCount: 0
+    )
+  }
 }
 
 private actor SaveCounter {
   private(set) var value = 0
   func increment() { value += 1 }
+}
+
+private actor TasteNotesReadGate {
+  private var continuation: CheckedContinuation<PlaylistTasteNotesFolderRead, Never>?
+  private var didStartRead = false
+  private var startWaiters: [CheckedContinuation<Void, Never>] = []
+
+  func read() async -> PlaylistTasteNotesFolderRead {
+    await withCheckedContinuation { continuation in
+      self.continuation = continuation
+      didStartRead = true
+      startWaiters.forEach { $0.resume() }
+      startWaiters.removeAll()
+    }
+  }
+
+  func waitUntilReadStarts() async {
+    guard !didStartRead else { return }
+    await withCheckedContinuation { startWaiters.append($0) }
+  }
+
+  func resume(with result: PlaylistTasteNotesFolderRead) {
+    continuation?.resume(returning: result)
+    continuation = nil
+  }
 }
