@@ -1,5 +1,11 @@
 # Done log
 
+## 2026-10-30 — M21 · S4: Notes from the playlist
+
+- Branch: `m21/s4-playlist-notes`.
+- Added a playlist note sheet available for every song row, saving `source: playlist` v1 notes through coordinated folder access. Playlist detail now reads notes from all `notes*.jsonl` files, matches title and artist with the shared song matcher, sorts newest first, and shows saved notes immediately. Added package, app, and `vf-mcp` coverage. Made the existing playlist append request encoder use sorted JSON keys so its byte-level golden test is deterministic.
+- VinylFeverNotes (31 tests), Listening (55), Core (300), Mac app (94), and iOS Simulator (46) passed. Generic iOS Simulator and device builds passed. Jon's four-step M21 S4 device gate remains owed, along with the prior device gates.
+
 ## 2026-10-30 — M21 · S3: Keep a song in Jon's playlists
 
 - Branch: `m21/s3-keep-file-song`.

@@ -154,13 +154,16 @@ public enum TasteNotesCodec {
       }
     }
 
+    return TasteNotesReadResult(notes: uniqueNewestFirst(notes), skippedLines: skippedLines, filesRead: files.count)
+  }
+
+  public static func uniqueNewestFirst(_ notes: [TasteNote]) -> [TasteNote] {
     var seen = Set<String>()
     let unique = notes.filter { note in
       let key = note.id.map { "id:\($0)" } ?? "\(note.notedAt.timeIntervalSince1970)|\(note.title ?? "")|\(note.artist ?? "")"
       return seen.insert(key).inserted
     }
-    return TasteNotesReadResult(notes: unique.sorted { $0.notedAt > $1.notedAt },
-      skippedLines: skippedLines, filesRead: files.count)
+    return unique.sorted { $0.notedAt > $1.notedAt }
   }
 
   public static func openQuestions(in notes: [TasteNote], now: Date) -> [TasteNote] {

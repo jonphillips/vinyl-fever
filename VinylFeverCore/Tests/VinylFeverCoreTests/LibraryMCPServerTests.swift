@@ -163,6 +163,27 @@ struct LibraryMCPServerTests {
     #expect(notes.first?["note"] as? String == "The bass is warm.")
   }
 
+  @Test("taste_notes reads playlist notes verbatim")
+  func readsPlaylistTasteNote() async throws {
+    let root = temporaryDirectory()
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let snapshotURL = root.appending(path: "snapshot.json")
+    try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
+    let playlistNote = TasteNote(
+      notedAt: Date(timeIntervalSince1970: 1_800_000_000), note: "  The chorus lifts.\nAnd then it settles.  ",
+      source: "playlist", title: "Song", artist: "Artist", album: "Album", catalogID: "i.song"
+    )
+    try TasteNotesCodec.appendFeedbackNote(playlistNote, device: "iPhone", folder: tasteRoot)
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), tasteRootURL: tasteRoot)
+
+    let result = try #require(await resultJSON(server, id: 1, name: "taste_notes",
+      arguments: #"{"artist":"Artist","title":"Song"}"#) as? [String: Any])
+    let notes = try #require(result["notes"] as? [[String: Any]])
+    #expect(notes.count == 1)
+    #expect(notes.first?["source"] as? String == "playlist")
+    #expect(notes.first?["note"] as? String == "  The chorus lifts.\nAnd then it settles.  ")
+  }
+
   @Test("questions can be answered verbatim and unknown question ids are refused")
   func tasteQuestionFlow() async throws {
     let root = temporaryDirectory()

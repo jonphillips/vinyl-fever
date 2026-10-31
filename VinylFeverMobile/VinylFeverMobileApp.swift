@@ -7,10 +7,11 @@ struct VinylFeverMobileApp: App {
   @State private var shelfModel = PlaylistShelfModel()
   @State private var playbackModel = PlaylistPlaybackModel()
   @State private var keepModel = PlaylistKeepModel()
+  @State private var notesModel = PlaylistTasteNotesModel()
 
   var body: some Scene {
     WindowGroup {
-      PlaylistHomeView(model: shelfModel, playbackModel: playbackModel, keepModel: keepModel)
+      PlaylistHomeView(model: shelfModel, playbackModel: playbackModel, keepModel: keepModel, notesModel: notesModel)
     }
   }
 }
@@ -21,6 +22,7 @@ private struct PlaylistHomeView: View {
   @Bindable var model: PlaylistShelfModel
   let playbackModel: PlaylistPlaybackModel
   @Bindable var keepModel: PlaylistKeepModel
+  @Bindable var notesModel: PlaylistTasteNotesModel
 
   private var selectedPlaylist: PlaylistShelfPlaylist? {
     model.playlists.first { $0.id == model.selectedPlaylistID }
@@ -57,9 +59,11 @@ private struct PlaylistHomeView: View {
     } detail: {
       Group {
         if let playlist = selectedPlaylist {
-          PlaylistDetailView(playlist: playlist, hasUnreadableFiles: model.hasUnreadableFiles,
-            playbackModel: playbackModel, keepModel: keepModel) {
+          PlaylistDetailView(playlist: playlist,
+            hasUnreadableFiles: model.hasUnreadableFiles || notesModel.hasUnreadableFiles,
+            playbackModel: playbackModel, keepModel: keepModel, notesModel: notesModel) {
             await model.refresh()
+            await notesModel.refresh()
           }
         } else if model.requiresFolderAccess {
           ContentUnavailableView {
@@ -97,8 +101,15 @@ private struct PlaylistHomeView: View {
         KeepSheetView(model: keepModel)
       }
     }
+    .sheet(item: $notesModel.destination) { destination in
+      switch destination {
+      case .note:
+        PlaylistNoteSheet(model: notesModel)
+      }
+    }
     .task {
       await model.refresh()
+      await notesModel.refresh()
       guard !didApplyInitialSelection else { return }
       didApplyInitialSelection = true
       if horizontalSizeClass == .regular, model.selectedPlaylistID == nil {
@@ -137,6 +148,7 @@ private struct PlaylistDetailView: View {
   let hasUnreadableFiles: Bool
   let playbackModel: PlaylistPlaybackModel
   let keepModel: PlaylistKeepModel
+  let notesModel: PlaylistTasteNotesModel
   let refresh: () async -> Void
 
   private var title: String {
@@ -200,7 +212,7 @@ private struct PlaylistDetailView: View {
 
         ForEach(Array(playlist.songs.enumerated()), id: \.element.id) { index, song in
           VStack(spacing: 18) {
-            PlaylistSongView(song: song, playbackModel: playbackModel, keepModel: keepModel)
+            PlaylistSongView(song: song, playbackModel: playbackModel, keepModel: keepModel, notesModel: notesModel)
             if song.id != playlist.songs.last?.id { Divider() }
           }
           .task {
@@ -215,6 +227,7 @@ private struct PlaylistDetailView: View {
     .refreshable { await refresh() }
     .task(id: playlist.id) {
       await playbackModel.prepare(playlist)
+      await notesModel.refresh()
       await playbackModel.resolveSongs(through: PlaylistPlaybackModel.resolveAheadCount)
     }
     .navigationTitle(title)
@@ -226,6 +239,7 @@ private struct PlaylistSongView: View {
   let song: PlaylistShelfSong
   let playbackModel: PlaylistPlaybackModel
   let keepModel: PlaylistKeepModel
+  let notesModel: PlaylistTasteNotesModel
   var body: some View {
     HStack(alignment: .top, spacing: 14) {
       if let resolved = playbackModel.resolvedSongs[song.id], let artwork = resolved.artwork {
@@ -246,6 +260,11 @@ private struct PlaylistSongView: View {
             Image(systemName: "waveform").foregroundStyle(.tint).accessibilityLabel("Now playing")
           }
           Spacer()
+          Button("Note", systemImage: "pencil") {
+            notesModel.noteButtonTapped(for: song, resolvedSong: playbackModel.resolvedSongs[song.id])
+          }
+          .labelStyle(.iconOnly)
+          .accessibilityLabel("Note on \(song.title) by \(song.artist)")
           if playbackModel.notFoundSongIDs.contains(song.id) {
             Text("Not in Apple Music").font(.caption).foregroundStyle(.secondary)
           } else if playbackModel.resolvingSongIDs.contains(song.id) {
@@ -281,6 +300,14 @@ private struct PlaylistSongView: View {
         if let why = song.why {
           Text(why).fixedSize(horizontal: false, vertical: true)
         }
+        ForEach(Array(notesModel.notes(for: song).enumerated()), id: \.offset) { _, note in
+          VStack(alignment: .leading, spacing: 3) {
+            Text(note.notedAt.formatted(date: .abbreviated, time: .omitted))
+              .font(.caption).foregroundStyle(.secondary)
+            Text(note.note).fixedSize(horizontal: false, vertical: true)
+          }
+          .padding(.top, 3)
+        }
         if !song.like.isEmpty {
           VStack(alignment: .leading, spacing: 5) {
             Text("Sounds like").font(.subheadline.weight(.semibold))
@@ -305,6 +332,44 @@ private struct PlaylistSongView: View {
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
+  }
+}
+
+private struct PlaylistNoteSheet: View {
+  @Environment(\.dismiss) private var dismiss
+  @Bindable var model: PlaylistTasteNotesModel
+
+  var body: some View {
+    NavigationStack {
+      Form {
+        if let song = model.currentSong {
+          Section {
+            Text(song.title).font(.headline)
+            Text(song.artist).foregroundStyle(.secondary)
+          }
+        }
+        Section("Note") {
+          TextField("Write or dictate a note", text: $model.draft, axis: .vertical)
+            .lineLimit(5...12)
+            .accessibilityLabel("Note")
+        }
+        if let errorMessage = model.errorMessage {
+          Section { Text(errorMessage).foregroundStyle(.red) }
+        }
+      }
+      .navigationTitle("Note on song")
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel") { model.cancel(); dismiss() }.disabled(model.isSaving)
+        }
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Save") { Task { await model.save() } }.disabled(model.isSaving)
+        }
+      }
+      .onChange(of: model.destination == nil) { _, dismissed in
+        if dismissed { dismiss() }
+      }
+    }
   }
 }
 

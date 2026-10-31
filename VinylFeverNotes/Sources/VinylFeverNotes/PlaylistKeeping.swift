@@ -27,7 +27,9 @@ public enum AppleMusicPlaylistRequestEncoder {
   }
 
   public static func appendBody(songs: [PlaylistSongReference]) throws -> Data {
-    try JSONEncoder().encode(TracksBody(data: songs.map(PlaylistSongPayload.init)))
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    return try encoder.encode(TracksBody(data: songs.map(PlaylistSongPayload.init)))
   }
 
   private struct CreateBody: Encodable {

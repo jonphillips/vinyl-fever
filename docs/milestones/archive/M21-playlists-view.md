@@ -2,9 +2,9 @@
 
 *Give the Vinyl Fever app a home screen: every playlist the chat staged, each song with the
 chat's reason and the songs it compared it with, playable from the app, with a note one tap
-away. It's "the audition view" that [M20](M20-music-feedback-intent.md) parked for after S2.
+away. It's "the audition view" that [M20](../M20-music-feedback-intent.md) parked for after S2.
 M20's shared rules still apply except where Decision 1 replaces one. Rules in
-[../technical-architecture.md](../technical-architecture.md) and
+[../technical-architecture.md](../../technical-architecture.md) and
 `/Users/jon/code/jon-platform/AGENTS.md` apply, and the screens follow jon-platform
 `docs/ios/ui-and-platforms.md`. Where this doc and those conflict, stop and flag it.*
 
@@ -275,7 +275,7 @@ one sitting after S4, or one at a time if Jon wants to see a slice sooner.
     5. On the laptop, refresh the library snapshot. In a new chat, `kept_and_passed` lists both
        songs as kept.
 
-- [ ] **S4 — Notes from the playlist.**
+- [x] **S4 — Notes from the playlist.**
   - **Leave a note.** Each song row has a **Note** button. It opens a sheet with the song's
     title and artist and a text field. The keyboard's dictation works there. **Save** writes a
     `vf-taste-note` v1 line through `MusicFeedback.makeNote`, with `source: playlist`, to the
