@@ -1,0 +1,42 @@
+{
+  "fill" : {
+    "automatic-gradient" : "extended-srgb:0.00000,0.53333,1.00000,1.00000"
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "image-name" : "04_tonearm.png",
+          "name" : "04_tonearm"
+        },
+        {
+          "image-name" : "03_red_label.png",
+          "name" : "03_red_label"
+        },
+        {
+          "image-name" : "02_vinyl_disc.png",
+          "name" : "02_vinyl_disc"
+        },
+        {
+          "image-name" : "01_background.png",
+          "name" : "01_background"
+        }
+      ],
+      "name" : "Vinyl_Fever",
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.3
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}
