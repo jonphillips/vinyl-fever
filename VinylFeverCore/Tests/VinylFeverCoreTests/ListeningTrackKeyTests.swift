@@ -17,4 +17,19 @@ struct ListeningTrackKeyTests {
       #expect("\(ArtistIdentity.empty.key("The Records"))|\(SongTextNormalizer.libraryTitle(title))" == indexKey)
     }
   }
+
+  @Test("Taste Intelligence applies artist aliases through the shared key")
+  func tasteIntelligenceAppliesAliases() {
+    let identity = ArtistIdentity(aliases: ["John Cougar Mellencamp": "John Mellencamp"],
+      knownArtists: ["John Mellencamp", "John Cougar Mellencamp"])
+    #expect(TasteIntelligence.songKey(artist: "John Cougar Mellencamp", title: "Small Town", identity: identity)
+      == TasteIntelligence.songKey(artist: "John Mellencamp", title: "Small Town", identity: identity))
+  }
+
+  @Test("Without aliases, Taste Intelligence's key is the mobile key")
+  func tasteIntelligenceMatchesMobileKeyWithoutAliases() {
+    let identity = ArtistIdentity(knownArtists: ["The Records"])
+    #expect(TasteIntelligence.songKey(artist: "The Records", title: "Me & Magdalena", identity: identity)
+      == ListeningTrackKey.make(artist: "The Records", title: "Me & Magdalena"))
+  }
 }

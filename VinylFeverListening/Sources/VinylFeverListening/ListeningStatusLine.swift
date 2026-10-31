@@ -1,4 +1,5 @@
 import Foundation
+import VinylFeverNotes
 
 public enum ListeningStatusLine {
   public static let setupPointer = "Not set up yet. Follow the setup instructions to start collecting history."

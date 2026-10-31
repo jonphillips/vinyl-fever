@@ -1,5 +1,12 @@
 # Done log
 
+## 2026-10-31 — M22 · S2 — Heard, kept, and passed
+
+- Branch: `m22/s2-heard-kept-passed`
+- Result: moved the Foundation-only listening log models, codec, reader, and artist identity into `VinylFeverNotes`; added a shared Mac/mobile song key and indexed playlist progress; builds the evidence index off the main actor and updates it incrementally after keeps and notes. Missing listening-log folders now hide statuses until the data is available.
+- Verification: VinylFeverNotes (46 tests, including the 50 ms progress-index performance gate), VinylFeverListening (51 tests and its performance suite), VinylFeverCore (302 tests), Mac app (94 tests), iOS Simulator (51 tests), generic iOS device build, and `check-handoff` passed.
+- Jon's M22 S2 iPhone and iPad gate remains owed with the prior device gates.
+
 ## 2026-10-31 — M22 · S1 — Room for the actions, and Jon's words in his own type
 
 - Branch: `m22/s1-room-actions`

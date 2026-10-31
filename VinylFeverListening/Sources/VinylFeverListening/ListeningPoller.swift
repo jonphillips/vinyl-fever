@@ -1,5 +1,6 @@
 import Dependencies
 import Foundation
+import VinylFeverNotes
 import MusicKit
 
 public enum ListeningAuthorizationStatus: Equatable, Sendable {

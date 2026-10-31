@@ -1,5 +1,5 @@
 import Testing
-import VinylFeverListening
+import VinylFeverNotes
 
 @Suite("Artist identity")
 struct ArtistIdentityTests {

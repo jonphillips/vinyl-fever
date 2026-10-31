@@ -256,8 +256,19 @@ public struct ListeningLog: Sendable {
   )
     -> (plays: [ListeningPlay], collapsed: Int)
   {
-    let keyedPlays = plays.map { play in
-      (key: trackKey(artist: play.item.artist, title: play.item.title, artistKeys: artistKeys), play: play)
+    var keyByTrack = [RawTrackIdentity: String]()
+    var keyedPlays: [(key: String, play: ListeningPlay)] = []
+    keyedPlays.reserveCapacity(plays.count)
+    for play in plays {
+      let identity = RawTrackIdentity(artist: play.item.artist, title: play.item.title)
+      let key: String
+      if let cached = keyByTrack[identity] {
+        key = cached
+      } else {
+        key = trackKey(artist: identity.artist, title: identity.title, artistKeys: artistKeys)
+        keyByTrack[identity] = key
+      }
+      keyedPlays.append((key, play))
     }
     var kept: [ListeningPlay] = []
     var collapsed = 0
@@ -293,5 +304,10 @@ public struct ListeningLog: Sendable {
 
   private static func trackKey(artist: String, title: String, artistKeys: [String: String]) -> String {
     "\(artistKeys[artist] ?? ArtistIdentity.baseKey(artist))|\(ListeningTextNormalizer.libraryTitle(title))"
+  }
+
+  private struct RawTrackIdentity: Hashable {
+    var artist: String
+    var title: String
   }
 }

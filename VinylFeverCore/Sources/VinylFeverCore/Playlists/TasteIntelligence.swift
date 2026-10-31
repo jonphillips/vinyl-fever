@@ -172,7 +172,7 @@ public enum TasteIntelligence {
   }
 
   public static func songKey(artist: String, title: String, identity: ArtistIdentity) -> String {
-    "\(identity.key(artist))|\(ListeningTextNormalizer.libraryTitle(title))"
+    ListeningTrackKey.make(artist: artist, title: title, identity: identity)
   }
 
   public static func keptAndPassed(weeks: [NewMusicWeek], snapshot: LibrarySnapshot,
