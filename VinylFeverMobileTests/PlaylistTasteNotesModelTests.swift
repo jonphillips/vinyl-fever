@@ -12,7 +12,7 @@ struct PlaylistTasteNotesModelTests {
     defer { try? FileManager.default.removeItem(at: root) }
     let saveCount = SaveCounter()
     let model = withDependencies({ dependencies in
-      dependencies.date.now = Date(timeIntervalSince1970: 100)
+      dependencies.date.now = Date(timeIntervalSince1970: 1_800_000_000.123456)
       dependencies.playlistTasteNotesClient.deviceName = { "Test iPhone" }
       dependencies.playlistTasteNotesClient.save = { note, device in
         await saveCount.increment()
@@ -80,7 +80,7 @@ struct PlaylistTasteNotesModelTests {
   func noteSavedDuringInFlightRefreshStaysShown() async {
     let gate = TasteNotesReadGate()
     let model = withDependencies({ dependencies in
-      dependencies.date.now = Date(timeIntervalSince1970: 100)
+      dependencies.date.now = Date(timeIntervalSince1970: 1_800_000_000.123456)
       dependencies.playlistTasteNotesClient.read = { await gate.read() }
       dependencies.playlistTasteNotesClient.deviceName = { "Test" }
       dependencies.playlistTasteNotesClient.save = { _, _ in }
@@ -96,6 +96,31 @@ struct PlaylistTasteNotesModelTests {
     await refresh.value
 
     #expect(model.notes(for: song).map(\.note) == ["Saved during refresh."])
+  }
+
+  @Test @MainActor
+  func savedNoteIsNotDuplicatedByLaterRefresh() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let model = withDependencies({ dependencies in
+      dependencies.date.now = Date(timeIntervalSince1970: 1_800_000_000.123456)
+      dependencies.playlistTasteNotesClient.deviceName = { "Test iPhone" }
+      dependencies.playlistTasteNotesClient.save = { note, device in
+        try TasteNotesCodec.appendFeedbackNote(
+          note, device: device, folder: root.appendingPathComponent("Taste Intelligence", isDirectory: true)
+        )
+      }
+      dependencies.playlistTasteNotesClient.read = { PlaylistTasteNotesFolderReader.read(folder: root) }
+    }) { PlaylistTasteNotesModel() }
+
+    let song = playlistSong()
+    model.noteButtonTapped(for: song, resolvedSong: nil)
+    model.draft = "A note saved with fractional time."
+    await model.save()
+    await model.refresh()
+
+    #expect(model.notes(for: song).count == 1)
+    #expect(model.notes(for: song).first?.note == "A note saved with fractional time.")
   }
 
   @Test @MainActor

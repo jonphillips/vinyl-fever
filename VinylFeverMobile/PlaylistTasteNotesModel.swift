@@ -118,9 +118,10 @@ final class PlaylistTasteNotesModel {
     isSaving = true
     defer { isSaving = false }
     do {
+      let persistedNote = TasteNotesCodec.readFiles([try TasteNotesCodec.encode(note)]).notes.first ?? note
       try await client.save(note, note.device ?? "device")
-      sessionSavedNotes.append(note)
-      notes = TasteNotesCodec.uniqueNewestFirst(notes + [note])
+      sessionSavedNotes.append(persistedNote)
+      notes = TasteNotesCodec.uniqueNewestFirst(notes + [persistedNote])
       destination = nil
       currentSong = nil
       draft = ""
