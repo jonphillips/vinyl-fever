@@ -89,6 +89,8 @@ struct LibraryMCPServerTests {
     #expect(enumValues(in: tools, tool: "recent_listening", property: "period") == ["24h", "7d", "30d", "90d"])
     #expect(enumValues(in: tools, tool: "top_artists", property: "period") == ["all_time", "7d", "30d", "90d"])
     let stage = try #require(tools.first { $0["name"] as? String == "stage_playlist" })
+    let stageSchema = try #require(stage["inputSchema"] as? [String: Any])
+    #expect(Set(stageSchema["required"] as? [String] ?? []) == Set(["name", "description", "tracks"]))
     let stageProperties = try #require((stage["inputSchema"] as? [String: Any])?["properties"] as? [String: Any])
     let stageTracks = try #require(stageProperties["tracks"] as? [String: Any])
     let stageTrackSchema = try #require(stageTracks["items"] as? [String: Any])
@@ -100,6 +102,8 @@ struct LibraryMCPServerTests {
       == "The song's original release year, not a reissue's or compilation's. Use null only when you can't verify it.")
     #expect((stageProperties["description"] as? [String: Any])?["description"] as? String
       == "One sentence about the music; it becomes the playlist's description in Apple Music. No library stats, availability notes, or dates. Don't stage the same batch again to fix a year; that marks every song as recommended before.")
+    #expect((stageProperties["request"] as? [String: Any])?["description"] as? String
+      == "Jon's message asking for this playlist, word for word, including how he said it. Never a summary or your plan.")
   }
 
   @Test("chat taste notes round-trip verbatim and never write the shortcut file")
@@ -573,7 +577,7 @@ struct LibraryMCPServerTests {
     #expect(firstEvidence["latestOutcome"] as? String == "unheard")
 
     let staged = try #require(await resultJSON(server, id: 2, name: "stage_playlist",
-      arguments: #"{"name":"New batch","tracks":[{"artist":"Cached Artist","title":"Cached Song","year":2020},{"artist":"Fresh Artist","title":"Fresh Song","year":2024}]}"#) as? [String: Any])
+      arguments: #"{"name":"New batch","description":"A new set of songs.","tracks":[{"artist":"Cached Artist","title":"Cached Song","year":2020},{"artist":"Fresh Artist","title":"Fresh Song","year":2024}]}"#) as? [String: Any])
     #expect(staged["ledgerRecorded"] as? Bool == true)
     let second = try #require(await resultJSON(server, id: 3, name: "check_tracks",
       arguments: #"{"tracks":[{"artist":"Fresh Artist","title":"Fresh Song"}]}"#) as? [String: Any])
@@ -595,7 +599,7 @@ struct LibraryMCPServerTests {
     let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"),
       listeningRootURL: root.appending(path: "Listening"), tasteRootURL: tasteRoot, now: { clock.now() })
     let staged = try #require(await resultJSON(server, id: 1, name: "stage_playlist",
-      arguments: #"{"name":"Chat batch","tracks":[{"artist":"Shared Artist","title":"Shared Song","year":2026}]}"#) as? [String: Any])
+      arguments: #"{"name":"Chat batch","description":"Bright guitar pop.","tracks":[{"artist":"Shared Artist","title":"Shared Song","year":2026}]}"#) as? [String: Any])
     #expect(staged["ledgerRecorded"] as? Bool == true)
     let first = try #require(await resultJSON(server, id: 2, name: "check_tracks",
       arguments: #"{"tracks":[{"artist":"Shared Artist","title":"Shared Song"}]}"#) as? [String: Any])
@@ -633,7 +637,7 @@ struct LibraryMCPServerTests {
     let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"),
       listeningRootURL: root.appending(path: "Listening"), tasteRootURL: tasteRoot, now: { clock.now() })
     let staged = try #require(await resultJSON(server, id: 1, name: "stage_playlist",
-      arguments: #"{"name":"Window batch","tracks":[{"artist":"Window Artist","title":"Window Song","year":2026}]}"#) as? [String: Any])
+      arguments: #"{"name":"Window batch","description":"Songs for the window.","tracks":[{"artist":"Window Artist","title":"Window Song","year":2026}]}"#) as? [String: Any])
     #expect(staged["ledgerRecorded"] as? Bool == true)
     let arguments = #"{"tracks":[{"artist":"Window Artist","title":"Window Song"}]}"#
     let first = try #require(await resultJSON(server, id: 2, name: "check_tracks", arguments: arguments) as? [String: Any])
@@ -685,7 +689,7 @@ struct LibraryMCPServerTests {
 
     // Warm the shared indexes and then measure the 15-track familiarity/stage pass.
     let stageTracks = (0..<15).map { #"{"artist":"Artist \#($0)","title":"New Track \#($0)","year":null}"# }.joined(separator: ",")
-    let stageArguments = #"{"name":"Performance Stage","tracks":[\#(stageTracks)]}"#
+    let stageArguments = #"{"name":"Performance Stage","description":"Performance fixture.","tracks":[\#(stageTracks)]}"#
     let stageStart = ContinuousClock.now
     let staged = try #require(await resultJSON(server, id: 3, name: "stage_playlist", arguments: stageArguments) as? [String: Any])
     let stageElapsed = stageStart.duration(to: .now)
@@ -964,7 +968,7 @@ struct LibraryMCPServerTests {
     #expect(refused.contains("\"isError\":true"))
     #expect(!FileManager.default.fileExists(atPath: inbox.path))
     #expect(!FileManager.default.fileExists(atPath: tasteRoot.appending(path: "recommendations").path))
-    let valid = try #require(await call(server, id: 1, name: "stage_playlist", arguments: #"{"name":"Power Pop","tracks":[{"artist":" ","title":"Dropped","year":null},{"artist":"The Records","title":"Starry Eyes","year":null,"why":"Bright guitars and wiry hooks."}]}"#))
+    let valid = try #require(await call(server, id: 1, name: "stage_playlist", arguments: #"{"name":"Power Pop","description":"Bright guitars and wiry hooks.","request":"Find me some power pop.","tracks":[{"artist":" ","title":"Dropped","year":null},{"artist":"The Records","title":"Starry Eyes","year":null,"why":"Bright guitars and wiry hooks."}]}"#))
     #expect(valid.contains("\"staged\":true"))
     #expect(valid.contains("\"trackCount\":1"))
     #expect(valid.contains("\"missingYear\":[\"The Records — Starry Eyes\"]"))
@@ -975,7 +979,8 @@ struct LibraryMCPServerTests {
     let files = try FileManager.default.contentsOfDirectory(at: inbox, includingPropertiesForKeys: nil)
     let stagedURL = try #require(files.first)
     let decoded = try PlaylistContract.decode(String(contentsOf: stagedURL, encoding: .utf8))
-    #expect(decoded.request == PlaylistRequest(name: "Power Pop", tracks: [TrackRequest(index: 2, artist: "The Records", title: "Starry Eyes")]))
+    #expect(decoded.request == PlaylistRequest(name: "Power Pop", description: "Bright guitars and wiry hooks.",
+      tracks: [TrackRequest(index: 2, artist: "The Records", title: "Starry Eyes")]))
     let recommendationFolder = tasteRoot.appending(path: "recommendations")
     let ledgerFile = try #require(FileManager.default.contentsOfDirectory(at: recommendationFolder, includingPropertiesForKeys: nil).first)
     let ledger = RecommendationLedgerCodec.readFiles([try Data(contentsOf: ledgerFile)])
@@ -983,6 +988,8 @@ struct LibraryMCPServerTests {
     #expect(ledger.batches[0].recordedAt != .distantPast)
     #expect(ledger.batches[0].tracks.map(\.title) == ["Starry Eyes"])
     #expect(ledger.batches[0].tracks[0].reasons.isEmpty)
+    #expect(ledger.batches[0].request == "Find me some power pop.")
+    #expect(ledger.batches[0].description == "Bright guitars and wiry hooks.")
     let checked = try #require(await resultJSON(server, id: 4, name: "check_tracks",
       arguments: #"{"tracks":[{"artist":"The Records","title":"Starry Eyes"}]}"#) as? [String: Any])
     let checkedRows = try #require(checked["tracks"] as? [[String: Any]])
@@ -992,11 +999,14 @@ struct LibraryMCPServerTests {
     #expect(recommended["latestOutcome"] as? String == "pending")
 
     let countBefore = files.count
-    let zero = try #require(await call(server, id: 2, name: "stage_playlist", arguments: #"{"name":"Empty","tracks":[]}"#))
+    let missingDescription = try #require(await call(server, id: 6, name: "stage_playlist", arguments: #"{"name":"Missing description","tracks":[{"artist":"A","title":"B","year":2024}]}"#))
+    #expect(missingDescription.contains("description is required"))
+    #expect(missingDescription.contains("\"isError\":true"))
+    let zero = try #require(await call(server, id: 2, name: "stage_playlist", arguments: #"{"name":"Empty","description":"Empty fixture.","tracks":[]}"#))
     #expect(zero.contains("tracks must contain at least one track"))
     #expect(zero.contains("\"isError\":true"))
     #expect(try FileManager.default.contentsOfDirectory(at: inbox, includingPropertiesForKeys: nil).count == countBefore)
-    let emptyName = try #require(await call(server, id: 3, name: "stage_playlist", arguments: #"{"name":" ","tracks":[{"artist":"A","title":"B","year":null}]}"#))
+    let emptyName = try #require(await call(server, id: 3, name: "stage_playlist", arguments: #"{"name":" ","description":"Empty name fixture.","tracks":[{"artist":"A","title":"B","year":null}]}"#))
     #expect(emptyName.contains("name must not be empty"))
     #expect(emptyName.contains("\"isError\":true"))
     #expect(try FileManager.default.contentsOfDirectory(at: inbox, includingPropertiesForKeys: nil).count == countBefore)
@@ -1008,7 +1018,7 @@ struct LibraryMCPServerTests {
     let (ledgerUnavailableServer, _) = try makeServer(snapshot: s0Fixture(), inbox: root.appending(path: "blocked-inbox"),
       tasteRootURL: blockedRoot)
     let stagedWithoutLedger = try #require(await resultJSON(ledgerUnavailableServer, id: 5,
-      name: "stage_playlist", arguments: #"{"name":"Still stages","tracks":[{"artist":"A","title":"B","year":null}]}"#) as? [String: Any])
+      name: "stage_playlist", arguments: #"{"name":"Still stages","description":"A song for later.","tracks":[{"artist":"A","title":"B","year":null}]}"#) as? [String: Any])
     #expect(stagedWithoutLedger["staged"] as? Bool == true)
     #expect(stagedWithoutLedger["ledgerRecorded"] as? Bool == false)
     #expect(stagedWithoutLedger["ledgerReason"] as? String != nil)
@@ -1026,7 +1036,7 @@ struct LibraryMCPServerTests {
       LibraryPlaylist(persistentID: "unlabeled-id", name: "Unlabeled Reference Set", kind: .user, members: ["reference-id"]),
     ])
     let (server, _) = try makeServer(snapshot: snapshot, inbox: inbox, tasteRootURL: tasteRoot)
-    let staged = try #require(await resultJSON(server, id: 1, name: "stage_playlist", arguments: #"{"name":"Reference Test","request":"Find a companion","tracks":[{"artist":"New Artist","title":"New Song","year":2024,"why":"It shares the bright guitars.","like":[{"artist":"Reference Artist","title":"Reference Song","from":"Unlabeled Reference Set"},{"artist":"Reference Artist","title":"Reference Song","from":"Wrong Playlist"},{"artist":"Missing Artist","title":"Missing Song","from":"Unlabeled Reference Set"}]},{"artist":"Second Artist","title":"Second New Song","year":null,"like":[{"artist":"Reference Artist","title":"Reference Song"}]}]}"#) as? [String: Any])
+    let staged = try #require(await resultJSON(server, id: 1, name: "stage_playlist", arguments: #"{"name":"Reference Test","description":"Bright guitar connections.","request":"Find a companion","tracks":[{"artist":"New Artist","title":"New Song","year":2024,"why":"It shares the bright guitars.","like":[{"artist":"Reference Artist","title":"Reference Song","from":"Unlabeled Reference Set"},{"artist":"Reference Artist","title":"Reference Song","from":"Wrong Playlist"},{"artist":"Missing Artist","title":"Missing Song","from":"Unlabeled Reference Set"}]},{"artist":"Second Artist","title":"Second New Song","year":null,"like":[{"artist":"Reference Artist","title":"Reference Song"}]}]}"#) as? [String: Any])
     #expect(staged["ledgerRecorded"] as? Bool == true)
     let recommendations = tasteRoot.appending(path: "recommendations", directoryHint: .isDirectory)
     let ledgerFile = try #require(FileManager.default.contentsOfDirectory(at: recommendations, includingPropertiesForKeys: nil).first)
@@ -1044,20 +1054,22 @@ struct LibraryMCPServerTests {
     #expect(!stagedText.contains("like"))
   }
 
-  @Test("stage truncates request and reason in the ledger and reports it")
-  func stageReasoningTruncation() async throws {
+  @Test("stage preserves request and description word for word while truncating reasons")
+  func stageWordForWordCopy() async throws {
     let root = temporaryDirectory()
     let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
-    let request = String(repeating: "r", count: 501)
+    let request = "Find a song, and please keep my wording intact. " + String(repeating: "r", count: 501)
+    let description = "A chat description, kept as sent. " + String(repeating: "d", count: 501)
     let why = String(repeating: "w", count: 301)
     let (server, _) = try makeServer(snapshot: s0Fixture(), tasteRootURL: tasteRoot)
-    let arguments = #"{"name":"Long Reason","request":"\#(request)","tracks":[{"artist":"A","title":"B","year":2024,"why":"\#(why)"}]}"#
+    let arguments = #"{"name":"Long Reason","description":"\#(description)","request":"\#(request)","tracks":[{"artist":"A","title":"B","year":2024,"why":"\#(why)"}]}"#
     let staged = try #require(await resultJSON(server, id: 1, name: "stage_playlist", arguments: arguments) as? [String: Any])
     #expect(staged["truncated"] as? Bool == true)
     let recommendationFolder = tasteRoot.appending(path: "recommendations", directoryHint: .isDirectory)
     let ledgerFile = try #require(FileManager.default.contentsOfDirectory(at: recommendationFolder, includingPropertiesForKeys: nil).first)
     let batch = try #require(RecommendationLedgerCodec.readFiles([try Data(contentsOf: ledgerFile)]).batches.first)
-    #expect(batch.request?.count == 500)
+    #expect(batch.request == request)
+    #expect(batch.description == description)
     #expect(batch.tracks.first?.why?.count == 300)
   }
 
@@ -1102,7 +1114,7 @@ struct LibraryMCPServerTests {
     let beforeRows = try #require(beforeStage["tracks"] as? [[String: Any]])
     #expect(beforeRows.allSatisfy { $0["recommended"] == nil })
     _ = try #require(await resultJSON(server, id: 4, name: "stage_playlist",
-      arguments: #"{"name":"Picked week","tracks":[{"artist":"Week Artist","title":"Week Song","year":2026},{"artist":"Other Week Artist","title":"Other Week Song","year":2025}]}"#) as? [String: Any])
+      arguments: #"{"name":"Picked week","description":"Songs from this week's picks.","tracks":[{"artist":"Week Artist","title":"Week Song","year":2026},{"artist":"Other Week Artist","title":"Other Week Song","year":2025}]}"#) as? [String: Any])
     let batches = RecommendationLedgerCodec.readFiles([try Data(contentsOf: ledgerFile)]).batches
     let staged = try #require(batches.first { $0.kind == "staged-playlist" })
     #expect(staged.tracks.count == 2)
@@ -1145,6 +1157,8 @@ struct LibraryMCPServerTests {
     #expect(LibraryMCPServer.instructions.contains("never ask what tools can tell you"))
     #expect(!LibraryMCPServer.instructions.contains("VF Note"))
     #expect(LibraryMCPServer.instructions.contains("Stage discoveries with stage_playlist"))
+    #expect(LibraryMCPServer.instructions.contains("Jon's request word for word as `request`"))
+    #expect(LibraryMCPServer.instructions.contains("one-sentence description of the music as `description`"))
     #expect(LibraryMCPServer.instructions.contains("Drop songs recommended before, unless Jon asks for them again."))
     #expect(LibraryMCPServer.instructions.contains("record_new_music_picks"))
     #expect(LibraryMCPServer.instructions.contains("`like`"))

@@ -578,6 +578,10 @@ private actor LibraryMCPContext {
   func stage(_ payload: PlaylistToolPayload, recordedAt: Date) throws -> (name: String, trackCount: Int,
     dropped: [DroppedPlaylistTrack], ledgerRecorded: Bool, ledgerReason: String?, missingYear: [String],
     unverifiedReferences: [String], truncated: Bool) {
+    guard let description = payload.description,
+      !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      throw ArgumentError.invalidShape("description is required")
+    }
     struct ContractTrack: Encodable { var artist: String; var title: String; var album: String?; var year: Int? }
     struct ContractPayload: Encodable { var name: String; var description: String?; var tracks: [ContractTrack] }
     let encoder = JSONEncoder()
@@ -647,9 +651,9 @@ private actor LibraryMCPContext {
         result.like = references[index]
         return result
       }
-      if let request = payload.request, request.count > 500 { truncated = true }
       let batch = RecommendationBatch(recordedAt: recordedAt, host: hostName(),
-        playlist: decoded.request.name, tracks: enriched, request: payload.request.map { String($0.prefix(500)) },
+        playlist: decoded.request.name, tracks: enriched, request: payload.request,
+        description: description,
         coverage: RecommendationCoverage(listening: log != nil, notes: notesBySong != nil, snapshotAt: snapshot.generatedAt))
       let folder = tasteRootURL.appending(path: "recommendations", directoryHint: .isDirectory)
       try RecommendationLedgerCodec.append(batch, host: hostName(), folder: folder)
@@ -685,7 +689,7 @@ public enum LibraryMCPServer {
   Vinyl Fever exposes Jon's Apple Music library and listening stats. Use these tools for any claim about what Jon owns, has played, or has loved — never guess. Before proposing a final list, call check_tracks on it. For Jon's uploads, use an exact album from uploadedAlbums as the album hint. When Jon asks for the playlist, call stage_playlist with the final list instead of printing it; Jon reviews and creates it in Vinyl Fever. Snapshot age is in library_overview.
   """
   public static let instructions: String = {
-    instructionHead + "\n\nFor taste questions, start with list_playlists. keepers are the strongest evidence and replay positions are ranks. Report evidence by role, not by counting playlists; don't infer taste from genre. sharedAccountEra play counts aren't Jon's alone. Stage discoveries with stage_playlist, because Vinyl Fever records which songs were new to Jon. Give every discovery its original release year, Jon's request as request, a one-sentence why, and up to three songs in `like`. Cite only songs read from a Vinyl Fever tool in this conversation, and name the playlist you read each one from in `from`. Drop songs recommended before, unless Jon asks for them again. When Jon asks which New Music songs he'll keep, read kept_and_passed, choose before he listens, then call record_new_music_picks. `list_playlists` and `check_tracks` return `openQuestions` when there are any. In a taste conversation, ask at most one without waiting to be asked, and only when it bears on what Jon is doing. Record his reply word for word as `note` with the question's id in `answers`. Record 'skip' or 'not now' the same way, with `skipped: true`. When you stage, show Jon each song's year and why. If the result lists `missingYear` or `unverifiedReferences`, tell Jon which songs. Don't stage the same batch again: a second staging marks every song as recommended before. Record a new question when evidence leaves a meaningful contrast unresolved, even if Jon isn't there; ask only when the answer could change your next recommendation, cite the evidence, and never ask what tools can tell you.\n\n" + PlaylistContract.trackRules
+    instructionHead + "\n\nFor taste questions, start with list_playlists. keepers are the strongest evidence and replay positions are ranks. Report evidence by role, not by counting playlists; don't infer taste from genre. sharedAccountEra play counts aren't Jon's alone. Stage discoveries with stage_playlist, because Vinyl Fever records which songs were new to Jon. Give every discovery its original release year, Jon's request word for word as `request`, including how he said it; never summarize it or substitute your plan. Include the chat's own one-sentence description of the music as `description`. Give every discovery a one-sentence why and up to three songs in `like`. Cite only songs read from a Vinyl Fever tool in this conversation, and name the playlist you read each one from in `from`. Drop songs recommended before, unless Jon asks for them again. When Jon asks which New Music songs he'll keep, read kept_and_passed, choose before he listens, then call record_new_music_picks. `list_playlists` and `check_tracks` return `openQuestions` when there are any. In a taste conversation, ask at most one without waiting to be asked, and only when it bears on what Jon is doing. Record his reply word for word as `note` with the question's id in `answers`. Record 'skip' or 'not now' the same way, with `skipped: true`. When you stage, show Jon each song's year and why. If the result lists `missingYear` or `unverifiedReferences`, tell Jon which songs. Don't stage the same batch again: a second staging marks every song as recommended before. Record a new question when evidence leaves a meaningful contrast unresolved, even if Jon isn't there; ask only when the answer could change your next recommendation, cite the evidence, and never ask what tools can tell you.\n\n" + PlaylistContract.trackRules
   }()
 
   public static func make(
@@ -722,7 +726,10 @@ public enum LibraryMCPServer {
     let likeSchema = MCPValue.object(["type": .string("array"), "maxItems": .integer(3), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField, "from": stringField]), "required": .array([.string("artist"), .string("title")])])])
     let stageYearField = MCPValue.object(["type": .array([.string("integer"), .string("null")]),
       "description": .string("The song's original release year, not a reissue's or compilation's. Use null only when you can't verify it.")])
-    let stageSchema = schema(["name": stringField, "description": .object(["type": .string("string"), "description": .string(stageDescriptionGuidance)]), "request": stringField, "tracks": .object(["type": .string("array"), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField, "album": stringField, "year": stageYearField, "why": stringField, "like": likeSchema]), "required": .array([.string("artist"), .string("title"), .string("year")])])])], required: ["name", "tracks"])
+    let stageSchema = schema(["name": stringField,
+      "description": .object(["type": .string("string"), "description": .string(stageDescriptionGuidance)]),
+      "request": .object(["type": .string("string"), "description": .string("Jon's message asking for this playlist, word for word, including how he said it. Never a summary or your plan.")]),
+      "tracks": .object(["type": .string("array"), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField, "album": stringField, "year": stageYearField, "why": stringField, "like": likeSchema]), "required": .array([.string("artist"), .string("title"), .string("year")])])])], required: ["name", "description", "tracks"])
     return MCPServer(name: "Vinyl Fever", version: "1.0.0", instructions: instructions, tools: [
       MCPTool(name: "library_overview", description: "Summarize Jon's Apple Music library, including track, artist, album, genre and decade counts, plus the connector's build stamp (commit, dirty state, and build time).", inputSchema: overviewSchema, annotations: readOnly) { _ in
         return .json(MCPOverview(try await context.overview(), connector: buildStamp))

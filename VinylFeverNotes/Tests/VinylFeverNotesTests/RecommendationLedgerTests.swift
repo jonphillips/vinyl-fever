@@ -90,6 +90,18 @@ struct RecommendationLedgerTests {
     #expect(result.skippedLines == 1)
   }
 
+  @Test("staged playlist headers attribute Jon's request only when a description is recorded")
+  func playlistRequestHeader() {
+    let stagedAt = Date(timeIntervalSince1970: 1_800_000_000)
+    let attributed = RecommendationBatch(recordedAt: stagedAt, host: "Mac", playlist: "Selections",
+      tracks: [], request: "Find 15 discoveries, please.", description: "Bright songs for late nights.")
+    let legacy = RecommendationBatch(recordedAt: stagedAt, host: "Mac", playlist: "Old batch",
+      tracks: [], request: "Find 10 songs Jon has not heard.")
+
+    #expect(PlaylistRequestHeader.forBatch(attributed) == .jonWords)
+    #expect(PlaylistRequestHeader.forBatch(legacy) == .unattributed)
+  }
+
   @Test("playlist names load from every host and skip batches without a playlist")
   func playlistNamesInFolder() throws {
     let folder = FileManager.default.temporaryDirectory

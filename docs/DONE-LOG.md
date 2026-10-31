@@ -1,5 +1,10 @@
 # Done log
 
+## 2026-10-31 — M22 · S4
+
+Completed `m22/s4-chat-description`: `stage_playlist` records Jon's request and the chat's description verbatim, and the playlist view distinguishes attributed requests from older unattributed ones. The M22 brief is archived at `docs/milestones/archive/M22-playlist-progress.md`.
+
+
 ## 2026-10-31 — M22 · S3 — The archive
 
 - Branch: `m22/s3-archive`
