@@ -1,5 +1,12 @@
 # Done log
 
+## 2026-10-31 — M22 · S3 — The archive
+
+- Branch: `m22/s3-archive`
+- Result: derived archive status from the authorized Music library read and the 24-hour grace period. Added Active/Archived segments with counts, selection clearing, archived detail copy, and the empty Archived message. Reused the successful library read for playlist progress.
+- Verification: VinylFeverNotes (53 tests), VinylFeverListening (51), VinylFeverCore (302), iPhone Simulator (53), Mac app (94), generic iOS Simulator build, generic iOS device build, and `check-handoff` passed.
+- Jon's S3 delete-and-refresh and newly staged playlist device gates remain owed with the prior device gates.
+
 ## 2026-10-31 — M22 · S2 — Heard, kept, and passed
 
 - Branch: `m22/s2-heard-kept-passed`
