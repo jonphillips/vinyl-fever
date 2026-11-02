@@ -36,7 +36,7 @@ goes in `DONE-LOG.md`.
 - **M22 S3:** on iPhone and iPad, delete a staged playlist you're done with in Music, pull to refresh, and confirm it's under Archived with “No longer in your Music library.” and its songs still play; have the chat stage a new playlist and confirm it's under Active straight away; confirm Active opens by default and both segment counts are right ([M22](milestones/archive/M22-playlist-progress.md)).
 - **M22 S4:** install the Mac build, start a new chat so it refreshes the tool list, stage a playlist, and confirm the app shows the exact request under “You asked” with the chat description in plain type above it; confirm *Sam Fender — Manchester 2027 Catch-Up* shows its older request under “Request” in plain type ([M22](milestones/archive/M22-playlist-progress.md)).
 - **M23 S1:** after install, in a new chat, Jon makes two unprompted taste statements and confirms both land word for word in `notes-chat-<host>.jsonl` ([M23](milestones/M23-done-listening.md)).
-- M23 · S2 — After installing this build, Jon finishes a real playlist on the phone, asks the chat in a new conversation to review his finished playlists, and sees the review on the phone. ([M23 §S2](milestones/M23-done-listening.md#slices))
+- **M23 S2:** After installing this build, Jon finishes a real playlist on the phone, asks the chat in a new conversation to review his finished playlists, and sees the review on the phone. ([M23](milestones/M23-done-listening.md))
 ## Setup steps held for Jon
 
 - **Before M20 S1's gate:** the one-action "VF Music Feedback" shortcut, picked in Control

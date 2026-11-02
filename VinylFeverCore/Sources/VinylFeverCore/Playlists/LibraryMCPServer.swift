@@ -429,11 +429,18 @@ private actor LibraryMCPContext {
   }
 
   func playlistReviewProgress(for playlist: PlaylistShelfPlaylist, at: Date) throws -> PlaylistProgressResult {
+    guard let result = try playlistReviewProgresses(for: [playlist], at: at)[playlist.id] else {
+      throw ArgumentError.invalidShape("playlist progress could not be computed")
+    }
+    return result
+  }
+
+  private func playlistReviewProgresses(for playlists: [PlaylistShelfPlaylist], at: Date) throws -> [String: PlaylistProgressResult] {
     let (snapshot, roles, _, _, _) = try playlistData()
+    let tracksByID = Dictionary(uniqueKeysWithValues: snapshot.tracks.map { ($0.persistentID, $0) })
     let keepers = PlaylistRoleMatcher.resolve(snapshot: snapshot, roles: roles).compactMap { row -> PlaylistKeeperTracks? in
       guard row.role == .keepers || (row.role == nil && (row.playlist.name == "Vinyl Fever Keepers" ||
         row.playlist.name.range(of: SelectionPlaylistName.pattern, options: .regularExpression) != nil)) else { return nil }
-      let tracksByID = Dictionary(uniqueKeysWithValues: snapshot.tracks.map { ($0.persistentID, $0) })
       return PlaylistKeeperTracks(name: row.playlist.name, tracks: row.playlist.members.compactMap { id in
         if let track = tracksByID[id] { return PlaylistTrackIdentity(title: track.name, artist: track.artist) }
         if let track = snapshot.outsideTracks[id] { return PlaylistTrackIdentity(title: track.name, artist: track.artist) }
@@ -442,7 +449,9 @@ private actor LibraryMCPContext {
     }
     let plays = try listeningLog(now: at).plays
     let notes = try tasteNotes().notes
-    return PlaylistProgress.make(playlist: playlist, keepers: keepers, plays: plays, notes: notes)
+    return Dictionary(uniqueKeysWithValues: playlists.map { playlist in
+      (playlist.id, PlaylistProgress.make(playlist: playlist, keepers: keepers, plays: plays, notes: notes))
+    })
   }
 
   func playlistReviewData(now: Date) throws -> MCPPlaylistReviews {
@@ -452,16 +461,22 @@ private actor LibraryMCPContext {
     let latestStates = PlaylistReviewsCodec.latestJonState(in: reviews.entries)
     let latestReviews = PlaylistReviewsCodec.latestReviews(in: reviews.entries)
     let notes = try tasteNotes().notes
-    let pending = try playlists.compactMap { playlist -> MCPPlaylistReviewCandidate? in
-      guard latestStates[playlist.id]?.kind == .finished, latestReviews[playlist.id] == nil else { return nil }
-      let progress = try playlistReviewProgress(for: playlist, at: now)
+    let pendingPlaylists = playlists.filter {
+      latestStates[$0.id]?.kind == .finished && latestReviews[$0.id] == nil
+    }
+    let progressByPlaylist = try playlistReviewProgresses(for: pendingPlaylists, at: now)
+    let pending = try pendingPlaylists.map { playlist -> MCPPlaylistReviewCandidate in
+      guard let progress = progressByPlaylist[playlist.id] else {
+        throw ArgumentError.invalidShape("playlist progress could not be computed")
+      }
       let name = playlist.batch.playlist ?? "Staged playlist"
       let relatedNotes = notes.filter { note in
-        note.playlist?.localizedCaseInsensitiveCompare(name) == .orderedSame ||
-          note.about?.playlists.contains(where: { $0.localizedCaseInsensitiveCompare(name) == .orderedSame }) == true ||
-          playlist.songs.contains { song in
-            !PlaylistTasteNotes.matching([note], title: song.title, artist: song.artist).isEmpty
-          }
+        note.resolvedKind != "question" && (
+          note.playlist?.localizedCaseInsensitiveCompare(name) == .orderedSame ||
+            note.about?.playlists.contains(where: { $0.localizedCaseInsensitiveCompare(name) == .orderedSame }) == true ||
+            playlist.songs.contains { song in
+              !PlaylistTasteNotes.matching([note], title: song.title, artist: song.artist).isEmpty
+            })
       }.map(\.note)
       return MCPPlaylistReviewCandidate(host: playlist.batch.host, recordedAt: Self.reviewTimestamp(playlist.batch.recordedAt),
         playlistID: playlist.id, playlist: name, request: playlist.batch.request,

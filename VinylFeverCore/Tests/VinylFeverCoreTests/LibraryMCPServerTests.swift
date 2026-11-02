@@ -144,6 +144,11 @@ struct LibraryMCPServerTests {
     try ListeningLogCodec.encode(fetch).write(to: fetchFolder.appending(path: "2026-11.jsonl"))
     let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"),
       listeningRootURL: listeningRoot, tasteRootURL: tasteRoot, hostName: { "Test Mac" }, now: { recordedAt.addingTimeInterval(3) })
+    try TasteNotesCodec.appendFeedbackNote(TasteNote(notedAt: recordedAt, note: "I prefer bright hooks without a harsh edge.",
+      source: "playlist", device: "iPhone", playlist: "Power Pop"), device: "iPhone", folder: tasteRoot)
+    let question = try #require(await resultJSON(server, id: 79, name: "record_taste_note",
+      arguments: #"{"note":"Which vocal quality feels too soft?","kind":"question","about":{"playlists":["Power Pop"]}}"#) as? [String: Any])
+    #expect(question["recorded"] as? Bool == true)
 
     let pending = try #require(await resultJSON(server, id: 80, name: "playlist_reviews", arguments: "{}") as? [String: Any])
     let waiting = try #require(pending["awaitingReview"] as? [[String: Any]])
@@ -155,6 +160,9 @@ struct LibraryMCPServerTests {
     let songs = try #require(waiting[0]["songs"] as? [[String: Any]])
     #expect(songs[0]["why"] as? String == "The chorus opens up.")
     #expect(songs[0]["status"] as? String == "passed")
+    let jonNotes = try #require(waiting[0]["jonNotes"] as? [String])
+    #expect(jonNotes == ["I prefer bright hooks without a harsh edge."])
+    #expect(!jonNotes.contains("Which vocal quality feels too soft?"))
 
     let timestamp = ISO8601DateFormatter()
     timestamp.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
