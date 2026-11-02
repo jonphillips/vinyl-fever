@@ -129,6 +129,8 @@ def main():
         required_instruction = "When Jon states a preference, reacts to a song, artist, or playlist"
         if required_instruction not in instructions or "the same words twice in one conversation" not in instructions:
             fail("initialize did not serve the M23 taste-recording instructions")
+        if "When Jon asks for a review of finished playlists, read `playlist_reviews`" not in instructions:
+            fail("initialize did not serve the M23 playlist-review instructions")
         print(f"initialize: {elapsed:.2f}s — {result.get('serverInfo', {}).get('name', 'server responded')}")
         process.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n")
         process.stdin.flush()
@@ -140,7 +142,12 @@ def main():
         record_description = tools.get("record_taste_note", {}).get("description", "")
         if "stated preferences, reactions, and keep/pass reasons verbatim" not in record_description:
             fail("tools/list did not serve the M23 record_taste_note description")
-        print(f"tools/list: {elapsed:.2f}s — {len(tools)} tools; library_overview and M23 taste rule present")
+        if "playlist_reviews" not in tools or "record_playlist_review" not in tools:
+            fail("tools/list did not include both M23 playlist review tools")
+        review_description = tools["record_playlist_review"].get("description", "")
+        if "refused unless the recommendation batch exists" not in review_description:
+            fail("tools/list did not serve the M23 record_playlist_review contract")
+        print(f"tools/list: {elapsed:.2f}s — {len(tools)} tools; library_overview, taste rule, and playlist review tools present")
 
         for name, arguments in (("library_overview", {}), ("recent_listening", {"period": "24h"})):
             result, elapsed = request("tools/call", {"name": name, "arguments": arguments})

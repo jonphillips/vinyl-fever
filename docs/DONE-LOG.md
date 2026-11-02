@@ -1,5 +1,9 @@
 # Done log
 
+## 2026-11-02 — M23 · S2 — Done listening, and the chat's review (`m23/s2-done-listening`)
+
+Added the append-only playlist review log, phone actions to mark a playlist done or reopen it, and MCP tools for the chat to read finished playlists and record reviews with their listening outcomes. The phone shows playlist status and the latest chat review beside the progress summary.
+
 ## 2026-11-02 — M23 · S1: Jon's words, saved when he says them (`m23/s1-save-taste-words`)
 
 - **Branch:** `m23/s1-save-taste-words`
