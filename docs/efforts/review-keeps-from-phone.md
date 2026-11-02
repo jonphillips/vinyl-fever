@@ -4,8 +4,9 @@
 **Summary:** The chat's playlist review read keeps from the Mac's library snapshot, which was two
 days stale, and told Jon he kept nothing from *Pop with Bite* when he had. Record the phone's
 live outcomes in the `finished` line, merge them with the Mac's in `playlist_reviews`, and let
-Jon ask for a fresh review from the phone.
-**Related:** [M23](../milestones/archive/M23-done-listening.md) (S2, S3 gate results) · [Efforts index](README.md)
+Jon ask for a fresh review from the phone. Also lead the `vf-mcp` instructions with the
+taste-statement rule, which a Work chat could quote but didn't act on (M23 S1's gate).
+**Related:** [M23](../milestones/archive/M23-done-listening.md) (S1, S2, S3 gate results) · [Efforts index](README.md)
 
 Branch `effort/review-keeps-from-phone`, from a fresh `main`. One PR. No schema change and no
 sync change. The log format keeps `version: 1` (Decision 1).
@@ -29,6 +30,16 @@ The review was still wrong. It said "12 of 12 passed and no keepers", but Jon ha
 The monitor runs whether or not the Mac app is open, so most reviews would miss keeps from the
 same day. At the moment Jon taps Done listening, the phone holds the outcomes he has just seen.
 That's the evidence to record.
+
+**M23 S1's gate failed the same afternoon.**
+- In a new Work chat, Jon wrote two unprompted reactions: Mimi Webb's "Red Flags" and Foxes'
+  "Sister Ray". The chat answered them, but never called `record_taste_note`, and nothing was
+  saved.
+- Asked to quote Vinyl Fever's instructions on taste statements, it quoted the S1 rule exactly,
+  then saved both reactions. So the rule reaches the model through Codex.
+- The rule sits mid-way through a roughly 400-word paragraph, after the playlist and staging
+  rules. It asks for an unprompted call with a side effect, which a model skips unless the
+  trigger is prominent.
 
 ## Changes
 
@@ -65,6 +76,19 @@ That's the evidence to record.
 - **Instructions:** when `outcomeSource` is `mac` and `snapshotTakenAt` is older than the
   playlist's finish, say in the review that keeps since the snapshot may be missing.
 
+- **Lead with the taste-statement rule** (`LibraryMCPServer`).
+  - Move it out of the long paragraph into `instructionHead`, as its second sentence:
+    "Whenever Jon reacts to a song, artist, or playlist, states a preference, or explains a keep
+    or a pass, call `record_taste_note` with his words word for word before you reply, then say
+    briefly that it's saved so he can say 'don't'."
+  - The don't-record list (the chat's own words or a paraphrase, a playlist request, small talk,
+    the same words twice) stays, right after it.
+  - Begin `record_taste_note`'s description with the trigger: "Call this whenever Jon reacts to
+    a song, artist, or playlist, states a preference, or explains a keep or a pass: record his
+    words verbatim, …". Keep the rest of the description.
+  - Update the S1 assertions in `LibraryMCPServerTests` and the strings `scripts/mcp-smoke`
+    checks to the new wording.
+
 ## Decisions
 
 1. **`version` stays 1.** The new fields are optional, and current readers ignore keys they don't
@@ -92,13 +116,22 @@ That's the evidence to record.
     `snapshotTakenAt`;
   - a `finished` newer than the latest review is waiting again;
   - `record_playlist_review` stores the merged counts.
-- Closeout (ADR-0005 D16) records the gate. Jon:
+- **Instruction test:** `instructionHead` contains the taste-statement rule, and
+  `record_taste_note`'s description begins with "Call this whenever Jon reacts". `scripts/mcp-smoke`
+  passes against the built helper.
+- Closeout (ADR-0005 D16) records two gates.
+
+  **The keeps.** Jon:
   - keeps a song from a staged playlist on the phone;
   - taps Done listening without opening Vinyl Fever on the Mac;
   - sees the monitor's review count that keep.
 
   Then, on *Pop with Bite*, he taps **Not done**, then **Done listening**, and the new review
   counts his keeps.
+
+  **Unprompted saves, replacing M23 S1's gate.** After the install, Jon quits and reopens
+  ChatGPT, then makes two unprompted taste statements in a new Work chat. Both land word for word
+  in `notes-chat-<host>.jsonl`, and the chat says each is saved, without being asked.
 
 ## Out of scope
 
