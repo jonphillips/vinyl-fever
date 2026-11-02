@@ -8,7 +8,11 @@ struct PlaylistReviewsTests {
     let at = Date(timeIntervalSince1970: 1_800_000_000.125)
     let entries = [
       PlaylistReviewEntry(source: .jon, kind: .finished, host: "Mac", recordedAt: at,
-        playlistID: "Mac|1", playlist: "Playlist", at: at, device: "iPhone"),
+        playlistID: "Mac|legacy", playlist: "Legacy Playlist", at: at, device: "iPhone"),
+      PlaylistReviewEntry(source: .jon, kind: .finished, host: "Mac", recordedAt: at,
+        playlistID: "Mac|1", playlist: "Playlist", at: at, device: "iPhone",
+        heard: 1, kept: 1, passed: 0, unheard: 0,
+        songs: [PlaylistReviewSongOutcome(index: 0, title: "Song", artist: "Artist", status: "kept", keptIn: ["Keepers"])]),
       PlaylistReviewEntry(source: .jon, kind: .reopened, host: "Mac", recordedAt: at,
         playlistID: "Mac|1", playlist: "Playlist", at: at.addingTimeInterval(1), device: "iPhone"),
       PlaylistReviewEntry(source: .chat, kind: .review, host: "Mac", recordedAt: at,

@@ -57,6 +57,7 @@ final class PlaylistTasteNotesModel {
   var destination: Destination?
   var draft = ""
   private(set) var currentSong: FeedbackSong?
+  private(set) var currentPlaylist: String?
   private var sessionSavedNotes: [TasteNote] = []
 
   @ObservationIgnored
@@ -86,6 +87,19 @@ final class PlaylistTasteNotesModel {
     PlaylistTasteNotes.matching(notes, title: song.title, artist: song.artist)
   }
 
+  func notes(forPlaylist name: String) -> [TasteNote] {
+    notes.filter { $0.playlist?.localizedCaseInsensitiveCompare(name) == .orderedSame }
+      .sorted { $0.notedAt > $1.notedAt }
+  }
+
+  func playlistNoteButtonTapped(_ name: String) {
+    currentSong = nil
+    currentPlaylist = name
+    draft = ""
+    errorMessage = nil
+    destination = .note
+  }
+
   func noteButtonTapped(for song: PlaylistShelfSong, resolvedSong: Song?) {
     currentSong = FeedbackSong(
       title: song.title,
@@ -96,6 +110,7 @@ final class PlaylistTasteNotesModel {
       releaseDate: resolvedSong?.releaseDate.map { ISO8601DateFormatter().string(from: $0) },
       duration: resolvedSong?.duration.map(Self.durationString)
     )
+    currentPlaylist = nil
     draft = ""
     errorMessage = nil
     destination = .note
@@ -105,15 +120,20 @@ final class PlaylistTasteNotesModel {
     guard !isSaving else { return }
     destination = nil
     currentSong = nil
+    currentPlaylist = nil
     draft = ""
   }
 
   func save() async {
     guard !isSaving else { return }
-    guard let note = MusicFeedback.makeNote(draft, selected: currentSong, source: "playlist", at: now,
+    guard var note = MusicFeedback.makeNote(draft, selected: currentSong, source: "playlist", at: now,
       device: await client.deviceName()) else {
       cancel()
       return
+    }
+    if let currentPlaylist {
+      note.playlist = currentPlaylist
+      note.about = TasteNote.About(playlists: [currentPlaylist])
     }
     isSaving = true
     defer { isSaving = false }
@@ -124,6 +144,7 @@ final class PlaylistTasteNotesModel {
       notes = TasteNotesCodec.uniqueNewestFirst(notes + [persistedNote])
       destination = nil
       currentSong = nil
+      currentPlaylist = nil
       draft = ""
       errorMessage = nil
     } catch ProbeBookmarkError.folderNotSelected, ProbeBookmarkError.accessRefused {

@@ -63,6 +63,13 @@ final class PlaylistReviewsModel {
     PlaylistReviewsCodec.latestJonState(in: entries).filter { $0.value.kind == .finished }
   }
 
+  var waitingEntries: [String: PlaylistReviewEntry] {
+    let latestReviews = PlaylistReviewsCodec.latestReviews(in: entries)
+    return finishedEntries.filter { id, entry in
+      !(latestReviews[id].map { $0.at > entry.at } ?? false)
+    }
+  }
+
   var reviews: [String: PlaylistReviewEntry] {
     PlaylistReviewsCodec.latestReviews(in: entries)
   }
@@ -87,19 +94,40 @@ final class PlaylistReviewsModel {
     await appendJonEntry(.finished, for: playlist)
   }
 
+  func finish(_ playlist: PlaylistShelfPlaylist, progress: PlaylistProgressResult?) async {
+    await appendJonEntry(.finished, for: playlist, progress: progress)
+  }
+
   func reopen(_ playlist: PlaylistShelfPlaylist) async {
     await appendJonEntry(.reopened, for: playlist)
   }
 
-  private func appendJonEntry(_ kind: PlaylistReviewKind, for playlist: PlaylistShelfPlaylist) async {
+  private func appendJonEntry(_ kind: PlaylistReviewKind, for playlist: PlaylistShelfPlaylist,
+    progress: PlaylistProgressResult? = nil) async {
     guard !isSaving else { return }
     isSaving = true
     defer { isSaving = false }
     let device = await client.deviceName()
     let name = playlist.batch.playlist?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let songs = progress.map { result in
+      playlist.songs.enumerated().map { index, song in
+        let status: String
+        let keptIn: [String]?
+        switch result.songs[song.id] {
+        case let .kept(names): status = "kept"; keptIn = names
+        case .passed: status = "passed"; keptIn = nil
+        case .notHeard, .none: status = "unheard"; keptIn = nil
+        }
+        return PlaylistReviewSongOutcome(index: index, title: song.title, artist: song.artist,
+          status: status, keptIn: keptIn)
+      }
+    }
     let entry = PlaylistReviewEntry(source: .jon, kind: kind, host: playlist.batch.host,
       recordedAt: playlist.batch.recordedAt, playlistID: playlist.id,
-      playlist: name.flatMap { $0.isEmpty ? nil : $0 } ?? "Staged playlist", at: now, device: device)
+      playlist: name.flatMap { $0.isEmpty ? nil : $0 } ?? "Staged playlist", at: now, device: device,
+      heard: progress?.counts.heard, kept: progress?.counts.kept,
+      passed: progress.map { $0.counts.passedWithFeedback + $0.counts.passedWithoutFeedback },
+      unheard: progress?.counts.notHeard, songs: songs)
     do {
       try await client.append(entry, device)
       entries.append(entry)

@@ -141,7 +141,7 @@ on Jon's gates.
   - **The gate (2026-11-02): failed.** In a new Work chat, Jon reacted to "Red Flags" and "Sister
     Ray". The chat replied, but saved nothing until Jon asked it to quote the rule. Then it quoted
     the rule exactly and saved both reactions word for word. The fix and the re-run are in
-    [review-keeps-from-phone](../../efforts/review-keeps-from-phone.md).
+    [review-keeps-from-phone](../../efforts/archive/review-keeps-from-phone.md).
 
 - [x] **S2 — Done listening, and the chat's review on the record.**
   - **The log (Decision 1).** `Taste Intelligence/playlist-reviews/<device-or-host>.jsonl`,
@@ -222,7 +222,7 @@ on Jon's gates.
     - **End to end:** Jon tapped Done listening on *Pop with Bite* at 15:57:51. The line reached
       the Mac at 16:03, the monitor recorded its review at 16:09, and it showed on the phone.
       The review missed Jon's keeps, because the Mac's library snapshot dated from 2026-10-31.
-      The fix is [review-keeps-from-phone](../../efforts/review-keeps-from-phone.md).
+      The fix is [review-keeps-from-phone](../../efforts/archive/review-keeps-from-phone.md).
     - **So:** the review loop needs no push. The monitor's polling delivers it within 15 minutes
       plus iCloud sync, and Jon sets its interval in ChatGPT, since each check costs tokens.
 

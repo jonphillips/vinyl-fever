@@ -8,7 +8,7 @@ Jon ask for a fresh review from the phone. Also lead the `vf-mcp` instructions w
 taste-statement rule, which a Work chat could quote but didn't act on (M23 S1's gate), and have
 the chat study recent outcomes before it chooses songs. And let Jon react to a whole playlist,
 in his own words, from the phone.
-**Related:** [M23](../milestones/archive/M23-done-listening.md) (S1, S2, S3 gate results) · [Efforts index](README.md)
+**Related:** [M23](../../milestones/archive/M23-done-listening.md) (S1, S2, S3 gate results) · [Efforts index](../README.md)
 
 Branch `effort/review-keeps-from-phone`, from a fresh `main`. One PR. No schema change and no
 sync change. The log format keeps `version: 1` (Decision 1).

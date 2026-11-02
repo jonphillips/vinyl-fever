@@ -27,6 +27,30 @@ struct PlaylistReviewsModelTests {
   }
 
   @Test @MainActor
+  func finishCapturesProgressOutcomesAndCounts() async {
+    let playlist = makePlaylist()
+    let writes = ReviewWriteCounter()
+    let model = withDependencies({ dependencies in
+      dependencies.date.now = Date(timeIntervalSince1970: 1_800_000_100)
+      dependencies.playlistReviewsClient.deviceName = { "Test iPhone" }
+      dependencies.playlistReviewsClient.append = { entry, writer in await writes.append(entry, writer: writer) }
+    }) { PlaylistReviewsModel() }
+    let progress = PlaylistProgressResult(
+      songs: [playlist.songs[0].id: .kept(in: ["Keepers"])],
+      counts: PlaylistProgressCounts(kept: 1, passedWithFeedback: 0, passedWithoutFeedback: 0, notHeard: 0))
+
+    await model.finish(playlist, progress: progress)
+
+    let saved = await writes.entries.first?.0
+    #expect(saved?.heard == 1)
+    #expect(saved?.kept == 1)
+    #expect(saved?.passed == 0)
+    #expect(saved?.unheard == 0)
+    #expect(saved?.songs == [PlaylistReviewSongOutcome(index: 0, title: "Song", artist: "Artist",
+      status: "kept", keptIn: ["Keepers"])])
+  }
+
+  @Test @MainActor
   func refreshShowsLatestReviewAndFinishedState() async {
     let playlist = makePlaylist()
     let finished = PlaylistReviewEntry(source: .jon, kind: .finished, host: "Mac",
@@ -36,16 +60,26 @@ struct PlaylistReviewsModelTests {
       recordedAt: playlist.batch.recordedAt, playlistID: playlist.id, playlist: "Playlist",
       at: Date(timeIntervalSince1970: 11), text: "The sequence builds well.", heard: 1, kept: 1, passed: 0, unheard: 0)
     let model = withDependencies({ dependencies in
+      dependencies.date.now = Date(timeIntervalSince1970: 12)
       dependencies.playlistReviewsClient.read = {
         PlaylistReviewsReadResult(entries: [finished, review], skippedLines: 0, filesRead: 1)
       }
+      dependencies.playlistReviewsClient.append = { _, _ in }
     }) { PlaylistReviewsModel() }
 
     await model.refresh()
 
     #expect(model.finishedEntries[playlist.id] != nil)
+    #expect(model.waitingEntries[playlist.id] == nil)
     #expect(model.reviews[playlist.id]?.text == "The sequence builds well.")
     #expect(!model.hasUnreadableFiles)
+
+    await model.finish(playlist)
+    #expect(model.entries.count == 3)
+    #expect(model.entries.last?.at == Date(timeIntervalSince1970: 12))
+    #expect(model.finishedEntries[playlist.id]?.at == Date(timeIntervalSince1970: 12))
+    #expect(model.reviews[playlist.id]?.at == Date(timeIntervalSince1970: 11))
+    #expect(model.waitingEntries[playlist.id] != nil)
   }
 
   @Test @MainActor

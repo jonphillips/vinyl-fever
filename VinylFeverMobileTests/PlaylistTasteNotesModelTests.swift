@@ -6,6 +6,33 @@ import VinylFeverNotes
 
 struct PlaylistTasteNotesModelTests {
   @Test @MainActor
+  func savesPlaylistReactionWithPlaylistContextAndDisplaysItSeparately() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let tasteFolder = root.appendingPathComponent("Taste Intelligence", isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let model = withDependencies({ dependencies in
+      dependencies.date.now = Date(timeIntervalSince1970: 1_800_000_000)
+      dependencies.playlistTasteNotesClient.deviceName = { "Test iPhone" }
+      dependencies.playlistTasteNotesClient.save = { note, device in
+        try TasteNotesCodec.appendFeedbackNote(note, device: device, folder: tasteFolder)
+      }
+    }) { PlaylistTasteNotesModel() }
+    model.playlistNoteButtonTapped("Power Pop")
+    model.draft = "The whole sequence feels bright."
+
+    await model.save()
+
+    let file = tasteFolder.appendingPathComponent("notes-feedback-Test_iPhone.jsonl")
+    let note = try #require(TasteNotesCodec.readFiles([Data(contentsOf: file)]).notes.first)
+    #expect(note.title == nil)
+    #expect(note.playlist == "Power Pop")
+    #expect(note.about?.playlists == ["Power Pop"])
+    #expect(note.source == "playlist")
+    #expect(model.notes(forPlaylist: "Power Pop").map(\.note) == ["The whole sequence feels bright."])
+    #expect(model.notes(for: playlistSong()).isEmpty)
+  }
+
+  @Test @MainActor
   func savesOneCoordinatedLineAndShowsItUnderTheSong() async throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     let tasteFolder = root.appendingPathComponent("Taste Intelligence", isDirectory: true)

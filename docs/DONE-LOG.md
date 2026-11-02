@@ -1,5 +1,11 @@
 # Done log
 
+## 2026-11-02 — Reviews count the keeps Jon saw (`effort/review-keeps-from-phone`)
+
+- **Result:** The phone records finish-time outcomes and playlist reactions, and the MCP helper merges phone and Mac evidence for reviews. It foregrounds the taste-note trigger and learns from recent outcomes before playlist selection.
+- **Verification:** VinylFeverNotes: 57 tests; VinylFeverCore: 313 tests; macOS app: 94 tests; iPhone Simulator: 60 tests; generic iOS Simulator build; vf-mcp build and mcp-smoke.
+- **Owed:** review-keeps-from-phone's device gate, in [device-passes.md](device-passes.md).
+
 ## 2026-11-02 — M23 · S2 and S3 gates
 
 - **Result:**
