@@ -139,7 +139,7 @@ on Jon's gates.
       two unprompted taste statements and checks that both land in `notes-chat-<host>.jsonl`,
       word for word.
 
-- [ ] **S2 — Done listening, and the chat's review on the record.**
+- [x] **S2 — Done listening, and the chat's review on the record.**
   - **The log (Decision 1).** `Taste Intelligence/playlist-reviews/<device-or-host>.jsonl`,
     `format: "vf-playlist-review"`, `version: 1`. Every line names its playlist by the ledger
     batch's `host` and `recordedAt`, the shelf's identity, plus the `playlist` name for people.

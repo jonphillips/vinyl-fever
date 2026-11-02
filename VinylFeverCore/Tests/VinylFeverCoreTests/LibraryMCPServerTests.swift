@@ -58,6 +58,8 @@ struct LibraryMCPServerTests {
       "recommendation_outcomes": ["batches"],
       "record_new_music_picks": ["songs"],
       "taste_notes": ["artist", "title", "playlist", "period", "limit"],
+      "playlist_reviews": [],
+      "record_playlist_review": ["host", "recordedAt", "text"],
       "record_taste_note": ["note", "artist", "title", "album", "playlist", "kind", "answers", "skipped", "about"],
       "stage_playlist": ["name", "description", "request", "tracks"],
     ]
@@ -77,7 +79,7 @@ struct LibraryMCPServerTests {
         #expect(description.contains("briefly confirm it's saved"))
         #expect(description.contains("never record the chat's words or a paraphrase, playlist requests, small talk"))
       }
-      if name == "stage_playlist" || name == "record_taste_note" || name == "record_new_music_picks" {
+      if name == "stage_playlist" || name == "record_taste_note" || name == "record_new_music_picks" || name == "record_playlist_review" {
         #expect(annotations["destructiveHint"] as? Bool == false)
         #expect(annotations["readOnlyHint"] == nil)
       } else {
@@ -111,6 +113,72 @@ struct LibraryMCPServerTests {
       == "One sentence about the music; it becomes the playlist's description in Apple Music. No library stats, availability notes, or dates. Don't stage the same batch again to fix a year; that marks every song as recommended before.")
     #expect((stageProperties["request"] as? [String: Any])?["description"] as? String
       == "Jon's message asking for this playlist, word for word, including how he said it. Never a summary or your plan.")
+  }
+
+  @Test("playlist reviews expose finished batches and refuse unfinished or missing batches")
+  func playlistReviewsTools() async throws {
+    let root = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let snapshotURL = root.appending(path: "snapshot.json")
+    try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let recordedAt = Date(timeIntervalSince1970: 1_800_000_000.125)
+    let batch = RecommendationBatch(recordedAt: recordedAt, host: "Mac", playlist: "Power Pop",
+      tracks: [RecommendationTrack(artist: "Artist", title: "Song", familiar: false,
+        reasons: [], artistKnown: true, why: "The chorus opens up.")],
+      request: "Make me a buoyant power pop playlist.", description: "Bright guitars and big choruses.")
+    let ledgerFolder = tasteRoot.appending(path: "recommendations", directoryHint: .isDirectory)
+    try RecommendationLedgerCodec.append(batch, host: "Mac", folder: ledgerFolder)
+    let shelf = PlaylistShelf.make(from: RecommendationLedgerReadResult(batches: [batch], skippedLines: 0),
+      now: recordedAt, calendar: .current, timeZone: .current)[0]
+    let finished = PlaylistReviewEntry(source: .jon, kind: .finished, host: "Mac", recordedAt: recordedAt,
+      playlistID: shelf.id, playlist: "Power Pop", at: recordedAt.addingTimeInterval(1), device: "iPhone")
+    try PlaylistReviewsCodec.append(finished, writer: "iPhone", folder: tasteRoot.appending(path: "playlist-reviews"))
+
+    let listeningRoot = root.appending(path: "Listening", directoryHint: .isDirectory)
+    let fetchFolder = listeningRoot.appending(path: "fetches/test", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: fetchFolder, withIntermediateDirectories: true)
+    let fetch = ListeningFetch(poller: UUID(), host: "Mac", fetchedAt: recordedAt.addingTimeInterval(2),
+      outcome: .plays, newCount: 1, pagesRead: 1,
+      items: [.init(kind: .song, id: "song", title: "Song", artist: "Artist")])
+    try ListeningLogCodec.encode(fetch).write(to: fetchFolder.appending(path: "2026-11.jsonl"))
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"),
+      listeningRootURL: listeningRoot, tasteRootURL: tasteRoot, hostName: { "Test Mac" }, now: { recordedAt.addingTimeInterval(3) })
+    try TasteNotesCodec.appendFeedbackNote(TasteNote(notedAt: recordedAt, note: "I prefer bright hooks without a harsh edge.",
+      source: "playlist", device: "iPhone", playlist: "Power Pop"), device: "iPhone", folder: tasteRoot)
+    let question = try #require(await resultJSON(server, id: 79, name: "record_taste_note",
+      arguments: #"{"note":"Which vocal quality feels too soft?","kind":"question","about":{"playlists":["Power Pop"]}}"#) as? [String: Any])
+    #expect(question["recorded"] as? Bool == true)
+
+    let pending = try #require(await resultJSON(server, id: 80, name: "playlist_reviews", arguments: "{}") as? [String: Any])
+    let waiting = try #require(pending["awaitingReview"] as? [[String: Any]])
+    #expect(waiting.count == 1)
+    #expect(waiting[0]["request"] as? String == "Make me a buoyant power pop playlist.")
+    #expect(waiting[0]["description"] as? String == "Bright guitars and big choruses.")
+    #expect(waiting[0]["heard"] as? Int == 1)
+    #expect(waiting[0]["passed"] as? Int == 1)
+    let songs = try #require(waiting[0]["songs"] as? [[String: Any]])
+    #expect(songs[0]["why"] as? String == "The chorus opens up.")
+    #expect(songs[0]["status"] as? String == "passed")
+    let jonNotes = try #require(waiting[0]["jonNotes"] as? [String])
+    #expect(jonNotes == ["I prefer bright hooks without a harsh edge."])
+    #expect(!jonNotes.contains("Which vocal quality feels too soft?"))
+
+    let timestamp = ISO8601DateFormatter()
+    timestamp.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let identity = timestamp.string(from: recordedAt)
+    let review = try #require(await resultJSON(server, id: 81, name: "record_playlist_review",
+      arguments: #"{"host":"Mac","recordedAt":"\#(identity)","text":"The playlist follows the request and keeps its energy."}"#) as? [String: Any])
+    #expect(review["recorded"] as? Bool == true)
+    #expect(review["source"] as? String == "chat")
+    let after = try #require(await resultJSON(server, id: 82, name: "playlist_reviews", arguments: "{}") as? [String: Any])
+    #expect((after["awaitingReview"] as? [[String: Any]])?.isEmpty == true)
+    #expect((after["recentReviews"] as? [[String: Any]])?.first?["text"] as? String
+      == "The playlist follows the request and keeps its energy.")
+
+    let refused = await rawCall(server, id: 83, name: "record_playlist_review",
+      arguments: #"{"host":"missing","recordedAt":"\#(identity)","text":"No batch."}"#)
+    #expect(refused?.contains("the recommendation batch does not exist") == true)
   }
 
   @Test("chat taste notes round-trip verbatim and never write the shortcut file")
@@ -1170,6 +1238,8 @@ struct LibraryMCPServerTests {
     #expect(LibraryMCPServer.instructions.contains("After recording, briefly say it's saved so he can say 'don't.'"))
     #expect(LibraryMCPServer.instructions.contains("Don't record the chat's own words or a paraphrase"))
     #expect(LibraryMCPServer.instructions.contains("the same words twice in one conversation."))
+    #expect(LibraryMCPServer.instructions.contains("When Jon asks for a review of finished playlists, read `playlist_reviews`"))
+    #expect(LibraryMCPServer.instructions.contains("Never claim an outcome a tool didn't report."))
     #expect(LibraryMCPServer.instructions.contains("one-sentence description of the music as `description`"))
     #expect(LibraryMCPServer.instructions.contains("Drop songs recommended before, unless Jon asks for them again."))
     #expect(LibraryMCPServer.instructions.contains("record_new_music_picks"))

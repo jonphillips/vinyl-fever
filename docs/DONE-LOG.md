@@ -1,5 +1,12 @@
 # Done log
 
+## 2026-11-02 — M23 · S2 — Done listening, and the chat's review (`m23/s2-done-listening`)
+
+- **Branch:** `m23/s2-done-listening`
+- **Result:** Added the append-only playlist review log, phone actions to mark a playlist done or reopen it, and MCP tools for the chat to read finished playlists and record reviews with their listening outcomes. The phone shows playlist status and the latest chat review beside the progress summary.
+- **Verification:** VinylFeverNotes 57, VinylFeverListening 51, VinylFeverCore 303, macOS app 94, and iOS Simulator 58 tests passed; `scripts/mcp-smoke` and `check-handoff --strict` passed.
+- **Owed gate:** After installation, Jon finishes a real playlist on the phone, asks the chat in a new conversation to review finished playlists, and sees the review on the phone. See [device-passes.md](device-passes.md).
+
 ## 2026-11-02 — M23 · S1: Jon's words, saved when he says them (`m23/s1-save-taste-words`)
 
 - **Branch:** `m23/s1-save-taste-words`
