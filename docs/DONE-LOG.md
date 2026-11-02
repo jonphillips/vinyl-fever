@@ -1,5 +1,11 @@
 # Done log
 
+## 2026-11-02 — M23 · S3 — MCP Events probe (`m23/s3-mcp-events-probe`)
+
+- **Result:** Added an opt-in MCP Events probe to vf-mcp with event discovery, validated signed subscriptions, persisted subscription state, and a command to fire the latest finished playlist.
+- **Verification:** Passed: VinylFeverCore (308 tests), VinylFeverNotes (57), VinylFeverListening (51), macOS app (94), iOS Simulator app (58); mobile build passed. MCP Events probe tests: 5 passed.
+- **Owed:** M23 S3's device gate, in [device-passes.md](device-passes.md).
+
 ## 2026-11-02 — M23 · S2 — Done listening, and the chat's review (`m23/s2-done-listening`)
 
 - **Branch:** `m23/s2-done-listening`
