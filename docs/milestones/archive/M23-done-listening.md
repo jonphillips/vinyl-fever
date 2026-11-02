@@ -3,7 +3,7 @@
 *Let Jon say he's done with a playlist and have the chat review it on the record. Make sure
 what Jon tells the chat about his taste lands in Vinyl Fever's files, not only in one
 provider's history. Then find out whether ChatGPT can be woken from outside. Rules in
-[../technical-architecture.md](../technical-architecture.md), jon-platform `AGENTS.md`, and
+[../technical-architecture.md](../../technical-architecture.md), jon-platform `AGENTS.md`, and
 `docs/ios/mcp-access.md` apply. The phone screens follow jon-platform
 `docs/ios/ui-and-platforms.md`. Where this doc and those conflict, stop and flag it.*
 
@@ -176,7 +176,7 @@ on Jon's gates.
       the chat in a new conversation to review his finished playlists, and sees the review on
       the phone.
 
-- [ ] **S3 — Probe: do MCP Events reach `vf-mcp` through the tunnel?**
+- [x] **S3 — Probe: do MCP Events reach `vf-mcp` through the tunnel?**
   - **Why.** The push milestone depends on answers no document gives (see *What's true
     today*).
   - **The probe build.** When `VF_MCP_EVENTS_PROBE=1` is set, `vf-mcp`:
