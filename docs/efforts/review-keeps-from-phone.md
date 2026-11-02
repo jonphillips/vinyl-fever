@@ -6,7 +6,8 @@ days stale, and told Jon he kept nothing from *Pop with Bite* when he had. Recor
 live outcomes in the `finished` line, merge them with the Mac's in `playlist_reviews`, and let
 Jon ask for a fresh review from the phone. Also lead the `vf-mcp` instructions with the
 taste-statement rule, which a Work chat could quote but didn't act on (M23 S1's gate), and have
-the chat study recent outcomes before it chooses songs.
+the chat study recent outcomes before it chooses songs. And let Jon react to a whole playlist,
+in his own words, from the phone.
 **Related:** [M23](../milestones/archive/M23-done-listening.md) (S1, S2, S3 gate results) · [Efforts index](README.md)
 
 Branch `effort/review-keeps-from-phone`, from a fresh `main`. One PR. No schema change and no
@@ -97,6 +98,25 @@ That's the evidence to record.
     for a new playlist, read `recommendation_outcomes` and `taste_notes`, and learn from what
     Jon passed as well as what he kept, and from his notes on both."
 
+- **Jon's reaction to a playlist, from the phone** (`VinylFeverMobile`).
+  - **Why:** the monitor writes reviews while Jon is away, so he first reads them on the phone.
+    The phone saves notes on individual songs only, so there's nowhere to react to a playlist
+    as a whole.
+  - **The control:** a labeled **Your reaction** button on the playlist detail, under the chat's
+    review, or under "Done · waiting for the chat's review" when no review exists yet. Place it
+    per `ui-and-platforms.md` § Controls. It opens the same note sheet as a song note.
+  - **The note:** make it with `MusicFeedback.makeNote(_:selected: nil, source: "playlist", …)`,
+    then set `playlist` to the batch's playlist name and `about.playlists` to `[name]`. Save it
+    through the existing feedback-note client, to `notes-feedback-<device>.jsonl`. No format
+    change: `TasteNote` already carries both fields.
+  - **Showing it:** the detail page lists the playlist's notes (no title, `playlist` matching)
+    under **Your reaction**, in Jon's type (M22 S1: serif italic with a leading rule), apart
+    from the review's type. Song rows don't show them, and they don't change any song's
+    passed-with-feedback status.
+  - **Where it's read:** `playlist_reviews`' `jonNotes` (already matches `playlist`),
+    `taste_notes` with `playlist`, and the new before-choosing rule. The chat's review stays the
+    chat's words (M22 S4).
+
 ## Decisions
 
 1. **`version` stays 1.** The new fields are optional, and current readers ignore keys they don't
@@ -116,14 +136,19 @@ That's the evidence to record.
 - **Phone model tests** (injected folder and clock):
   - finishing with a progress result writes each song's status and the counts;
   - finishing without one writes the line without them;
-  - after a review, reopening then finishing shows the waiting state again.
+  - after a review, reopening then finishing shows the waiting state again;
+  - saving a playlist reaction writes a note with no title, with `playlist` and `about.playlists`
+    set to the playlist's name and `source: "playlist"`, and it appears under **Your reaction**,
+    not on any song.
 - **MCP tests** (fixture folder):
   - the snapshot has no keeper, but the `finished` line has the song `kept`: the candidate shows
     it `kept`, with `kept: 1` and `outcomeSource: "phone and mac"`;
   - the `finished` line has no `songs`: the candidate falls back to the Mac, with
     `snapshotTakenAt`;
   - a `finished` newer than the latest review is waiting again;
-  - `record_playlist_review` stores the merged counts.
+  - `record_playlist_review` stores the merged counts;
+  - a playlist-level feedback note appears in that playlist's `jonNotes`, and `taste_notes` with
+    `playlist` returns it.
 - **Instruction test:**
   - `instructionHead` contains the taste-statement rule;
   - `record_taste_note`'s description begins with "Call this whenever Jon reacts";
@@ -137,7 +162,9 @@ That's the evidence to record.
   - sees the monitor's review count that keep.
 
   Then, on *Pop with Bite*, he taps **Not done**, then **Done listening**, and the new review
-  counts his keeps.
+  counts his keeps. Under that review he taps **Your reaction** and saves a sentence. It shows
+  under **Your reaction** on the phone, and a new chat finds it with `taste_notes` for *Pop
+  with Bite*.
 
   **Unprompted saves, replacing M23 S1's gate.** After the install, Jon quits and reopens
   ChatGPT, then makes two unprompted taste statements in a new Work chat. Both land word for word
