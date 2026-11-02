@@ -75,7 +75,7 @@ struct LibraryMCPServerTests {
         #expect(description.contains("stated preferences, reactions, and keep/pass reasons verbatim"))
         #expect(description.contains("naming songs or playlists in about"))
         #expect(description.contains("briefly confirm it's saved"))
-        #expect(description.contains("never record the chat's words, playlist requests, small talk"))
+        #expect(description.contains("never record the chat's words or a paraphrase, playlist requests, small talk"))
       }
       if name == "stage_playlist" || name == "record_taste_note" || name == "record_new_music_picks" {
         #expect(annotations["destructiveHint"] as? Bool == false)
