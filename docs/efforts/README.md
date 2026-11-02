@@ -6,4 +6,4 @@ Scoped briefs for off-arc work (defects, spin-offs, standalone fixes) that isn't
 This index lists live briefs only. Finished, retired, and parked briefs are in
 [archive/](archive/) (ADR-0005 D10); `DONE-LOG.md` records what shipped.
 
-No live efforts.
+- [review-keeps-from-phone.md](review-keeps-from-phone.md) — **Dispatched** · The playlist review counts the keeps Jon saw on the phone, not a stale Mac snapshot.

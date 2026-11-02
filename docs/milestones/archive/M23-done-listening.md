@@ -7,7 +7,7 @@ provider's history. Then find out whether ChatGPT can be woken from outside. Rul
 `docs/ios/mcp-access.md` apply. The phone screens follow jon-platform
 `docs/ios/ui-and-platforms.md`. Where this doc and those conflict, stop and flag it.*
 
-Status: Planned
+Status: Done 2026-11-02
 Summary: S1 has the chat record Jon's taste statements word for word as he makes them, S2 adds Done listening on the phone and a recorded chat review of each finished playlist, and S3 probes whether ChatGPT's MCP Events reach `vf-mcp` through the Secure MCP Tunnel, which decides the push milestone after it.
 
 Jon asked for this on 2026-11-02, after M22:
@@ -201,11 +201,32 @@ on Jon's gates.
     - tests for subscribe validation, signing (a Standard Webhooks test vector), and the
       unset-variable path;
     - closeout (ADR-0005 D16) records the run as the gate.
+  - **The run (2026-11-02, Jon and the architect).**
+    - **The route:** on this Mac, a ChatGPT Work chat reaches Vinyl Fever through ChatGPT's
+      built-in Codex, which starts its own `vf-mcp` from `~/.codex/config.toml`, not through
+      the tunnel. The tunnel's helper had no requests during the run. The probe variable went
+      into both: `launchctl setenv` for the tunnel, and the server's `env` in Codex's config.
+    - **The answers:**
+      1. ChatGPT didn't use the event. With `events` advertised, it never called `events/list`.
+      2. `events/subscribe` never reached either helper: no `probe.log` was written.
+      3. Verification and delivery were never reached.
+      4. Yes. Asked to watch `playlist.finished`, ChatGPT made its own monitor in the chat:
+         "Review finished Vinyl Fever playlists", every 15 minutes. It calls
+         `playlist_reviews`, and `record_playlist_review` when one is waiting. Its first try
+         failed because it couldn't identify the chat; "host the monitor in this chat" fixed it.
+      5. Doesn't apply: the monitor is a ChatGPT scheduled task, not a subscription.
+    - **End to end:** Jon tapped Done listening on *Pop with Bite* at 15:57:51. The line reached
+      the Mac at 16:03, the monitor recorded its review at 16:09, and it showed on the phone.
+      The review missed Jon's keeps, because the Mac's library snapshot dated from 2026-10-31.
+      The fix is [review-keeps-from-phone](../../efforts/review-keeps-from-phone.md).
+    - **So:** the review loop needs no push. The monitor's polling delivers it within 15 minutes
+      plus iCloud sync, and Jon sets its interval in ChatGPT, since each check costs tokens.
 
 ## Out of scope — with destinations
 
-- **The push itself** (a Mac-side sender, or the Shortcuts fallback): **M24**, planned from
-  S3's answers.
+- **The push itself** (a Mac-side sender, or the Shortcuts fallback): not needed, per S3's
+  run. ChatGPT's own monitor covers the review loop. Revisit only if polling's delay or token
+  cost becomes a problem.
 - **A Claude channel** reading the same `playlist-reviews` log: M24, as a second reader once
   the log exists.
 - **Importing music conversations from before `vf-mcp`:** after S1. Jon requests a ChatGPT data
