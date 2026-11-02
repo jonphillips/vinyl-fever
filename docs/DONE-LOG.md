@@ -1,5 +1,11 @@
 # Done log
 
+## 2026-11-02 — M23 · S1: Jon's words, saved when he says them (`m23/s1-save-taste-words`)
+
+Updated the `vf-mcp` instructions to capture Jon's taste statements word for word, acknowledge each save, and avoid recording chat-authored text, playlist requests, unrelated small talk, or duplicate wording. Updated `record_taste_note`'s tool description to carry the same rule. Added regression assertions for both strings and extended `scripts/mcp-smoke` to check the built helper serves them.
+
+The focused `LibraryMCPServerTests` suite passed (39 tests), the `vf-mcp` product built, and `scripts/mcp-smoke` passed against the built helper. Jon's new-chat check remains owed: make two unprompted taste statements after install and confirm both are saved word for word.
+
 ## 2026-10-31 — M22 · S4 — Jon's words and the chat's, told apart
 
 - **Branch:** `m22/s4-chat-description`

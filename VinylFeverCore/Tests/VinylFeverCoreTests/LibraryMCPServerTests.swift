@@ -70,6 +70,13 @@ struct LibraryMCPServerTests {
       let annotations = try #require(tool["annotations"] as? [String: Any])
       #expect(annotations["openWorldHint"] as? Bool == false)
       #expect(!((tool["description"] as? String) ?? "").contains("VF Note"))
+      if name == "record_taste_note" {
+        let description = try #require(tool["description"] as? String)
+        #expect(description.contains("stated preferences, reactions, and keep/pass reasons verbatim"))
+        #expect(description.contains("naming songs or playlists in about"))
+        #expect(description.contains("briefly confirm it's saved"))
+        #expect(description.contains("never record the chat's words, playlist requests, small talk"))
+      }
       if name == "stage_playlist" || name == "record_taste_note" || name == "record_new_music_picks" {
         #expect(annotations["destructiveHint"] as? Bool == false)
         #expect(annotations["readOnlyHint"] == nil)
@@ -1158,6 +1165,11 @@ struct LibraryMCPServerTests {
     #expect(!LibraryMCPServer.instructions.contains("VF Note"))
     #expect(LibraryMCPServer.instructions.contains("Stage discoveries with stage_playlist"))
     #expect(LibraryMCPServer.instructions.contains("Jon's request word for word as `request`"))
+    #expect(LibraryMCPServer.instructions.contains("When Jon states a preference, reacts to a song, artist, or playlist, or explains a keep or a pass, record his words word for word with `record_taste_note`."))
+    #expect(LibraryMCPServer.instructions.contains("Name songs or playlists in `about` when he names them."))
+    #expect(LibraryMCPServer.instructions.contains("After recording, briefly say it's saved so he can say 'don't.'"))
+    #expect(LibraryMCPServer.instructions.contains("Don't record the chat's own words or a paraphrase"))
+    #expect(LibraryMCPServer.instructions.contains("the same words twice in one conversation."))
     #expect(LibraryMCPServer.instructions.contains("one-sentence description of the music as `description`"))
     #expect(LibraryMCPServer.instructions.contains("Drop songs recommended before, unless Jon asks for them again."))
     #expect(LibraryMCPServer.instructions.contains("record_new_music_picks"))

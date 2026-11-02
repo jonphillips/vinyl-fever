@@ -119,7 +119,7 @@ Claude Code [channels](https://code.claude.com/docs/en/channels) and
 **Dispatch 3: S3** (the MCP Events probe). Each completing PR advances `NEXT_UP.md`. None waits
 on Jon's gates.
 
-- [ ] **S1 — Jon's words, saved when he says them.**
+- [x] **S1 — Jon's words, saved when he says them.**
   - **Why.** The chat records Jon only when he answers one of its questions or says "record
     this." His reactions, reasons, and preferences otherwise live only in one provider's
     history.

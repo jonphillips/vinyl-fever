@@ -125,15 +125,22 @@ def main():
             "capabilities": {},
             "clientInfo": {"name": "vinyl-fever-install-smoke", "version": "1"},
         })
+        instructions = result.get("instructions", "")
+        required_instruction = "When Jon states a preference, reacts to a song, artist, or playlist"
+        if required_instruction not in instructions or "the same words twice in one conversation" not in instructions:
+            fail("initialize did not serve the M23 taste-recording instructions")
         print(f"initialize: {elapsed:.2f}s — {result.get('serverInfo', {}).get('name', 'server responded')}")
         process.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n")
         process.stdin.flush()
 
         result, elapsed = request("tools/list")
-        tools = {tool.get("name") for tool in result.get("tools", [])}
+        tools = {tool.get("name"): tool for tool in result.get("tools", [])}
         if "library_overview" not in tools:
             fail("tools/list did not include library_overview")
-        print(f"tools/list: {elapsed:.2f}s — {len(tools)} tools; library_overview present")
+        record_description = tools.get("record_taste_note", {}).get("description", "")
+        if "stated preferences, reactions, and keep/pass reasons verbatim" not in record_description:
+            fail("tools/list did not serve the M23 record_taste_note description")
+        print(f"tools/list: {elapsed:.2f}s — {len(tools)} tools; library_overview and M23 taste rule present")
 
         for name, arguments in (("library_overview", {}), ("recent_listening", {"period": "24h"})):
             result, elapsed = request("tools/call", {"name": name, "arguments": arguments})

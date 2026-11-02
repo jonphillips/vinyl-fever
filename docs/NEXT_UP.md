@@ -1,7 +1,7 @@
-# Next Up — M23 · S1 — Jon's words, saved when he says them
+# Next Up — M23 · S2 — Done listening, and the chat's review
 
-**Slices:** M23 · S1
-**Briefs:** [docs/milestones/M23-done-listening.md](milestones/M23-done-listening.md) §S1, with its Shared rules
-**Done when:** per the brief's S1 DoD
+**Slices:** M23 · S2
+**Briefs:** [docs/milestones/M23-done-listening.md](milestones/M23-done-listening.md) §S2, with its Shared rules
+**Done when:** per the brief's S2 DoD
 **Owed:** see [device-passes.md](device-passes.md)
-**Notes:** `vf-mcp` instructions and one tool description only. No app or format change.
+**Notes:** The slice does not wait on earlier device gates.
