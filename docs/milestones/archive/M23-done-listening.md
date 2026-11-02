@@ -138,6 +138,10 @@ on Jon's gates.
     - closeout (ADR-0005 D16) records the gate: after the install, in a new chat, Jon makes
       two unprompted taste statements and checks that both land in `notes-chat-<host>.jsonl`,
       word for word.
+  - **The gate (2026-11-02): failed.** In a new Work chat, Jon reacted to "Red Flags" and "Sister
+    Ray". The chat replied, but saved nothing until Jon asked it to quote the rule. Then it quoted
+    the rule exactly and saved both reactions word for word. The fix and the re-run are in
+    [review-keeps-from-phone](../../efforts/review-keeps-from-phone.md).
 
 - [x] **S2 — Done listening, and the chat's review on the record.**
   - **The log (Decision 1).** `Taste Intelligence/playlist-reviews/<device-or-host>.jsonl`,
