@@ -198,6 +198,12 @@ struct MCPEventsProbeTests {
       $0["method"] as? String == "--probe-fire" && $0["subscriptionID"] as? String == "active" &&
         $0["outcome"] as? String == "delivered" && $0["httpStatus"] as? Int == 200
     })
+    try FileManager.default.removeItem(at: sandbox.subscriptionsFolder.appending(path: "subscriptions.json"))
+    await MCPEventsProbe.fireNewestFinished(dependencies: dependencies)
+    #expect(await sender.requests().count == 1)
+    #expect(try sandbox.logLines().contains {
+      $0["method"] as? String == "--probe-fire" && $0["outcome"] as? String == "no_subscriptions"
+    })
   }
 
   private func subscribeRequest(id: Int) -> String {
