@@ -5,7 +5,8 @@
 days stale, and told Jon he kept nothing from *Pop with Bite* when he had. Record the phone's
 live outcomes in the `finished` line, merge them with the Mac's in `playlist_reviews`, and let
 Jon ask for a fresh review from the phone. Also lead the `vf-mcp` instructions with the
-taste-statement rule, which a Work chat could quote but didn't act on (M23 S1's gate).
+taste-statement rule, which a Work chat could quote but didn't act on (M23 S1's gate), and have
+the chat study recent outcomes before it chooses songs.
 **Related:** [M23](../milestones/archive/M23-done-listening.md) (S1, S2, S3 gate results) · [Efforts index](README.md)
 
 Branch `effort/review-keeps-from-phone`, from a fresh `main`. One PR. No schema change and no
@@ -89,6 +90,13 @@ That's the evidence to record.
   - Update the S1 assertions in `LibraryMCPServerTests` and the strings `scripts/mcp-smoke`
     checks to the new wording.
 
+- **Study outcomes before choosing songs** (`LibraryMCPServer.instructions`).
+  - Today only New Music picks point the chat at outcomes. Playlist building sees a past
+    outcome only when `check_tracks` happens to meet a song recommended before.
+  - Add, right after "For taste questions, start with list_playlists.": "Before choosing songs
+    for a new playlist, read `recommendation_outcomes` and `taste_notes`, and learn from what
+    Jon passed as well as what he kept, and from his notes on both."
+
 ## Decisions
 
 1. **`version` stays 1.** The new fields are optional, and current readers ignore keys they don't
@@ -116,9 +124,11 @@ That's the evidence to record.
     `snapshotTakenAt`;
   - a `finished` newer than the latest review is waiting again;
   - `record_playlist_review` stores the merged counts.
-- **Instruction test:** `instructionHead` contains the taste-statement rule, and
-  `record_taste_note`'s description begins with "Call this whenever Jon reacts". `scripts/mcp-smoke`
-  passes against the built helper.
+- **Instruction test:**
+  - `instructionHead` contains the taste-statement rule;
+  - `record_taste_note`'s description begins with "Call this whenever Jon reacts";
+  - `instructions` contains the "Before choosing songs for a new playlist" rule;
+  - `scripts/mcp-smoke` passes against the built helper.
 - Closeout (ADR-0005 D16) records two gates.
 
   **The keeps.** Jon:
