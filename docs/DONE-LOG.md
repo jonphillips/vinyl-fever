@@ -1,5 +1,18 @@
 # Done log
 
+## 2026-11-02 — M23 · S2 and S3 gates
+
+- **Result:**
+  - **S2 passed:** Jon finished *Pop with Bite* on the phone, the chat reviewed it, and the review
+    showed on the phone. It missed his keeps, because it read a stale Mac snapshot. The fix is
+    effort `review-keeps-from-phone`.
+  - **S3 answered:** ChatGPT's Work chat made its own 15-minute monitor rather than using MCP
+    Events, and it reaches `vf-mcp` through Codex, not the tunnel. No push milestone is
+    needed. The full run is in the M23 brief's S3 section.
+- **Verification:** the architect read `probe.log` (never written), the tunnel log (no requests),
+  and the `playlist-reviews` log (the phone's `finished` at 15:57:51, the chat's `review` at
+  16:09:19).
+
 ## 2026-11-02 — M23 · S3 — MCP Events probe (`m23/s3-mcp-events-probe`)
 
 - **Result:** Added an opt-in MCP Events probe to vf-mcp with event discovery, validated signed subscriptions, persisted subscription state, and a command to fire the latest finished playlist.
