@@ -131,6 +131,8 @@ def main():
             fail("initialize did not serve the M23 taste-recording instructions")
         if "Before choosing songs for a new playlist, read `recommendation_outcomes` and `taste_notes`" not in instructions:
             fail("initialize did not serve the recommendation-learning instructions")
+        if "outcomeSource` is `mac` and `snapshotTakenAt` is older than `finishedAt`" not in instructions:
+            fail("initialize did not serve the stale-snapshot review instructions")
         if "When Jon asks for a review of finished playlists, read `playlist_reviews`" not in instructions:
             fail("initialize did not serve the M23 playlist-review instructions")
         print(f"initialize: {elapsed:.2f}s — {result.get('serverInfo', {}).get('name', 'server responded')}")

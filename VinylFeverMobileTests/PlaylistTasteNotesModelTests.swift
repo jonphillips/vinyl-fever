@@ -10,13 +10,29 @@ struct PlaylistTasteNotesModelTests {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     let tasteFolder = root.appendingPathComponent("Taste Intelligence", isDirectory: true)
     defer { try? FileManager.default.removeItem(at: root) }
+    let seededNotes = [
+      TasteNote(notedAt: Date(timeIntervalSince1970: 100), note: "Chat song note", source: "chat",
+        title: "Song", artist: "Artist", playlist: "Power Pop"),
+      TasteNote(notedAt: Date(timeIntervalSince1970: 101), note: "Chat question", source: "chat",
+        playlist: "Power Pop", kind: "question"),
+    ]
+    let seededData = try seededNotes.reduce(into: Data()) { data, note in
+      data.append(try TasteNotesCodec.encode(note))
+    }
     let model = withDependencies({ dependencies in
       dependencies.date.now = Date(timeIntervalSince1970: 1_800_000_000)
+      dependencies.playlistTasteNotesClient.read = {
+        PlaylistTasteNotesFolderRead(result: TasteNotesCodec.readFiles([seededData]),
+          unreadableFileCount: 0, totalFileCount: 1)
+      }
       dependencies.playlistTasteNotesClient.deviceName = { "Test iPhone" }
       dependencies.playlistTasteNotesClient.save = { note, device in
         try TasteNotesCodec.appendFeedbackNote(note, device: device, folder: tasteFolder)
       }
     }) { PlaylistTasteNotesModel() }
+    await model.refresh()
+    #expect(model.notes.count == 2)
+    #expect(model.notes(forPlaylist: "Power Pop").isEmpty)
     model.playlistNoteButtonTapped("Power Pop")
     model.draft = "The whole sequence feels bright."
 
@@ -29,7 +45,7 @@ struct PlaylistTasteNotesModelTests {
     #expect(note.about?.playlists == ["Power Pop"])
     #expect(note.source == "playlist")
     #expect(model.notes(forPlaylist: "Power Pop").map(\.note) == ["The whole sequence feels bright."])
-    #expect(model.notes(for: playlistSong()).isEmpty)
+    #expect(model.notes(for: playlistSong()).map(\.note) == ["Chat song note"])
   }
 
   @Test @MainActor

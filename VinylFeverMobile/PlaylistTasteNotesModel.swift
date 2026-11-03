@@ -88,7 +88,10 @@ final class PlaylistTasteNotesModel {
   }
 
   func notes(forPlaylist name: String) -> [TasteNote] {
-    notes.filter { $0.playlist?.localizedCaseInsensitiveCompare(name) == .orderedSame }
+    notes.filter {
+      $0.title == nil && $0.resolvedKind != "question" &&
+        $0.playlist?.localizedCaseInsensitiveCompare(name) == .orderedSame
+    }
       .sorted { $0.notedAt > $1.notedAt }
   }
 

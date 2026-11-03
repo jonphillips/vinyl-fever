@@ -134,7 +134,10 @@ struct LibraryMCPServerTests {
     let finished = PlaylistReviewEntry(source: .jon, kind: .finished, host: "Mac", recordedAt: recordedAt,
       playlistID: shelf.id, playlist: "Power Pop", at: recordedAt.addingTimeInterval(1), device: "iPhone",
       heard: 1, kept: 1, passed: 0, unheard: 0,
-      songs: [PlaylistReviewSongOutcome(index: 0, title: "Song", artist: "Artist", status: "kept", keptIn: ["Keepers"])])
+      songs: [
+        PlaylistReviewSongOutcome(index: 0, title: "Song", artist: "Artist", status: "kept", keptIn: ["Keepers"]),
+        PlaylistReviewSongOutcome(index: 0, title: "Song", artist: "Artist", status: "passed"),
+      ])
     try PlaylistReviewsCodec.append(finished, writer: "iPhone", folder: tasteRoot.appending(path: "playlist-reviews"))
 
     let listeningRoot = root.appending(path: "Listening", directoryHint: .isDirectory)
@@ -153,6 +156,7 @@ struct LibraryMCPServerTests {
     #expect(question["recorded"] as? Bool == true)
 
     let pending = try #require(await resultJSON(server, id: 80, name: "playlist_reviews", arguments: "{}") as? [String: Any])
+    #expect(pending["skippedLines"] as? Int == 0)
     let waiting = try #require(pending["awaitingReview"] as? [[String: Any]])
     #expect(waiting.count == 1)
     #expect(waiting[0]["request"] as? String == "Make me a buoyant power pop playlist.")
@@ -161,6 +165,9 @@ struct LibraryMCPServerTests {
     #expect(waiting[0]["kept"] as? Int == 1)
     #expect(waiting[0]["outcomeSource"] as? String == "phone and mac")
     #expect(waiting[0]["snapshotTakenAt"] as? String != nil)
+    let reviewTimestamp = ISO8601DateFormatter()
+    reviewTimestamp.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    #expect(waiting[0]["finishedAt"] as? String == reviewTimestamp.string(from: finished.at))
     let songs = try #require(waiting[0]["songs"] as? [[String: Any]])
     #expect(songs[0]["why"] as? String == "The chorus opens up.")
     #expect(songs[0]["status"] as? String == "kept")
@@ -196,6 +203,7 @@ struct LibraryMCPServerTests {
     let refreshedCandidate = try #require((refreshed["awaitingReview"] as? [[String: Any]])?.first)
     #expect(refreshedCandidate["outcomeSource"] as? String == "mac")
     #expect(refreshedCandidate["snapshotTakenAt"] as? String != nil)
+    #expect(refreshedCandidate["finishedAt"] as? String == reviewTimestamp.string(from: macOnlyFinish.at))
     #expect(refreshedCandidate["kept"] as? Int == 0)
 
     let refused = await rawCall(server, id: 83, name: "record_playlist_review",
@@ -1259,6 +1267,7 @@ struct LibraryMCPServerTests {
     #expect(LibraryMCPServer.instructions.contains("Do not record the chat's own words or a paraphrase"))
     #expect(LibraryMCPServer.instructions.contains("the same words twice in one conversation."))
     #expect(LibraryMCPServer.instructions.contains("When Jon asks for a review of finished playlists, read `playlist_reviews`"))
+    #expect(LibraryMCPServer.instructions.contains("If `outcomeSource` is `mac` and `snapshotTakenAt` is older than `finishedAt`"))
     #expect(LibraryMCPServer.instructions.contains("Never claim an outcome a tool didn't report."))
     #expect(LibraryMCPServer.instructions.contains("one-sentence description of the music as `description`"))
     #expect(LibraryMCPServer.instructions.contains("Drop songs recommended before, unless Jon asks for them again."))
