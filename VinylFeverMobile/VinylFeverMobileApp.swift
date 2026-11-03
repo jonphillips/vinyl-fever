@@ -334,7 +334,8 @@ private struct PlaylistDetailView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             }
-          } else if reviewsModel.finishedEntries[playlist.id] != nil {
+          }
+          if reviewsModel.waitingEntries[playlist.id] != nil {
             VStack(alignment: .leading, spacing: 8) {
               Text("Done · waiting for the chat’s review")
                 .font(.callout)
@@ -344,6 +345,33 @@ private struct PlaylistDetailView: View {
               }
               .buttonStyle(.bordered)
               .disabled(reviewsModel.isSaving)
+            }
+          } else if reviewsModel.finishedEntries[playlist.id] != nil, reviewsModel.reviews[playlist.id] != nil {
+            Button("Not done", systemImage: "arrow.uturn.backward") {
+              Task { await reviewsModel.reopen(playlist) }
+            }
+            .buttonStyle(.bordered)
+            .disabled(reviewsModel.isSaving)
+          }
+          if reviewsModel.finishedEntries[playlist.id] != nil || reviewsModel.reviews[playlist.id] != nil {
+            VStack(alignment: .leading, spacing: 10) {
+              Text("Your reaction").font(.headline)
+              ForEach(notesModel.notes(forPlaylist: title), id: \.playlistReactionID) { note in
+                Text(note.note)
+                  .font(.body)
+                  .fontDesign(.serif)
+                  .italic()
+                  .fixedSize(horizontal: false, vertical: true)
+                  .padding(.leading, 12)
+                  .overlay(alignment: .leading) {
+                    Rectangle().fill(.secondary.opacity(0.45)).frame(width: 2)
+                  }
+              }
+              Button("Your reaction", systemImage: "quote.bubble") {
+                notesModel.playlistNoteButtonTapped(title)
+              }
+              .buttonStyle(.bordered)
+              .disabled(notesModel.isSaving)
             }
           }
           if let error = reviewsModel.errorMessage {
@@ -416,7 +444,7 @@ private struct PlaylistDetailView: View {
     .refreshable { await refresh() }
     .alert("Done listening?", isPresented: $confirmsDoneListening) {
       Button("Cancel", role: .cancel) {}
-      Button("Done listening") { Task { await reviewsModel.finish(playlist) } }
+      Button("Done listening") { Task { await reviewsModel.finish(playlist, progress: progressModel.results[playlist.id]) } }
     } message: {
       Text("This tells the chat your playlist is ready for review.")
     }
@@ -428,6 +456,10 @@ private struct PlaylistDetailView: View {
     .navigationTitle(title)
     .navigationBarTitleDisplayMode(.inline)
   }
+}
+
+private extension TasteNote {
+  var playlistReactionID: String { id ?? "\(notedAt.timeIntervalSince1970)|\(note)" }
 }
 
 private struct PlaylistSongView: View {
@@ -571,7 +603,9 @@ private struct PlaylistNoteSheet: View {
   var body: some View {
     NavigationStack {
       Form {
-        if let song = model.currentSong {
+        if let playlist = model.currentPlaylist {
+          Section { Text(playlist).font(.headline) }
+        } else if let song = model.currentSong {
           Section {
             Text(song.title).font(.headline)
             Text(song.artist).foregroundStyle(.secondary)
@@ -586,7 +620,7 @@ private struct PlaylistNoteSheet: View {
           Section { Text(errorMessage).foregroundStyle(.red) }
         }
       }
-      .navigationTitle("Note on song")
+      .navigationTitle(model.currentPlaylist == nil ? "Note on song" : "Your reaction")
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancel") { model.cancel(); dismiss() }.disabled(model.isSaving)

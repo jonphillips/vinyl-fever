@@ -126,9 +126,13 @@ def main():
             "clientInfo": {"name": "vinyl-fever-install-smoke", "version": "1"},
         })
         instructions = result.get("instructions", "")
-        required_instruction = "When Jon states a preference, reacts to a song, artist, or playlist"
+        required_instruction = "Whenever Jon reacts to a song, artist, or playlist, states a preference"
         if required_instruction not in instructions or "the same words twice in one conversation" not in instructions:
             fail("initialize did not serve the M23 taste-recording instructions")
+        if "Before choosing songs for a new playlist, read `recommendation_outcomes` and `taste_notes`" not in instructions:
+            fail("initialize did not serve the recommendation-learning instructions")
+        if "outcomeSource` is `mac` and `snapshotTakenAt` is older than `finishedAt`" not in instructions:
+            fail("initialize did not serve the stale-snapshot review instructions")
         if "When Jon asks for a review of finished playlists, read `playlist_reviews`" not in instructions:
             fail("initialize did not serve the M23 playlist-review instructions")
         print(f"initialize: {elapsed:.2f}s — {result.get('serverInfo', {}).get('name', 'server responded')}")
@@ -140,7 +144,7 @@ def main():
         if "library_overview" not in tools:
             fail("tools/list did not include library_overview")
         record_description = tools.get("record_taste_note", {}).get("description", "")
-        if "stated preferences, reactions, and keep/pass reasons verbatim" not in record_description:
+        if not record_description.startswith("Call this whenever Jon reacts"):
             fail("tools/list did not serve the M23 record_taste_note description")
         if "playlist_reviews" not in tools or "record_playlist_review" not in tools:
             fail("tools/list did not include both M23 playlist review tools")

@@ -417,7 +417,7 @@ private actor LibraryMCPContext {
     guard PlaylistReviewsCodec.latestJonState(in: reviews.entries)[playlist.id]?.kind == .finished else {
       throw ArgumentError.invalidShape("Jon has not finished this playlist")
     }
-    let progress = try playlistReviewProgress(for: playlist, at: at)
+    let progress = try mergedPlaylistReviewProgress(for: playlist, finished: PlaylistReviewsCodec.latestJonState(in: reviews.entries)[playlist.id], at: at)
     let displayName: String
     if let name = batch.playlist?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
       displayName = name
@@ -440,6 +440,53 @@ private actor LibraryMCPContext {
       throw ArgumentError.invalidShape("playlist progress could not be computed")
     }
     return result
+  }
+
+  private func mergedPlaylistReviewProgress(for playlist: PlaylistShelfPlaylist,
+    finished: PlaylistReviewEntry?, at: Date) throws -> PlaylistProgressResult {
+    let mac = try playlistReviewProgress(for: playlist, at: at)
+    return mergePlaylistReviewProgress(mac, playlist: playlist, finished: finished)
+  }
+
+  private func mergePlaylistReviewProgress(_ mac: PlaylistProgressResult, playlist: PlaylistShelfPlaylist,
+    finished: PlaylistReviewEntry?) -> PlaylistProgressResult {
+    guard let phoneSongs = finished?.songs else { return mac }
+    let phoneByIndex = Dictionary(phoneSongs.map { ($0.index, $0) }, uniquingKeysWith: { first, _ in first })
+    var songs: [String: PlaylistSongProgress] = [:]
+    var counts = PlaylistProgressCounts(kept: 0, passedWithFeedback: 0, passedWithoutFeedback: 0, notHeard: 0)
+    for (index, song) in playlist.songs.enumerated() {
+      let phone = phoneByIndex[index]
+      let current = mac.songs[song.id] ?? .notHeard
+      let status: PlaylistSongProgress
+      if phone?.status == "kept" || isKept(current) {
+        let names: [String]
+        if case let .kept(in: currentNames) = current {
+          names = Array(Set(currentNames + (phone?.keptIn ?? []))).sorted()
+        } else {
+          names = phone?.keptIn ?? []
+        }
+        status = .kept(in: names)
+        counts.kept += 1
+      } else if phone?.status == "passed" || isPassed(current) {
+        status = .passed(withFeedback: false)
+        counts.passedWithoutFeedback += 1
+      } else {
+        status = .notHeard
+        counts.notHeard += 1
+      }
+      songs[song.id] = status
+    }
+    return PlaylistProgressResult(songs: songs, counts: counts)
+  }
+
+  private func isKept(_ status: PlaylistSongProgress) -> Bool {
+    if case .kept = status { return true }
+    return false
+  }
+
+  private func isPassed(_ status: PlaylistSongProgress) -> Bool {
+    if case .passed = status { return true }
+    return false
   }
 
   private func playlistReviewProgresses(for playlists: [PlaylistShelfPlaylist], at: Date) throws -> [String: PlaylistProgressResult] {
@@ -468,14 +515,20 @@ private actor LibraryMCPContext {
     let latestStates = PlaylistReviewsCodec.latestJonState(in: reviews.entries)
     let latestReviews = PlaylistReviewsCodec.latestReviews(in: reviews.entries)
     let notes = try tasteNotes().notes
-    let pendingPlaylists = playlists.filter {
-      latestStates[$0.id]?.kind == .finished && latestReviews[$0.id] == nil
+    let pendingPlaylists = playlists.filter { playlist in
+      guard let finished = latestStates[playlist.id], finished.kind == .finished else { return false }
+      return !(latestReviews[playlist.id].map { $0.at > finished.at } ?? false)
     }
     let progressByPlaylist = try playlistReviewProgresses(for: pendingPlaylists, at: now)
     let pending = try pendingPlaylists.map { playlist -> MCPPlaylistReviewCandidate in
-      guard let progress = progressByPlaylist[playlist.id] else {
+      guard let macProgress = progressByPlaylist[playlist.id] else {
         throw ArgumentError.invalidShape("playlist progress could not be computed")
       }
+      guard let finished = latestStates[playlist.id], finished.kind == .finished else {
+        throw ArgumentError.invalidShape("finished playlist state could not be read")
+      }
+      let progress = mergePlaylistReviewProgress(macProgress, playlist: playlist, finished: finished)
+      let snapshotTakenAt = try playlistData().0.generatedAt
       let name = playlist.batch.playlist ?? "Staged playlist"
       let relatedNotes = notes.filter { note in
         note.resolvedKind != "question" && (
@@ -486,6 +539,7 @@ private actor LibraryMCPContext {
             })
       }.map(\.note)
       return MCPPlaylistReviewCandidate(host: playlist.batch.host, recordedAt: Self.reviewTimestamp(playlist.batch.recordedAt),
+        finishedAt: Self.reviewTimestamp(finished.at),
         playlistID: playlist.id, playlist: name, request: playlist.batch.request,
         description: playlist.batch.description, heard: progress.counts.heard, kept: progress.counts.kept,
         passed: progress.counts.passedWithFeedback + progress.counts.passedWithoutFeedback,
@@ -497,8 +551,11 @@ private actor LibraryMCPContext {
           case .passed: status = "passed"
           case .notHeard, .none: status = "unheard"
           }
-          return MCPPlaylistReviewSong(artist: song.artist, title: song.title, why: song.why, status: status)
-        }, jonNotes: relatedNotes)
+          let keptIn: [String]?
+          if case let .kept(names) = progress.songs[song.id] { keptIn = names } else { keptIn = nil }
+          return MCPPlaylistReviewSong(artist: song.artist, title: song.title, why: song.why, status: status, keptIn: keptIn)
+        }, jonNotes: relatedNotes, outcomeSource: finished.songs == nil ? "mac" : "phone and mac",
+        snapshotTakenAt: Self.reviewTimestamp(snapshotTakenAt))
     }
     let recent = latestReviews.values.sorted { $0.at > $1.at }.prefix(10).map {
       MCPRecordedPlaylistReview(host: $0.host, recordedAt: Self.reviewTimestamp($0.recordedAt),
@@ -822,10 +879,10 @@ public enum LibraryMCPServer {
   public static var defaultTasteRootURL: URL { LibraryMCPContext.defaultTasteRootURL }
 
   public static let instructionHead = """
-  Vinyl Fever exposes Jon's Apple Music library and listening stats. Use these tools for any claim about what Jon owns, has played, or has loved — never guess. Before proposing a final list, call check_tracks on it. For Jon's uploads, use an exact album from uploadedAlbums as the album hint. When Jon asks for the playlist, call stage_playlist with the final list instead of printing it; Jon reviews and creates it in Vinyl Fever. Snapshot age is in library_overview.
+  Vinyl Fever exposes Jon's Apple Music library and listening stats. Whenever Jon reacts to a song, artist, or playlist, states a preference, or explains a keep or a pass, call `record_taste_note` with his words word for word before you reply, then say briefly that it's saved so he can say 'don't'. Do not record the chat's own words or a paraphrase, playlist requests, small talk without a taste statement, or the same words twice in one conversation.
   """
   public static let instructions: String = {
-    instructionHead + "\n\nFor taste questions, start with list_playlists. keepers are the strongest evidence and replay positions are ranks. Report evidence by role, not by counting playlists; don't infer taste from genre. sharedAccountEra play counts aren't Jon's alone. Stage discoveries with stage_playlist, because Vinyl Fever records which songs were new to Jon. Give every discovery its original release year, Jon's request word for word as `request`, including how he said it; never summarize it or substitute your plan. Include the chat's own one-sentence description of the music as `description`. Give every discovery a one-sentence why and up to three songs in `like`. Cite only songs read from a Vinyl Fever tool in this conversation, and name the playlist you read each one from in `from`. Drop songs recommended before, unless Jon asks for them again. When Jon asks which New Music songs he'll keep, read kept_and_passed, choose before he listens, then call record_new_music_picks. `list_playlists` and `check_tracks` return `openQuestions` when there are any. In a taste conversation, ask at most one without waiting to be asked, and only when it bears on what Jon is doing. Record his reply word for word as `note` with the question's id in `answers`. Record 'skip' or 'not now' the same way, with `skipped: true`. When Jon states a preference, reacts to a song, artist, or playlist, or explains a keep or a pass, record his words word for word with `record_taste_note`. Name songs or playlists in `about` when he names them. After recording, briefly say it's saved so he can say 'don't.' Don't record the chat's own words or a paraphrase, a playlist request (it goes in `stage_playlist`'s `request`), small talk without a taste statement, or the same words twice in one conversation. When Jon asks for a review of finished playlists, read `playlist_reviews`, judge each against its request and song whys, show Jon the review, then record it with `record_playlist_review`. Never claim an outcome a tool didn't report. When you stage, show Jon each song's year and why. If the result lists `missingYear` or `unverifiedReferences`, tell Jon which songs. Don't stage the same batch again: a second staging marks every song as recommended before. Record a new question when evidence leaves a meaningful contrast unresolved, even if Jon isn't there; ask only when the answer could change your next recommendation, cite the evidence, and never ask what tools can tell you.\n\n" + PlaylistContract.trackRules
+    instructionHead + "\n\nUse these tools for any claim about what Jon owns, has played, or has loved — never guess. Before proposing a final list, call check_tracks on it. For Jon's uploads, use an exact album from uploadedAlbums as the album hint. When Jon asks for the playlist, call stage_playlist with the final list instead of printing it; Jon reviews and creates it in Vinyl Fever. Snapshot age is in library_overview. For taste questions, start with list_playlists. Before choosing songs for a new playlist, read `recommendation_outcomes` and `taste_notes`, and learn from what Jon passed as well as what he kept, and from his notes on both. keepers are the strongest evidence and replay positions are ranks. Report evidence by role, not by counting playlists; don't infer taste from genre. sharedAccountEra play counts aren't Jon's alone. Stage discoveries with stage_playlist, because Vinyl Fever records which songs were new to Jon. Give every discovery its original release year, Jon's request word for word as `request`, including how he said it; never summarize it or substitute your plan. Include the chat's own one-sentence description of the music as `description`. Give every discovery a one-sentence why and up to three songs in `like`. Cite only songs read from a Vinyl Fever tool in this conversation, and name the playlist you read each one from in `from`. Drop songs recommended before, unless Jon asks for them again. When Jon asks which New Music songs he'll keep, read kept_and_passed, choose before he listens, then call record_new_music_picks. `list_playlists` and `check_tracks` return `openQuestions` when there are any. In a taste conversation, ask at most one without waiting to be asked, and only when it bears on what Jon is doing. Record his reply word for word as `note` with the question's id in `answers`. Record 'skip' or 'not now' the same way, with `skipped: true`. Name songs or playlists in `about` when he names them. When Jon asks for a review of finished playlists, read `playlist_reviews`, judge each against its request and song whys, show Jon the review, then record it with `record_playlist_review`. If `outcomeSource` is `mac` and `snapshotTakenAt` is older than `finishedAt`, say in the review that keeps since the snapshot may be missing. Never claim an outcome a tool didn't report. When you stage, show Jon each song's year and why. If the result lists `missingYear` or `unverifiedReferences`, tell Jon which songs. Don't stage the same batch again: a second staging marks every song as recommended before. Record a new question when evidence leaves a meaningful contrast unresolved, even if Jon isn't there; ask only when the answer could change your next recommendation, cite the evidence, and never ask what tools can tell you.\n\n" + PlaylistContract.trackRules
   }()
 
   public static func newestFinishedPlaylist(tasteRootURL: URL? = nil) async throws -> PlaylistReviewEntry? {
@@ -1111,7 +1168,7 @@ public enum LibraryMCPServer {
           text: payload.text, at: now())
         return .json(MCPPlaylistReviewRecorded(recorded: recorded, source: "chat"))
       },
-      MCPTool(name: "record_taste_note", description: "Record Jon's stated preferences, reactions, and keep/pass reasons verbatim in any taste conversation, naming songs or playlists in about when he names them; briefly confirm it's saved so he can say 'don't', and never record the chat's words or a paraphrase, playlist requests, small talk without a taste statement, or duplicate wording from one conversation. Record taste questions and answers verbatim too; ask only when an answer could change your next recommendation, cite the evidence contrast, put question context in about, and name a known question by id for answers (use skipped: true for a decline).", inputSchema: recordTasteNoteSchema,
+      MCPTool(name: "record_taste_note", description: "Call this whenever Jon reacts to a song, artist, or playlist, states a preference, or explains a keep or a pass: record his words verbatim, naming songs or playlists in about when he names them; briefly confirm it's saved so he can say 'don't', and never record the chat's words or a paraphrase, playlist requests, small talk without a taste statement, or duplicate wording from one conversation. Record taste questions and answers verbatim too; ask only when an answer could change your next recommendation, cite the evidence contrast, put question context in about, and name a known question by id for answers (use skipped: true for a decline).", inputSchema: recordTasteNoteSchema,
         annotations: MCPToolAnnotations(destructive: false, openWorld: false)) { input in
         let payload = try decode(RecordTasteNotePayload.self, from: input, schema: recordTasteNoteSchema)
         guard !payload.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -1279,10 +1336,12 @@ private struct MCPPlaylistReviewSong: Encodable {
   var title: String
   var why: String?
   var status: String
+  var keptIn: [String]?
 }
 private struct MCPPlaylistReviewCandidate: Encodable {
   var host: String
   var recordedAt: String
+  var finishedAt: String
   var playlistID: String
   var playlist: String
   var request: String?
@@ -1293,6 +1352,8 @@ private struct MCPPlaylistReviewCandidate: Encodable {
   var unheard: Int
   var songs: [MCPPlaylistReviewSong]
   var jonNotes: [String]
+  var outcomeSource: String
+  var snapshotTakenAt: String
 }
 private struct MCPRecordedPlaylistReview: Encodable {
   var host: String

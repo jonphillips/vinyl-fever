@@ -11,6 +11,22 @@ public enum PlaylistReviewKind: String, Codable, Sendable {
   case review
 }
 
+public struct PlaylistReviewSongOutcome: Codable, Equatable, Sendable {
+  public var index: Int
+  public var title: String
+  public var artist: String
+  public var status: String
+  public var keptIn: [String]?
+
+  public init(index: Int, title: String, artist: String, status: String, keptIn: [String]? = nil) {
+    self.index = index
+    self.title = title
+    self.artist = artist
+    self.status = status
+    self.keptIn = keptIn
+  }
+}
+
 /// One append-only statement about a staged playlist. `recordedAt` and `host` identify the
 /// recommendation batch; `playlistID` is the shelf's stable identity for that batch.
 public struct PlaylistReviewEntry: Codable, Equatable, Sendable {
@@ -29,11 +45,12 @@ public struct PlaylistReviewEntry: Codable, Equatable, Sendable {
   public var kept: Int?
   public var passed: Int?
   public var unheard: Int?
+  public var songs: [PlaylistReviewSongOutcome]?
 
   public init(source: PlaylistReviewSource, kind: PlaylistReviewKind, host: String,
     recordedAt: Date, playlistID: String, playlist: String, at: Date,
     device: String? = nil, text: String? = nil, heard: Int? = nil, kept: Int? = nil,
-    passed: Int? = nil, unheard: Int? = nil) {
+    passed: Int? = nil, unheard: Int? = nil, songs: [PlaylistReviewSongOutcome]? = nil) {
     format = "vf-playlist-review"
     version = 1
     self.source = source
@@ -49,6 +66,7 @@ public struct PlaylistReviewEntry: Codable, Equatable, Sendable {
     self.kept = kept
     self.passed = passed
     self.unheard = unheard
+    self.songs = songs
   }
 }
 
@@ -165,7 +183,13 @@ public enum PlaylistReviewsCodec {
   private static func isValid(_ entry: PlaylistReviewEntry) -> Bool {
     guard !entry.host.isEmpty, !entry.playlistID.isEmpty, !entry.playlist.isEmpty else { return false }
     switch (entry.source, entry.kind) {
-    case (.jon, .finished), (.jon, .reopened): return entry.device?.isEmpty == false
+    case (.jon, .finished):
+      guard entry.device?.isEmpty == false else { return false }
+      return entry.songs?.allSatisfy { song in
+        song.index >= 0 && !song.title.isEmpty && !song.artist.isEmpty &&
+          ["kept", "passed", "unheard"].contains(song.status)
+      } ?? true
+    case (.jon, .reopened): return entry.device?.isEmpty == false
     case (.chat, .review):
       return entry.text?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false &&
         entry.heard != nil && entry.kept != nil && entry.passed != nil && entry.unheard != nil

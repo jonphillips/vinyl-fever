@@ -74,7 +74,7 @@ struct LibraryMCPServerTests {
       #expect(!((tool["description"] as? String) ?? "").contains("VF Note"))
       if name == "record_taste_note" {
         let description = try #require(tool["description"] as? String)
-        #expect(description.contains("stated preferences, reactions, and keep/pass reasons verbatim"))
+        #expect(description.hasPrefix("Call this whenever Jon reacts"))
         #expect(description.contains("naming songs or playlists in about"))
         #expect(description.contains("briefly confirm it's saved"))
         #expect(description.contains("never record the chat's words or a paraphrase, playlist requests, small talk"))
@@ -132,7 +132,12 @@ struct LibraryMCPServerTests {
     let shelf = PlaylistShelf.make(from: RecommendationLedgerReadResult(batches: [batch], skippedLines: 0),
       now: recordedAt, calendar: .current, timeZone: .current)[0]
     let finished = PlaylistReviewEntry(source: .jon, kind: .finished, host: "Mac", recordedAt: recordedAt,
-      playlistID: shelf.id, playlist: "Power Pop", at: recordedAt.addingTimeInterval(1), device: "iPhone")
+      playlistID: shelf.id, playlist: "Power Pop", at: recordedAt.addingTimeInterval(1), device: "iPhone",
+      heard: 1, kept: 1, passed: 0, unheard: 0,
+      songs: [
+        PlaylistReviewSongOutcome(index: 0, title: "Song", artist: "Artist", status: "kept", keptIn: ["Keepers"]),
+        PlaylistReviewSongOutcome(index: 0, title: "Song", artist: "Artist", status: "passed"),
+      ])
     try PlaylistReviewsCodec.append(finished, writer: "iPhone", folder: tasteRoot.appending(path: "playlist-reviews"))
 
     let listeningRoot = root.appending(path: "Listening", directoryHint: .isDirectory)
@@ -151,18 +156,29 @@ struct LibraryMCPServerTests {
     #expect(question["recorded"] as? Bool == true)
 
     let pending = try #require(await resultJSON(server, id: 80, name: "playlist_reviews", arguments: "{}") as? [String: Any])
+    #expect(pending["skippedLines"] as? Int == 0)
     let waiting = try #require(pending["awaitingReview"] as? [[String: Any]])
     #expect(waiting.count == 1)
     #expect(waiting[0]["request"] as? String == "Make me a buoyant power pop playlist.")
     #expect(waiting[0]["description"] as? String == "Bright guitars and big choruses.")
     #expect(waiting[0]["heard"] as? Int == 1)
-    #expect(waiting[0]["passed"] as? Int == 1)
+    #expect(waiting[0]["kept"] as? Int == 1)
+    #expect(waiting[0]["outcomeSource"] as? String == "phone and mac")
+    #expect(waiting[0]["snapshotTakenAt"] as? String != nil)
+    let reviewTimestamp = ISO8601DateFormatter()
+    reviewTimestamp.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    #expect(waiting[0]["finishedAt"] as? String == reviewTimestamp.string(from: finished.at))
     let songs = try #require(waiting[0]["songs"] as? [[String: Any]])
     #expect(songs[0]["why"] as? String == "The chorus opens up.")
-    #expect(songs[0]["status"] as? String == "passed")
+    #expect(songs[0]["status"] as? String == "kept")
+    #expect(songs[0]["keptIn"] as? [String] == ["Keepers"])
     let jonNotes = try #require(waiting[0]["jonNotes"] as? [String])
     #expect(jonNotes == ["I prefer bright hooks without a harsh edge."])
     #expect(!jonNotes.contains("Which vocal quality feels too soft?"))
+    let playlistNotes = try #require(await resultJSON(server, id: 85, name: "taste_notes",
+      arguments: #"{"playlist":"Power Pop"}"#) as? [String: Any])
+    #expect((playlistNotes["notes"] as? [[String: Any]])?.first?["note"] as? String
+      == "I prefer bright hooks without a harsh edge.")
 
     let timestamp = ISO8601DateFormatter()
     timestamp.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -173,8 +189,22 @@ struct LibraryMCPServerTests {
     #expect(review["source"] as? String == "chat")
     let after = try #require(await resultJSON(server, id: 82, name: "playlist_reviews", arguments: "{}") as? [String: Any])
     #expect((after["awaitingReview"] as? [[String: Any]])?.isEmpty == true)
-    #expect((after["recentReviews"] as? [[String: Any]])?.first?["text"] as? String
+    let recentReview = (after["recentReviews"] as? [[String: Any]])?.first
+    #expect(recentReview?["text"] as? String
       == "The playlist follows the request and keeps its energy.")
+    #expect(recentReview?["kept"] as? Int == 1, "recent review: \(String(describing: recentReview))")
+
+    let macOnlyFinish = PlaylistReviewEntry(source: .jon, kind: .finished, host: "Mac",
+      recordedAt: recordedAt, playlistID: shelf.id, playlist: "Power Pop",
+      at: recordedAt.addingTimeInterval(4), device: "iPhone")
+    try PlaylistReviewsCodec.append(macOnlyFinish, writer: "iPhone",
+      folder: tasteRoot.appending(path: "playlist-reviews"))
+    let refreshed = try #require(await resultJSON(server, id: 84, name: "playlist_reviews", arguments: "{}") as? [String: Any])
+    let refreshedCandidate = try #require((refreshed["awaitingReview"] as? [[String: Any]])?.first)
+    #expect(refreshedCandidate["outcomeSource"] as? String == "mac")
+    #expect(refreshedCandidate["snapshotTakenAt"] as? String != nil)
+    #expect(refreshedCandidate["finishedAt"] as? String == reviewTimestamp.string(from: macOnlyFinish.at))
+    #expect(refreshedCandidate["kept"] as? Int == 0)
 
     let refused = await rawCall(server, id: 83, name: "record_playlist_review",
       arguments: #"{"host":"missing","recordedAt":"\#(identity)","text":"No batch."}"#)
@@ -1217,7 +1247,7 @@ struct LibraryMCPServerTests {
 
   @Test("instructions use the brief's standalone head and only the track rules tail")
   func instructions() {
-    let briefParagraph = "Vinyl Fever exposes Jon's Apple Music library and listening stats. Use these tools for any claim about what Jon owns, has played, or has loved — never guess. Before proposing a final list, call check_tracks on it. For Jon's uploads, use an exact album from uploadedAlbums as the album hint. When Jon asks for the playlist, call stage_playlist with the final list instead of printing it; Jon reviews and creates it in Vinyl Fever. Snapshot age is in library_overview."
+    let briefParagraph = "Vinyl Fever exposes Jon's Apple Music library and listening stats. Whenever Jon reacts to a song, artist, or playlist, states a preference, or explains a keep or a pass, call `record_taste_note` with his words word for word before you reply, then say briefly that it's saved so he can say 'don't'. Do not record the chat's own words or a paraphrase, playlist requests, small talk without a taste statement, or the same words twice in one conversation."
     #expect(LibraryMCPServer.instructions.hasPrefix(briefParagraph))
     #expect(LibraryMCPServer.instructionHead == briefParagraph)
     #expect(LibraryMCPServer.instructionHead.count <= 512)
@@ -1233,12 +1263,11 @@ struct LibraryMCPServerTests {
     #expect(!LibraryMCPServer.instructions.contains("VF Note"))
     #expect(LibraryMCPServer.instructions.contains("Stage discoveries with stage_playlist"))
     #expect(LibraryMCPServer.instructions.contains("Jon's request word for word as `request`"))
-    #expect(LibraryMCPServer.instructions.contains("When Jon states a preference, reacts to a song, artist, or playlist, or explains a keep or a pass, record his words word for word with `record_taste_note`."))
-    #expect(LibraryMCPServer.instructions.contains("Name songs or playlists in `about` when he names them."))
-    #expect(LibraryMCPServer.instructions.contains("After recording, briefly say it's saved so he can say 'don't.'"))
-    #expect(LibraryMCPServer.instructions.contains("Don't record the chat's own words or a paraphrase"))
+    #expect(LibraryMCPServer.instructions.contains("Whenever Jon reacts to a song, artist, or playlist"))
+    #expect(LibraryMCPServer.instructions.contains("Do not record the chat's own words or a paraphrase"))
     #expect(LibraryMCPServer.instructions.contains("the same words twice in one conversation."))
     #expect(LibraryMCPServer.instructions.contains("When Jon asks for a review of finished playlists, read `playlist_reviews`"))
+    #expect(LibraryMCPServer.instructions.contains("If `outcomeSource` is `mac` and `snapshotTakenAt` is older than `finishedAt`"))
     #expect(LibraryMCPServer.instructions.contains("Never claim an outcome a tool didn't report."))
     #expect(LibraryMCPServer.instructions.contains("one-sentence description of the music as `description`"))
     #expect(LibraryMCPServer.instructions.contains("Drop songs recommended before, unless Jon asks for them again."))

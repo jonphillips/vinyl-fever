@@ -1,6 +1,5 @@
-# Next Up — Reviews count the keeps Jon saw
+# Next Up — nothing dispatched
 
-**Slices:** effort `review-keeps-from-phone`
-**Briefs:** [docs/efforts/review-keeps-from-phone.md](efforts/review-keeps-from-phone.md)
-**Done when:** per the brief
+Nothing dispatched.
+
 **Owed:** see [device-passes.md](device-passes.md)
