@@ -25,3 +25,6 @@ narrowest test (`swift test --filter …`) and run the full set once before mark
 The Mac app has no simulator; name any Music.app or on-device risk in the PR as unverified.
 The iPhone companion builds and runs in the iOS Simulator, but Siri, MusicKit playback and
 Up Next, and ShazamKit need a device: name those as owed device gates.
+
+Run `scripts/mcp-smoke` outside Codex's sandbox: `NSFileCoordinator` fails inside it, so
+`recent_listening` reports it can't open a log.

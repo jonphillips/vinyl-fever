@@ -309,17 +309,7 @@ private enum ListeningCoordinatedFiles {
   }
 
   static func append(_ data: Data, to url: URL) throws {
-    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try coordinated(url, writing: true, options: .forMerging) { coordinatedURL in
-      if !FileManager.default.fileExists(atPath: coordinatedURL.path) {
-        FileManager.default.createFile(atPath: coordinatedURL.path, contents: nil)
-      }
-      let handle = try FileHandle(forWritingTo: coordinatedURL)
-      defer { try? handle.close() }
-      try handle.seekToEnd()
-      try handle.write(contentsOf: data)
-      try handle.synchronize()
-    }
+    try JSONLAppend.append(data, to: url)
   }
 
   private static func coordinated<T>(

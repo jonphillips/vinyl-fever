@@ -3,8 +3,8 @@
 Status: Dispatched
 Summary: `vf-mcp` runs under launchd, where a write to an iCloud file that Optimize Storage has evicted fails, so New Music picks and a staged playlist's record were lost on 2026-11-06. One shared append fetches the file first and reports the real error, a week keeps its first picks, and the chat says when something wasn't saved.
 
-Related: [M18](../milestones/M18-taste-outcomes.md) · [M23](../milestones/archive/M23-done-listening.md) ·
-[Efforts index](README.md)
+Related: [M18](../../milestones/M18-taste-outcomes.md) · [M23](../../milestones/archive/M23-done-listening.md) ·
+[Efforts index](../README.md)
 
 Branch `effort/evicted-icloud-writes`, from a fresh `main`. One PR. No schema change and no sync
 change: every log keeps its format and version.
@@ -175,7 +175,7 @@ chat saves its picks with `recorded: true`, and `recommendation_outcomes` lists 
 ## Out of scope
 
 - **The finished-week signal:** the next effort,
-  [finish-new-music-week](finish-new-music-week.md).
+  [finish-new-music-week](../finish-new-music-week.md).
 - **Recovering *The Missing Decade*'s record.** The `.vfplaylist` has the songs but not the request
   or the whys. If Jon wants it tracked, the chat that wrote it can stage it again.
 - **Testing the phone for this failure.** Its appends go through the shared code, so they gain the

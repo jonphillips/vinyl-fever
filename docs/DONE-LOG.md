@@ -1,5 +1,11 @@
 # Done log
 
+## 2026-11-06 — Writes survive iCloud eviction (`effort/evicted-icloud-writes`)
+
+- **Result:** Added a shared JSONL append that downloads existing iCloud files before coordinated writes and reports concise file-specific errors. New Music keeps its first picks for each saved week, and chat guidance now reports unsaved picks and staged playlist records.
+- **Verification:** VinylFeverNotes: 61 tests passed; VinylFeverListening: 51; VinylFeverCore: 317; macOS app: 94; iOS simulator: 60; iOS simulator build passed. `mcp-smoke --self-test`, full `mcp-smoke` outside Codex's sandbox, and `check-handoff --strict` passed.
+- **Owed:** evicted-icloud-writes's device gate, in [device-passes.md](device-passes.md).
+
 ## 2026-11-02 — Reviews count the keeps Jon saw (`effort/review-keeps-from-phone`)
 
 - **Result:** The phone records finish-time outcomes and playlist reactions, and the MCP helper merges phone and Mac evidence for reviews. It foregrounds the taste-note trigger and learns from recent outcomes before playlist selection.

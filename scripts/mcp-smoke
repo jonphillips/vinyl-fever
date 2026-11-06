@@ -131,6 +131,8 @@ def main():
             fail("initialize did not serve the M23 taste-recording instructions")
         if "Before choosing songs for a new playlist, read `recommendation_outcomes` and `taste_notes`" not in instructions:
             fail("initialize did not serve the recommendation-learning instructions")
+        if "When Jon asks which New Music songs he'll keep, read kept_and_passed, choose, then call record_new_music_picks right away" not in instructions:
+            fail("initialize did not serve the New Music pick-recording instructions")
         if "outcomeSource` is `mac` and `snapshotTakenAt` is older than `finishedAt`" not in instructions:
             fail("initialize did not serve the stale-snapshot review instructions")
         if "When Jon asks for a review of finished playlists, read `playlist_reviews`" not in instructions:
@@ -146,6 +148,9 @@ def main():
         record_description = tools.get("record_taste_note", {}).get("description", "")
         if not record_description.startswith("Call this whenever Jon reacts"):
             fail("tools/list did not serve the M23 record_taste_note description")
+        picks_description = tools.get("record_new_music_picks", {}).get("description", "")
+        if not picks_description.startswith("Record the chat's picks from the latest saved New Music week as soon as they're chosen."):
+            fail("tools/list did not serve the New Music pick-recording description")
         if "playlist_reviews" not in tools or "record_playlist_review" not in tools:
             fail("tools/list did not include both M23 playlist review tools")
         review_description = tools["record_playlist_review"].get("description", "")
