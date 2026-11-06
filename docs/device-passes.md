@@ -16,7 +16,9 @@ goes in `DONE-LOG.md`.
 - **M17 S3:** a Music Feedback note in the car, read back word for word, then a playlist note.
   M18's prerequisites carry it too ([M18](milestones/M18-taste-outcomes.md)).
 - **M18 S2:** for two New Music weeks, chat picks before listening, then read `taste_baselines`
-  after 14 days. Staging passed 2026-10-28 ([M18](milestones/M18-taste-outcomes.md)).
+  after 14 days, or once Jon finishes the week in chat
+  ([finish-new-music-week](efforts/finish-new-music-week.md)). Staging passed 2026-10-28
+  ([M18](milestones/M18-taste-outcomes.md)).
 - **M18 S7:** create an inbox playlist, confirm it's pending immediately, then confirm its Music
   ID is adopted after sync and refresh.
 - **M18 S8:** replaces S6's steps 2–4. It needs two open questions. The soft-vocal pair was
