@@ -391,7 +391,13 @@ private actor LibraryMCPContext {
       return PlaylistReviewsReadResult(entries: [], skippedLines: 0, filesRead: 0)
     }
     let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
-      .filter { $0.pathExtension == "jsonl" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
+      .filter { url in
+        guard url.pathExtension == "jsonl" else { return false }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { return false }
+        return !isDirectory.boolValue
+      }
+      .sorted { $0.lastPathComponent < $1.lastPathComponent }
     return PlaylistReviewsCodec.readFiles(try files.compactMap { try Self.readCoordinated($0) })
   }
 
@@ -582,7 +588,13 @@ private actor LibraryMCPContext {
       return empty
     }
     let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
-      .filter { $0.pathExtension == "jsonl" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
+      .filter { url in
+        guard url.pathExtension == "jsonl" else { return false }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { return false }
+        return !isDirectory.boolValue
+      }
+      .sorted { $0.lastPathComponent < $1.lastPathComponent }
     let modified = Dictionary(uniqueKeysWithValues: files.compactMap { url in
       let date = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
       return date.map { (url, $0) }
@@ -608,13 +620,27 @@ private actor LibraryMCPContext {
       }
   }
 
-  func recordNewMusicPicks(_ songs: [(artist: String, title: String)], recordedAt: Date) throws -> Int {
+  func recordNewMusicPicks(_ songs: [(artist: String, title: String)], recordedAt: Date) throws -> MCPRecordPicks {
     guard !songs.isEmpty else { throw ArgumentError.invalidShape("songs must contain at least one pick") }
     let weeks = try newMusicExposure().records.compactMap { record -> NewMusicWeek? in
       if case let .week(week) = record { week } else { nil }
     }
     guard let week = weeks.max(by: { $0.lastModifiedDate < $1.lastModifiedDate }) else {
       throw ArgumentError.invalidShape("there is no saved New Music week")
+    }
+    let folder = tasteRootURL.appending(path: "recommendations", directoryHint: .isDirectory)
+    let ledger: RecommendationLedgerReadResult
+    do {
+      ledger = try recommendationLedger()
+    } catch {
+      let url = RecommendationLedgerCodec.fileURL(host: hostName(), folder: folder)
+      throw ArgumentError.invalidShape(JSONLAppend.errorDescription(step: "download", to: url, underlying: error))
+    }
+    if let firstBatch = ledger.batches
+      .filter({ $0.kind == "new-music-picks" && $0.batchDate == week.lastModifiedDate })
+      .min(by: { $0.recordedAt < $1.recordedAt }) {
+      let count = firstBatch.tracks.filter { $0.picked == true }.count
+      return MCPRecordPicks(recorded: false, recordedAt: firstBatch.recordedAt, songCount: count)
     }
     let (snapshot, _, _, _, identity) = try playlistData()
     let available = Set(week.tracks.map { TasteIntelligence.songKey(artist: $0.artist, title: $0.title, identity: identity) })
@@ -639,10 +665,10 @@ private actor LibraryMCPContext {
       coverage: RecommendationCoverage(listening: (try? listeningLog(now: recordedAt)) != nil,
         notes: (try? tasteNotes()) != nil, snapshotAt: snapshot.generatedAt),
       batchDate: week.lastModifiedDate)
-    try RecommendationLedgerCodec.append(batch, host: hostName(), folder: tasteRootURL.appending(path: "recommendations", directoryHint: .isDirectory))
+    try RecommendationLedgerCodec.append(batch, host: hostName(), folder: folder)
     cachedRecommendationLedger = nil; cachedRecommendationFiles = [:]; cachedRecommendationEvidence = nil
     invalidateLatestRecommendationOutcomes()
-    return songs.count
+    return MCPRecordPicks(recorded: true, recordedAt: recordedAt, songCount: songs.count)
   }
 
   func recommendationEvidenceIndex(identity: ArtistIdentity) throws -> RecommendationLedgerEvidenceIndex {
@@ -862,7 +888,7 @@ private actor LibraryMCPContext {
       return (decoded.request.name, decoded.request.tracks.count, decoded.droppedTracks, true, nil, missingYear, unverified, truncated)
     } catch {
       return (decoded.request.name, decoded.request.tracks.count, decoded.droppedTracks, false,
-        "ledger could not be read or written", [], [], false)
+        error.localizedDescription, [], [], false)
     }
   }
 }
@@ -882,7 +908,7 @@ public enum LibraryMCPServer {
   Vinyl Fever exposes Jon's Apple Music library and listening stats. Whenever Jon reacts to a song, artist, or playlist, states a preference, or explains a keep or a pass, call `record_taste_note` with his words word for word before you reply, then say briefly that it's saved so he can say 'don't'. Do not record the chat's own words or a paraphrase, playlist requests, small talk without a taste statement, or the same words twice in one conversation.
   """
   public static let instructions: String = {
-    instructionHead + "\n\nUse these tools for any claim about what Jon owns, has played, or has loved — never guess. Before proposing a final list, call check_tracks on it. For Jon's uploads, use an exact album from uploadedAlbums as the album hint. When Jon asks for the playlist, call stage_playlist with the final list instead of printing it; Jon reviews and creates it in Vinyl Fever. Snapshot age is in library_overview. For taste questions, start with list_playlists. Before choosing songs for a new playlist, read `recommendation_outcomes` and `taste_notes`, and learn from what Jon passed as well as what he kept, and from his notes on both. keepers are the strongest evidence and replay positions are ranks. Report evidence by role, not by counting playlists; don't infer taste from genre. sharedAccountEra play counts aren't Jon's alone. Stage discoveries with stage_playlist, because Vinyl Fever records which songs were new to Jon. Give every discovery its original release year, Jon's request word for word as `request`, including how he said it; never summarize it or substitute your plan. Include the chat's own one-sentence description of the music as `description`. Give every discovery a one-sentence why and up to three songs in `like`. Cite only songs read from a Vinyl Fever tool in this conversation, and name the playlist you read each one from in `from`. Drop songs recommended before, unless Jon asks for them again. When Jon asks which New Music songs he'll keep, read kept_and_passed, choose before he listens, then call record_new_music_picks. `list_playlists` and `check_tracks` return `openQuestions` when there are any. In a taste conversation, ask at most one without waiting to be asked, and only when it bears on what Jon is doing. Record his reply word for word as `note` with the question's id in `answers`. Record 'skip' or 'not now' the same way, with `skipped: true`. Name songs or playlists in `about` when he names them. When Jon asks for a review of finished playlists, read `playlist_reviews`, judge each against its request and song whys, show Jon the review, then record it with `record_playlist_review`. If `outcomeSource` is `mac` and `snapshotTakenAt` is older than `finishedAt`, say in the review that keeps since the snapshot may be missing. Never claim an outcome a tool didn't report. When you stage, show Jon each song's year and why. If the result lists `missingYear` or `unverifiedReferences`, tell Jon which songs. Don't stage the same batch again: a second staging marks every song as recommended before. Record a new question when evidence leaves a meaningful contrast unresolved, even if Jon isn't there; ask only when the answer could change your next recommendation, cite the evidence, and never ask what tools can tell you.\n\n" + PlaylistContract.trackRules
+    instructionHead + "\n\nUse these tools for any claim about what Jon owns, has played, or has loved — never guess. Before proposing a final list, call check_tracks on it. For Jon's uploads, use an exact album from uploadedAlbums as the album hint. When Jon asks for the playlist, call stage_playlist with the final list instead of printing it; Jon reviews and creates it in Vinyl Fever. Snapshot age is in library_overview. For taste questions, start with list_playlists. Before choosing songs for a new playlist, read `recommendation_outcomes` and `taste_notes`, and learn from what Jon passed as well as what he kept, and from his notes on both. keepers are the strongest evidence and replay positions are ranks. Report evidence by role, not by counting playlists; don't infer taste from genre. sharedAccountEra play counts aren't Jon's alone. Stage discoveries with stage_playlist, because Vinyl Fever records which songs were new to Jon. Give every discovery its original release year, Jon's request word for word as `request`, including how he said it; never summarize it or substitute your plan. Include the chat's own one-sentence description of the music as `description`. Give every discovery a one-sentence why and up to three songs in `like`. Cite only songs read from a Vinyl Fever tool in this conversation, and name the playlist you read each one from in `from`. Drop songs recommended before, unless Jon asks for them again. When Jon asks which New Music songs he'll keep, read kept_and_passed, choose, then call record_new_music_picks right away, even if he has started listening: songs he's already heard are marked and left out of scoring. A week keeps its first picks, so `recorded: false` means they're already saved. If the call fails, show Jon the error as reported and say the picks weren't saved. If stage_playlist returns `ledgerRecorded: false`, tell Jon the playlist is staged but its record wasn't saved, and give him `ledgerReason`. `list_playlists` and `check_tracks` return `openQuestions` when there are any. In a taste conversation, ask at most one without waiting to be asked, and only when it bears on what Jon is doing. Record his reply word for word as `note` with the question's id in `answers`. Record 'skip' or 'not now' the same way, with `skipped: true`. Name songs or playlists in `about` when he names them. When Jon asks for a review of finished playlists, read `playlist_reviews`, judge each against its request and song whys, show Jon the review, then record it with `record_playlist_review`. If `outcomeSource` is `mac` and `snapshotTakenAt` is older than `finishedAt`, say in the review that keeps since the snapshot may be missing. Never claim an outcome a tool didn't report. When you stage, show Jon each song's year and why. If the result lists `missingYear` or `unverifiedReferences`, tell Jon which songs. Don't stage the same batch again: a second staging marks every song as recommended before. Record a new question when evidence leaves a meaningful contrast unresolved, even if Jon isn't there; ask only when the answer could change your next recommendation, cite the evidence, and never ask what tools can tell you.\n\n" + PlaylistContract.trackRules
   }()
 
   public static func newestFinishedPlaylist(tasteRootURL: URL? = nil) async throws -> PlaylistReviewEntry? {
@@ -1275,12 +1301,12 @@ public enum LibraryMCPServer {
 
   private static func recordNewMusicPicksTool(context: LibraryMCPContext, now: @escaping @Sendable () -> Date,
     schema: MCPValue) -> MCPTool {
-    MCPTool(name: "record_new_music_picks", description: "Record the chat's blind picks from the latest saved New Music week before Jon listens.", inputSchema: schema, annotations: MCPToolAnnotations(destructive: false, openWorld: false)) { input in
+    MCPTool(name: "record_new_music_picks", description: "Record the chat's picks from the latest saved New Music week as soon as they're chosen. Record the picked songs from that week.", inputSchema: schema, annotations: MCPToolAnnotations(destructive: false, openWorld: false)) { input in
       let payload = try decode(RecordNewMusicPicksPayload.self, from: input, schema: schema)
       let instant = now()
       let songs = payload.songs.map { (artist: $0.artist, title: $0.title) }
-      let count = try await context.recordNewMusicPicks(songs, recordedAt: instant)
-      return .json(MCPRecordPicks(recorded: true, recordedAt: instant, songCount: count))
+      let result = try await context.recordNewMusicPicks(songs, recordedAt: instant)
+      return .json(result)
     }
   }
 

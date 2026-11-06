@@ -40,6 +40,7 @@ goes in `DONE-LOG.md`.
 - **M23 S1:** failed 2026-11-02: the Work chat saved Jon's two statements only after he asked about the rule. Re-run as part of [review-keeps-from-phone](efforts/archive/review-keeps-from-phone.md)'s gate.
 - **review-keeps-from-phone:** Phone outcomes: on iPhone, keep a staged song, tap Done listening without opening Mac Vinyl Fever, and confirm the monitor review counts the keep. On Pop with Bite, tap Not done then Done listening, confirm the new review counts keeps, save Your reaction, and find it via taste_notes. ([brief](efforts/archive/review-keeps-from-phone.md))
 - **review-keeps-from-phone:** Unprompted taste notes: after install, quit and reopen ChatGPT, then make two unprompted taste statements in a new Work chat. Verify both strings arrive word for word in notes-chat-<host>.jsonl and each reply confirms it is saved. ([brief](efforts/archive/review-keeps-from-phone.md))
+- **evicted-icloud-writes:** After installation, evict the recommendations JSONL file; ask chat to record New Music picks and confirm recorded: true plus the batch in recommendation_outcomes. ([brief](efforts/archive/evicted-icloud-writes.md))
 ## Setup steps held for Jon
 
 - **Before M20 S1's gate:** the one-action "VF Music Feedback" shortcut, picked in Control

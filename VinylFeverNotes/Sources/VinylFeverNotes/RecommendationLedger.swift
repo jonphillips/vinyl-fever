@@ -253,28 +253,14 @@ public enum RecommendationLedgerCodec {
   }
 
   public static func append(_ batch: RecommendationBatch, host: String, folder: URL) throws {
-    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    try JSONLAppend.append(encode(batch), to: fileURL(host: host, folder: folder))
+  }
+
+  public static func fileURL(host: String, folder: URL) -> URL {
     let safeHost = host.unicodeScalars.map {
       CharacterSet.alphanumerics.contains($0) || "-_".unicodeScalars.contains($0) ? String($0) : "_"
     }.joined()
-    let url = folder.appending(path: "\(safeHost.isEmpty ? "Mac" : safeHost).jsonl")
-    let coordinator = NSFileCoordinator(filePresenter: nil)
-    var coordinationError: NSError?
-    var writeError: Error?
-    coordinator.coordinate(writingItemAt: url, options: .forMerging, error: &coordinationError) { target in
-      do {
-        if !FileManager.default.fileExists(atPath: target.path) {
-          _ = FileManager.default.createFile(atPath: target.path, contents: nil)
-        }
-        let handle = try FileHandle(forWritingTo: target)
-        defer { try? handle.close() }
-        try handle.seekToEnd()
-        try handle.write(contentsOf: encode(batch))
-        try handle.synchronize()
-      } catch { writeError = error }
-    }
-    if let coordinationError { throw coordinationError }
-    if let writeError { throw writeError }
+    return folder.appending(path: "\(safeHost.isEmpty ? "Mac" : safeHost).jsonl")
   }
 
   public static func playlistNames(inFolder folder: URL) throws -> Set<String> {

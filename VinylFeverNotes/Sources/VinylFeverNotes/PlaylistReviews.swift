@@ -156,28 +156,11 @@ public enum PlaylistReviewsCodec {
   }
 
   public static func append(_ entry: PlaylistReviewEntry, writer: String, folder: URL) throws {
-    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     let safeWriter = writer.unicodeScalars.map {
       CharacterSet.alphanumerics.contains($0) || "-_".unicodeScalars.contains($0) ? String($0) : "_"
     }.joined()
     let url = folder.appending(path: "\(safeWriter.isEmpty ? "device" : safeWriter).jsonl")
-    let coordinator = NSFileCoordinator(filePresenter: nil)
-    var coordinationError: NSError?
-    var writeError: Error?
-    coordinator.coordinate(writingItemAt: url, options: .forMerging, error: &coordinationError) { target in
-      do {
-        if !FileManager.default.fileExists(atPath: target.path) {
-          _ = FileManager.default.createFile(atPath: target.path, contents: nil)
-        }
-        let handle = try FileHandle(forWritingTo: target)
-        defer { try? handle.close() }
-        try handle.seekToEnd()
-        try handle.write(contentsOf: encode(entry))
-        try handle.synchronize()
-      } catch { writeError = error }
-    }
-    if let coordinationError { throw coordinationError }
-    if let writeError { throw writeError }
+    try JSONLAppend.append(encode(entry), to: url)
   }
 
   private static func isValid(_ entry: PlaylistReviewEntry) -> Bool {

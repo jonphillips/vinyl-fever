@@ -156,7 +156,7 @@ songs into kept and passed, which gives all four outcomes once passes exist.
 - Closeout (ADR-0005 D16) records the gate below.
 
 **The gate.** After the install, in a new chat, on a real New Music week:
-1. The chat saves picks (the [evicted-icloud-writes](evicted-icloud-writes.md) gate can be the same
+1. The chat saves picks (the [evicted-icloud-writes](archive/evicted-icloud-writes.md) gate can be the same
    run).
 2. Jon listens and keeps some songs, one of them on the phone just before finishing.
 3. Jon says "I finished this week's New Music." The chat records it without asking him to confirm.

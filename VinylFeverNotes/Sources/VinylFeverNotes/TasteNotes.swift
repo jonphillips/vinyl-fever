@@ -188,24 +188,7 @@ public enum TasteNotesCodec {
   }
 
   public static func append(_ note: TasteNote, to url: URL) throws {
-    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-    let coordinator = NSFileCoordinator(filePresenter: nil)
-    var coordinationError: NSError?
-    var writeError: Error?
-    coordinator.coordinate(writingItemAt: url, options: .forMerging, error: &coordinationError) { target in
-      do {
-        if !FileManager.default.fileExists(atPath: target.path) {
-          _ = FileManager.default.createFile(atPath: target.path, contents: nil)
-        }
-        let handle = try FileHandle(forWritingTo: target)
-        defer { try? handle.close() }
-        try handle.seekToEnd()
-        try handle.write(contentsOf: encode(note))
-        try handle.synchronize()
-      } catch { writeError = error }
-    }
-    if let coordinationError { throw coordinationError }
-    if let writeError { throw writeError }
+    try JSONLAppend.append(encode(note), to: url)
   }
 
   private static func sanitizedComponent(_ value: String, fallback: String) -> String {
