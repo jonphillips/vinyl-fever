@@ -391,13 +391,7 @@ private actor LibraryMCPContext {
       return PlaylistReviewsReadResult(entries: [], skippedLines: 0, filesRead: 0)
     }
     let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
-      .filter { url in
-        guard url.pathExtension == "jsonl" else { return false }
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { return false }
-        return !isDirectory.boolValue
-      }
-      .sorted { $0.lastPathComponent < $1.lastPathComponent }
+      .filter { $0.pathExtension == "jsonl" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
     return PlaylistReviewsCodec.readFiles(try files.compactMap { try Self.readCoordinated($0) })
   }
 
@@ -588,13 +582,7 @@ private actor LibraryMCPContext {
       return empty
     }
     let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
-      .filter { url in
-        guard url.pathExtension == "jsonl" else { return false }
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { return false }
-        return !isDirectory.boolValue
-      }
-      .sorted { $0.lastPathComponent < $1.lastPathComponent }
+      .filter { $0.pathExtension == "jsonl" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
     let modified = Dictionary(uniqueKeysWithValues: files.compactMap { url in
       let date = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
       return date.map { (url, $0) }
@@ -633,8 +621,11 @@ private actor LibraryMCPContext {
     do {
       ledger = try recommendationLedger()
     } catch {
-      let url = RecommendationLedgerCodec.fileURL(host: hostName(), folder: folder)
-      throw ArgumentError.invalidShape(JSONLAppend.errorDescription(step: "download", to: url, underlying: error))
+      let failure = error as NSError
+      let url = failure.userInfo[NSURLErrorKey] as? URL
+        ?? (failure.userInfo[NSFilePathErrorKey] as? String).map { URL(fileURLWithPath: $0) }
+        ?? folder
+      throw JSONLAppendError(step: "download", url: url, underlying: error)
     }
     if let firstBatch = ledger.batches
       .filter({ $0.kind == "new-music-picks" && $0.batchDate == week.lastModifiedDate })

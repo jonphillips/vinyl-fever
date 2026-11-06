@@ -1,13 +1,6 @@
 import Foundation
 
 public enum JSONLAppend {
-  public static func errorDescription(step: String, to url: URL, underlying: Error) -> String {
-    let components = url.pathComponents.suffix(2).joined(separator: "/")
-    let error = underlying as NSError
-    let cause = (error.userInfo[NSUnderlyingErrorKey] as? NSError) ?? error
-    return "Couldn't save \(components) (\(step)): \(cause.domain) \(cause.code), \(cause.localizedDescription)"
-  }
-
   public static func append(_ data: Data, to url: URL) throws {
     do {
       try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -29,9 +22,8 @@ public enum JSONLAppend {
     var writeError: Error?
     coordinator.coordinate(writingItemAt: url, options: .forMerging, error: &coordinationError) { target in
       do {
-        if !FileManager.default.fileExists(atPath: target.path),
-          !FileManager.default.createFile(atPath: target.path, contents: nil) {
-          throw CocoaError(.fileWriteUnknown)
+        if !FileManager.default.fileExists(atPath: target.path) {
+          try Data().write(to: target, options: .withoutOverwriting)
         }
         let handle = try FileHandle(forWritingTo: target)
         defer { try? handle.close() }
@@ -52,12 +44,21 @@ public enum JSONLAppend {
   }
 }
 
-private struct JSONLAppendError: LocalizedError {
-  var step: String
-  var url: URL
-  var underlying: Error
+public struct JSONLAppendError: LocalizedError {
+  private var step: String
+  private var url: URL
+  private var underlying: Error
 
-  var errorDescription: String? {
-    JSONLAppend.errorDescription(step: step, to: url, underlying: underlying)
+  public init(step: String, url: URL, underlying: Error) {
+    self.step = step
+    self.url = url
+    self.underlying = underlying
+  }
+
+  public var errorDescription: String? {
+    let components = url.pathComponents.suffix(2).joined(separator: "/")
+    let error = underlying as NSError
+    let cause = (error.userInfo[NSUnderlyingErrorKey] as? NSError) ?? error
+    return "Couldn't save \(components) (\(step)): \(cause.domain) \(cause.code), \(cause.localizedDescription)"
   }
 }

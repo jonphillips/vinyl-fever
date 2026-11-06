@@ -40,6 +40,28 @@ struct JSONLAppendTests {
     }
   }
 
+  @Test("create failures retain the underlying POSIX error")
+  func createFailureDescription() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    let folder = root.appending(path: "Taste Intelligence/recommendations", directoryHint: .isDirectory)
+    defer {
+      try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path)
+      try? FileManager.default.removeItem(at: root)
+    }
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    // Read and execute without write access forces file creation to report the OS error.
+    let readOnlyPermissions = 0o555
+    try FileManager.default.setAttributes([.posixPermissions: readOnlyPermissions], ofItemAtPath: folder.path)
+    let url = folder.appending(path: "Jon_MBP.jsonl")
+    do {
+      try JSONLAppend.append(Data("line\n".utf8), to: url)
+      Issue.record("append should fail when its parent folder has no write permission")
+    } catch {
+      #expect(error.localizedDescription.contains("recommendations/Jon_MBP.jsonl (create file)"))
+      #expect(error.localizedDescription.contains("NSPOSIXErrorDomain 13"))
+    }
+  }
+
   @Test("note, recommendation, and review codecs append readable versioned lines")
   func codecsAppend() throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)

@@ -253,14 +253,11 @@ public enum RecommendationLedgerCodec {
   }
 
   public static func append(_ batch: RecommendationBatch, host: String, folder: URL) throws {
-    try JSONLAppend.append(encode(batch), to: fileURL(host: host, folder: folder))
-  }
-
-  public static func fileURL(host: String, folder: URL) -> URL {
     let safeHost = host.unicodeScalars.map {
       CharacterSet.alphanumerics.contains($0) || "-_".unicodeScalars.contains($0) ? String($0) : "_"
     }.joined()
-    return folder.appending(path: "\(safeHost.isEmpty ? "Mac" : safeHost).jsonl")
+    let url = folder.appending(path: "\(safeHost.isEmpty ? "Mac" : safeHost).jsonl")
+    try JSONLAppend.append(encode(batch), to: url)
   }
 
   public static func playlistNames(inFolder folder: URL) throws -> Set<String> {

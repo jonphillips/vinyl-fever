@@ -1238,7 +1238,7 @@ struct LibraryMCPServerTests {
     #expect(staged.tracks.allSatisfy { !$0.familiar && !$0.reasons.contains("recommended") })
   }
 
-  @Test("pick write failures name the ledger and a retry records the batch")
+  @Test("pick write failures preserve earlier history and a retry records the batch")
   func recordNewMusicPicksFailureCanRetry() async throws {
     let root = temporaryDirectory()
     let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
@@ -1258,26 +1258,88 @@ struct LibraryMCPServerTests {
     let ledgerFolder = tasteRoot.appending(path: "recommendations", directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: ledgerFolder, withIntermediateDirectories: true)
     let ledgerFile = ledgerFolder.appending(path: "Test_Mac.jsonl")
-    try Data().write(to: ledgerFile)
-    let cachedModificationDate = try #require(
-      FileManager.default.attributesOfItem(atPath: ledgerFile.path)[.modificationDate] as? Date)
+    let earlier = RecommendationBatch(recordedAt: Date(timeIntervalSince1970: 1_700_000_000), host: "Other Mac",
+      playlist: "Earlier", tracks: [RecommendationTrack(artist: "Older Artist", title: "Older Song",
+        familiar: false, reasons: [], artistKnown: false)])
+    let earlierBytes = try RecommendationLedgerCodec.encode(earlier)
+    try earlierBytes.write(to: ledgerFile)
+    let note = TasteNote(notedAt: Date(timeIntervalSince1970: 1_700_000_000), note: "Earlier taste note", source: "chat")
+    try TasteNotesCodec.appendChatNote(note, host: "Test Mac", folder: tasteRoot)
+    // Read-only file access lets the ledger read succeed while forcing the later append to fail.
+    try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: ledgerFile.path)
     _ = try await resultJSON(server, id: 1, name: "recommendation_outcomes", arguments: "{}")
 
-    try FileManager.default.removeItem(at: ledgerFile)
-    try FileManager.default.createDirectory(at: ledgerFile, withIntermediateDirectories: true)
-    try FileManager.default.setAttributes([.modificationDate: cachedModificationDate], ofItemAtPath: ledgerFile.path)
     let failed = try #require(await call(server, id: 2, name: "record_new_music_picks",
       arguments: #"{"songs":[{"artist":"Week Artist","title":"Week Song"}]}"#))
-    #expect(failed.contains("Test_Mac.jsonl (write)") || failed.contains("Test_Mac.jsonl (download)"))
+    #expect(failed.contains("recommendations/Test_Mac.jsonl (write)"))
     #expect(failed.contains("\"isError\":true"))
     #expect(!failed.contains(tasteRoot.path))
 
-    try FileManager.default.removeItem(at: ledgerFile)
+    try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: ledgerFile.path)
     let retried = try #require(await resultJSON(server, id: 3, name: "record_new_music_picks",
       arguments: #"{"songs":[{"artist":"Week Artist","title":"Week Song"}]}"#) as? [String: Any])
     #expect(retried["recorded"] as? Bool == true)
-    let outcomes = try #require(await call(server, id: 4, name: "recommendation_outcomes", arguments: "{}"))
+    let finalLedger = try Data(contentsOf: ledgerFile)
+    #expect(Data(finalLedger.prefix(earlierBytes.count)) == earlierBytes)
+    #expect(RecommendationLedgerCodec.readFiles([finalLedger]).batches.count == 2)
+    let savedNote = try #require(await call(server, id: 4, name: "taste_notes", arguments: "{}"))
+    #expect(savedNote.contains("Earlier taste note"))
+    let outcomes = try #require(await call(server, id: 5, name: "recommendation_outcomes", arguments: "{}"))
     #expect(outcomes.contains("new-music-picks"))
+  }
+
+  @Test("staging succeeds and reports the ledger write failure")
+  func stagePlaylistReportsLedgerWriteFailure() async throws {
+    let root = temporaryDirectory()
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let ledgerFolder = tasteRoot.appending(path: "recommendations", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: ledgerFolder, withIntermediateDirectories: true)
+    let ledgerFile = ledgerFolder.appending(path: "Test_Mac.jsonl")
+    try Data().write(to: ledgerFile)
+    try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: ledgerFile.path)
+    defer {
+      try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: ledgerFile.path)
+      try? FileManager.default.removeItem(at: root)
+    }
+    let snapshotURL = root.appending(path: "snapshot.json")
+    try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"),
+      listeningRootURL: root.appending(path: "Listening"), tasteRootURL: tasteRoot,
+      hostName: { "Test Mac" }, now: { Date(timeIntervalSince1970: 1_800_000_000) })
+    let staged = try #require(await resultJSON(server, id: 1, name: "stage_playlist",
+      arguments: #"{"name":"Still stages","description":"A song for later.","tracks":[{"artist":"A","title":"B","year":null}]}"#) as? [String: Any])
+    #expect(staged["staged"] as? Bool == true)
+    #expect(staged["ledgerRecorded"] as? Bool == false)
+    #expect((staged["ledgerReason"] as? String)?.contains("recommendations/Test_Mac.jsonl (write)") == true)
+    #expect(!String(describing: staged).contains(tasteRoot.path))
+  }
+
+  @Test("pick ledger read failures identify the file that could not be read")
+  func recordNewMusicPicksReadFailureNamesTheFile() async throws {
+    let root = temporaryDirectory()
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let exposureFolder = tasteRoot.appending(path: "exposure", directoryHint: .isDirectory)
+    let ledgerFolder = tasteRoot.appending(path: "recommendations", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: exposureFolder, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: ledgerFolder, withIntermediateDirectories: true)
+    let week = NewMusicWeek(lastModifiedDate: Date(timeIntervalSince1970: 1_790_000_000),
+      fetchedAt: Date(timeIntervalSince1970: 1_790_000_100), host: "Mac", tracks: [
+        NewMusicTrack(catalogID: "catalog", title: "Week Song", artist: "Week Artist", releaseDate: "2026-01-01"),
+      ])
+    try NewMusicExposureCodec.encode(week).write(to: exposureFolder.appending(path: "week.jsonl"))
+    try FileManager.default.createDirectory(at: ledgerFolder.appending(path: "Other_Mac.jsonl"), withIntermediateDirectories: true)
+    let snapshotURL = root.appending(path: "snapshot.json")
+    try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"),
+      listeningRootURL: root.appending(path: "Listening"), tasteRootURL: tasteRoot,
+      hostName: { "Test Mac" }, now: { Date(timeIntervalSince1970: 1_800_000_000) })
+
+    let failed = try #require(await call(server, id: 1, name: "record_new_music_picks",
+      arguments: #"{"songs":[{"artist":"Week Artist","title":"Week Song"}]}"#))
+    #expect(failed.contains("recommendations/Other_Mac.jsonl (download)"))
+    #expect(!failed.contains("Test_Mac.jsonl"))
+    #expect(!failed.contains("Invalid arguments"))
+    #expect(!failed.contains(tasteRoot.path))
   }
 
   @Test("pick batches mark only songs heard before the pick time")
