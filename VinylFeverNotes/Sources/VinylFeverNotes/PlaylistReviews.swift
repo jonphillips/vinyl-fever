@@ -82,6 +82,15 @@ public struct PlaylistReviewsReadResult: Equatable, Sendable {
 }
 
 public enum PlaylistReviewsCodec {
+  public static let newMusicWeekIDPrefix = "new-music-week|"
+
+  /// Stable identity for a New Music week, rounded to the date precision in its source file.
+  public static func newMusicWeekID(_ lastModifiedDate: Date) -> String {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime]
+    return newMusicWeekIDPrefix + formatter.string(from: lastModifiedDate)
+  }
+
   public static func encode(_ entry: PlaylistReviewEntry) throws -> Data {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]

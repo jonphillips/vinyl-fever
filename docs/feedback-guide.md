@@ -13,6 +13,7 @@ milestones are right, and this guide needs fixing.*
   release year, or Vinyl Fever Keepers. That's the whole keep signal. There's no button to press
   and no note to leave.
 - **Pass by doing nothing.** If you play a song and don't file it within 14 days, it's a pass.
+- **Finish a New Music week in chat.** Say "I finished this week's New Music." The chat records the finish and Vinyl Fever refreshes the library snapshot; unkept songs count as passed once that snapshot is newer than your statement.
   A skip counts as playing it.
 - **Leave a Music Feedback note only when you know why.** One sentence about why a song
   missed, or why it surprised you, is worth more than any rating.

@@ -3,6 +3,12 @@ import Testing
 import VinylFeverNotes
 
 struct PlaylistReviewsTests {
+  @Test("New Music week ids use UTC ISO 8601 whole seconds")
+  func newMusicWeekID() {
+    let date = Date(timeIntervalSince1970: 1_800_000_000.987)
+    #expect(PlaylistReviewsCodec.newMusicWeekID(date) == "new-music-week|2027-01-15T08:00:00Z")
+  }
+
   @Test("each playlist review kind round trips as a versioned line")
   func codecRoundTrip() throws {
     let at = Date(timeIntervalSince1970: 1_800_000_000.125)
