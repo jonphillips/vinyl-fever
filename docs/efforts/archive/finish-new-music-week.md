@@ -3,9 +3,9 @@
 Status: Ready
 Summary: Jon tells the chat he's finished a New Music week, and it's recorded through the existing `playlist-reviews` log. Unkept songs then count as passed as soon as a library snapshot newer than that statement exists, the Mac app refreshes one on request, and the 14-day rule stays for weeks nobody finishes.
 
-Related: [M18](../milestones/M18-taste-outcomes.md) ·
-[M23](../milestones/archive/M23-done-listening.md) ·
-[review-keeps-from-phone](archive/review-keeps-from-phone.md) · [Efforts index](README.md)
+Related: [M18](../../milestones/M18-taste-outcomes.md) ·
+[M23](../../milestones/archive/M23-done-listening.md) ·
+[review-keeps-from-phone](review-keeps-from-phone.md) · [Efforts index](../README.md)
 
 Branch `effort/finish-new-music-week`, from a fresh `main`. One PR. No schema change and no sync
 change. The log stays `vf-playlist-review` `version: 1` (Decision 1).
@@ -156,7 +156,7 @@ songs into kept and passed, which gives all four outcomes once passes exist.
 - Closeout (ADR-0005 D16) records the gate below.
 
 **The gate.** After the install, in a new chat, on a real New Music week:
-1. The chat saves picks (the [evicted-icloud-writes](archive/evicted-icloud-writes.md) gate can be the same
+1. The chat saves picks (the [evicted-icloud-writes](evicted-icloud-writes.md) gate can be the same
    run).
 2. Jon listens and keeps some songs, one of them on the phone just before finishing.
 3. Jon says "I finished this week's New Music." The chat records it without asking him to confirm.

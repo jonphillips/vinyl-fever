@@ -45,8 +45,9 @@ struct AppShellView: View {
       // The test host launches this view too; its launch refresh would read live dependencies
       // in the middle of unrelated tests.
       guard context == .live else { return }
-      await playlistBuilderModel.loadSnapshotAndRefreshIfStale()
-      await playlistRoleBannerModel.snapshotLoaded(playlistBuilderModel.librarySnapshot)
+      await playlistBuilderModel.runSnapshotLifecycle { snapshot in
+        await playlistRoleBannerModel.snapshotLoaded(snapshot)
+      }
     }
     .onChange(of: playlistBuilderModel.librarySnapshot?.generatedAt) { _, _ in
       guard context == .live, let snapshot = playlistBuilderModel.librarySnapshot else { return }

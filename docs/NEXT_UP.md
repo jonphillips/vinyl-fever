@@ -1,6 +1,5 @@
-# Next Up — Say you've finished this week's New Music
+# Next Up — nothing dispatched
 
-**Slices:** effort `finish-new-music-week`
-**Briefs:** [docs/efforts/finish-new-music-week.md](efforts/finish-new-music-week.md)
-**Done when:** per the brief
+Nothing dispatched.
+
 **Owed:** see [device-passes.md](device-passes.md)

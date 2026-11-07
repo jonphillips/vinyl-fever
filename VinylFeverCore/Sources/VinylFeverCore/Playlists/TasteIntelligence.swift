@@ -114,6 +114,7 @@ public struct RecommendationOutcomeBatch: Codable, Equatable, Sendable {
   public var songs: [RecommendationOutcomeSong]; public var notCounted: [String]
   public var counts: [String: Int]; public var pickedCounts: [String: Int]?
   public var notPickedCounts: [String: Int]?; public var notScored: String?
+  public var finishedAt: Date?; public var awaitingSnapshot: Bool?; public var heardBeforePick: [String]?
 }
 public struct RecommendationOutcomes: Codable, Equatable, Sendable {
   public var batches: [RecommendationOutcomeBatch]; public var skippedLines: Int
@@ -128,9 +129,13 @@ public struct NewMusicWeekResult: Codable, Equatable, Sendable {
   public var fetchedAt: Date
   public var counts: [String: Int]
   public var tracks: [ClassifiedNewMusicTrack]
-  public init(lastModifiedDate: Date, fetchedAt: Date, counts: [String: Int], tracks: [ClassifiedNewMusicTrack]) {
+  public var finishedAt: Date?
+  public var awaitingSnapshot: Bool?
+  public init(lastModifiedDate: Date, fetchedAt: Date, counts: [String: Int], tracks: [ClassifiedNewMusicTrack],
+    finishedAt: Date? = nil, awaitingSnapshot: Bool? = nil) {
     self.lastModifiedDate = lastModifiedDate; self.fetchedAt = fetchedAt
     self.counts = counts; self.tracks = tracks
+    self.finishedAt = finishedAt; self.awaitingSnapshot = awaitingSnapshot
   }
 }
 public struct TasteBaselines: Codable, Equatable, Sendable {
@@ -176,11 +181,13 @@ public enum TasteIntelligence {
   }
 
   public static func keptAndPassed(weeks: [NewMusicWeek], snapshot: LibrarySnapshot,
-    roles: PlaylistRoles, log: ListeningLog, now: Date, limit: Int = 8) -> [NewMusicWeekResult] {
+    roles: PlaylistRoles, log: ListeningLog, now: Date, limit: Int = 8,
+    finishedAtByWeek: [Date: Date] = [:]) -> [NewMusicWeekResult] {
     let selectedWeeks = Array(weeks.sorted { $0.lastModifiedDate > $1.lastModifiedDate }.prefix(max(1, limit)))
     let classifier = classificationIndex(snapshot: snapshot, roles: roles, log: log,
       dates: selectedWeeks.map(\.lastModifiedDate))
-    return selectedWeeks.map { classifyWeek($0, snapshot: snapshot, classifier: classifier, now: now) }
+    return selectedWeeks.map { classifyWeek($0, snapshot: snapshot, classifier: classifier, now: now,
+      finishedAt: finishedAtByWeek[$0.lastModifiedDate]) }
   }
 
   private static func classificationIndex(snapshot: LibrarySnapshot, roles: PlaylistRoles,
@@ -220,11 +227,12 @@ public enum TasteIntelligence {
   }
 
   private static func classifyWeek(_ week: NewMusicWeek, snapshot: LibrarySnapshot,
-    classifier: ClassificationIndex, now: Date) -> NewMusicWeekResult {
+    classifier: ClassificationIndex, now: Date, finishedAt: Date? = nil) -> NewMusicWeekResult {
     let heardKeys = classifier.heardKeysByWindow[week.lastModifiedDate] ?? []
     var rows = week.tracks.map { track -> ClassifiedNewMusicTrack in
       let status = classify(artist: track.artist, title: track.title, date: week.lastModifiedDate,
-        snapshot: snapshot, keepKeys: classifier.keepKeys, heardKeys: heardKeys, identity: classifier.identity, now: now)
+        snapshot: snapshot, keepKeys: classifier.keepKeys, heardKeys: heardKeys, identity: classifier.identity,
+        now: now, finishedAt: finishedAt)
       return ClassifiedNewMusicTrack(track: track, classification: status)
     }
     let order: [NewMusicClassification] = [.kept, .passed, .unheard, .pending]
@@ -232,14 +240,17 @@ public enum TasteIntelligence {
     var counts: [String: Int] = [:]
     for row in rows { counts[row.classification.rawValue, default: 0] += 1 }
     return NewMusicWeekResult(lastModifiedDate: week.lastModifiedDate, fetchedAt: week.fetchedAt,
-      counts: counts, tracks: rows)
+      counts: counts, tracks: rows, finishedAt: finishedAt,
+      awaitingSnapshot: finishedAt.map { snapshot.generatedAt < $0 })
   }
 
   private static func classify(artist: String, title: String, date: Date, snapshot: LibrarySnapshot,
-    keepKeys: Set<String>, heardKeys: Set<String>, identity: ArtistIdentity, now: Date) -> NewMusicClassification {
+    keepKeys: Set<String>, heardKeys: Set<String>, identity: ArtistIdentity, now: Date,
+    finishedAt: Date? = nil) -> NewMusicClassification {
     let key = songKey(artist: artist, title: title, identity: identity)
     let windowEnd = date.addingTimeInterval(14 * 86_400)
     guard !keepKeys.contains(key) else { return .kept }
+    if let finishedAt { return snapshot.generatedAt >= finishedAt ? .passed : .pending }
     guard now >= windowEnd && snapshot.generatedAt >= windowEnd else { return .pending }
     return heardKeys.contains(key) ? .passed : .unheard
   }
@@ -253,14 +264,16 @@ public enum TasteIntelligence {
   }
 
   public static func recommendationOutcomes(ledger: RecommendationLedgerReadResult, weeks: [NewMusicWeek],
-    snapshot: LibrarySnapshot, roles: PlaylistRoles, log: ListeningLog, now: Date, limit: Int = 10) -> RecommendationOutcomes {
+    snapshot: LibrarySnapshot, roles: PlaylistRoles, log: ListeningLog, now: Date, limit: Int = 10,
+    finishedAtByWeek: [Date: Date] = [:]) -> RecommendationOutcomes {
     let sorted = Array(ledger.batches.sorted { $0.recordedAt > $1.recordedAt }.prefix(max(1, limit)))
     let needsWeekClassifications = sorted.contains { $0.kind == "new-music-picks" }
     let dates = (needsWeekClassifications ? weeks.map(\.lastModifiedDate) : []) + sorted.map { $0.batchDate ?? $0.recordedAt }
     let classifier = classificationIndex(snapshot: snapshot, roles: roles, log: log, dates: dates)
     var resultByDate: [Date: NewMusicWeekResult] = [:]
     if needsWeekClassifications {
-      for week in weeks { resultByDate[week.lastModifiedDate] = classifyWeek(week, snapshot: snapshot, classifier: classifier, now: now) }
+      for week in weeks { resultByDate[week.lastModifiedDate] = classifyWeek(week, snapshot: snapshot, classifier: classifier, now: now,
+        finishedAt: finishedAtByWeek[week.lastModifiedDate]) }
     }
     let identity = classifier.identity
     var batches: [RecommendationOutcomeBatch] = []
@@ -270,6 +283,14 @@ public enum TasteIntelligence {
       let familiar = batch.tracks.filter(\.familiar).map { "\($0.artist) — \($0.title)" }
       let scored = batch.coverage?.listening != false
       var rows: [RecommendationOutcomeSong] = []
+      let heardBeforePick: [String]?
+      if batch.kind == "new-music-picks" {
+        let heard = batch.tracks.filter { !$0.familiar && $0.heardBeforePick == true }
+          .map { "\($0.artist) — \($0.title)" }
+        heardBeforePick = heard.isEmpty ? nil : heard
+      } else {
+        heardBeforePick = nil
+      }
       for track in batch.tracks where !track.familiar && track.heardBeforePick != true {
         let status: NewMusicClassification?
         if batch.kind == "new-music-picks", let week = resultByDate[date] {
@@ -297,7 +318,10 @@ public enum TasteIntelligence {
         playlist: batch.playlist, songs: rows, notCounted: familiar, counts: counts,
         pickedCounts: batch.kind == "new-music-picks" ? pickedCounts : nil,
         notPickedCounts: batch.kind == "new-music-picks" ? notPickedCounts : nil,
-        notScored: scored ? nil : "no listening evidence at staging")
+        notScored: scored ? nil : "no listening evidence at staging",
+        finishedAt: batch.kind == "new-music-picks" ? finishedAtByWeek[date] : nil,
+        awaitingSnapshot: batch.kind == "new-music-picks" ? finishedAtByWeek[date].map { snapshot.generatedAt < $0 } : nil,
+        heardBeforePick: heardBeforePick)
       )
     }
     return RecommendationOutcomes(batches: Array(batches), skippedLines: ledger.skippedLines,

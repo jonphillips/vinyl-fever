@@ -6,6 +6,29 @@ import VinylFeverNotes
 
 struct PlaylistReviewsModelTests {
   @Test @MainActor
+  func newMusicFinishIsNotAppliedToAPlaylistShelfEntry() async {
+    let weekDate = Date(timeIntervalSince1970: 1_800_000_000)
+    let weekFinish = PlaylistReviewEntry(source: .jon, kind: .finished, host: "Mac",
+      recordedAt: weekDate, playlistID: PlaylistReviewsCodec.newMusicWeekID(weekDate),
+      playlist: "New Music, 2027-01-15", at: weekDate.addingTimeInterval(86_400), device: "chat")
+    let shelfPlaylist = PlaylistShelf.make(from: RecommendationLedgerReadResult(batches: [
+      RecommendationBatch(recordedAt: weekDate, host: "Mac", playlist: "Power Pop", tracks: [])
+    ], skippedLines: 0), now: weekDate, calendar: .current, timeZone: .current)[0]
+    let model = withDependencies({ dependencies in
+      dependencies.playlistReviewsClient.read = {
+        PlaylistReviewsReadResult(entries: [weekFinish], skippedLines: 0, filesRead: 1)
+      }
+    }) { PlaylistReviewsModel() }
+
+    await model.refresh()
+
+    #expect(shelfPlaylist.id != weekFinish.playlistID)
+    #expect(model.finishedEntries[weekFinish.playlistID]?.kind == .finished)
+    #expect(model.finishedEntries[shelfPlaylist.id] == nil)
+    #expect(model.waitingEntries[shelfPlaylist.id] == nil)
+  }
+
+  @Test @MainActor
   func finishAndReopenAppendJonLinesAndLatestStateWins() async {
     let playlist = makePlaylist()
     let writes = ReviewWriteCounter()

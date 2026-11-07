@@ -1,5 +1,11 @@
 # Done log
 
+## 2026-11-06 — Finished New Music weeks from chat (`effort/finish-new-music-week`)
+
+- **Result:** The chat can record or undo a New Music week finish. Unkept songs count as passed once a later library snapshot exists; on-request refresh reaches the Mac app and retries after five minutes.
+- **Verification:** 63 VinylFeverNotes, 51 VinylFeverListening, 326 VinylFeverCore, 96 Mac app, and 61 iOS companion tests passed; iOS build, vf-mcp build, and mcp-smoke passed.
+- **Owed:** finish-new-music-week's device gate, in [device-passes.md](device-passes.md).
+
 ## 2026-11-06 — Writes survive iCloud eviction (`effort/evicted-icloud-writes`)
 
 - **Result:** Added a shared JSONL append that downloads existing iCloud files before coordinated writes and reports concise file-specific errors. New Music keeps its first picks for each saved week, and chat guidance now reports unsaved picks and staged playlist records.

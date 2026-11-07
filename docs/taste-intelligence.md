@@ -157,7 +157,7 @@ Music.app ──snapshot v2 (laptop)──▶ tracks + every playlist's members 
     this to my 2026 Selections"), works on a first hearing, and the curation log already sees
     the add. No shortcut.
   - **Pass is inferred.** Jon hears New Music in full, so a song he heard (listening log) and
-    didn't add (curation log) within two weeks is a pass. No shortcut.
+    didn't add (curation log) within two weeks is a pass. No shortcut. If Jon explicitly says he finished a New Music week, unkept songs count as passed as soon as a library snapshot newer than that statement exists; the 14-day rule remains for unfinished weeks.
   - **VF Note** (renamed **Music Feedback** on 2026-10-25, because Siri heard "VF Note" as a
     request to the Notes app; see [the feedback guide](feedback-guide.md)) captures the reason,
     the best feedback Jon gives and the one that disappears

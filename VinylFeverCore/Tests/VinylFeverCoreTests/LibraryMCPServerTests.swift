@@ -57,6 +57,7 @@ struct LibraryMCPServerTests {
       "taste_baselines": [],
       "recommendation_outcomes": ["batches"],
       "record_new_music_picks": ["songs"],
+      "finish_new_music_week": ["week", "undo"],
       "taste_notes": ["artist", "title", "playlist", "period", "limit"],
       "playlist_reviews": [],
       "record_playlist_review": ["host", "recordedAt", "text"],
@@ -83,7 +84,7 @@ struct LibraryMCPServerTests {
         #expect((tool["description"] as? String)?.hasPrefix(
           "Record the chat's picks from the latest saved New Music week as soon as they're chosen.") == true)
       }
-      if name == "stage_playlist" || name == "record_taste_note" || name == "record_new_music_picks" || name == "record_playlist_review" {
+      if name == "stage_playlist" || name == "record_taste_note" || name == "record_new_music_picks" || name == "record_playlist_review" || name == "finish_new_music_week" {
         #expect(annotations["destructiveHint"] as? Bool == false)
         #expect(annotations["readOnlyHint"] == nil)
       } else {
@@ -1382,6 +1383,159 @@ struct LibraryMCPServerTests {
     #expect(heardBeforePick["Never Played"] == false)
   }
 
+  @Test("finishing a New Music week records once, requests refresh while stale, and can be undone")
+  func finishNewMusicWeek() async throws {
+    let root = temporaryDirectory()
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let exposureFolder = tasteRoot.appending(path: "exposure", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: exposureFolder, withIntermediateDirectories: true)
+    let weekDate = Date(timeIntervalSince1970: 1_800_000_000)
+    let finishedAt = weekDate.addingTimeInterval(86_400)
+    let week = NewMusicWeek(lastModifiedDate: weekDate, fetchedAt: weekDate, host: "Mac", tracks: [
+      NewMusicTrack(catalogID: "song", title: "Song", artist: "Artist"),
+    ])
+    try NewMusicExposureCodec.encode(week).write(to: exposureFolder.appending(path: "week.jsonl"))
+    let snapshot = LibrarySnapshot(generatedAt: finishedAt.addingTimeInterval(-1), tracks: [])
+    let snapshotURL = root.appending(path: "snapshot.json")
+    try LibrarySnapshotCodec.encode(snapshot).write(to: snapshotURL)
+    let refreshCounter = RefreshRequestCounter()
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"),
+      tasteRootURL: tasteRoot, hostName: { "Chat Host" }, now: { finishedAt },
+      requestSnapshotRefresh: { refreshCounter.increment() })
+    let arguments = "{\"week\":\"\(weekDate.ISO8601Format())\"}"
+    let first = try #require(await resultJSON(server, id: 1, name: "finish_new_music_week", arguments: arguments) as? [String: Any])
+    #expect(first["recorded"] as? Bool == true)
+    #expect(first["awaitingSnapshot"] as? Bool == true)
+    #expect(first["finishedAt"] as? String == finishedAt.ISO8601Format())
+    let repeatResult = try #require(await resultJSON(server, id: 2, name: "finish_new_music_week", arguments: arguments) as? [String: Any])
+    #expect(repeatResult["recorded"] as? Bool == false)
+    #expect(repeatResult["finishedAt"] as? String == first["finishedAt"] as? String)
+    #expect(refreshCounter.value == 2)
+    #expect(try await LibraryMCPServer.newestFinishedPlaylist(tasteRootURL: tasteRoot) == nil)
+    let hiddenFromPlaylistReviews = try #require(await resultJSON(server, id: 9, name: "playlist_reviews", arguments: "{}") as? [String: Any])
+    #expect((hiddenFromPlaylistReviews["awaitingReview"] as? [[String: Any]])?.isEmpty == true)
+    let refusedPlaylistReview = await call(server, id: 10, name: "record_playlist_review",
+      arguments: "{\"host\":\"Mac\",\"recordedAt\":\"\(weekDate.ISO8601Format())\",\"text\":\"Review\"}")
+    #expect(refusedPlaylistReview?.contains("recommendation batch does not exist") == true)
+
+    try LibrarySnapshotCodec.encode(LibrarySnapshot(generatedAt: finishedAt.addingTimeInterval(1), tracks: []))
+      .write(to: snapshotURL, options: .atomic)
+    let classified = try #require(await resultJSON(server, id: 11, name: "kept_and_passed", arguments: "{}") as? [String: Any])
+    let classifiedWeeks = try #require(classified["weeks"] as? [[String: Any]])
+    #expect(classifiedWeeks.first?["finishedAt"] as? String == first["finishedAt"] as? String)
+    #expect(classifiedWeeks.first?["awaitingSnapshot"] as? Bool == false)
+    #expect(classifiedWeeks.first?["counts"] as? [String: Int] == ["passed": 1])
+    let freshRepeat = try #require(await resultJSON(server, id: 12, name: "finish_new_music_week", arguments: arguments) as? [String: Any])
+    #expect(freshRepeat["recorded"] as? Bool == false)
+    #expect(freshRepeat["awaitingSnapshot"] as? Bool == false)
+    #expect(refreshCounter.value == 2)
+
+    let entries = PlaylistReviewsCodec.readFiles(try FileManager.default.contentsOfDirectory(at: tasteRoot.appending(path: "playlist-reviews"), includingPropertiesForKeys: nil).map { try Data(contentsOf: $0) }).entries
+    #expect(entries.count == 1)
+    #expect(entries.first?.playlistID == PlaylistReviewsCodec.newMusicWeekID(weekDate))
+    #expect(entries.first?.device == "chat")
+    #expect(entries.first?.at == finishedAt)
+    let undone = try #require(await resultJSON(server, id: 3, name: "finish_new_music_week",
+      arguments: "{\"week\":\"\(weekDate.ISO8601Format())\",\"undo\":true}") as? [String: Any])
+    #expect(undone["recorded"] as? Bool == true)
+    #expect(undone["finishedAt"] == nil)
+    #expect(undone["awaitingSnapshot"] as? Bool == false)
+    #expect(refreshCounter.value == 2)
+    #expect(PlaylistReviewsCodec.readFiles([try Data(contentsOf: tasteRoot.appending(path: "playlist-reviews/chat-Chat_Host.jsonl"))]).entries.last?.kind == .reopened)
+    let reopened = try #require(await resultJSON(server, id: 13, name: "kept_and_passed", arguments: "{}") as? [String: Any])
+    let reopenedWeek = try #require((reopened["weeks"] as? [[String: Any]])?.first)
+    #expect(reopenedWeek["finishedAt"] == nil)
+    #expect(reopenedWeek["awaitingSnapshot"] == nil)
+    #expect(reopenedWeek["counts"] as? [String: Int] == ["pending": 1])
+    let unknown = await call(server, id: 4, name: "finish_new_music_week", arguments: #"{"week":"2020-01-01T00:00:00Z"}"#)
+    #expect(unknown?.contains("unknown New Music week 2020-01-01T00:00:00Z") == true)
+  }
+
+  @Test("undoing an unfinished New Music week appends nothing")
+  func undoOfUnfinishedWeekAppendsNothing() async throws {
+    let root = temporaryDirectory()
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let exposureFolder = tasteRoot.appending(path: "exposure", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: exposureFolder, withIntermediateDirectories: true)
+    let weekDate = Date(timeIntervalSince1970: 1_800_000_000)
+    let week = NewMusicWeek(lastModifiedDate: weekDate, fetchedAt: weekDate, host: "Mac", tracks: [
+      NewMusicTrack(catalogID: "song", title: "Song", artist: "Artist"),
+    ])
+    try NewMusicExposureCodec.encode(week).write(to: exposureFolder.appending(path: "week.jsonl"))
+    let (server, _) = try makeServer(snapshot: s0Fixture(), tasteRootURL: tasteRoot, now: { weekDate })
+
+    let response = try #require(await resultJSON(server, id: 1, name: "finish_new_music_week",
+      arguments: "{\"week\":\"\(weekDate.ISO8601Format())\",\"undo\":true}") as? [String: Any])
+    #expect(response["recorded"] as? Bool == false)
+    #expect(response["finishedAt"] == nil)
+    #expect(!FileManager.default.fileExists(atPath: tasteRoot.appending(path: "playlist-reviews").path))
+  }
+
+  @Test("finishing a New Music week requires a readable snapshot before writing")
+  func finishWithoutSnapshotWritesNothing() async throws {
+    let root = temporaryDirectory()
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let exposureFolder = tasteRoot.appending(path: "exposure", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: exposureFolder, withIntermediateDirectories: true)
+    let weekDate = Date(timeIntervalSince1970: 1_800_000_000)
+    let week = NewMusicWeek(lastModifiedDate: weekDate, fetchedAt: weekDate, host: "Mac", tracks: [
+      NewMusicTrack(catalogID: "song", title: "Song", artist: "Artist"),
+    ])
+    try NewMusicExposureCodec.encode(week).write(to: exposureFolder.appending(path: "week.jsonl"))
+    let server = LibraryMCPServer.make(snapshotURL: root.appending(path: "missing-snapshot.json"),
+      inboxRoot: root.appending(path: "inbox"), tasteRootURL: tasteRoot, hostName: { "Chat Host" }, now: { weekDate })
+
+    let failure = await call(server, id: 1, name: "finish_new_music_week",
+      arguments: "{\"week\":\"\(weekDate.ISO8601Format())\"}")
+    #expect(failure?.contains("Open Vinyl Fever to build the library snapshot.") == true)
+    #expect(!FileManager.default.fileExists(atPath: tasteRoot.appending(path: "playlist-reviews").path))
+  }
+
+  @Test("finishing a New Music week preserves other taste records")
+  func finishLeavesOtherRecordsUnchanged() async throws {
+    let root = temporaryDirectory()
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let weekDate = now.addingTimeInterval(-86_400)
+    let exposureFolder = tasteRoot.appending(path: "exposure", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: exposureFolder, withIntermediateDirectories: true)
+    let week = NewMusicWeek(lastModifiedDate: weekDate, fetchedAt: weekDate, host: "Mac", tracks: [
+      NewMusicTrack(catalogID: "song", title: "Song", artist: "Artist"),
+    ])
+    try NewMusicExposureCodec.encode(week).write(to: exposureFolder.appending(path: "week.jsonl"))
+
+    let recommendationsFolder = tasteRoot.appending(path: "recommendations", directoryHint: .isDirectory)
+    let batch = RecommendationBatch(recordedAt: now, host: "Fixture", playlist: "Other batch", tracks: [
+      RecommendationTrack(artist: "Other Artist", title: "Other Song", familiar: false, reasons: [], artistKnown: false),
+    ])
+    try RecommendationLedgerCodec.append(batch, host: "Fixture", folder: recommendationsFolder)
+    let notesFolder = tasteRoot.appending(path: "taste-notes", directoryHint: .isDirectory)
+    let note = TasteNote(notedAt: now, note: "Keep this note", source: "chat")
+    try TasteNotesCodec.appendChatNote(note, host: "Fixture", folder: notesFolder)
+    let reviewFolder = tasteRoot.appending(path: "playlist-reviews", directoryHint: .isDirectory)
+    let otherFinish = PlaylistReviewEntry(source: .jon, kind: .finished, host: "Fixture", recordedAt: now,
+      playlistID: "other-finished-playlist", playlist: "Finished playlist", at: now, device: "iPhone")
+    try PlaylistReviewsCodec.append(otherFinish, writer: "iPhone", folder: reviewFolder)
+    let review = PlaylistReviewEntry(source: .chat, kind: .review, host: "Fixture", recordedAt: now,
+      playlistID: "other-playlist", playlist: "Other playlist", at: now, text: "Keep this review",
+      heard: 1, kept: 1, passed: 0, unheard: 0)
+    try PlaylistReviewsCodec.append(review, writer: "iPhone", folder: reviewFolder)
+    let (server, _) = try makeServer(snapshot: s0Fixture(), tasteRootURL: tasteRoot, now: { now })
+
+    let result = try #require(await resultJSON(server, id: 1, name: "finish_new_music_week",
+      arguments: "{\"week\":\"\(weekDate.ISO8601Format())\"}") as? [String: Any])
+    #expect(result["recorded"] as? Bool == true)
+    let recommendationFiles = try FileManager.default.contentsOfDirectory(at: recommendationsFolder, includingPropertiesForKeys: nil).map { try Data(contentsOf: $0) }
+    let noteFiles = try FileManager.default.contentsOfDirectory(at: notesFolder, includingPropertiesForKeys: nil).map { try Data(contentsOf: $0) }
+    #expect(RecommendationLedgerCodec.readFiles(recommendationFiles).batches == [batch])
+    #expect(TasteNotesCodec.readFiles(noteFiles).notes == [note])
+    let reviewFiles = try FileManager.default.contentsOfDirectory(at: reviewFolder, includingPropertiesForKeys: nil).map { try Data(contentsOf: $0) }
+    let reviews = PlaylistReviewsCodec.readFiles(reviewFiles).entries
+    #expect(reviews.contains(otherFinish))
+    #expect(reviews.contains(review))
+    #expect(reviews.count == 3)
+  }
+
   @Test("recommendation_outcomes returns golden JSON without library identifiers or paths")
   func recommendationOutcomesGoldenJSON() async throws {
     let root = temporaryDirectory()
@@ -1428,6 +1582,8 @@ struct LibraryMCPServerTests {
     #expect(LibraryMCPServer.instructions.contains("one-sentence description of the music as `description`"))
     #expect(LibraryMCPServer.instructions.contains("Drop songs recommended before, unless Jon asks for them again."))
     #expect(LibraryMCPServer.instructions.contains("When Jon asks which New Music songs he'll keep, read kept_and_passed, choose, then call record_new_music_picks right away, even if he has started listening"))
+    #expect(LibraryMCPServer.instructions.contains("When Jon says he's finished a New Music week, read kept_and_passed for its lastModifiedDate and call finish_new_music_week without asking him to confirm."))
+    #expect(LibraryMCPServer.instructions.contains("Once it's false, review the picks"))
     #expect(LibraryMCPServer.instructions.contains("A week keeps its first picks, so `recorded: false` means they're already saved."))
     #expect(LibraryMCPServer.instructions.contains("If the call fails, show Jon the error as reported and say the picks weren't saved."))
     #expect(LibraryMCPServer.instructions.contains("give him `ledgerReason`"))
@@ -1510,6 +1666,13 @@ struct LibraryMCPServerTests {
     try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     return directory
   }
+}
+
+private final class RefreshRequestCounter: @unchecked Sendable {
+  private let lock = NSLock()
+  private var count = 0
+  var value: Int { lock.lock(); defer { lock.unlock() }; return count }
+  func increment() { lock.lock(); defer { lock.unlock() }; count += 1 }
 }
 
 private final class TestClock: @unchecked Sendable {

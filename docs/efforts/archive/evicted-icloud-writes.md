@@ -175,7 +175,7 @@ chat saves its picks with `recorded: true`, and `recommendation_outcomes` lists 
 ## Out of scope
 
 - **The finished-week signal:** the next effort,
-  [finish-new-music-week](../finish-new-music-week.md).
+  [finish-new-music-week](finish-new-music-week.md).
 - **Recovering *The Missing Decade*'s record.** The `.vfplaylist` has the songs but not the request
   or the whys. If Jon wants it tracked, the chat that wrote it can stage it again.
 - **Testing the phone for this failure.** Its appends go through the shared code, so they gain the

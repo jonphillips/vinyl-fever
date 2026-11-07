@@ -1,4 +1,5 @@
 import Dependencies
+import Clocks
 import Foundation
 import LLMHandoffKit
 import Observation
@@ -898,6 +899,92 @@ struct PlaylistBuilderModelTests {
     #expect(await reads.count == 1)
     #expect(model.librarySnapshot == refreshed)
     #expect(model.librarySnapshotError == nil)
+  }
+
+  @Test("a chat refresh runs now, retries after five minutes, and replaces the pending retry")
+  func requestedSnapshotRefreshAndRetry() async throws {
+    let database = try testDatabase()
+    let now = Date(timeIntervalSince1970: 2_000_000_000)
+    let snapshot = LibrarySnapshot(generatedAt: now, tracks: [])
+    let counter = SearchCallCounter()
+    let clock = TestClock()
+    let requests = AsyncStream<Void>.makeStream()
+    let reads = AsyncStream<Void>.makeStream()
+    let loaded = AsyncStream<Void>.makeStream()
+    let model = withDependencies {
+      $0.defaultDatabase = database
+      $0.continuousClock = clock
+      $0.date.now = now
+      $0.musicAppClient.automationPermission = { .authorized }
+      $0.musicAppClient.readLibrarySnapshot = {
+        await counter.record(); reads.continuation.yield(()); return snapshot
+      }
+      $0.librarySnapshotStore = LibrarySnapshotStore(
+        read: { snapshot }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { now })
+      $0.snapshotRefreshRequestClient.requests = { requests.stream }
+    } operation: { PlaylistBuilderModel() }
+    var readIterator = reads.stream.makeAsyncIterator()
+    requests.continuation.yield(())
+    let lifecycle = Task { @MainActor in
+      await model.runSnapshotLifecycle { _ in
+        loaded.continuation.yield(())
+      }
+    }
+    var loadedIterator = loaded.stream.makeAsyncIterator()
+    #expect(await loadedIterator.next() != nil)
+    #expect(await readIterator.next() != nil)
+    #expect(await counter.count == 1)
+
+    await clock.advance(by: .seconds(240))
+    #expect(await counter.count == 1)
+    requests.continuation.yield(())
+    #expect(await readIterator.next() != nil)
+    #expect(await counter.count == 2)
+
+    await clock.advance(by: .seconds(60))
+    #expect(await counter.count == 2)
+    await clock.advance(by: .seconds(240))
+    #expect(await readIterator.next() != nil)
+    #expect(await counter.count == 3)
+    requests.continuation.finish()
+    lifecycle.cancel()
+    await lifecycle.value
+  }
+
+  @Test("snapshot lifecycle keeps listening after launch completes")
+  func snapshotLifecycleKeepsListeningAfterLaunch() async throws {
+    let database = try testDatabase()
+    let now = Date(timeIntervalSince1970: 2_000_000_000)
+    let snapshot = LibrarySnapshot(generatedAt: now, tracks: [])
+    let counter = SearchCallCounter()
+    let clock = TestClock()
+    let requests = AsyncStream<Void>.makeStream()
+    let reads = AsyncStream<Void>.makeStream()
+    let loaded = AsyncStream<Void>.makeStream()
+    let model = withDependencies {
+      $0.defaultDatabase = database
+      $0.continuousClock = clock
+      $0.date.now = now
+      $0.musicAppClient.automationPermission = { .authorized }
+      $0.musicAppClient.readLibrarySnapshot = {
+        await counter.record(); reads.continuation.yield(()); return snapshot
+      }
+      $0.librarySnapshotStore = LibrarySnapshotStore(
+        read: { snapshot }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { now })
+      $0.snapshotRefreshRequestClient.requests = { requests.stream }
+    } operation: { PlaylistBuilderModel() }
+    var readIterator = reads.stream.makeAsyncIterator()
+    let lifecycle = Task { @MainActor in
+      await model.runSnapshotLifecycle { _ in loaded.continuation.yield(()) }
+    }
+    var loadedIterator = loaded.stream.makeAsyncIterator()
+    #expect(await loadedIterator.next() != nil)
+    requests.continuation.yield(())
+    #expect(await readIterator.next() != nil)
+    #expect(await counter.count == 1)
+    requests.continuation.finish()
+    lifecycle.cancel()
+    await lifecycle.value
   }
 
   private func testDatabase() throws -> any SQLiteData.DatabaseWriter {
