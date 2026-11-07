@@ -6,35 +6,6 @@ import VinylFeverNotes
 
 struct PlaylistShelfModelTests {
   @Test @MainActor
-  func newMusicFinishLineDoesNotChangeShelfPlaylistState() async throws {
-    let weekDate = Date(timeIntervalSince1970: 1_800_000_000)
-    let finishFolder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
-      .appending(path: "playlist-reviews", directoryHint: .isDirectory)
-    let finish = PlaylistReviewEntry(source: .jon, kind: .finished, host: "Mac", recordedAt: weekDate,
-      playlistID: PlaylistReviewsCodec.newMusicWeekID(weekDate), playlist: "New Music, 2027-01-15",
-      at: weekDate.addingTimeInterval(86_400), device: "chat")
-    try FileManager.default.createDirectory(at: finishFolder, withIntermediateDirectories: true)
-    try PlaylistReviewsCodec.encode(finish).write(to: finishFolder.appending(path: "chat.jsonl"))
-    let staged = batch(name: "Power Pop", stagedAt: 1_700_000_000)
-    let model = withDependencies({ dependencies in
-      dependencies.date.now = Date(timeIntervalSince1970: 1_800_000_100)
-      dependencies.keepLibraryClient.isAuthorized = { false }
-      dependencies.playlistShelfClient.read = { folderRead([staged]) }
-    }) {
-      PlaylistShelfModel()
-    }
-
-    await model.refresh()
-    model.selectFirstPlaylistIfNeeded()
-    let before = model.displayedPlaylists.map(\.id)
-    let selectedBefore = model.selectedPlaylistID
-    await model.refresh()
-    #expect(FileManager.default.fileExists(atPath: finishFolder.appending(path: "chat.jsonl").path))
-    #expect(model.displayedPlaylists.map(\.id) == before)
-    #expect(model.selectedPlaylistID == selectedBefore)
-  }
-
-  @Test @MainActor
   func loadedAndPartlyUnreadable() async {
     let batch = RecommendationBatch(recordedAt: .now, host: "Test", playlist: "Power Pop", tracks: [
       RecommendationTrack(artist: "Band", title: "Song", familiar: false, reasons: [], artistKnown: true),

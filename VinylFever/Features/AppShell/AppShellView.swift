@@ -6,7 +6,6 @@ struct AppShellView: View {
   @State private var playlistBuilderModel = PlaylistBuilderModel()
   @State private var playlistRoleBannerModel = PlaylistRoleBannerModel()
   @Dependency(\.context) private var context
-  @Dependency(\.snapshotRefreshRequestClient) private var snapshotRefreshRequests
   @Environment(\.openSettings) private var openSettings
 
   var body: some View {
@@ -46,15 +45,9 @@ struct AppShellView: View {
       // The test host launches this view too; its launch refresh would read live dependencies
       // in the middle of unrelated tests.
       guard context == .live else { return }
-      let requests = snapshotRefreshRequests.requests()
-      let refreshTask = Task {
-        for await _ in requests {
-          await playlistBuilderModel.snapshotRefreshRequested()
-        }
+      await playlistBuilderModel.runSnapshotLifecycle { snapshot in
+        await playlistRoleBannerModel.snapshotLoaded(snapshot)
       }
-      defer { refreshTask.cancel() }
-      await playlistBuilderModel.loadSnapshotAndRefreshIfStale()
-      await playlistRoleBannerModel.snapshotLoaded(playlistBuilderModel.librarySnapshot)
     }
     .onChange(of: playlistBuilderModel.librarySnapshot?.generatedAt) { _, _ in
       guard context == .live, let snapshot = playlistBuilderModel.librarySnapshot else { return }

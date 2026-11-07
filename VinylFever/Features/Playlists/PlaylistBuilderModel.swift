@@ -54,6 +54,7 @@ final class PlaylistBuilderModel {
   @ObservationIgnored @Dependency(\.appleMusicCatalogClient) private var appleMusic
   @ObservationIgnored @Dependency(\.catalogMatchResolver) private var resolver
   @ObservationIgnored @Dependency(\.continuousClock) private var clock
+  @ObservationIgnored @Dependency(\.snapshotRefreshRequestClient) private var snapshotRefreshRequests
   @ObservationIgnored @Dependency(\.musicAppClient) private var musicApp
   @ObservationIgnored @Dependency(\.librarySnapshotStore) private var snapshotStore
   @ObservationIgnored @Dependency(\.tasteCurationClient) private var tasteCuration
@@ -197,6 +198,15 @@ final class PlaylistBuilderModel {
         await refreshSnapshot(requestingPermission: false)
       }
     } catch { librarySnapshotError = error.localizedDescription }
+  }
+
+  func runSnapshotLifecycle(onLoaded: @MainActor (LibrarySnapshot?) async -> Void) async {
+    let requests = snapshotRefreshRequests.requests()
+    await loadSnapshotAndRefreshIfStale()
+    await onLoaded(librarySnapshot)
+    for await _ in requests {
+      await snapshotRefreshRequested()
+    }
   }
 
   func snapshotRefreshRequested() async {

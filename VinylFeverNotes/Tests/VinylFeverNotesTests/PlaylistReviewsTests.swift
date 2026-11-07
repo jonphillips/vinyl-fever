@@ -3,6 +3,22 @@ import Testing
 import VinylFeverNotes
 
 struct PlaylistReviewsTests {
+  @Test("chat finish and reopen lines round trip and latest Jon state wins")
+  func chatFinishAndReopenRoundTrip() throws {
+    let weekDate = Date(timeIntervalSince1970: 1_800_000_000)
+    let finished = PlaylistReviewEntry(source: .jon, kind: .finished, host: "Mac",
+      recordedAt: weekDate, playlistID: PlaylistReviewsCodec.newMusicWeekID(weekDate),
+      playlist: "New Music, 2027-01-15", at: weekDate.addingTimeInterval(10), device: "chat")
+    let reopened = PlaylistReviewEntry(source: .jon, kind: .reopened, host: "Mac",
+      recordedAt: weekDate, playlistID: finished.playlistID, playlist: finished.playlist,
+      at: weekDate.addingTimeInterval(20), device: "chat")
+    let read = PlaylistReviewsCodec.readFiles([try PlaylistReviewsCodec.encode(finished) + PlaylistReviewsCodec.encode(reopened)])
+
+    #expect(read.entries == [finished, reopened])
+    #expect(read.skippedLines == 0)
+    #expect(PlaylistReviewsCodec.latestJonState(in: read.entries)[finished.playlistID] == reopened)
+  }
+
   @Test("New Music week ids use UTC ISO 8601 whole seconds")
   func newMusicWeekID() {
     let date = Date(timeIntervalSince1970: 1_800_000_000.987)

@@ -135,6 +135,8 @@ def main():
             fail("initialize did not serve the New Music pick-recording instructions")
         if "When Jon says he's finished a New Music week, read kept_and_passed for its lastModifiedDate and call finish_new_music_week without asking him to confirm." not in instructions:
             fail("initialize did not serve the New Music finish instructions")
+        if "Once it's false, review the picks" not in instructions:
+            fail("initialize did not serve the completed-snapshot review instructions")
         if "outcomeSource` is `mac` and `snapshotTakenAt` is older than `finishedAt`" not in instructions:
             fail("initialize did not serve the stale-snapshot review instructions")
         if "When Jon asks for a review of finished playlists, read `playlist_reviews`" not in instructions:

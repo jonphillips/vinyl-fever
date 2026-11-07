@@ -283,9 +283,14 @@ public enum TasteIntelligence {
       let familiar = batch.tracks.filter(\.familiar).map { "\($0.artist) — \($0.title)" }
       let scored = batch.coverage?.listening != false
       var rows: [RecommendationOutcomeSong] = []
-      let heardBeforePick = batch.kind == "new-music-picks"
-        ? batch.tracks.filter { !$0.familiar && $0.heardBeforePick == true }.map { "\($0.artist) — \($0.title)" }
-        : nil
+      let heardBeforePick: [String]?
+      if batch.kind == "new-music-picks" {
+        let heard = batch.tracks.filter { !$0.familiar && $0.heardBeforePick == true }
+          .map { "\($0.artist) — \($0.title)" }
+        heardBeforePick = heard.isEmpty ? nil : heard
+      } else {
+        heardBeforePick = nil
+      }
       for track in batch.tracks where !track.familiar && track.heardBeforePick != true {
         let status: NewMusicClassification?
         if batch.kind == "new-music-picks", let week = resultByDate[date] {
