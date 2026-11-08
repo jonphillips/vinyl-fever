@@ -13,6 +13,11 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   - **Dismiss a staged playlist from the phone,** writing M24 S4's `dismissed` line. Today the
     14-day rule archives one he never creates.
   - **Tap the player strip to jump to the song** in the open playlist.
+- **Phone shelf: re-read only what changed** (architect, 2026-11-08). After
+  [phone-remembers-shelf](efforts/phone-remembers-shelf.md), every launch still re-reads every
+  ledger file and every Keepers playlist's tracks behind the cached shelf. Skip ledger files whose
+  modification date hasn't changed, and Keepers playlists whose `lastModifiedDate` hasn't. Build it
+  only if the background refresh still feels slow.
 - **Now-playing album brief and queueing** — [parked brief](efforts/archive/now-playing-album-brief.md)
   (Jon and the architect, 2026-10-27). Ask the chat about the song that's playing and get a brief
   against Jon's own evidence, then queue tracks without a playlist. Its first intent shipped as

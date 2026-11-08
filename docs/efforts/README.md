@@ -6,3 +6,4 @@ Scoped briefs for off-arc work (defects, spin-offs, standalone fixes) that isn't
 This index lists live briefs only. Finished, retired, and parked briefs are in
 [archive/](archive/) (ADR-0005 D10); `DONE-LOG.md` records what shipped.
 
+- [phone-remembers-shelf.md](phone-remembers-shelf.md) — **Ready** · The phone shows its shelf, archive, and progress at once from its first SQLiteData database, and refreshes behind it.
