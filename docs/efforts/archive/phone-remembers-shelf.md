@@ -3,8 +3,8 @@
 Status: Ready
 Summary: The phone app starts empty every launch and waits on iCloud and Music before it shows a single playlist. It gets its first SQLiteData database, keeps what the shelf last knew (playlists, what's archived, what's in Music, each song's kept/heard state), shows that at once, and refreshes behind it exactly as today.
 
-Related: M24 (the phone shelf) · [Technical architecture](../technical-architecture.md) ·
-[Efforts index](README.md)
+Related: M24 (the phone shelf) · [Technical architecture](../../technical-architecture.md) ·
+[Efforts index](../README.md)
 
 Branch `effort/phone-remembers-shelf`, from a fresh `main` **after #192 (M24 S5) merges**: both
 touch `PlaylistShelfModel` and the home view. One PR. No iCloud format change, no Mac change.

@@ -184,6 +184,8 @@ targets:
         product: Dependencies
       - package: swift-dependencies
         product: DependenciesMacros
+      - package: sqlite-data
+        product: SQLiteData
     info:
       path: VinylFeverMobile/Info.plist
       properties:

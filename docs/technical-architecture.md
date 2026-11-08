@@ -85,6 +85,16 @@ Per-feature tier targeting and no-key behavior:
 
 Use SQLiteData for app state.
 
+The phone keeps its own device-local SQLiteData database at
+`Application Support/VinylFever/VinylFeverMobile.sqlite`. Today it holds only
+rebuildable caches of the playlist shelf, Music library playlist list, and song
+progress; iCloud and Music remain authoritative. If this cache-only database
+cannot open or migrate, including when a newer build has superseded a migration,
+delete it and create a fresh cache. If that also fails, use an in-memory cache
+for the session. This recovery rule ends when the first non-cache table is added;
+that database must use the Mac database's older-build and backup-before-migrate
+behavior instead.
+
 Merged database migrations are immutable. Add a new migration for schema changes; never edit a
 migration that may have shipped.
 

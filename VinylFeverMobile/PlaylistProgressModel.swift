@@ -1,6 +1,8 @@
 import Dependencies
 import Foundation
+import GRDB
 import Observation
+import SQLiteData
 import VinylFeverNotes
 
 struct PlaylistListeningLogClient {
@@ -40,11 +42,14 @@ final class PlaylistProgressModel {
   @ObservationIgnored @Dependency(\.playlistTasteNotesClient) private var notesClient
   @ObservationIgnored @Dependency(\.playlistListeningLogClient) private var logClient
   @ObservationIgnored @Dependency(\.date.now) private var now
+  @ObservationIgnored @Dependency(\.mobileCacheDatabase) private var database
 
   private var playlists: [PlaylistShelfPlaylist] = []
   private var index: PlaylistProgressIndex?
+  private var didLoadCache = false
 
   func refresh(_ playlists: [PlaylistShelfPlaylist], libraryPlaylists suppliedLibrary: [KeepLibraryPlaylist]? = nil) async {
+    loadCacheIfNeeded()
     self.playlists = playlists
     hasUnreadableListeningLog = false
     guard keepClient.isAuthorized() else {
@@ -92,11 +97,14 @@ final class PlaylistProgressModel {
       index = calculation.0
       results = calculation.1
       isAvailable = true
+      saveCache()
     } catch {
-      isAvailable = false
-      index = nil
-      results = [:]
+      // Keep the last successful cache visible while evidence sources are unavailable.
     }
+  }
+
+  func loadCache() {
+    loadCacheIfNeeded()
   }
 
   func updateSavedNotes(_ notes: [TasteNote]) {
@@ -104,6 +112,7 @@ final class PlaylistProgressModel {
     index.addNotes(TasteNotesCodec.uniqueNewestFirst(notes), playlists: playlists)
     self.index = index
     recompute()
+    saveCache()
   }
 
   func updateSavedKeeps(_ keptPlaylistsBySong: [String: [String]]) {
@@ -118,12 +127,36 @@ final class PlaylistProgressModel {
     }
     self.index = index
     recompute()
+    saveCache()
   }
 
   private func recompute() {
     guard var index else { return }
     results = Dictionary(uniqueKeysWithValues: playlists.map { ($0.id, index.result(for: $0)) })
     self.index = index
+  }
+
+  private func loadCacheIfNeeded() {
+    guard !didLoadCache else { return }
+    didLoadCache = true
+    guard let database else { return }
+    guard keepClient.isAuthorized() else { return }
+    do {
+      let cache = try ShelfCache.load(from: database)
+      results = cache.progress
+      isAvailable = !results.isEmpty
+    } catch {
+      NSLog("Vinyl Fever mobile progress cache could not be loaded: %@", error.localizedDescription)
+    }
+  }
+
+  private func saveCache() {
+    guard let database else { return }
+    do {
+      try ShelfCache.replaceProgress(results, to: database)
+    } catch {
+      NSLog("Vinyl Fever mobile progress cache could not be saved: %@", error.localizedDescription)
+    }
   }
 }
 
