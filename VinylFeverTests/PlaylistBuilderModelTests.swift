@@ -908,43 +908,48 @@ struct PlaylistBuilderModelTests {
     let snapshot = LibrarySnapshot(generatedAt: now, tracks: [])
     let counter = SearchCallCounter()
     let clock = TestClock()
+    let armCounter = ClockArmCounter()
+    let armedClock = ArmedClock(base: clock, armCounter: armCounter)
     let requests = AsyncStream<Void>.makeStream()
-    let reads = AsyncStream<Void>.makeStream()
-    let loaded = AsyncStream<Void>.makeStream()
+    let loadedCounter = SearchCallCounter()
     let model = withDependencies {
       $0.defaultDatabase = database
-      $0.continuousClock = clock
+      $0.continuousClock = armedClock
       $0.date.now = now
       $0.musicAppClient.automationPermission = { .authorized }
       $0.musicAppClient.readLibrarySnapshot = {
-        await counter.record(); reads.continuation.yield(()); return snapshot
+        await counter.record(); return snapshot
       }
       $0.librarySnapshotStore = LibrarySnapshotStore(
         read: { snapshot }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { now })
       $0.snapshotRefreshRequestClient.requests = { requests.stream }
     } operation: { PlaylistBuilderModel() }
-    var readIterator = reads.stream.makeAsyncIterator()
     requests.continuation.yield(())
     let lifecycle = Task { @MainActor in
       await model.runSnapshotLifecycle { _ in
-        loaded.continuation.yield(())
+        await loadedCounter.record()
       }
     }
-    var loadedIterator = loaded.stream.makeAsyncIterator()
-    #expect(await loadedIterator.next() != nil)
-    #expect(await readIterator.next() != nil)
-    #expect(await counter.count == 1)
+    let didLoad = await waitUntil { await loadedCounter.count >= 1 }
+    #expect(didLoad)
+    let firstRead = await waitUntil { await counter.count >= 1 }
+    #expect(firstRead)
+    let firstRetryArmed = await waitUntil { armCounter.count >= 1 }
+    #expect(firstRetryArmed)
 
     await clock.advance(by: .seconds(240))
     #expect(await counter.count == 1)
     requests.continuation.yield(())
-    #expect(await readIterator.next() != nil)
-    #expect(await counter.count == 2)
+    let secondRead = await waitUntil { await counter.count >= 2 }
+    #expect(secondRead)
+    let replacementRetryArmed = await waitUntil { armCounter.count >= 2 }
+    #expect(replacementRetryArmed)
 
     await clock.advance(by: .seconds(60))
     #expect(await counter.count == 2)
     await clock.advance(by: .seconds(240))
-    #expect(await readIterator.next() != nil)
+    let retryRead = await waitUntil { await counter.count >= 3 }
+    #expect(retryRead)
     #expect(await counter.count == 3)
     requests.continuation.finish()
     lifecycle.cancel()
@@ -959,32 +964,40 @@ struct PlaylistBuilderModelTests {
     let counter = SearchCallCounter()
     let clock = TestClock()
     let requests = AsyncStream<Void>.makeStream()
-    let reads = AsyncStream<Void>.makeStream()
-    let loaded = AsyncStream<Void>.makeStream()
+    let loadedCounter = SearchCallCounter()
     let model = withDependencies {
       $0.defaultDatabase = database
       $0.continuousClock = clock
       $0.date.now = now
       $0.musicAppClient.automationPermission = { .authorized }
       $0.musicAppClient.readLibrarySnapshot = {
-        await counter.record(); reads.continuation.yield(()); return snapshot
+        await counter.record(); return snapshot
       }
       $0.librarySnapshotStore = LibrarySnapshotStore(
         read: { snapshot }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { now })
       $0.snapshotRefreshRequestClient.requests = { requests.stream }
     } operation: { PlaylistBuilderModel() }
-    var readIterator = reads.stream.makeAsyncIterator()
     let lifecycle = Task { @MainActor in
-      await model.runSnapshotLifecycle { _ in loaded.continuation.yield(()) }
+      await model.runSnapshotLifecycle { _ in await loadedCounter.record() }
     }
-    var loadedIterator = loaded.stream.makeAsyncIterator()
-    #expect(await loadedIterator.next() != nil)
+    let didLoad = await waitUntil { await loadedCounter.count >= 1 }
+    #expect(didLoad)
     requests.continuation.yield(())
-    #expect(await readIterator.next() != nil)
+    let refreshed = await waitUntil { await counter.count >= 1 }
+    #expect(refreshed)
     #expect(await counter.count == 1)
     requests.continuation.finish()
     lifecycle.cancel()
     await lifecycle.value
+  }
+
+  private func waitUntil(_ condition: @Sendable () async -> Bool) async -> Bool {
+    let deadline = Date().addingTimeInterval(5)
+    while Date() < deadline {
+      if await condition() { return true }
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+    return await condition()
   }
 
   private func testDatabase() throws -> any SQLiteData.DatabaseWriter {
@@ -1522,6 +1535,25 @@ private final class ObservationFlag: @unchecked Sendable {
 private actor SearchCallCounter {
   private(set) var count = 0
   func record() { count += 1 }
+}
+
+private final class ClockArmCounter: @unchecked Sendable {
+  private let lock = NSLock()
+  private var storage = 0
+  var count: Int { lock.withLock { storage } }
+  func increment() { lock.withLock { storage += 1 } }
+}
+
+private struct ArmedClock: Clock {
+  typealias Instant = TestClock<Duration>.Instant
+  let base: TestClock<Duration>
+  let armCounter: ClockArmCounter
+  var now: Instant { base.now }
+  var minimumResolution: Duration { base.minimumResolution }
+  func sleep(until deadline: Instant, tolerance: Duration?) async throws {
+    armCounter.increment()
+    try await base.sleep(until: deadline, tolerance: tolerance)
+  }
 }
 
 private actor PlaylistCreateCapture {
