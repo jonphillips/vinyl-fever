@@ -1,5 +1,4 @@
 import Foundation
-import VinylFeverListening
 import VinylFeverNotes
 
 public struct CatalogSongCandidate: Equatable, Sendable {
@@ -75,10 +74,10 @@ public enum CatalogMatchScorer {
       }
       .sorted(by: orderedBefore)
     guard let first = ranked.first, first.score >= ambiguousFloor else { return .notFound }
-    let firstTitle = SongTextNormalizer.title(first.candidate.title)
+    let firstTitle = ListeningTextNormalizer.title(first.candidate.title)
     let firstArtist = identity.key(first.candidate.artistName)
     let bestDifferentSong = ranked.dropFirst().first {
-      SongTextNormalizer.title($0.candidate.title) != firstTitle
+      ListeningTextNormalizer.title($0.candidate.title) != firstTitle
         || identity.key($0.candidate.artistName) != firstArtist
     }
     let lead = first.score - (bestDifferentSong?.score ?? 0)
@@ -92,19 +91,19 @@ public enum CatalogMatchScorer {
     _ request: TrackRequest, _ candidate: CatalogSongCandidate, identity: ArtistIdentity = .empty
   ) -> Double {
     let titleScore = similarity(
-      SongTextNormalizer.title(request.title), SongTextNormalizer.title(candidate.title))
+      ListeningTextNormalizer.title(request.title), ListeningTextNormalizer.title(candidate.title))
     let artistScore = identity.matches(request: request.artist, track: candidate.artistName)
       ? 1
       : similarity(
-        SongTextNormalizer.artist(request.artist), SongTextNormalizer.artist(candidate.artistName))
+        ListeningTextNormalizer.artist(request.artist), ListeningTextNormalizer.artist(candidate.artistName))
     // The base match tops out at 0.90 so the two hint boosts remain useful when
     // otherwise-identical catalog entries need to be separated.
     var score = (titleScore * 0.55) + (artistScore * 0.35)
 
-    let requestedVersionText = " \(SongTextNormalizer.title(request.title)) "
-    let candidateVersionText = " \(SongTextNormalizer.title(candidate.title)) "
+    let requestedVersionText = " \(ListeningTextNormalizer.title(request.title)) "
+    let candidateVersionText = " \(ListeningTextNormalizer.title(candidate.title)) "
     for term in versionTerms {
-      let normalizedTerm = " \(SongTextNormalizer.text(term)) "
+      let normalizedTerm = " \(ListeningTextNormalizer.text(term)) "
       if candidateVersionText.contains(normalizedTerm)
         && !requestedVersionText.contains(normalizedTerm)
       {
@@ -113,7 +112,7 @@ public enum CatalogMatchScorer {
     }
 
     if let requestedAlbum = request.album, let candidateAlbum = candidate.albumTitle,
-      SongTextNormalizer.album(requestedAlbum) == SongTextNormalizer.album(candidateAlbum)
+      ListeningTextNormalizer.album(requestedAlbum) == ListeningTextNormalizer.album(candidateAlbum)
     {
       score += hintBoost
     }

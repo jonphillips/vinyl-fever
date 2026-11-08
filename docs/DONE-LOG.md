@@ -1,5 +1,11 @@
 # Done log
 
+## 2026-11-08 — M24 Dispatch 2 — Shared matching and creation record (`m24/s3-shared-matching`)
+
+- **Result:** Moved the Mac matching client into the shared Apple Music package, recorded upload routing and iCloud alias mirrors, and added cross-device creation records with Mac inbox reconciliation and phone archive rules.
+- **Verification:** Listening (51), Notes (69), Core (327), Apple Music (1), Mac app (100), and iOS app (66) tests passed; generic iOS simulator build passed; mcp-smoke passed outside the sandbox.
+- **Owed:** M24 S3, M24 S4's device gate, in [device-passes.md](device-passes.md).
+
 ## 2026-11-08 — A player strip and visible song notes (`m24/s1-player-strip`)
 
 - **Result:** Added a persistent Music transport strip for what is playing and made song note actions show their saved-note state.

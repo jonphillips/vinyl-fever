@@ -1,7 +1,7 @@
 import Dependencies
 import DependenciesMacros
 import Foundation
-import VinylFeverListening
+import VinylFeverNotes
 
 public struct ResolvedPlaylistRow: Equatable, Sendable, Identifiable {
   public enum Status: Equatable, Sendable {

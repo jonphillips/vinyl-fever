@@ -12,14 +12,18 @@ public struct RecommendationTrack: Codable, Equatable, Sendable {
   public var like: [RecommendationLike]?
   public var heardBeforePick: Bool?
   public var picked: Bool?
+  /// True when the Mac snapshot said this staged song needs the upload matcher.
+  public var upload: Bool?
 
   public init(artist: String, title: String, album: String? = nil, year: Int? = nil,
     familiar: Bool, reasons: [String], artistKnown: Bool, why: String? = nil,
-    like: [RecommendationLike]? = nil, heardBeforePick: Bool? = nil, picked: Bool? = nil) {
+    like: [RecommendationLike]? = nil, heardBeforePick: Bool? = nil, picked: Bool? = nil,
+    upload: Bool? = nil) {
     self.artist = artist; self.title = title; self.album = album; self.year = year
     self.familiar = familiar; self.reasons = reasons; self.artistKnown = artistKnown
     self.why = why; self.like = like; self.heardBeforePick = heardBeforePick
     self.picked = picked
+    self.upload = upload
   }
 }
 

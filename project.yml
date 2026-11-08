@@ -20,6 +20,8 @@ packages:
     path: VinylFeverListening
   VinylFeverNotes:
     path: VinylFeverNotes
+  VinylFeverAppleMusic:
+    path: VinylFeverAppleMusic
   swift-dependencies:
     url: https://github.com/pointfreeco/swift-dependencies
     from: 1.0.0
@@ -85,6 +87,8 @@ targets:
     dependencies:
       - package: VinylFeverCore
         product: VinylFeverCore
+      - package: VinylFeverAppleMusic
+        product: VinylFeverAppleMusicLive
       - package: VinylFeverListening
         product: VinylFeverListening
       - package: swift-dependencies
@@ -170,6 +174,10 @@ targets:
       # One Icon Composer file serves both apps; it lives with the Mac app's sources.
       - VinylFever/AppIcon.icon
     dependencies:
+      - package: VinylFeverAppleMusic
+        product: VinylFeverAppleMusic
+      - package: VinylFeverAppleMusic
+        product: VinylFeverAppleMusicLive
       - package: VinylFeverNotes
         product: VinylFeverNotes
       - package: swift-dependencies

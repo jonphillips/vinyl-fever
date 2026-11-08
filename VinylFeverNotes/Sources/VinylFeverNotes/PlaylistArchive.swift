@@ -1,16 +1,15 @@
 import Foundation
 
 public enum PlaylistArchive {
-  /// M22 allows this window for iCloud to bring a newly staged playlist to the phone (M18 S7).
-  public static let gracePeriod: TimeInterval = 24 * 60 * 60
+  public static let gracePeriod: TimeInterval = 14 * 24 * 60 * 60
 
   public static func archivedPlaylistIDs(
     from playlists: [PlaylistShelfPlaylist],
     libraryPlaylistNames: [String]?,
+    creations: [PlaylistCreationEvent] = [],
     now: Date
   ) -> Set<String> {
-    guard let libraryPlaylistNames else { return [] }
-
+    let latest = PlaylistCreationsCodec.latestEvents(creations)
     var stagedCountsByName: [String: Int] = [:]
     for playlist in playlists {
       guard let name = playlist.batch.playlist,
@@ -21,11 +20,20 @@ public enum PlaylistArchive {
 
     return Set(playlists.compactMap { playlist in
       guard let name = playlist.batch.playlist,
-        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-        stagedCountsByName[name] == 1,
-        !libraryPlaylistNames.contains(name),
-        now.timeIntervalSince(playlist.batch.recordedAt) > gracePeriod
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       else { return nil }
+      let key = PlaylistCreationsCodec.batchKey(host: playlist.batch.host, recordedAt: playlist.batch.recordedAt)
+      if let event = latest[key] {
+        switch event.kind {
+        case .dismissed: return playlist.id
+        case .created:
+          guard let libraryPlaylistNames, !libraryPlaylistNames.contains(name) else { return nil }
+          return playlist.id
+        }
+      }
+      guard stagedCountsByName[name] == 1,
+        let libraryPlaylistNames, !libraryPlaylistNames.contains(name),
+        now.timeIntervalSince(playlist.batch.recordedAt) > gracePeriod else { return nil }
       return playlist.id
     })
   }

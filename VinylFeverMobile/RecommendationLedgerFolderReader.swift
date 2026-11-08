@@ -3,6 +3,7 @@ import VinylFeverNotes
 
 struct RecommendationLedgerFolderRead: Equatable {
   var ledger: RecommendationLedgerReadResult
+  var creations: PlaylistCreationsReadResult = .init(events: [], skippedLines: 0, filesRead: 0)
   var filesRead: Int
   var unreadableFileCount: Int
   var totalFileCount: Int = 0
@@ -25,8 +26,15 @@ enum RecommendationLedgerFolderReader {
       startDownload: startDownload,
       coordinatedRead: coordinatedRead
     )
+    let creationsRead = TasteFolderReader.read(
+      folder: folder, subdirectory: "playlist-creations", includes: { $0.hasSuffix(".jsonl") },
+      missingDirectoryIsUnavailable: false, emptyDirectoryIsUnavailable: false,
+      deadline: deadline, startDownload: startDownload, coordinatedRead: coordinatedRead
+    )
     return RecommendationLedgerFolderRead(
       ledger: RecommendationLedgerCodec.readFiles(read.files),
+      creations: PlaylistCreationsCodec.readFiles(creationsRead.files,
+        unreadableFileCount: creationsRead.unreadableFileCount),
       filesRead: read.filesRead,
       unreadableFileCount: read.unreadableFileCount,
       totalFileCount: read.totalFileCount

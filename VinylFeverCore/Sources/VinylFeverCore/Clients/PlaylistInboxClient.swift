@@ -2,17 +2,22 @@ import Dependencies
 import DependenciesMacros
 import Foundation
 import LLMHandoffKit
+import VinylFeverListening
 
 public struct StagedPlaylistSummary: Identifiable, Sendable {
   public let handoff: StagedHandoff
   public let name: String
   public let trackCount: Int
+  public let batchHost: String?
+  public let recordedAt: Date?
   public var id: URL { handoff.url }
 
-  public init(handoff: StagedHandoff, name: String, trackCount: Int) {
+  public init(handoff: StagedHandoff, name: String, trackCount: Int, batchHost: String? = nil, recordedAt: Date? = nil) {
     self.handoff = handoff
     self.name = name
     self.trackCount = trackCount
+    self.batchHost = batchHost
+    self.recordedAt = recordedAt
   }
 }
 
@@ -31,20 +36,22 @@ extension PlaylistInboxClient: TestDependencyKey {
 extension PlaylistInboxClient: DependencyKey {
   public static var liveValue: Self {
     live(root: FileManager.default.homeDirectoryForCurrentUser
-      .appending(path: "Library/Application Support/VinylFever/PlaylistInbox", directoryHint: .isDirectory))
+      .appending(path: "Library/Application Support/VinylFever/PlaylistInbox", directoryHint: .isDirectory),
+      hostName: { ListeningStore.liveHostName() })
   }
 }
 
 extension PlaylistInboxClient {
-  public static func live(root: URL) -> Self {
+  public static func live(root: URL, hostName: @escaping @Sendable () -> String = { ListeningStore.liveHostName() }) -> Self {
     let inbox = HandoffInbox(root: root, fileExtension: "vfplaylist")
     return Self(
       list: {
-        try inbox.list().map { item in
+        return try inbox.list().map { item in
           let decoded = try? PlaylistContract.decode(inbox.read(item))
           return StagedPlaylistSummary(
             handoff: item, name: decoded?.request.name ?? item.slug,
-            trackCount: decoded?.request.tracks.count ?? 0
+            trackCount: decoded?.request.tracks.count ?? 0,
+            batchHost: hostName(), recordedAt: item.stagedAt
           )
         }
       },

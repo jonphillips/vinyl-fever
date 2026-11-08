@@ -141,6 +141,8 @@ def main():
             fail("initialize did not serve the stale-snapshot review instructions")
         if "When Jon asks for a review of finished playlists, read `playlist_reviews`" not in instructions:
             fail("initialize did not serve the M23 playlist-review instructions")
+        if "Jon creates it in Vinyl Fever on the Mac or iPhone" not in instructions:
+            fail("initialize did not serve the Mac and iPhone playlist creation instruction")
         print(f"initialize: {elapsed:.2f}s — {result.get('serverInfo', {}).get('name', 'server responded')}")
         process.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n")
         process.stdin.flush()

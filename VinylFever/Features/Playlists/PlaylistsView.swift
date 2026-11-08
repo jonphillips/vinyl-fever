@@ -76,6 +76,17 @@ struct PlaylistsView: View {
 
   private var inboxPanel: some View {
     Group {
+      if !model.createdElsewhere.isEmpty {
+        VStack(alignment: .leading, spacing: 5) {
+          ForEach(Array(model.createdElsewhere.enumerated()), id: \.offset) { _, event in
+            Text("Created on \(event.writerName) · \(event.at.formatted(date: .abbreviated, time: .shortened)): \(event.playlist)")
+              .font(.callout).foregroundStyle(.secondary)
+          }
+        }
+      }
+      if let error = model.creationLogError {
+        Label(error, systemImage: "icloud.slash").font(.callout).foregroundStyle(.secondary)
+      }
       if !model.stagedPlaylists.isEmpty {
         VStack(alignment: .leading, spacing: 8) {
           Text("From chat (\(model.stagedPlaylists.count))").font(.headline)

@@ -34,6 +34,25 @@ struct PlaylistShelfModelTests {
   }
 
   @Test @MainActor
+  func unreadableCreationLogIsSurfaced() async {
+    let model = await withDependencies({ dependencies in
+      dependencies.date.now = Date(timeIntervalSince1970: 0)
+      dependencies.keepLibraryClient.isAuthorized = { false }
+      dependencies.playlistShelfClient.read = {
+        RecommendationLedgerFolderRead(
+          ledger: RecommendationLedgerReadResult(batches: [], skippedLines: 0),
+          creations: PlaylistCreationsReadResult(events: [], skippedLines: 0, filesRead: 0, unreadableFileCount: 1),
+          filesRead: 1, unreadableFileCount: 0, totalFileCount: 1)
+      }
+    }) {
+      let model = PlaylistShelfModel()
+      await model.refresh()
+      return model
+    }
+    #expect(model.hasUnreadableFiles)
+  }
+
+  @Test @MainActor
   func refreshKeepsAnExistingSelectionAndClearsOneThatDisappears() async {
     let first = RecommendationBatch(recordedAt: Date(timeIntervalSince1970: 2), host: "Test", playlist: "First", tracks: [])
     let second = RecommendationBatch(recordedAt: Date(timeIntervalSince1970: 1), host: "Test", playlist: "Second", tracks: [])
@@ -156,9 +175,10 @@ struct PlaylistShelfModelTests {
   func archiveCountsAndSegmentSwitchesClearSelectionsOutsideTheSegment() async throws {
     let present = batch(name: "Power Pop", stagedAt: 1_000)
     let archived = batch(name: "Old Mix", stagedAt: 0)
-    let recent = batch(name: "Just Staged", stagedAt: 50_000)
+    let now = PlaylistArchive.gracePeriod + 100_000
+    let recent = batch(name: "Just Staged", stagedAt: now - 1_000)
     let model = await withDependencies({ dependencies in
-      dependencies.date.now = Date(timeIntervalSince1970: 100_000)
+      dependencies.date.now = Date(timeIntervalSince1970: now)
       dependencies.playlistShelfClient.read = { folderRead([present, archived, recent]) }
       dependencies.keepLibraryClient.isAuthorized = { true }
       dependencies.keepLibraryClient.libraryPlaylists = {
@@ -190,7 +210,7 @@ struct PlaylistShelfModelTests {
   func anEmptyArchiveSegmentShowsItsGuidanceAndLibraryReadFailureKeepsAllActive() async {
     let oldPlaylist = batch(name: "Old Mix", stagedAt: 0)
     let model = await withDependencies({ dependencies in
-      dependencies.date.now = Date(timeIntervalSince1970: 100_000)
+      dependencies.date.now = Date(timeIntervalSince1970: PlaylistArchive.gracePeriod + 100_000)
       dependencies.playlistShelfClient.read = { folderRead([oldPlaylist]) }
       dependencies.keepLibraryClient.isAuthorized = { true }
       dependencies.keepLibraryClient.libraryPlaylists = { throw CocoaError(.fileReadUnknown) }
@@ -209,7 +229,7 @@ struct PlaylistShelfModelTests {
   @Test @MainActor
   func activeWithEveryPlaylistArchivedPointsToANewOne() async {
     let model = await withDependencies({ dependencies in
-      dependencies.date.now = Date(timeIntervalSince1970: 100_000)
+      dependencies.date.now = Date(timeIntervalSince1970: PlaylistArchive.gracePeriod + 100_000)
       dependencies.playlistShelfClient.read = { folderRead([batch(name: "Old Mix", stagedAt: 0)]) }
       dependencies.keepLibraryClient.isAuthorized = { true }
       dependencies.keepLibraryClient.libraryPlaylists = { [] }

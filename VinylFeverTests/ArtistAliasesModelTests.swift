@@ -9,6 +9,21 @@ import VinylFeverCore
 @MainActor
 @Suite(.serialized)
 struct ArtistAliasesModelTests {
+  @Test("saving aliases mirrors the same bytes and repairs a missing mirror")
+  func aliasMirrorWriteAndRepair() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: "AliasMirror-\(UUID().uuidString)", directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let local = root.appending(path: "LibrarySnapshot/library-snapshot.json")
+    let mirror = root.appending(path: "iCloud/Taste Intelligence/artist-aliases.json")
+    let store = LibrarySnapshotStore.live(fileURL: local, mirrorURL: mirror)
+    try await store.writeAliases(["The Artist": "Artist"])
+    let localAliases = local.deletingLastPathComponent().appending(path: "artist-aliases.json")
+    #expect(try Data(contentsOf: localAliases) == Data(contentsOf: mirror))
+    try FileManager.default.removeItem(at: mirror)
+    try store.repairAliasesMirror()
+    #expect(try Data(contentsOf: localAliases) == Data(contentsOf: mirror))
+  }
+
   @Test("the sheet accepts either canonical spelling and undo restores the candidate")
   func decideSwapAndUndo() async throws {
     let databasePath = FileManager.default.temporaryDirectory
@@ -19,7 +34,7 @@ struct ArtistAliasesModelTests {
       $0.defaultDatabase = database
       $0.librarySnapshotStore = LibrarySnapshotStore(
         read: { snapshot }, write: { _ in }, readAliases: { [:] },
-        writeAliases: { _ in }, modifiedAt: { nil })
+        writeAliases: { _ in }, repairAliasesMirror: {}, modifiedAt: { nil })
     } operation: {
       ArtistAliasesModel()
     }
@@ -36,7 +51,7 @@ struct ArtistAliasesModelTests {
       $0.defaultDatabase = swappedDatabase
       $0.librarySnapshotStore = LibrarySnapshotStore(
         read: { snapshot }, write: { _ in }, readAliases: { [:] },
-        writeAliases: { _ in }, modifiedAt: { nil })
+        writeAliases: { _ in }, repairAliasesMirror: {}, modifiedAt: { nil })
     } operation: {
       ArtistAliasesModel()
     }
@@ -61,7 +76,7 @@ struct ArtistAliasesModelTests {
       $0.defaultDatabase = database
       $0.librarySnapshotStore = LibrarySnapshotStore(
         read: { await reads.read(snapshot) }, write: { _ in }, readAliases: { [:] },
-        writeAliases: { _ in }, modifiedAt: { nil })
+        writeAliases: { _ in }, repairAliasesMirror: {}, modifiedAt: { nil })
     } operation: {
       ArtistAliasesModel()
     }

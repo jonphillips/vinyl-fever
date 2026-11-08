@@ -1,8 +1,9 @@
 import Foundation
 import MusicKit
-import VinylFeverCore
+import VinylFeverAppleMusic
+import VinylFeverNotes
 
-extension AppleMusicCatalogClient {
+public extension AppleMusicCatalogClient {
   static var liveValue: Self {
     Self(
       authorizationStatus: {
@@ -97,10 +98,16 @@ extension AppleMusicCatalogClient {
         guard let playlist = created.data.first else {
           throw PlaylistCreationError.invalidResponse("Apple Music did not return the created playlist.")
         }
+        var addedCount = firstChunk.count
+        let createdRef = CreatedPlaylistRef(id: playlist.id, name: name, trackCount: addedCount)
         for chunk in songIDs.dropFirst(firstChunk.count).chunked(into: 100) {
-          try await Self.append(chunk, to: playlist.id)
+          do { try await Self.append(chunk, to: playlist.id); addedCount += chunk.count }
+          catch {
+            throw CreatedPlaylistPartialError(createdPlaylist: CreatedPlaylistRef(id: playlist.id, name: name, trackCount: addedCount),
+              unaddedSongs: Array(songIDs.dropFirst(addedCount)), detail: error.localizedDescription)
+          }
         }
-        return CreatedPlaylistRef(id: playlist.id, name: name, trackCount: songIDs.count)
+        return CreatedPlaylistRef(id: createdRef.id, name: name, trackCount: songIDs.count)
       },
       appendToLibraryPlaylist: { id, songIDs in
         for chunk in songIDs.chunked(into: 100) {

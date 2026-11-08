@@ -46,6 +46,7 @@ final class PlaylistShelfModel {
   }
 
   private(set) var playlists: [PlaylistShelfPlaylist] = []
+  private(set) var creationEvents: [PlaylistCreationEvent] = []
   private(set) var hasUnreadableFiles = false
   private(set) var isLoading = false
   private(set) var requiresFolderAccess = false
@@ -67,7 +68,8 @@ final class PlaylistShelfModel {
   }
 
   private var archivedPlaylistIDs: Set<String> {
-    PlaylistArchive.archivedPlaylistIDs(from: playlists, libraryPlaylistNames: libraryPlaylistNames, now: now)
+    PlaylistArchive.archivedPlaylistIDs(from: playlists, libraryPlaylistNames: libraryPlaylistNames,
+      creations: creationEvents, now: now)
   }
 
   var displayedPlaylists: [PlaylistShelfPlaylist] {
@@ -121,6 +123,7 @@ final class PlaylistShelfModel {
       let result = try await client.read()
       requiresFolderAccess = false
       playlists = PlaylistShelf.make(from: result.ledger, now: now, calendar: .current, timeZone: .current)
+      creationEvents = result.creations.events
       if keepClient.isAuthorized() {
         do {
           libraryPlaylists = try await keepClient.libraryPlaylists()
@@ -130,7 +133,8 @@ final class PlaylistShelfModel {
       } else {
         libraryPlaylists = nil
       }
-      hasUnreadableFiles = result.totalFileCount > 0 && result.unreadableFileCount > 0
+      hasUnreadableFiles = (result.totalFileCount > 0 && result.unreadableFileCount > 0)
+        || result.creations.unreadableFileCount > 0 || result.creations.skippedLines > 0
       if let selectedPlaylistID, !displayedPlaylists.contains(where: { $0.id == selectedPlaylistID }) {
         self.selectedPlaylistID = nil
       }

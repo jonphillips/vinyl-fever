@@ -10,11 +10,13 @@ struct PlaylistInboxClientTests {
     let inbox = HandoffInbox(root: root, fileExtension: "vfplaylist")
     let earlier = try inbox.stage("VF-PLAYLIST: v1\n{\"name\":\"Earlier\",\"tracks\":[{\"artist\":\"A\",\"title\":\"One\"}]}", slug: "Earlier", now: Date(timeIntervalSince1970: 1))
     let later = try inbox.stage("VF-PLAYLIST: v1\n{\"name\":\"Later\",\"tracks\":[{\"artist\":\"B\",\"title\":\"Two\"}]}", slug: "Later", now: Date(timeIntervalSince1970: 2))
-    let client = PlaylistInboxClient.live(root: root)
+    let client = PlaylistInboxClient.live(root: root, hostName: { "stage-host" })
 
     let items = try client.list()
     #expect(items.map(\.name) == ["Later", "Earlier"])
     #expect(items.map(\.trackCount) == [1, 1])
+    #expect(items.map(\.batchHost) == ["stage-host", "stage-host"])
+    #expect(items.map(\.recordedAt) == [later.stagedAt, earlier.stagedAt])
     #expect(try PlaylistContract.decode(client.read(items[0].handoff)).request.name == "Later")
 
     let processed = try client.markProcessed(items[0].handoff)

@@ -147,7 +147,7 @@ gates. Dispatch 2 adds a ledger field and a new log, so the architect escalates 
       noted through Siri and confirm it reads Noted; leave a note on another song and confirm it
       switches straight away; confirm a song without notes still reads Note.
 
-- [ ] **S3 — The Mac's matching, shared, and what only the Mac knows, recorded.**
+- [x] **S3 — The Mac's matching, shared, and what only the Mac knows, recorded.** *(Implemented in `m24/s3-shared-matching`; Jon's gate remains owed.)*
   - **The package (Decision 3).** A new local package, `VinylFeverAppleMusic` (macOS 26,
     iOS 27), with two products:
     - `VinylFeverAppleMusic` (Foundation and swift-dependencies, no MusicKit): the
@@ -178,7 +178,7 @@ gates. Dispatch 2 adds a ledger field and a new log, so the architect escalates 
     - a test that saving aliases writes the mirror, and that launch repairs a missing one;
     - closeout (ADR-0005 D16) records the gate, run with S4's.
 
-- [ ] **S4 — The creation record, and the Mac keeps up.**
+- [x] **S4 — The creation record, and the Mac keeps up.** *(Implemented in `m24/s3-shared-matching`; Jon's gate remains owed.)*
   - **The log (Decision 2).** `Taste Intelligence/playlist-creations/<device-or-host>.jsonl`,
     `format: "vf-playlist-creation"`, `version: 1`. Every line names its batch by the ledger's
     `host` and `recordedAt`, plus `playlist` (the name) for people, `at`, and `device` or `host`
@@ -254,6 +254,7 @@ gates. Dispatch 2 adds a ledger field and a new log, so the architect escalates 
       didn't save: <reason>. The Mac will still list it in its inbox." The detail still finds the
       playlist by name.
   - **Archiving (Decision 10).** `PlaylistArchive` takes the creation lines:
+    - shipped in this PR.
     - a batch whose latest line is `created` is archived once its name is missing from the
       library, with no grace period;
     - a batch whose latest line is `dismissed` is archived;
