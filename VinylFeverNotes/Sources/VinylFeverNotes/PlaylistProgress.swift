@@ -48,6 +48,20 @@ public struct PlaylistProgressResult: Equatable, Sendable {
   public var songs: [String: PlaylistSongProgress]
   public var counts: PlaylistProgressCounts
 
+  public init(songs: [String: PlaylistSongProgress]) {
+    self.songs = songs
+    var counts = PlaylistProgressCounts(kept: 0, passedWithFeedback: 0, passedWithoutFeedback: 0, notHeard: 0)
+    for status in songs.values {
+      switch status {
+      case .kept: counts.kept += 1
+      case let .passed(withFeedback):
+        if withFeedback { counts.passedWithFeedback += 1 } else { counts.passedWithoutFeedback += 1 }
+      case .notHeard: counts.notHeard += 1
+      }
+    }
+    self.counts = counts
+  }
+
   public init(songs: [String: PlaylistSongProgress], counts: PlaylistProgressCounts) {
     self.songs = songs
     self.counts = counts
@@ -98,9 +112,8 @@ public struct PlaylistProgressIndex: Sendable {
   }
 
   public mutating func result(for playlist: PlaylistShelfPlaylist) -> PlaylistProgressResult {
-    let stagedAt = playlist.batch.recordedAt
     var songStatuses: [String: PlaylistSongProgress] = [:]
-    var counts = PlaylistProgressCounts(kept: 0, passedWithFeedback: 0, passedWithoutFeedback: 0, notHeard: 0)
+    let stagedAt = playlist.batch.recordedAt
 
     for song in playlist.songs {
       let key = trackKey(artist: song.artist, title: song.title)
@@ -111,17 +124,14 @@ public struct PlaylistProgressIndex: Sendable {
       let status: PlaylistSongProgress
       if !keeperNames.isEmpty {
         status = .kept(in: keeperNames)
-        counts.kept += 1
       } else if hasPlay || hasNote {
         status = .passed(withFeedback: hasNote)
-        if hasNote { counts.passedWithFeedback += 1 } else { counts.passedWithoutFeedback += 1 }
       } else {
         status = .notHeard
-        counts.notHeard += 1
       }
       songStatuses[song.id] = status
     }
-    return PlaylistProgressResult(songs: songStatuses, counts: counts)
+    return PlaylistProgressResult(songs: songStatuses)
   }
 
   private static func noteID(_ note: TasteNote) -> String {

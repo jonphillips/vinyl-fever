@@ -1,5 +1,6 @@
 import Dependencies
 import MusicKit
+import SQLiteData
 import SwiftUI
 import VinylFeverAppleMusic
 import VinylFeverAppleMusicLive
@@ -7,21 +8,32 @@ import VinylFeverNotes
 
 @main
 struct VinylFeverMobileApp: App {
-  @State private var shelfModel = PlaylistShelfModel()
-  @State private var playbackModel = PlaylistPlaybackModel()
-  @State private var nowPlayingModel = NowPlayingModel()
-  @State private var keepModel = PlaylistKeepModel()
-  @State private var notesModel = PlaylistTasteNotesModel()
-  @State private var progressModel = PlaylistProgressModel()
-  @State private var reviewsModel = PlaylistReviewsModel()
-  @State private var createModel = PlaylistCreateModel()
+  @State private var shelfModel: PlaylistShelfModel
+  @State private var playbackModel: PlaylistPlaybackModel
+  @State private var nowPlayingModel: NowPlayingModel
+  @State private var keepModel: PlaylistKeepModel
+  @State private var notesModel: PlaylistTasteNotesModel
+  @State private var progressModel: PlaylistProgressModel
+  @State private var reviewsModel: PlaylistReviewsModel
+  @State private var createModel: PlaylistCreateModel
 
   init() {
     prepareDependencies {
+      let database = MobileDatabase.open()
+      $0.mobileCacheDatabase = database
+      $0.defaultDatabase = database
       $0.appleMusicCatalogClient = .liveValue
       $0.catalogMatchResolver = .liveValue
       $0.playlistCreateSupportClient = PlaylistCreateSupportClientKey.liveValue
     }
+    _shelfModel = State(initialValue: PlaylistShelfModel())
+    _playbackModel = State(initialValue: PlaylistPlaybackModel())
+    _nowPlayingModel = State(initialValue: NowPlayingModel())
+    _keepModel = State(initialValue: PlaylistKeepModel())
+    _notesModel = State(initialValue: PlaylistTasteNotesModel())
+    _progressModel = State(initialValue: PlaylistProgressModel())
+    _reviewsModel = State(initialValue: PlaylistReviewsModel())
+    _createModel = State(initialValue: PlaylistCreateModel())
   }
 
   var body: some Scene {
@@ -118,7 +130,7 @@ private struct PlaylistHomeView: View {
             Button("Open Setup") { model.setupButtonTapped() }
               .buttonStyle(.borderedProminent)
           }
-        } else if model.isLoading {
+        } else if model.isLoading && model.playlists.isEmpty {
           ProgressView("Loading playlists…")
         } else if let message = model.emptyMessage {
           PlaylistShelfEmptyView(segment: model.selectedSegment, message: message)
@@ -161,6 +173,8 @@ private struct PlaylistHomeView: View {
       }
     }
     .task {
+      model.loadCache()
+      progressModel.loadCache()
       await model.refresh()
       await notesModel.refresh()
       await progressModel.refresh(model.playlists, libraryPlaylists: model.libraryPlaylists)

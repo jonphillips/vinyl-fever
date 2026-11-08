@@ -1,7 +1,9 @@
 import Dependencies
 import DependenciesMacros
 import Foundation
+import GRDB
 import Observation
+import SQLiteData
 import VinylFeverNotes
 
 enum PlaylistShelfSegment: String, CaseIterable, Equatable, Identifiable {
@@ -61,6 +63,11 @@ final class PlaylistShelfModel {
   @Dependency(\.keepLibraryClient) private var keepClient
   @ObservationIgnored
   @Dependency(\.date.now) private var now
+  @ObservationIgnored
+  @Dependency(\.mobileCacheDatabase) private var database
+
+  private var didLoadCache = false
+  private var shelfCache = MobileShelfCache.empty
 
   private var libraryPlaylistNames: [String]? {
     guard let libraryPlaylists else { return nil }
@@ -126,18 +133,32 @@ final class PlaylistShelfModel {
   }
 
   func refresh() async {
+    loadCacheIfNeeded()
     isLoading = true
     defer { isLoading = false }
     do {
       let result = try await client.read()
       requiresFolderAccess = false
-      playlists = PlaylistShelf.make(from: result.ledger, now: now, calendar: .current, timeZone: .current)
-      creationEvents = result.creations.events
+      let merged = ShelfCache.mergeShelf(result, with: shelfCache)
+      shelfCache = merged
+      playlists = PlaylistShelf.make(
+        from: RecommendationLedgerReadResult(batches: merged.batches, skippedLines: 0),
+        now: now, calendar: .current, timeZone: .current
+      )
+      creationEvents = merged.creationEvents
+      if let database {
+        do {
+          try ShelfCache.writeShelf(merged, to: database)
+        } catch {
+          NSLog("Vinyl Fever mobile shelf cache could not be saved: %@", error.localizedDescription)
+        }
+      }
       if keepClient.isAuthorized() {
         do {
           libraryPlaylists = try await keepClient.libraryPlaylists()
+          if let libraryPlaylists, let database { try ShelfCache.replaceLibrary(libraryPlaylists, to: database) }
         } catch {
-          libraryPlaylists = nil
+          // Keep the last successfully read Music library snapshot.
         }
       } else {
         libraryPlaylists = nil
@@ -155,10 +176,29 @@ final class PlaylistShelfModel {
       hasUnreadableFiles = false
     } catch {
       requiresFolderAccess = false
-      playlists = []
-      libraryPlaylists = nil
-      selectedPlaylistID = nil
       hasUnreadableFiles = true
+    }
+  }
+
+  func loadCache() {
+    loadCacheIfNeeded()
+  }
+
+  private func loadCacheIfNeeded() {
+    guard !didLoadCache else { return }
+    didLoadCache = true
+    guard let database else { return }
+    do {
+      let cache = try ShelfCache.load(from: database)
+      shelfCache = cache
+      playlists = PlaylistShelf.make(
+        from: RecommendationLedgerReadResult(batches: cache.batches, skippedLines: 0),
+        now: now, calendar: .current, timeZone: .current
+      )
+      creationEvents = cache.creationEvents
+      libraryPlaylists = keepClient.isAuthorized() ? cache.libraryPlaylists : nil
+    } catch {
+      NSLog("Vinyl Fever mobile shelf cache could not be loaded: %@", error.localizedDescription)
     }
   }
 
