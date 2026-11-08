@@ -7,12 +7,16 @@ public struct StagedPlaylistSummary: Identifiable, Sendable {
   public let handoff: StagedHandoff
   public let name: String
   public let trackCount: Int
+  public let batchHost: String?
+  public let recordedAt: Date?
   public var id: URL { handoff.url }
 
-  public init(handoff: StagedHandoff, name: String, trackCount: Int) {
+  public init(handoff: StagedHandoff, name: String, trackCount: Int, batchHost: String? = nil, recordedAt: Date? = nil) {
     self.handoff = handoff
     self.name = name
     self.trackCount = trackCount
+    self.batchHost = batchHost
+    self.recordedAt = recordedAt
   }
 }
 
@@ -38,13 +42,21 @@ extension PlaylistInboxClient: DependencyKey {
 extension PlaylistInboxClient {
   public static func live(root: URL) -> Self {
     let inbox = HandoffInbox(root: root, fileExtension: "vfplaylist")
+    let recommendationsRoot = FileManager.default.homeDirectoryForCurrentUser
+      .appending(path: "Library/Mobile Documents/com~apple~CloudDocs/Vinyl Fever/Taste Intelligence/recommendations", directoryHint: .isDirectory)
     return Self(
       list: {
-        try inbox.list().map { item in
+        let recommendationFiles = (try? FileManager.default.contentsOfDirectory(at: recommendationsRoot, includingPropertiesForKeys: nil))?
+          .filter { $0.pathExtension == "jsonl" }.compactMap { try? Data(contentsOf: $0) } ?? []
+        let batches = RecommendationLedgerCodec.readFiles(recommendationFiles).batches
+        return try inbox.list().map { item in
           let decoded = try? PlaylistContract.decode(inbox.read(item))
+          let batch = batches.first { $0.playlist == decoded?.request.name &&
+            Int($0.recordedAt.timeIntervalSince1970) == Int(item.stagedAt.timeIntervalSince1970) }
           return StagedPlaylistSummary(
             handoff: item, name: decoded?.request.name ?? item.slug,
-            trackCount: decoded?.request.tracks.count ?? 0
+            trackCount: decoded?.request.tracks.count ?? 0,
+            batchHost: batch?.host, recordedAt: batch?.recordedAt
           )
         }
       },

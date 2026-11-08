@@ -1,5 +1,5 @@
 import Foundation
-import VinylFeverListening
+import VinylFeverNotes
 
 public enum LibraryUploadMatcher {
   // The S0 picker is capped at the three most-played uploads in its brief.
@@ -28,8 +28,8 @@ public enum LibraryUploadMatcher {
           let albums = try await CatalogMatchResolver.retryingSearch(
             term, clock: clock, search: searchAlbums)
           guard !albums.isEmpty else { continue }
-          let albumKey = SongTextNormalizer.album(album)
-          let exact = albums.filter { SongTextNormalizer.album($0.title) == albumKey }
+          let albumKey = ListeningTextNormalizer.album(album)
+          let exact = albums.filter { ListeningTextNormalizer.album($0.title) == albumKey }
           var candidates: [LibrarySongCandidate] = []
           for value in exact {
             candidates += try await CatalogMatchResolver.retryingSearch(
@@ -76,10 +76,10 @@ public enum LibraryUploadMatcher {
   ) -> [CatalogSongCandidate] {
     values.filter { value in
       let albumMatches = album.map {
-        SongTextNormalizer.album(value.album) == SongTextNormalizer.album($0)
+        ListeningTextNormalizer.album(value.album) == ListeningTextNormalizer.album($0)
       } ?? true
       return !value.hasCatalogID
-        && SongTextNormalizer.title(value.title) == SongTextNormalizer.title(request.title)
+        && ListeningTextNormalizer.title(value.title) == ListeningTextNormalizer.title(request.title)
         && identity.matches(request: request.artist, track: value.artist)
         && albumMatches
     }.map(\.candidate)

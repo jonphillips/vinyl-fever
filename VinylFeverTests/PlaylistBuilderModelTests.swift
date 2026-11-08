@@ -18,11 +18,12 @@ struct PlaylistBuilderModelTests {
     let older = handoff("older")
     let newer = handoff("newer")
     let summaries = [
-      StagedPlaylistSummary(handoff: newer, name: "Newer", trackCount: 1),
-      StagedPlaylistSummary(handoff: older, name: "Older", trackCount: 1),
+      StagedPlaylistSummary(handoff: newer, name: "Newer", trackCount: 1, batchHost: "stage-host", recordedAt: newer.stagedAt),
+      StagedPlaylistSummary(handoff: older, name: "Older", trackCount: 1, batchHost: "stage-host", recordedAt: older.stagedAt),
     ]
     let stub = InboxStub(summaries: summaries, contents: [newer.url: validPaste, older.url: validPaste])
     let roleMemory = BuilderRolesMemory()
+    let creationLog = PlaylistCreationLogStub()
     let resolver: @Sendable (PlaylistRequest, ArtistIdentity) async -> [ResolvedPlaylistRow] = { request, _ in
       request.tracks.map { track in
         let candidate = CatalogSongCandidate(id: "\(track.artist)-\(track.title)", title: track.title, artistName: track.artist)
@@ -32,6 +33,7 @@ struct PlaylistBuilderModelTests {
     let opened = withDependencies {
       $0.date.now = Date(timeIntervalSince1970: 10)
       $0.playlistInboxClient = stub.client
+      $0.playlistCreationClient = creationLog.client
       $0.playlistRolesStore.read = { await roleMemory.value }
       $0.playlistRolesStore.write = { await roleMemory.write($0) }
       $0.catalogMatchResolver.resolve = resolver
@@ -58,18 +60,108 @@ struct PlaylistBuilderModelTests {
     #expect(opened.stagedPlaylists.map(\.name) == ["Older"])
     #expect(stub.listCallCount >= 2)
     #expect(opened.createdStatus == "Created and labeled `vinyl-fever`.")
+    #expect(creationLog.events.first?.kind == .created)
+    #expect(creationLog.events.first?.musicID == "playlist")
     #expect(await roleMemory.value?.playlists == [PlaylistRoleEntry(
       persistentID: "playlist", name: "Test Mix", role: .vinylFever,
       pendingSince: Date(timeIntervalSince1970: 10))])
 
     let dismissStub = InboxStub(summaries: summaries, contents: [newer.url: validPaste])
+    let dismissCreationLog = PlaylistCreationLogStub()
     let dismiss = withDependencies {
       $0.playlistInboxClient = dismissStub.client
+      $0.playlistCreationClient = dismissCreationLog.client
     } operation: { PlaylistBuilderModel() }
     dismiss.refreshInbox()
     dismiss.dismissStagedPlaylist(summaries[0])
     #expect(dismissStub.processed.map(\.url) == [newer.url])
     #expect(dismiss.stagedPlaylists.map(\.name) == ["Older"])
+    #expect(dismissCreationLog.events.first?.kind == .dismissed)
+  }
+
+  @Test("a batch created on another device is filed and announced")
+  func filesAndAnnouncesRemoteCreation() {
+    let item = handoff("phone-created")
+    let summary = StagedPlaylistSummary(handoff: item, name: "Power Pop", trackCount: 1,
+      batchHost: "stage-host", recordedAt: item.stagedAt)
+    let stub = InboxStub(summaries: [summary], contents: [item.url: validPaste])
+    let event = PlaylistCreationEvent(kind: .created, host: "stage-host", recordedAt: item.stagedAt,
+      playlist: "Power Pop", at: item.stagedAt.addingTimeInterval(5), device: "Jon’s iPhone",
+      musicID: "p.1", songs: 1, skipped: [])
+    let model = withDependencies {
+      $0.playlistInboxClient = stub.client
+      $0.playlistCreationClient.read = { .init(events: [event], skippedLines: 0, filesRead: 1) }
+    } operation: { PlaylistBuilderModel() }
+    model.refreshInbox()
+    #expect(stub.processed.map(\.url) == [item.url])
+    #expect(model.stagedPlaylists.isEmpty)
+    #expect(model.createdElsewhere == [event])
+  }
+
+  @Test("a creation event arriving after open blocks a second Music create")
+  func refusesAlreadyCreatedBatch() async {
+    let stagedAt = Date(timeIntervalSince1970: 300)
+    let item = handoff("created-after-open")
+    let summary = StagedPlaylistSummary(handoff: item, name: "Power Pop", trackCount: 1,
+      batchHost: "stage-host", recordedAt: stagedAt)
+    let inbox = InboxStub(summaries: [summary], contents: [item.url: validPaste])
+    let event = PlaylistCreationEvent(kind: .created, host: "stage-host", recordedAt: stagedAt,
+      playlist: "Power Pop", at: stagedAt.addingTimeInterval(1), device: "Jon’s iPhone",
+      musicID: "p.1", songs: 1, skipped: [])
+    let calls = SearchCallCounter()
+    let model = withDependencies {
+      $0.playlistInboxClient = inbox.client
+      $0.playlistCreationClient.read = { .init(events: [event], skippedLines: 0, filesRead: 1) }
+      $0.catalogMatchResolver.resolve = { request, _ in
+        request.tracks.map { ResolvedPlaylistRow(request: $0,
+          status: .matched(CatalogSongCandidate(id: "song", title: $0.title, artistName: $0.artist), score: 1)) }
+      }
+      $0.appleMusicCatalogClient = authorizedClient(create: { name, _, songs in
+        await calls.record()
+        return CreatedPlaylistRef(id: "duplicate", name: name, trackCount: songs.count)
+      })
+    } operation: { PlaylistBuilderModel() }
+    await model.openStagedPlaylist(summary)
+    await model.createPlaylist()
+    #expect(model.operationError == "Already created on Jon’s iPhone.")
+    #expect(model.createdPlaylist == nil)
+    #expect(await calls.count == 0)
+  }
+
+  @Test("a partial Music create is recorded as created with missing songs")
+  func partialCreateRecordsMissingSongs() async {
+    let stagedAt = Date(timeIntervalSince1970: 500)
+    let item = StagedHandoff(url: FileManager.default.temporaryDirectory.appending(path: "partial.vfplaylist"),
+      stagedAt: stagedAt, slug: "partial")
+    let tracks = (1...101).map { "{\"artist\":\"Band\",\"title\":\"Song \($0)\"}" }.joined(separator: ",")
+    let paste = "VF-PLAYLIST: v1\n{\"name\":\"Long Mix\",\"tracks\":[\(tracks)]}"
+    let summary = StagedPlaylistSummary(handoff: item, name: "Long Mix", trackCount: 101,
+      batchHost: "stage-host", recordedAt: stagedAt)
+    let inbox = InboxStub(summaries: [summary], contents: [item.url: paste])
+    let creationLog = PlaylistCreationLogStub()
+    let model = withDependencies {
+      $0.date.now = stagedAt.addingTimeInterval(10)
+      $0.playlistInboxClient = inbox.client
+      $0.playlistCreationClient = creationLog.client
+      $0.catalogMatchResolver.resolve = { request, _ in
+        request.tracks.map { track in
+          ResolvedPlaylistRow(request: track, status: .matched(
+            CatalogSongCandidate(id: "id-\(track.index)", title: track.title, artistName: track.artist), score: 1))
+        }
+      }
+      $0.appleMusicCatalogClient = authorizedClient(create: { name, _, songs in
+        throw CreatedPlaylistPartialError(createdPlaylist: CreatedPlaylistRef(id: "partial-id", name: name, trackCount: 100),
+          unaddedSongs: Array(songs.suffix(1)), detail: "network unavailable")
+      })
+    } operation: { PlaylistBuilderModel() }
+    await model.openStagedPlaylist(summary)
+    await model.createPlaylist()
+    #expect(model.createdPlaylist?.trackCount == 100)
+    #expect(model.createdStatus?.contains("1 songs didn't make it") == true)
+    #expect(creationLog.events.first?.kind == .created)
+    #expect(creationLog.events.first?.skipped == [PlaylistCreationSkippedSong(
+      title: "Song 101", artist: "Band", reason: "not-found")])
+    #expect(inbox.processed.map(\.url) == [item.url])
   }
 
   @Test("start over detaches the opened handoff before creating a pasted playlist")
@@ -166,7 +258,7 @@ struct PlaylistBuilderModelTests {
     let store = LibrarySnapshotStore(
       read: { snapshot }, write: { _ in },
       readAliases: { ["john cougar mellencamp": "john mellencamp"] },
-      writeAliases: { _ in }, modifiedAt: { nil })
+      writeAliases: { _ in }, repairAliasesMirror: {}, modifiedAt: { nil })
     let model = withDependencies {
       $0.librarySnapshotStore = store
     } operation: {
@@ -188,7 +280,7 @@ struct PlaylistBuilderModelTests {
     let capture = PlaylistCreateCapture()
     let model = withDependencies {
       $0.librarySnapshotStore = LibrarySnapshotStore(
-        read: { nil }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { nil })
+        read: { nil }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, repairAliasesMirror: {}, modifiedAt: { nil })
       $0.catalogMatchResolver.resolve = { _, _ in [] }
       $0.appleMusicCatalogClient.createLibraryPlaylist = { name, _, ids in
         await capture.record(name: name, description: nil, ids: ids.map(\.id))
@@ -577,7 +669,7 @@ struct PlaylistBuilderModelTests {
           domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Music unavailable"])
       }
       $0.librarySnapshotStore = LibrarySnapshotStore(
-        read: { previous }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { nil })
+        read: { previous }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, repairAliasesMirror: {}, modifiedAt: { nil })
     } operation: {
       PlaylistBuilderModel()
     }
@@ -603,7 +695,7 @@ struct PlaylistBuilderModelTests {
       $0.musicAppClient.readLibrarySnapshot = { snapshot }
       $0.librarySnapshotStore = LibrarySnapshotStore(
         read: { nil }, write: { await writes.captureSnapshot($0) }, readAliases: { [:] },
-        writeAliases: { await writes.aliases($0) }, modifiedAt: { nil })
+        writeAliases: { await writes.aliases($0) }, repairAliasesMirror: {}, modifiedAt: { nil })
     } operation: {
       PlaylistBuilderModel()
     }
@@ -626,7 +718,7 @@ struct PlaylistBuilderModelTests {
       $0.librarySnapshotStore = LibrarySnapshotStore(
         read: { nil }, write: { await writes.captureSnapshot($0) }, readAliases: { [:] },
         writeAliases: { _ in throw NSError(domain: "alias export", code: 1, userInfo: [NSLocalizedDescriptionKey: "Alias file unavailable"]) },
-        modifiedAt: { nil })
+        repairAliasesMirror: {}, modifiedAt: { nil })
     } operation: {
       PlaylistBuilderModel()
     }
@@ -648,7 +740,7 @@ struct PlaylistBuilderModelTests {
       $0.musicAppClient.readLibrarySnapshot = { snapshot }
       $0.librarySnapshotStore = LibrarySnapshotStore(
         read: { nil }, write: { await writes.captureSnapshot($0) }, readAliases: { [:] },
-        writeAliases: { _ in }, modifiedAt: { nil })
+        writeAliases: { _ in }, repairAliasesMirror: {}, modifiedAt: { nil })
       $0.tasteCurationClient.append = { _, _, _ in
         throw NSError(domain: "curation", code: 1, userInfo: [NSLocalizedDescriptionKey: "iCloud unavailable"])
       }
@@ -671,7 +763,7 @@ struct PlaylistBuilderModelTests {
       $0.musicAppClient.readLibrarySnapshot = { snapshot }
       $0.librarySnapshotStore = LibrarySnapshotStore(
         read: { throw CocoaError(.fileReadCorruptFile) }, write: { await writes.captureSnapshot($0) },
-        readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { nil })
+        readAliases: { [:] }, writeAliases: { _ in }, repairAliasesMirror: {}, modifiedAt: { nil })
     } operation: { PlaylistBuilderModel() }
     await model.refreshLibrarySnapshot()
     #expect(await writes.snapshot == snapshot)
@@ -694,7 +786,7 @@ struct PlaylistBuilderModelTests {
       $0.musicAppClient.requestAutomationPermission = { .authorized }
       $0.musicAppClient.readLibrarySnapshot = { snapshot }
       $0.librarySnapshotStore = LibrarySnapshotStore(
-        read: { previous }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { nil })
+        read: { previous }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, repairAliasesMirror: {}, modifiedAt: { nil })
       $0.listeningStore = ListeningStore.testValue
       $0.tasteCurationClient.append = { change, host, _ in await capture.record(change, host: host) }
     } operation: { PlaylistBuilderModel() }
@@ -716,7 +808,7 @@ struct PlaylistBuilderModelTests {
       $0.musicAppClient.requestAutomationPermission = { .authorized }
       $0.musicAppClient.readLibrarySnapshot = { snapshot }
       $0.librarySnapshotStore = LibrarySnapshotStore(
-        read: { nil }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { nil })
+        read: { nil }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, repairAliasesMirror: {}, modifiedAt: { nil })
       $0.listeningStore = ListeningStore.testValue
       $0.tasteCurationClient.append = { change, host, _ in await capture.record(change, host: host) }
     } operation: { PlaylistBuilderModel() }
@@ -737,7 +829,7 @@ struct PlaylistBuilderModelTests {
         LibraryTrack(persistentID: "owned", name: "Owned Song", artist: "The Records", playCount: 4)
       ])
     let store = LibrarySnapshotStore(
-      read: { snapshot }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { now })
+      read: { snapshot }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, repairAliasesMirror: {}, modifiedAt: { now })
     let ownedCandidate = Self.candidate(id: "owned", title: "Owned Song")
     let unownedCandidate = Self.candidate(id: "unowned", title: "New Song")
     let model = withDependencies {
@@ -776,7 +868,7 @@ struct PlaylistBuilderModelTests {
 
   @Test("no snapshot keeps rows unannotated and bulk removal changes nothing")
   func noSnapshotHasNoBadgesOrRemoval() async throws {
-    let store = LibrarySnapshotStore(read: { nil }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { nil })
+    let store = LibrarySnapshotStore(read: { nil }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, repairAliasesMirror: {}, modifiedAt: { nil })
     let model = withDependencies {
       $0.librarySnapshotStore = store
     } operation: {
@@ -831,7 +923,7 @@ struct PlaylistBuilderModelTests {
         return refreshed
       }
       $0.librarySnapshotStore = LibrarySnapshotStore(
-        read: { previous }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { now.addingTimeInterval(-7 * 60 * 60) })
+        read: { previous }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, repairAliasesMirror: {}, modifiedAt: { now.addingTimeInterval(-7 * 60 * 60) })
     } operation: {
       let model = PlaylistBuilderModel()
       await model.loadSnapshotAndRefreshIfStale()
@@ -850,7 +942,7 @@ struct PlaylistBuilderModelTests {
         return refreshed
       }
       $0.librarySnapshotStore = LibrarySnapshotStore(
-        read: { previous }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { now.addingTimeInterval(-2 * 60 * 60) })
+        read: { previous }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, repairAliasesMirror: {}, modifiedAt: { now.addingTimeInterval(-2 * 60 * 60) })
     } operation: {
       let model = PlaylistBuilderModel()
       await model.loadSnapshotAndRefreshIfStale()
@@ -881,7 +973,7 @@ struct PlaylistBuilderModelTests {
         return refreshed
       }
       $0.librarySnapshotStore = LibrarySnapshotStore(
-        read: { nil }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { nil })
+        read: { nil }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, repairAliasesMirror: {}, modifiedAt: { nil })
     } operation: {
       PlaylistBuilderModel()
     }
@@ -921,7 +1013,7 @@ struct PlaylistBuilderModelTests {
         await counter.record(); return snapshot
       }
       $0.librarySnapshotStore = LibrarySnapshotStore(
-        read: { snapshot }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { now })
+        read: { snapshot }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, repairAliasesMirror: {}, modifiedAt: { now })
       $0.snapshotRefreshRequestClient.requests = { requests.stream }
     } operation: { PlaylistBuilderModel() }
     requests.continuation.yield(())
@@ -974,7 +1066,7 @@ struct PlaylistBuilderModelTests {
         await counter.record(); return snapshot
       }
       $0.librarySnapshotStore = LibrarySnapshotStore(
-        read: { snapshot }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, modifiedAt: { now })
+        read: { snapshot }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, repairAliasesMirror: {}, modifiedAt: { now })
       $0.snapshotRefreshRequestClient.requests = { requests.stream }
     } operation: { PlaylistBuilderModel() }
     let lifecycle = Task { @MainActor in
@@ -1522,6 +1614,18 @@ private final class InboxStub: @unchecked Sendable {
   private func markProcessed(_ handoff: StagedHandoff) -> StagedHandoff {
     lock.withLock { processedHandoffs.append(handoff) }
     return handoff
+  }
+}
+
+private final class PlaylistCreationLogStub: @unchecked Sendable {
+  private let lock = NSLock()
+  private var storedEvents: [PlaylistCreationEvent] = []
+  var events: [PlaylistCreationEvent] { lock.withLock { storedEvents } }
+  var client: PlaylistCreationClient {
+    PlaylistCreationClient(
+      read: { .init(events: self.events, skippedLines: 0, filesRead: self.events.isEmpty ? 0 : 1) },
+      append: { event in self.lock.withLock { self.storedEvents.append(event) } }
+    )
   }
 }
 

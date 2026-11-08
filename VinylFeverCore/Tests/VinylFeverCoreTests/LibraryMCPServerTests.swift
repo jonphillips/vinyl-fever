@@ -1084,7 +1084,7 @@ struct LibraryMCPServerTests {
     #expect(valid.contains("\"missingYear\":[\"The Records — Starry Eyes\"]"))
     #expect(valid.contains("\"ledgerRecorded\":true"))
     #expect(valid.contains("\"dropped\":[{\"artist\":\"\",\"index\":1,\"title\":\"Dropped\"}]"))
-    #expect(valid.contains("Jon reviews and creates it in Vinyl Fever; nothing is in Apple Music yet."))
+    #expect(valid.contains("Jon creates it in Vinyl Fever on the Mac or iPhone; nothing is in Apple Music yet."))
     #expect(!valid.contains(".vfplaylist"))
     let files = try FileManager.default.contentsOfDirectory(at: inbox, includingPropertiesForKeys: nil)
     let stagedURL = try #require(files.first)
@@ -1183,6 +1183,23 @@ struct LibraryMCPServerTests {
     #expect(batch.request == request)
     #expect(batch.description == description)
     #expect(batch.tracks.first?.why?.count == 300)
+  }
+
+  @Test("stage records which songs need the upload route")
+  func stageUploadRouteHints() async throws {
+    let root = temporaryDirectory()
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let snapshot = LibrarySnapshot(generatedAt: .now, tracks: [
+      LibraryTrack(persistentID: "upload", name: "Live Song", artist: "Band", album: "Live Set", availability: .uploaded),
+      LibraryTrack(persistentID: "catalog", name: "Studio Song", artist: "Band", album: "Studio", availability: .subscription),
+    ])
+    let (server, _) = try makeServer(snapshot: snapshot, tasteRootURL: tasteRoot)
+    _ = try #require(await resultJSON(server, id: 1, name: "stage_playlist", arguments:
+      #"{"name":"Routes","description":"Two routes.","tracks":[{"artist":"Band","title":"Live Song","album":"Live Set","year":1977},{"artist":"Band","title":"Studio Song","album":"Studio","year":1978}]}"#) as? [String: Any])
+    let folder = tasteRoot.appending(path: "recommendations")
+    let file = try #require(FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil).first)
+    let batch = try #require(RecommendationLedgerCodec.readFiles([try Data(contentsOf: file)]).batches.first)
+    #expect(batch.tracks.map(\.upload) == [true, false])
   }
 
   @Test("New Music picks validate against and record the latest saved week")
@@ -1640,7 +1657,7 @@ struct LibraryMCPServerTests {
       let content = result["content"] as? [[String: Any]],
       let text = content.first?["text"] as? String
     else { return nil }
-    let jsonText = text.components(separatedBy: "\n\nJon reviews and creates it").first ?? text
+    let jsonText = text.components(separatedBy: "\n\nJon creates it in Vinyl Fever").first ?? text
     return try JSONSerialization.jsonObject(with: Data(jsonText.utf8))
   }
 

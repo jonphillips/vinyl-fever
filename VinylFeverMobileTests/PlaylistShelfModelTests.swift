@@ -156,9 +156,10 @@ struct PlaylistShelfModelTests {
   func archiveCountsAndSegmentSwitchesClearSelectionsOutsideTheSegment() async throws {
     let present = batch(name: "Power Pop", stagedAt: 1_000)
     let archived = batch(name: "Old Mix", stagedAt: 0)
-    let recent = batch(name: "Just Staged", stagedAt: 50_000)
+    let now = PlaylistArchive.gracePeriod + 100_000
+    let recent = batch(name: "Just Staged", stagedAt: now - 1_000)
     let model = await withDependencies({ dependencies in
-      dependencies.date.now = Date(timeIntervalSince1970: 100_000)
+      dependencies.date.now = Date(timeIntervalSince1970: now)
       dependencies.playlistShelfClient.read = { folderRead([present, archived, recent]) }
       dependencies.keepLibraryClient.isAuthorized = { true }
       dependencies.keepLibraryClient.libraryPlaylists = {
@@ -190,7 +191,7 @@ struct PlaylistShelfModelTests {
   func anEmptyArchiveSegmentShowsItsGuidanceAndLibraryReadFailureKeepsAllActive() async {
     let oldPlaylist = batch(name: "Old Mix", stagedAt: 0)
     let model = await withDependencies({ dependencies in
-      dependencies.date.now = Date(timeIntervalSince1970: 100_000)
+      dependencies.date.now = Date(timeIntervalSince1970: PlaylistArchive.gracePeriod + 100_000)
       dependencies.playlistShelfClient.read = { folderRead([oldPlaylist]) }
       dependencies.keepLibraryClient.isAuthorized = { true }
       dependencies.keepLibraryClient.libraryPlaylists = { throw CocoaError(.fileReadUnknown) }
@@ -209,7 +210,7 @@ struct PlaylistShelfModelTests {
   @Test @MainActor
   func activeWithEveryPlaylistArchivedPointsToANewOne() async {
     let model = await withDependencies({ dependencies in
-      dependencies.date.now = Date(timeIntervalSince1970: 100_000)
+      dependencies.date.now = Date(timeIntervalSince1970: PlaylistArchive.gracePeriod + 100_000)
       dependencies.playlistShelfClient.read = { folderRead([batch(name: "Old Mix", stagedAt: 0)]) }
       dependencies.keepLibraryClient.isAuthorized = { true }
       dependencies.keepLibraryClient.libraryPlaylists = { [] }

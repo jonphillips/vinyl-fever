@@ -31,6 +31,30 @@ struct PlaylistArchiveTests {
     #expect(!isArchived(name: "Power Pop", stagedAt: 0, library: nil, now: 200_000))
   }
 
+  @Test func aCreatedPlaylistMissingFromMusicArchivesImmediately() {
+    let date = Date(timeIntervalSince1970: 10)
+    let event = PlaylistCreationEvent(kind: .created, host: "Test", recordedAt: date,
+      playlist: "Power Pop", at: date, writerHost: "Phone", musicID: "p.1", songs: 1, skipped: [])
+    #expect(PlaylistArchive.archivedPlaylistIDs(from: [playlist(name: "Power Pop", id: "target", stagedAt: 10)],
+      libraryPlaylistNames: [], creations: [event], now: date).contains("target"))
+  }
+
+  @Test func aCreatedPlaylistStillInMusicRemainsActive() {
+    let date = Date(timeIntervalSince1970: 10)
+    let event = PlaylistCreationEvent(kind: .created, host: "Test", recordedAt: date,
+      playlist: "Power Pop", at: date, writerHost: "Phone", musicID: "p.1", songs: 1, skipped: [])
+    #expect(!PlaylistArchive.archivedPlaylistIDs(from: [playlist(name: "Power Pop", id: "target", stagedAt: 10)],
+      libraryPlaylistNames: ["Power Pop"], creations: [event], now: date).contains("target"))
+  }
+
+  @Test func aDismissedPlaylistArchivesWithoutALibraryRead() {
+    let date = Date(timeIntervalSince1970: 10)
+    let event = PlaylistCreationEvent(kind: .dismissed, host: "Test", recordedAt: date,
+      playlist: "Power Pop", at: date, writerHost: "Mac")
+    #expect(PlaylistArchive.archivedPlaylistIDs(from: [playlist(name: "Power Pop", id: "target", stagedAt: 10)],
+      libraryPlaylistNames: nil, creations: [event], now: date).contains("target"))
+  }
+
   private func isArchived(
     name: String?, stagedAt: TimeInterval, siblings: [String?] = [], library: [String]?, now: TimeInterval
   ) -> Bool {

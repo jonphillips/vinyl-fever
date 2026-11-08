@@ -74,6 +74,18 @@ public struct CreatedPlaylistRef: Equatable, Sendable {
   }
 }
 
+public struct CreatedPlaylistPartialError: LocalizedError, Equatable, Sendable {
+  public var createdPlaylist: CreatedPlaylistRef
+  public var unaddedSongs: [PlaylistSongReference]
+  public var detail: String
+  public init(createdPlaylist: CreatedPlaylistRef, unaddedSongs: [PlaylistSongReference], detail: String) {
+    self.createdPlaylist = createdPlaylist; self.unaddedSongs = unaddedSongs; self.detail = detail
+  }
+  public var errorDescription: String? {
+    "Created the playlist with \(createdPlaylist.trackCount) songs, but Apple Music couldn't add the remaining \(unaddedSongs.count): \(detail)"
+  }
+}
+
 public struct AppleMusicAPIError: LocalizedError, Equatable, Sendable {
   public var statusCode: Int
   public var detail: String

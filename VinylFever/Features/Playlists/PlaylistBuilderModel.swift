@@ -5,6 +5,8 @@ import LLMHandoffKit
 import Observation
 import SQLiteData
 import VinylFeverCore
+import VinylFeverListening
+import VinylFeverNotes
 
 @DependencyClient
 struct SnapshotRefreshRequestClient: Sendable {
@@ -61,6 +63,7 @@ final class PlaylistBuilderModel {
   @ObservationIgnored @Dependency(\.listeningStore) private var listeningStore
   @ObservationIgnored @Dependency(\.defaultDatabase) private var database
   @ObservationIgnored @Dependency(\.playlistInboxClient) private var playlistInbox
+  @ObservationIgnored @Dependency(\.playlistCreationClient) private var playlistCreations
   @ObservationIgnored @Dependency(\.playlistRolesStore) private var playlistRoles
   @ObservationIgnored @Dependency(\.date.now) private var now
   @ObservationIgnored private var pendingSnapshotRefresh: Task<Void, Never>?
@@ -70,7 +73,8 @@ final class PlaylistBuilderModel {
   var playlistDescription = ""
   var rows: [ResolvedPlaylistRow] = []
   var stagedPlaylists: [StagedPlaylistSummary] = []
-  private var openedStagedPlaylist: StagedHandoff?
+  private var openedStagedPlaylist: StagedPlaylistSummary?
+  var createdElsewhere: [PlaylistCreationEvent] = []
   var droppedTracks: [DroppedPlaylistTrack] = []
   var markerWarning: String?
   var decodeError: String?
@@ -220,14 +224,28 @@ final class PlaylistBuilderModel {
   }
 
   func refreshInbox() {
-    do { stagedPlaylists = try playlistInbox.list() }
+    do {
+      let items = try playlistInbox.list()
+      let creationLog = try playlistCreations.read()
+      let latest = PlaylistCreationsCodec.latestEvents(creationLog.events)
+      let localHost = ListeningStore.liveHostName()
+      createdElsewhere = latest.values.filter { $0.kind == .created && $0.writerHost != localHost }
+        .sorted { $0.at < $1.at }
+      for item in items {
+        guard let host = item.batchHost, let recordedAt = item.recordedAt,
+          let event = latest[PlaylistCreationsCodec.batchKey(host: host, recordedAt: recordedAt)],
+          event.kind == .created, event.writerHost != localHost else { continue }
+        _ = try playlistInbox.markProcessed(item.handoff)
+      }
+      stagedPlaylists = try playlistInbox.list()
+    }
     catch { operationError = error.localizedDescription }
   }
 
   func openStagedPlaylist(_ summary: StagedPlaylistSummary) async {
     do {
       pastedText = try playlistInbox.read(summary.handoff)
-      openedStagedPlaylist = summary.handoff
+      openedStagedPlaylist = summary
       await resolve()
     } catch { operationError = error.localizedDescription }
   }
@@ -235,6 +253,10 @@ final class PlaylistBuilderModel {
   /// Files the staged playlist under `Processed/` without creating it; nothing is deleted.
   func dismissStagedPlaylist(_ summary: StagedPlaylistSummary) {
     do {
+      if let host = summary.batchHost, let recordedAt = summary.recordedAt {
+        try playlistCreations.append(PlaylistCreationEvent(kind: .dismissed, host: host,
+          recordedAt: recordedAt, playlist: summary.name, at: now, writerHost: ListeningStore.liveHostName()))
+      }
       _ = try playlistInbox.markProcessed(summary.handoff)
       stagedPlaylists = try playlistInbox.list()
     } catch { operationError = error.localizedDescription }
@@ -475,6 +497,19 @@ final class PlaylistBuilderModel {
     operationError = nil
     createdStatus = nil
     defer { isCreating = false }
+    if let batch = openedStagedPlaylist, let host = batch.batchHost, let recordedAt = batch.recordedAt {
+      do {
+        let latest = PlaylistCreationsCodec.latestEvents(try playlistCreations.read().events)
+        if let event = latest[PlaylistCreationsCodec.batchKey(host: host, recordedAt: recordedAt)],
+          event.kind == .created {
+          operationError = "Already created on \(event.writerName)."
+          return
+        }
+      } catch {
+        operationError = "Couldn't check whether this playlist was already created: \(error.localizedDescription)"
+        return
+      }
+    }
     let matched = visibleRows.compactMap { row -> PlaylistSongReference? in
       if case .matched(let candidate, _) = row.status {
         PlaylistSongReference(id: candidate.id, source: candidate.source)
@@ -482,22 +517,59 @@ final class PlaylistBuilderModel {
         nil
       }
     }
+    let rowsBeforeCreate = visibleRows
+    var partialCreate = false
+    var unaddedSongIDs: Set<String> = []
     do {
       let trackIndexes = Set(
-        visibleRows.compactMap { row in
+        rowsBeforeCreate.compactMap { row in
           if case .matched = row.status { row.request.index } else { nil }
         })
-      let playlist = try await appleMusic.createLibraryPlaylist(
-        playlistName.trimmingCharacters(in: .whitespacesAndNewlines),
-        playlistDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-          ? nil : playlistDescription.trimmingCharacters(in: .whitespacesAndNewlines),
-        matched
-      )
-      createdTrackIndexes = trackIndexes
+      let playlist: CreatedPlaylistRef
+      do {
+        playlist = try await appleMusic.createLibraryPlaylist(
+          playlistName.trimmingCharacters(in: .whitespacesAndNewlines),
+          playlistDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? nil : playlistDescription.trimmingCharacters(in: .whitespacesAndNewlines),
+          matched
+        )
+      } catch let error as CreatedPlaylistPartialError {
+        playlist = error.createdPlaylist
+        partialCreate = true
+        unaddedSongIDs = Set(error.unaddedSongs.map(\.id))
+      }
+      createdTrackIndexes = partialCreate
+        ? Set(rowsBeforeCreate.compactMap { row in if case .matched = row.status { row.request.index } else { nil } }.prefix(playlist.trackCount))
+        : trackIndexes
       createdPlaylist = playlist
       if let openedStagedPlaylist {
+        if let host = openedStagedPlaylist.batchHost, let recordedAt = openedStagedPlaylist.recordedAt {
+          var skipped = rowsBeforeCreate.compactMap { row -> PlaylistCreationSkippedSong? in
+            switch row.status {
+            case .notFound, .uploadNotFound:
+              PlaylistCreationSkippedSong(title: row.request.title, artist: row.request.artist, reason: "not-found")
+            case .duplicate:
+              PlaylistCreationSkippedSong(title: row.request.title, artist: row.request.artist, reason: "duplicate")
+            default: nil
+            }
+          }
+          if partialCreate {
+            skipped += rowsBeforeCreate.compactMap { row in
+              guard case let .matched(candidate, _) = row.status, unaddedSongIDs.contains(candidate.id) else { return nil }
+              return PlaylistCreationSkippedSong(title: row.request.title, artist: row.request.artist, reason: "not-found")
+            }
+          }
+          do {
+            try playlistCreations.append(PlaylistCreationEvent(kind: .created, host: host,
+              recordedAt: recordedAt, playlist: openedStagedPlaylist.name, at: now,
+              writerHost: ListeningStore.liveHostName(), musicID: playlist.id,
+              songs: playlist.trackCount, skipped: skipped))
+          } catch {
+            operationError = "Playlist created, but its creation record couldn't be saved: \(error.localizedDescription)"
+          }
+        }
         do {
-          _ = try playlistInbox.markProcessed(openedStagedPlaylist)
+          _ = try playlistInbox.markProcessed(openedStagedPlaylist.handoff)
         } catch {
           self.openedStagedPlaylist = nil
           operationError = "Playlist created, but the inbox item couldn't be moved to Processed: \(error.localizedDescription)"
@@ -517,14 +589,20 @@ final class PlaylistBuilderModel {
           ))
           roles.updatedAt = now
           try await playlistRoles.write(roles)
-          createdStatus = "Created and labeled `vinyl-fever`."
+          createdStatus = partialCreate
+            ? "Created and labeled `vinyl-fever`, but \(max(0, matched.count - playlist.trackCount)) songs didn't make it."
+            : "Created and labeled `vinyl-fever`."
         } catch {
           let reason = error.localizedDescription.hasSuffix(".")
             ? String(error.localizedDescription.dropLast()) : error.localizedDescription
-          createdStatus = "Playlist created, but its role couldn't be saved: \(reason). It will be labeled when it syncs."
+          createdStatus = partialCreate
+            ? "Playlist created with \(playlist.trackCount) songs, but \(max(0, matched.count - playlist.trackCount)) didn't make it. Its role couldn't be saved: \(reason). It will be labeled when it syncs."
+            : "Playlist created, but its role couldn't be saved: \(reason). It will be labeled when it syncs."
         }
       } else {
-        createdStatus = "Created “\(playlist.name)” with \(playlist.trackCount) songs. It will appear in Music after iCloud sync."
+        createdStatus = partialCreate
+          ? "Created “\(playlist.name)” with \(playlist.trackCount) of \(matched.count) songs."
+          : "Created “\(playlist.name)” with \(playlist.trackCount) songs. It will appear in Music after iCloud sync."
       }
     } catch {
       operationError = error.localizedDescription

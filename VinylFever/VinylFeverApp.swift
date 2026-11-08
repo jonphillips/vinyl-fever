@@ -6,6 +6,7 @@ import os
 import SQLiteData
 import SwiftUI
 import VinylFeverCore
+import VinylFeverAppleMusicLive
 import VinylFeverListening
 
 private let listeningLogger = Logger(subsystem: "com.jonphillips.vinylfever", category: "listening-poller")
@@ -189,6 +190,10 @@ private func showStartupAlert(_ message: String) {
 }
 
 private func prepareVinylFeverDependencies(includeDatabase: Bool, context: DependencyContext) throws {
+  if includeDatabase, context == .live {
+    do { try LibrarySnapshotStore.liveValue.repairAliasesMirror() }
+    catch { listeningLogger.error("Artist alias mirror repair failed: \(error.localizedDescription, privacy: .public)") }
+  }
   let database: (any DatabaseWriter)?
   if includeDatabase {
     database = try VinylFeverDatabase.open()
@@ -216,6 +221,7 @@ private func prepareVinylFeverDependencies(includeDatabase: Bool, context: Depen
       $0.librarySnapshotStore = .liveValue
       $0.appleMusicCatalogClient = .liveValue
       $0.catalogMatchResolver = .liveValue
+      $0.playlistCreationClient = .liveValue
       // LLMClientKit's live defaults read the app's Keychain key per request.
       $0.setlistNormalizer = .liveValue
       $0.collectionRecipeRunner = .liveValue
