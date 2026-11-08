@@ -6,6 +6,7 @@ import VinylFeverNotes
 struct VinylFeverMobileApp: App {
   @State private var shelfModel = PlaylistShelfModel()
   @State private var playbackModel = PlaylistPlaybackModel()
+  @State private var nowPlayingModel = NowPlayingModel()
   @State private var keepModel = PlaylistKeepModel()
   @State private var notesModel = PlaylistTasteNotesModel()
   @State private var progressModel = PlaylistProgressModel()
@@ -13,17 +14,20 @@ struct VinylFeverMobileApp: App {
 
   var body: some Scene {
     WindowGroup {
-      PlaylistHomeView(model: shelfModel, playbackModel: playbackModel, keepModel: keepModel,
-        notesModel: notesModel, progressModel: progressModel, reviewsModel: reviewsModel)
+      PlaylistHomeView(model: shelfModel, playbackModel: playbackModel, nowPlayingModel: nowPlayingModel,
+        keepModel: keepModel, notesModel: notesModel, progressModel: progressModel,
+        reviewsModel: reviewsModel)
     }
   }
 }
 
 private struct PlaylistHomeView: View {
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+  @Environment(\.scenePhase) private var scenePhase
   @State private var didApplyInitialSelection = false
   @Bindable var model: PlaylistShelfModel
   let playbackModel: PlaylistPlaybackModel
+  let nowPlayingModel: NowPlayingModel
   @Bindable var keepModel: PlaylistKeepModel
   @Bindable var notesModel: PlaylistTasteNotesModel
   @Bindable var progressModel: PlaylistProgressModel
@@ -113,6 +117,9 @@ private struct PlaylistHomeView: View {
         }
       }
     }
+    .safeAreaInset(edge: .bottom, spacing: 0) {
+      NowPlayingBar(model: nowPlayingModel)
+    }
     .sheet(item: $model.destination, onDismiss: {
       Task {
         await model.refresh()
@@ -155,6 +162,10 @@ private struct PlaylistHomeView: View {
       if horizontalSizeClass == .regular { model.selectFirstPlaylistIfNeeded() }
     }
     .task { await playbackModel.observeCurrentEntry() }
+    .task(id: nowPlayingModel.isAuthorized) { await nowPlayingModel.observe() }
+    .onChange(of: scenePhase) { _, phase in
+      if phase == .active { nowPlayingModel.refreshAuthorization() }
+    }
     .onChange(of: notesModel.notes) { _, notes in progressModel.updateSavedNotes(notes) }
     .onChange(of: keepModel.keptPlaylistsBySong) { _, keeps in progressModel.updateSavedKeeps(keeps) }
     .task { await reviewsModel.refresh() }
@@ -462,6 +473,87 @@ private extension TasteNote {
   var playlistReactionID: String { id ?? "\(notedAt.timeIntervalSince1970)|\(note)" }
 }
 
+private struct NowPlayingBar: View {
+  let model: NowPlayingModel
+
+  var body: some View {
+    if model.isAuthorized, let item = model.item {
+      HStack(spacing: 12) {
+        if let artwork = item.artwork {
+          ArtworkImage(artwork, width: 40)
+          .clipShape(.rect(cornerRadius: 6))
+          .accessibilityHidden(true)
+        } else {
+          artworkPlaceholder
+        }
+
+        if let errorMessage = model.errorMessage {
+          Text(errorMessage)
+            .font(.callout)
+            .foregroundStyle(.red)
+            .lineLimit(2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+          VStack(alignment: .leading, spacing: 2) {
+            Text(item.song.title)
+              .font(.subheadline.weight(.semibold))
+              .lineLimit(1)
+            Text(item.song.artist)
+              .font(.caption)
+              .foregroundStyle(.secondary)
+              .lineLimit(1)
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+
+          transportButton("Previous", systemImage: "backward.fill") {
+            await model.previous()
+          }
+          transportButton(item.isPlaying ? "Pause" : "Play",
+            systemImage: item.isPlaying ? "pause.fill" : "play.fill") {
+            await model.togglePlayback()
+          }
+          transportButton("Next", systemImage: "forward.fill") {
+            await model.next()
+          }
+        }
+      }
+      .padding(.horizontal, 12)
+      .padding(.vertical, 6)
+      .padding(.horizontal, 8)
+      .glassEffect(in: .rect(cornerRadius: 16))
+      .accessibilityElement(children: .contain)
+    } else if model.isAuthorized, let errorMessage = model.errorMessage {
+      Text(errorMessage)
+        .font(.callout)
+        .foregroundStyle(.red)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .padding(.horizontal, 8)
+        .glassEffect(in: .rect(cornerRadius: 16))
+    }
+  }
+
+  private var artworkPlaceholder: some View {
+    Image(systemName: "music.note")
+      .font(.title3)
+      .foregroundStyle(.secondary)
+      .frame(width: 40, height: 40)
+      .background(.quaternary, in: .rect(cornerRadius: 6))
+  }
+
+  private func transportButton(_ label: String, systemImage: String, action: @escaping () async -> Void) -> some View {
+    Button {
+      Task { await action() }
+    } label: {
+      Image(systemName: systemImage)
+        .frame(minWidth: 44, minHeight: 44)
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel(label)
+  }
+}
+
 private struct PlaylistSongView: View {
   let song: PlaylistShelfSong
   let playbackModel: PlaylistPlaybackModel
@@ -491,10 +583,16 @@ private struct PlaylistSongView: View {
       .accessibilityLabel("Keep \(song.title) by \(song.artist)")
     }
 
-    Button("Note", systemImage: "pencil") {
+    let savedNotes = notesModel.notes(for: song)
+    let hasNotes = !savedNotes.isEmpty
+    let noteCount = savedNotes.count
+    let noteLabel = hasNotes
+      ? "Add a note on \(song.title) by \(song.artist), \(noteCount) \(noteCount == 1 ? "note" : "notes") saved"
+      : "Note on \(song.title) by \(song.artist)"
+    Button(hasNotes ? "Noted" : "Note", systemImage: hasNotes ? "text.bubble.fill" : "pencil") {
       notesModel.noteButtonTapped(for: song, resolvedSong: playbackModel.resolvedSongs[song.id])
     }
-    .accessibilityLabel("Note on \(song.title) by \(song.artist)")
+    .accessibilityLabel(noteLabel)
   }
 
   var body: some View {

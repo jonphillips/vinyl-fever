@@ -1,5 +1,11 @@
 # Done log
 
+## 2026-11-08 — A player strip and visible song notes (`m24/s1-player-strip`)
+
+- **Result:** Added a persistent Music transport strip for what is playing and made song note actions show their saved-note state.
+- **Verification:** iOS Simulator build passed; 66 iOS tests across 10 suites passed.
+- **Owed:** M24 S1, M24 S2's device gate, in [device-passes.md](device-passes.md).
+
 ## 2026-11-06 — Finished New Music weeks from chat (`effort/finish-new-music-week`)
 
 - **Result:** The chat can record or undo a New Music week finish. Unkept songs count as passed once a later library snapshot exists; on-request refresh reaches the Mac app and retries after five minutes.
