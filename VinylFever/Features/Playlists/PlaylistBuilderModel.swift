@@ -75,6 +75,7 @@ final class PlaylistBuilderModel {
   var stagedPlaylists: [StagedPlaylistSummary] = []
   private var openedStagedPlaylist: StagedPlaylistSummary?
   var createdElsewhere: [PlaylistCreationEvent] = []
+  var creationLogError: String?
   var droppedTracks: [DroppedPlaylistTrack] = []
   var markerWarning: String?
   var decodeError: String?
@@ -226,16 +227,28 @@ final class PlaylistBuilderModel {
   func refreshInbox() {
     do {
       let items = try playlistInbox.list()
-      let creationLog = try playlistCreations.read()
+      stagedPlaylists = items
+      let creationLog: PlaylistCreationsReadResult
+      do {
+        creationLog = try playlistCreations.read()
+        creationLogError = nil
+      } catch {
+        creationLogError = "Couldn't check for playlists created on other devices: \(error.localizedDescription)"
+        return
+      }
       let latest = PlaylistCreationsCodec.latestEvents(creationLog.events)
       let localHost = ListeningStore.liveHostName()
-      createdElsewhere = latest.values.filter { $0.kind == .created && $0.writerHost != localHost }
-        .sorted { $0.at < $1.at }
       for item in items {
         guard let host = item.batchHost, let recordedAt = item.recordedAt,
           let event = latest[PlaylistCreationsCodec.batchKey(host: host, recordedAt: recordedAt)],
           event.kind == .created, event.writerHost != localHost else { continue }
-        _ = try playlistInbox.markProcessed(item.handoff)
+        do {
+          _ = try playlistInbox.markProcessed(item.handoff)
+          let eventKey = PlaylistCreationsCodec.batchKey(host: event.host, recordedAt: event.recordedAt)
+          if !createdElsewhere.contains(where: {
+            PlaylistCreationsCodec.batchKey(host: $0.host, recordedAt: $0.recordedAt) == eventKey
+          }) { createdElsewhere.append(event) }
+        } catch { operationError = "Couldn't file a playlist created on another device: \(error.localizedDescription)" }
       }
       stagedPlaylists = try playlistInbox.list()
     }
@@ -539,25 +552,24 @@ final class PlaylistBuilderModel {
         unaddedSongIDs = Set(error.unaddedSongs.map(\.id))
       }
       createdTrackIndexes = partialCreate
-        ? Set(rowsBeforeCreate.compactMap { row in if case .matched = row.status { row.request.index } else { nil } }.prefix(playlist.trackCount))
+        ? Set(rowsBeforeCreate.compactMap { row -> Int? in
+          guard case let .matched(candidate, _) = row.status, !unaddedSongIDs.contains(candidate.id) else { return nil }
+          return row.request.index
+        })
         : trackIndexes
       createdPlaylist = playlist
       if let openedStagedPlaylist {
         if let host = openedStagedPlaylist.batchHost, let recordedAt = openedStagedPlaylist.recordedAt {
-          var skipped = rowsBeforeCreate.compactMap { row -> PlaylistCreationSkippedSong? in
+          let skipped = rows.compactMap { row -> PlaylistCreationSkippedSong? in
+            guard !createdTrackIndexes.contains(row.request.index) else { return nil }
+            let reason: String
             switch row.status {
-            case .notFound, .uploadNotFound:
-              PlaylistCreationSkippedSong(title: row.request.title, artist: row.request.artist, reason: "not-found")
-            case .duplicate:
-              PlaylistCreationSkippedSong(title: row.request.title, artist: row.request.artist, reason: "duplicate")
-            default: nil
+            case .notFound, .uploadNotFound: reason = "not-found"
+            case .duplicate: reason = "duplicate"
+            case let .matched(candidate, _) where partialCreate && unaddedSongIDs.contains(candidate.id): reason = "not-found"
+            default: reason = "skipped"
             }
-          }
-          if partialCreate {
-            skipped += rowsBeforeCreate.compactMap { row in
-              guard case let .matched(candidate, _) = row.status, unaddedSongIDs.contains(candidate.id) else { return nil }
-              return PlaylistCreationSkippedSong(title: row.request.title, artist: row.request.artist, reason: "not-found")
-            }
+            return PlaylistCreationSkippedSong(title: row.request.title, artist: row.request.artist, reason: reason)
           }
           do {
             try playlistCreations.append(PlaylistCreationEvent(kind: .created, host: host,

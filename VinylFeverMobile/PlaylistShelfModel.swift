@@ -134,7 +134,7 @@ final class PlaylistShelfModel {
         libraryPlaylists = nil
       }
       hasUnreadableFiles = (result.totalFileCount > 0 && result.unreadableFileCount > 0)
-        || result.creations.skippedLines > 0 || result.creations.filesRead > 0 && result.creations.events.isEmpty
+        || result.creations.unreadableFileCount > 0 || result.creations.skippedLines > 0
       if let selectedPlaylistID, !displayedPlaylists.contains(where: { $0.id == selectedPlaylistID }) {
         self.selectedPlaylistID = nil
       }

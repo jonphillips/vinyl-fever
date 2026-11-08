@@ -3,6 +3,9 @@ import Testing
 @testable import VinylFeverNotes
 
 struct PlaylistArchiveTests {
+  @Test func gracePeriodIsFourteenDays() {
+    #expect(PlaylistArchive.gracePeriod == 14 * 24 * 60 * 60)
+  }
   @Test func aNamedPlaylistPresentInTheLibraryIsActive() {
     #expect(!isArchived(name: "Power Pop", stagedAt: 0, library: ["Power Pop"], now: 200_000))
   }

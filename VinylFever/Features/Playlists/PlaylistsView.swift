@@ -84,6 +84,9 @@ struct PlaylistsView: View {
           }
         }
       }
+      if let error = model.creationLogError {
+        Label(error, systemImage: "icloud.slash").font(.callout).foregroundStyle(.secondary)
+      }
       if !model.stagedPlaylists.isEmpty {
         VStack(alignment: .leading, spacing: 8) {
           Text("From chat (\(model.stagedPlaylists.count))").font(.headline)

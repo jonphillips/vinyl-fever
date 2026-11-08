@@ -1199,7 +1199,7 @@ struct LibraryMCPServerTests {
     let folder = tasteRoot.appending(path: "recommendations")
     let file = try #require(FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil).first)
     let batch = try #require(RecommendationLedgerCodec.readFiles([try Data(contentsOf: file)]).batches.first)
-    #expect(batch.tracks.map(\.upload) == [true, false])
+    #expect(batch.tracks.map(\.upload) == [true, nil])
   }
 
   @Test("New Music picks validate against and record the latest saved week")

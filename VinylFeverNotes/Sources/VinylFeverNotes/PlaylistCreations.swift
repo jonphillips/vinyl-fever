@@ -45,8 +45,10 @@ public struct PlaylistCreationsReadResult: Equatable, Sendable {
   public var events: [PlaylistCreationEvent]
   public var skippedLines: Int
   public var filesRead: Int
-  public init(events: [PlaylistCreationEvent], skippedLines: Int, filesRead: Int) {
+  public var unreadableFileCount: Int
+  public init(events: [PlaylistCreationEvent], skippedLines: Int, filesRead: Int, unreadableFileCount: Int = 0) {
     self.events = events; self.skippedLines = skippedLines; self.filesRead = filesRead
+    self.unreadableFileCount = unreadableFileCount
   }
 }
 
@@ -70,7 +72,7 @@ public enum PlaylistCreationsCodec {
     return data
   }
 
-  public static func readFiles(_ files: [Data]) -> PlaylistCreationsReadResult {
+  public static func readFiles(_ files: [Data], unreadableFileCount: Int = 0) -> PlaylistCreationsReadResult {
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .custom { decoder in
       let container = try decoder.singleValueContainer()
@@ -100,7 +102,8 @@ public enum PlaylistCreationsCodec {
         events.append(event)
       }
     }
-    return PlaylistCreationsReadResult(events: events, skippedLines: skipped, filesRead: files.count)
+    return PlaylistCreationsReadResult(events: events, skippedLines: skipped, filesRead: files.count,
+      unreadableFileCount: unreadableFileCount)
   }
 
   public static func latestEvents(_ events: [PlaylistCreationEvent]) -> [String: PlaylistCreationEvent] {

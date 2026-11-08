@@ -33,7 +33,8 @@ enum RecommendationLedgerFolderReader {
     )
     return RecommendationLedgerFolderRead(
       ledger: RecommendationLedgerCodec.readFiles(read.files),
-      creations: PlaylistCreationsCodec.readFiles(creationsRead.files),
+      creations: PlaylistCreationsCodec.readFiles(creationsRead.files,
+        unreadableFileCount: creationsRead.unreadableFileCount),
       filesRead: read.filesRead,
       unreadableFileCount: read.unreadableFileCount,
       totalFileCount: read.totalFileCount

@@ -17,6 +17,8 @@ struct PlaylistCreationsTests {
     #expect(read.skippedLines == 0)
     #expect(read.events == [created, dismissed])
     #expect(PlaylistCreationsCodec.latestEvents(read.events)[PlaylistCreationsCodec.batchKey(host: "stage-host", recordedAt: at)] == dismissed)
+    #expect(String(decoding: try PlaylistCreationsCodec.encode(created), as: UTF8.self) == #"{"at":"2027-01-15T08:00:01.000Z","format":"vf-playlist-creation","host":"stage-host","kind":"created","musicID":"p.123","playlist":"Power Pop","recordedAt":"2027-01-15T08:00:00.000Z","skipped":[{"artist":"Band","reason":"not-found","title":"Live Song"}],"songs":2,"version":1,"writerHost":"Mac"}"# + "\n")
+    #expect(String(decoding: try PlaylistCreationsCodec.encode(dismissed), as: UTF8.self) == #"{"at":"2027-01-15T08:00:02.000Z","device":"Phone","format":"vf-playlist-creation","host":"stage-host","kind":"dismissed","playlist":"Power Pop","recordedAt":"2027-01-15T08:00:00.000Z","version":1}"# + "\n")
   }
 
   @Test func unreadableEventsAreSkippedAndCounted() {

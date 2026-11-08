@@ -921,7 +921,7 @@ private actor LibraryMCPContext {
       let enriched = zip(tracks, survivingInputs).enumerated().map { offset, pair -> RecommendationTrack in
         let (track, input) = pair
         var result = track
-        result.upload = index.shouldUseLibraryRoute(decoded.request.tracks[offset])
+        result.upload = index.shouldUseLibraryRoute(decoded.request.tracks[offset]) ? true : nil
         if let why = input?.why {
           if why.count > 300 { truncated = true }
           result.why = String(why.prefix(300))

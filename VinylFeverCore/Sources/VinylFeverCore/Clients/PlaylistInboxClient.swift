@@ -2,6 +2,7 @@ import Dependencies
 import DependenciesMacros
 import Foundation
 import LLMHandoffKit
+import VinylFeverListening
 
 public struct StagedPlaylistSummary: Identifiable, Sendable {
   public let handoff: StagedHandoff
@@ -35,28 +36,22 @@ extension PlaylistInboxClient: TestDependencyKey {
 extension PlaylistInboxClient: DependencyKey {
   public static var liveValue: Self {
     live(root: FileManager.default.homeDirectoryForCurrentUser
-      .appending(path: "Library/Application Support/VinylFever/PlaylistInbox", directoryHint: .isDirectory))
+      .appending(path: "Library/Application Support/VinylFever/PlaylistInbox", directoryHint: .isDirectory),
+      hostName: { ListeningStore.liveHostName() })
   }
 }
 
 extension PlaylistInboxClient {
-  public static func live(root: URL) -> Self {
+  public static func live(root: URL, hostName: @escaping @Sendable () -> String = { ListeningStore.liveHostName() }) -> Self {
     let inbox = HandoffInbox(root: root, fileExtension: "vfplaylist")
-    let recommendationsRoot = FileManager.default.homeDirectoryForCurrentUser
-      .appending(path: "Library/Mobile Documents/com~apple~CloudDocs/Vinyl Fever/Taste Intelligence/recommendations", directoryHint: .isDirectory)
     return Self(
       list: {
-        let recommendationFiles = (try? FileManager.default.contentsOfDirectory(at: recommendationsRoot, includingPropertiesForKeys: nil))?
-          .filter { $0.pathExtension == "jsonl" }.compactMap { try? Data(contentsOf: $0) } ?? []
-        let batches = RecommendationLedgerCodec.readFiles(recommendationFiles).batches
         return try inbox.list().map { item in
           let decoded = try? PlaylistContract.decode(inbox.read(item))
-          let batch = batches.first { $0.playlist == decoded?.request.name &&
-            Int($0.recordedAt.timeIntervalSince1970) == Int(item.stagedAt.timeIntervalSince1970) }
           return StagedPlaylistSummary(
             handoff: item, name: decoded?.request.name ?? item.slug,
             trackCount: decoded?.request.tracks.count ?? 0,
-            batchHost: batch?.host, recordedAt: batch?.recordedAt
+            batchHost: hostName(), recordedAt: item.stagedAt
           )
         }
       },

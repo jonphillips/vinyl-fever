@@ -62,6 +62,10 @@ struct PlaylistBuilderModelTests {
     #expect(opened.createdStatus == "Created and labeled `vinyl-fever`.")
     #expect(creationLog.events.first?.kind == .created)
     #expect(creationLog.events.first?.musicID == "playlist")
+    #expect(creationLog.events.first?.songs == 1)
+    #expect(creationLog.events.first?.skipped == [])
+    #expect(creationLog.events.first?.host == "stage-host")
+    #expect(creationLog.events.first?.recordedAt == newer.stagedAt)
     #expect(await roleMemory.value?.playlists == [PlaylistRoleEntry(
       persistentID: "playlist", name: "Test Mix", role: .vinylFever,
       pendingSince: Date(timeIntervalSince1970: 10))])
@@ -77,6 +81,10 @@ struct PlaylistBuilderModelTests {
     #expect(dismissStub.processed.map(\.url) == [newer.url])
     #expect(dismiss.stagedPlaylists.map(\.name) == ["Older"])
     #expect(dismissCreationLog.events.first?.kind == .dismissed)
+    #expect(dismissCreationLog.events.first?.host == "stage-host")
+    #expect(dismissCreationLog.events.first?.recordedAt == newer.stagedAt)
+    #expect(dismissCreationLog.events.first?.writerHost != nil)
+    #expect(dismissCreationLog.events.first?.musicID == nil)
   }
 
   @Test("a batch created on another device is filed and announced")
@@ -96,6 +104,44 @@ struct PlaylistBuilderModelTests {
     #expect(stub.processed.map(\.url) == [item.url])
     #expect(model.stagedPlaylists.isEmpty)
     #expect(model.createdElsewhere == [event])
+  }
+
+  @Test("unrelated creations are not announced and local creations are not filed")
+  func ignoresUnrelatedAndLocalCreations() {
+    let item = handoff("unrelated")
+    let summary = StagedPlaylistSummary(handoff: item, name: "Power Pop", trackCount: 1,
+      batchHost: "stage-host", recordedAt: item.stagedAt)
+    let stub = InboxStub(summaries: [summary], contents: [item.url: validPaste])
+    let unrelated = PlaylistCreationEvent(kind: .created, host: "other-stage", recordedAt: item.stagedAt,
+      playlist: "Unrelated", at: item.stagedAt.addingTimeInterval(1), device: "Jon’s iPhone",
+      musicID: "p.other", songs: 1, skipped: [])
+    let local = PlaylistCreationEvent(kind: .created, host: "stage-host", recordedAt: item.stagedAt,
+      playlist: "Power Pop", at: item.stagedAt.addingTimeInterval(2), writerHost: ListeningStore.liveHostName(),
+      musicID: "p.local", songs: 1, skipped: [])
+    let model = withDependencies {
+      $0.playlistInboxClient = stub.client
+      $0.playlistCreationClient.read = { .init(events: [unrelated, local], skippedLines: 0, filesRead: 1) }
+    } operation: { PlaylistBuilderModel() }
+    model.refreshInbox()
+    #expect(stub.processed.isEmpty)
+    #expect(model.stagedPlaylists.map(\.handoff.url) == [item.url])
+    #expect(model.createdElsewhere.isEmpty)
+  }
+
+  @Test("inbox stays visible when the creation log cannot be read")
+  func creationLogReadFailureDoesNotBlockInbox() {
+    let item = handoff("log-unreadable")
+    let summary = StagedPlaylistSummary(handoff: item, name: "Power Pop", trackCount: 1,
+      batchHost: "stage-host", recordedAt: item.stagedAt)
+    let stub = InboxStub(summaries: [summary], contents: [item.url: validPaste])
+    let model = withDependencies {
+      $0.playlistInboxClient = stub.client
+      $0.playlistCreationClient.read = { throw CocoaError(.fileReadNoPermission) }
+    } operation: { PlaylistBuilderModel() }
+    model.refreshInbox()
+    #expect(model.stagedPlaylists.map(\.handoff.url) == [item.url])
+    #expect(model.creationLogError?.contains("Couldn't check for playlists created on other devices") == true)
+    #expect(stub.processed.isEmpty)
   }
 
   @Test("a creation event arriving after open blocks a second Music create")
@@ -133,9 +179,9 @@ struct PlaylistBuilderModelTests {
     let stagedAt = Date(timeIntervalSince1970: 500)
     let item = StagedHandoff(url: FileManager.default.temporaryDirectory.appending(path: "partial.vfplaylist"),
       stagedAt: stagedAt, slug: "partial")
-    let tracks = (1...101).map { "{\"artist\":\"Band\",\"title\":\"Song \($0)\"}" }.joined(separator: ",")
+    let tracks = (1...103).map { "{\"artist\":\"Band\",\"title\":\"Song \($0)\"}" }.joined(separator: ",")
     let paste = "VF-PLAYLIST: v1\n{\"name\":\"Long Mix\",\"tracks\":[\(tracks)]}"
-    let summary = StagedPlaylistSummary(handoff: item, name: "Long Mix", trackCount: 101,
+    let summary = StagedPlaylistSummary(handoff: item, name: "Long Mix", trackCount: 103,
       batchHost: "stage-host", recordedAt: stagedAt)
     let inbox = InboxStub(summaries: [summary], contents: [item.url: paste])
     let creationLog = PlaylistCreationLogStub()
@@ -145,7 +191,13 @@ struct PlaylistBuilderModelTests {
       $0.playlistCreationClient = creationLog.client
       $0.catalogMatchResolver.resolve = { request, _ in
         request.tracks.map { track in
-          ResolvedPlaylistRow(request: track, status: .matched(
+          if track.index == 102 {
+            return ResolvedPlaylistRow(request: track, status: .ambiguous([
+              ScoredCandidate(candidate: CatalogSongCandidate(id: "ambiguous-a", title: track.title, artistName: track.artist), score: 0.8),
+              ScoredCandidate(candidate: CatalogSongCandidate(id: "ambiguous-b", title: track.title, artistName: track.artist), score: 0.7),
+            ]))
+          }
+          return ResolvedPlaylistRow(request: track, status: .matched(
             CatalogSongCandidate(id: "id-\(track.index)", title: track.title, artistName: track.artist), score: 1))
         }
       }
@@ -155,12 +207,16 @@ struct PlaylistBuilderModelTests {
       })
     } operation: { PlaylistBuilderModel() }
     await model.openStagedPlaylist(summary)
+    model.remove(trackIndex: 103)
     await model.createPlaylist()
     #expect(model.createdPlaylist?.trackCount == 100)
     #expect(model.createdStatus?.contains("1 songs didn't make it") == true)
     #expect(creationLog.events.first?.kind == .created)
-    #expect(creationLog.events.first?.skipped == [PlaylistCreationSkippedSong(
-      title: "Song 101", artist: "Band", reason: "not-found")])
+    #expect(creationLog.events.first?.skipped == [
+      PlaylistCreationSkippedSong(title: "Song 101", artist: "Band", reason: "not-found"),
+      PlaylistCreationSkippedSong(title: "Song 102", artist: "Band", reason: "skipped"),
+      PlaylistCreationSkippedSong(title: "Song 103", artist: "Band", reason: "skipped"),
+    ])
     #expect(inbox.processed.map(\.url) == [item.url])
   }
 
