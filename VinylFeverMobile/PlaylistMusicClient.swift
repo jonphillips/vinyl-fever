@@ -1,14 +1,25 @@
 import Dependencies
 import DependenciesMacros
 import Combine
+import Foundation
 import MusicKit
 import VinylFeverNotes
+
+struct NowPlayingItem: Equatable, Sendable {
+  var song: FeedbackSong
+  var artworkURL: URL?
+  var isPlaying: Bool
+}
 
 @DependencyClient
 struct PlaylistMusicClient {
   var isAuthorized: @MainActor @Sendable () -> Bool = { false }
   var hasCurrentEntry: @MainActor @Sendable () -> Bool = { false }
+  var playbackTime: @MainActor @Sendable () -> TimeInterval = { 0 }
   var currentEntry: @MainActor @Sendable () -> AsyncStream<FeedbackSong?> = {
+    AsyncStream { $0.finish() }
+  }
+  var nowPlaying: @MainActor @Sendable () -> AsyncStream<NowPlayingItem?> = {
     AsyncStream { $0.finish() }
   }
   var playlists: @MainActor @Sendable () async throws -> [Playlist]
@@ -19,6 +30,10 @@ struct PlaylistMusicClient {
   var playSongs: @MainActor @Sendable ([Song], Song) async throws -> Void
   var insertSong: @MainActor @Sendable (Song, Bool) async throws -> Void
   var play: @MainActor @Sendable () async throws -> Void
+  var pause: @MainActor @Sendable () async throws -> Void
+  var skipToPrevious: @MainActor @Sendable () async throws -> Void
+  var seekToStart: @MainActor @Sendable () async throws -> Void
+  var skipToNext: @MainActor @Sendable () async throws -> Void
 }
 
 extension PlaylistMusicClient: TestDependencyKey {
@@ -29,6 +44,7 @@ private enum PlaylistMusicClientKey: DependencyKey {
   static let liveValue = PlaylistMusicClient(
     isAuthorized: { MusicAuthorization.currentStatus == .authorized },
     hasCurrentEntry: { SystemMusicPlayer.shared.queue.currentEntry != nil },
+    playbackTime: { SystemMusicPlayer.shared.playbackTime },
     currentEntry: {
       AsyncStream { continuation in
         let queue = SystemMusicPlayer.shared.queue
@@ -47,6 +63,37 @@ private enum PlaylistMusicClientKey: DependencyKey {
           for await _ in queue.objectWillChange.values {
             await Task.yield()
             continuation.yield(currentSong())
+          }
+        }
+        continuation.onTermination = { _ in observation.cancel() }
+      }
+    },
+    nowPlaying: {
+      AsyncStream { continuation in
+        let player = SystemMusicPlayer.shared
+        let observation = Task { @MainActor in
+          func currentItem() -> NowPlayingItem? {
+            guard let entry = player.queue.currentEntry else { return nil }
+            let artist: String
+            var artworkURL: URL?
+            if case let .song(song)? = entry.item {
+              artist = song.artistName
+              artworkURL = song.artwork?.url(width: 80, height: 80)
+            } else {
+              artist = entry.subtitle ?? ""
+            }
+            return NowPlayingItem(song: FeedbackSong(title: entry.title, artist: artist),
+              artworkURL: artworkURL, isPlaying: player.state.playbackStatus == .playing)
+          }
+          continuation.yield(currentItem())
+          var previousItem = currentItem()
+          while !Task.isCancelled {
+            do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
+            let nextItem = currentItem()
+            if nextItem != previousItem {
+              continuation.yield(nextItem)
+              previousItem = nextItem
+            }
           }
         }
         continuation.onTermination = { _ in observation.cancel() }
@@ -85,7 +132,11 @@ private enum PlaylistMusicClientKey: DependencyKey {
       try await player.queue.insert(song, position: .afterCurrentEntry)
       if skip { try await player.skipToNextEntry() }
     },
-    play: { try await SystemMusicPlayer.shared.play() }
+    play: { try await SystemMusicPlayer.shared.play() },
+    pause: { SystemMusicPlayer.shared.pause() },
+    skipToPrevious: { try await SystemMusicPlayer.shared.skipToPreviousEntry() },
+    seekToStart: { SystemMusicPlayer.shared.restartCurrentEntry() },
+    skipToNext: { try await SystemMusicPlayer.shared.skipToNextEntry() }
   )
 }
 

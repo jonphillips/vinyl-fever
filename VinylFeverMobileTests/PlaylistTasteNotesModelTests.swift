@@ -6,6 +6,39 @@ import VinylFeverNotes
 
 struct PlaylistTasteNotesModelTests {
   @Test @MainActor
+  func songNotesIncludeFeedbackAndSessionNotesButExcludePlaylistReactions() async {
+    let songNote = TasteNote(notedAt: Date(timeIntervalSince1970: 10), note: "From Siri",
+      source: "picked", title: "Song", artist: "Artist")
+    let reaction = TasteNote(notedAt: Date(timeIntervalSince1970: 11), note: "Playlist reaction",
+      source: "playlist", playlist: "Power Pop")
+    let model = withDependencies({ dependencies in
+      dependencies.date.now = Date(timeIntervalSince1970: 1_800_000_000)
+      dependencies.playlistTasteNotesClient.read = {
+        let data = try [songNote, reaction].reduce(into: Data()) { data, note in
+          data.append(try TasteNotesCodec.encode(note))
+        }
+        return PlaylistTasteNotesFolderRead(result: TasteNotesCodec.readFiles([data]),
+          unreadableFileCount: 0, totalFileCount: 1)
+      }
+      dependencies.playlistTasteNotesClient.deviceName = { "Test iPhone" }
+      dependencies.playlistTasteNotesClient.save = { _, _ in }
+    }) { PlaylistTasteNotesModel() }
+    await model.refresh()
+
+    #expect(model.notes(for: playlistSong()).map(\.note) == ["From Siri"])
+    #expect(model.notes(for: PlaylistShelfSong(
+      id: "other", title: "Other", artist: "Artist", album: nil, year: nil, familiarity: "",
+      why: nil, like: []
+    )).isEmpty)
+
+    model.noteButtonTapped(for: playlistSong(), resolvedSong: nil)
+    model.draft = "Saved just now"
+    await model.save()
+    #expect(model.notes(for: playlistSong()).map(\.note).contains("Saved just now"))
+    #expect(model.notes(for: playlistSong()).count == 2)
+  }
+
+  @Test @MainActor
   func savesPlaylistReactionWithPlaylistContextAndDisplaysItSeparately() async throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     let tasteFolder = root.appendingPathComponent("Taste Intelligence", isDirectory: true)

@@ -42,6 +42,7 @@ goes in `DONE-LOG.md`.
 - **review-keeps-from-phone:** Unprompted taste notes: after install, quit and reopen ChatGPT, then make two unprompted taste statements in a new Work chat. Verify both strings arrive word for word in notes-chat-<host>.jsonl and each reply confirms it is saved. ([brief](efforts/archive/review-keeps-from-phone.md))
 - **evicted-icloud-writes:** After installation, evict the recommendations JSONL file; ask chat to record New Music picks and confirm recorded: true plus the batch in recommendation_outcomes. ([brief](efforts/archive/evicted-icloud-writes.md))
 - **finish-new-music-week:** After installing on the Mac, finish a live New Music week in a new chat; confirm the snapshot updates without touching the Mac, then confirm a keep synced from the phone appears in the review outcomes. ([brief](efforts/archive/finish-new-music-week.md))
+- **M24 S1, M24 S2:** On iPhone and iPad, start 2023 Selections and confirm artwork, previous/play-pause/next, Lock Screen pause tracking, playback started in Music, queue-clear hiding, and no overlap with the last song. On iPhone, confirm a Siri note reads Noted, a newly saved note updates immediately, and an unnoted song still reads Note. ([M24](milestones/M24-phone-finishes-playlists.md))
 ## Setup steps held for Jon
 
 - **Before M20 S1's gate:** the one-action "VF Music Feedback" shortcut, picked in Control
