@@ -4,6 +4,154 @@ import VinylFeverCore
 import VinylFeverListening
 
 struct TasteIntelligenceTests {
+  @Test("finished New Music weeks pass unkept songs once the snapshot reaches the finish time")
+  func finishedWeekOverridesListeningWindow() {
+    let date = Date(timeIntervalSince1970: 1_800_000_000)
+    let finishedAt = date.addingTimeInterval(86_400)
+    let now = date.addingTimeInterval(2 * 86_400)
+    let week = NewMusicWeek(lastModifiedDate: date, fetchedAt: date, host: "Mac", tracks: [
+      NewMusicTrack(catalogID: "1", title: "Kept", artist: "A"),
+      NewMusicTrack(catalogID: "2", title: "Unkept", artist: "B"),
+    ])
+    let roles = PlaylistRoles(updatedAt: now, playlists: [PlaylistRoleEntry(persistentID: "keep", name: "Keepers", role: .keepers)])
+    let snapshot = LibrarySnapshot(generatedAt: finishedAt.addingTimeInterval(1), tracks: [
+      LibraryTrack(persistentID: "kept", name: "Kept", artist: "A"),
+    ], playlists: [LibraryPlaylist(persistentID: "keep", name: "Keepers", kind: .user, members: ["kept"])])
+    let emptyLog = ListeningLog(streams: [], now: now)
+    let finished = TasteIntelligence.keptAndPassed(weeks: [week], snapshot: snapshot, roles: roles,
+      log: emptyLog, now: now, finishedAtByWeek: [date: finishedAt])[0]
+    #expect(finished.counts == ["kept": 1, "passed": 1])
+    #expect(finished.finishedAt == finishedAt)
+    #expect(finished.awaitingSnapshot == false)
+    #expect(TasteIntelligence.baselines(weeks: [finished], snapshot: snapshot).pendingWeeks == 0)
+
+    var staleSnapshot = snapshot
+    staleSnapshot.generatedAt = finishedAt.addingTimeInterval(-1)
+    let awaiting = TasteIntelligence.keptAndPassed(weeks: [week], snapshot: staleSnapshot, roles: roles,
+      log: emptyLog, now: now, finishedAtByWeek: [date: finishedAt])[0]
+    #expect(awaiting.counts == ["kept": 1, "pending": 1])
+    #expect(awaiting.awaitingSnapshot == true)
+  }
+
+  @Test("a keep added after a finished week turns its pass into a keep")
+  func finishedWeekKeepAddedLaterTurnsPassIntoKeep() {
+    let date = Date(timeIntervalSince1970: 1_800_000_000)
+    let finishedAt = date.addingTimeInterval(86_400)
+    let now = date.addingTimeInterval(2 * 86_400)
+    let tracks = (0..<25).map { index in
+      NewMusicTrack(catalogID: "catalog-\(index)", title: "Track \(index)", artist: "Artist \(index)")
+    }
+    let week = NewMusicWeek(lastModifiedDate: date, fetchedAt: date, host: "Mac", tracks: tracks)
+    func snapshot(keeping count: Int, at: Date) -> LibrarySnapshot {
+      let tracks = (0..<count).map { index in
+        LibraryTrack(persistentID: "id-\(index)", name: "Track \(index)", artist: "Artist \(index)")
+      }
+      return LibrarySnapshot(generatedAt: at, tracks: tracks, playlists: [
+        LibraryPlaylist(persistentID: "keepers", name: "Keepers", kind: .user,
+          members: tracks.map(\.persistentID))
+      ])
+    }
+    let roles = PlaylistRoles(updatedAt: now,
+      playlists: [PlaylistRoleEntry(persistentID: "keepers", name: "Keepers", role: .keepers)])
+    let log = ListeningLog(streams: [], now: now)
+
+    let first = TasteIntelligence.keptAndPassed(weeks: [week], snapshot: snapshot(keeping: 5, at: finishedAt.addingTimeInterval(1)),
+      roles: roles, log: log, now: now, finishedAtByWeek: [date: finishedAt])[0]
+    let later = TasteIntelligence.keptAndPassed(weeks: [week], snapshot: snapshot(keeping: 6, at: finishedAt.addingTimeInterval(2)),
+      roles: roles, log: log, now: now, finishedAtByWeek: [date: finishedAt])[0]
+
+    #expect(first.counts == ["kept": 5, "passed": 20])
+    #expect(later.counts == ["kept": 6, "passed": 19])
+  }
+
+  @Test("finished-week outcomes ignore incomplete listening logs")
+  func finishedWeekIgnoresPartialPlays() {
+    let date = Date(timeIntervalSince1970: 1_800_000_000)
+    let finishedAt = date.addingTimeInterval(86_400)
+    let now = date.addingTimeInterval(2 * 86_400)
+    let week = NewMusicWeek(lastModifiedDate: date, fetchedAt: date, host: "Mac", tracks: [
+      NewMusicTrack(catalogID: "1", title: "Played", artist: "A"),
+      NewMusicTrack(catalogID: "2", title: "Not logged", artist: "B"),
+    ])
+    let partialFetch = ListeningFetch(poller: UUID(), host: "Mac", fetchedAt: finishedAt,
+      outcome: .plays, newCount: 1, pagesRead: 1,
+      items: [ListeningItem(kind: .song, id: "1", title: "Played", artist: "A")])
+    let partialLog = ListeningLog(streams: [[partialFetch]], now: now)
+    let emptyLog = ListeningLog(streams: [], now: now)
+    let snapshot = LibrarySnapshot(generatedAt: finishedAt.addingTimeInterval(1), tracks: [])
+    let roles = PlaylistRoles(updatedAt: now, playlists: [])
+    let partial = TasteIntelligence.keptAndPassed(weeks: [week], snapshot: snapshot, roles: roles,
+      log: partialLog, now: now, finishedAtByWeek: [date: finishedAt])[0]
+    let empty = TasteIntelligence.keptAndPassed(weeks: [week], snapshot: snapshot, roles: roles,
+      log: emptyLog, now: now, finishedAtByWeek: [date: finishedAt])[0]
+
+    #expect(partial.tracks.map(\.classification) == [.passed, .passed])
+    #expect(partial.counts == empty.counts)
+    #expect(partial.tracks.map(\.classification) == empty.tracks.map(\.classification))
+  }
+
+  @Test("a staged batch on a finished-week date keeps the 14-day rule")
+  func stagedBatchOnFinishedWeekDateKeepsFourteenDayRule() {
+    let date = Date(timeIntervalSince1970: 1_800_000_000)
+    let finishedAt = date.addingTimeInterval(86_400)
+    let now = date.addingTimeInterval(2 * 86_400)
+    let batch = RecommendationBatch(kind: "staged-playlist", recordedAt: date, host: "Mac",
+      playlist: "Staged", tracks: [RecommendationTrack(artist: "Artist", title: "Song",
+        familiar: false, reasons: [], artistKnown: false)])
+    let snapshot = LibrarySnapshot(generatedAt: finishedAt.addingTimeInterval(1), tracks: [])
+    let outcomes = TasteIntelligence.recommendationOutcomes(ledger: .init(batches: [batch], skippedLines: 0),
+      weeks: [], snapshot: snapshot, roles: PlaylistRoles(updatedAt: now, playlists: []),
+      log: ListeningLog(streams: [], now: now), now: now, finishedAtByWeek: [date: finishedAt])
+    #expect(outcomes.batches.first?.songs.first?.classification == .pending)
+  }
+
+  @Test("finished New Music picks fill all four outcome cells and omit an empty heard list")
+  func finishedWeekPicksFillAllFourCells() {
+    let date = Date(timeIntervalSince1970: 1_800_000_000)
+    let finishedAt = date.addingTimeInterval(86_400)
+    let now = date.addingTimeInterval(2 * 86_400)
+    let weekTracks = [
+      NewMusicTrack(catalogID: "pk", title: "Picked Keep", artist: "A"),
+      NewMusicTrack(catalogID: "pp", title: "Picked Pass", artist: "B"),
+      NewMusicTrack(catalogID: "nk", title: "Unpicked Keep", artist: "C"),
+      NewMusicTrack(catalogID: "np", title: "Unpicked Pass", artist: "D"),
+    ]
+    let week = NewMusicWeek(lastModifiedDate: date, fetchedAt: date, host: "Mac", tracks: weekTracks)
+    let keptTracks = [
+      LibraryTrack(persistentID: "pk", name: "Picked Keep", artist: "A"),
+      LibraryTrack(persistentID: "nk", name: "Unpicked Keep", artist: "C"),
+    ]
+    let snapshot = LibrarySnapshot(generatedAt: finishedAt.addingTimeInterval(1), tracks: keptTracks,
+      playlists: [LibraryPlaylist(persistentID: "keepers", name: "Keepers", kind: .user,
+        members: keptTracks.map(\.persistentID))])
+    let roles = PlaylistRoles(updatedAt: now,
+      playlists: [PlaylistRoleEntry(persistentID: "keepers", name: "Keepers", role: .keepers)])
+    let songs = [
+      RecommendationTrack(artist: "A", title: "Picked Keep", familiar: false, reasons: [], artistKnown: false, picked: true),
+      RecommendationTrack(artist: "B", title: "Picked Pass", familiar: false, reasons: [], artistKnown: false, picked: true),
+      RecommendationTrack(artist: "C", title: "Unpicked Keep", familiar: false, reasons: [], artistKnown: false, picked: false),
+      RecommendationTrack(artist: "D", title: "Unpicked Pass", familiar: false, reasons: [], artistKnown: false, picked: false),
+    ]
+    let picks = RecommendationBatch(kind: "new-music-picks", recordedAt: date.addingTimeInterval(100),
+      host: "Mac", tracks: songs, coverage: RecommendationCoverage(listening: true, notes: true,
+        snapshotAt: snapshot.generatedAt), batchDate: date)
+    let log = ListeningLog(streams: [], now: now)
+    let outcomes = TasteIntelligence.recommendationOutcomes(ledger: .init(batches: [picks], skippedLines: 0),
+      weeks: [week], snapshot: snapshot, roles: roles, log: log, now: now,
+      finishedAtByWeek: [date: finishedAt])
+    let outcome = outcomes.batches[0]
+    let classified = TasteIntelligence.keptAndPassed(weeks: [week], snapshot: snapshot, roles: roles,
+      log: log, now: now, finishedAtByWeek: [date: finishedAt])
+    let baselines = TasteIntelligence.baselines(weeks: classified, snapshot: snapshot, outcomes: outcomes)
+
+    #expect(outcome.pickedCounts == ["kept": 1, "passed": 1])
+    #expect(outcome.notPickedCounts == ["kept": 1, "passed": 1])
+    #expect(outcome.songs.count == 4)
+    #expect(outcome.heardBeforePick == nil)
+    #expect(baselines.weeklyYield.count == 1)
+    #expect(baselines.pendingWeeks == 0)
+  }
+
   @Test("snapshot curation diff ignores playlist reorders and records membership and flag changes")
   func curationDiff() {
     let t0 = Date(timeIntervalSince1970: 1_700_000_000)
@@ -148,14 +296,19 @@ struct TasteIntelligenceTests {
         familiar: false, reasons: [], artistKnown: false, picked: true)],
       coverage: RecommendationCoverage(listening: true, notes: true, snapshotAt: now), batchDate: uncoveredDate)
     let ledger = RecommendationLedgerReadResult(batches: [replacementPick, uncoveredPick, ledgerBatch, coveredRetry], skippedLines: 0)
+    let finishedAt = date.addingTimeInterval(86_400)
+    let finishedAtByWeek = [date: finishedAt]
     let classified = TasteIntelligence.keptAndPassed(weeks: [week, uncoveredWeek], snapshot: snapshot,
-      roles: roles, log: log, now: now)
+      roles: roles, log: log, now: now, finishedAtByWeek: finishedAtByWeek)
     let outcomes = TasteIntelligence.recommendationOutcomes(ledger: ledger, weeks: [week, uncoveredWeek],
-      snapshot: snapshot, roles: roles, log: log, now: now)
+      snapshot: snapshot, roles: roles, log: log, now: now, finishedAtByWeek: finishedAtByWeek)
     let batch = try #require(outcomes.batches.first { $0.recordedAt == ledgerBatch.recordedAt })
     #expect(batch.pickedCounts == ["kept": 1])
     #expect(batch.notPickedCounts == ["passed": 1])
     #expect(batch.songs.map(\.title).sorted() == ["Keep Song", "Pass Song"])
+    #expect(batch.finishedAt == finishedAt)
+    #expect(batch.awaitingSnapshot == false)
+    #expect(batch.heardBeforePick == ["Heard Artist — Heard Song"])
     let baselines = TasteIntelligence.baselines(weeks: classified, snapshot: snapshot,
       ledger: ledger, outcomes: outcomes)
     #expect(baselines.picksByWeek[uncoveredDate.ISO8601Format()]?.picked == .init(kept: 1, passed: 0))

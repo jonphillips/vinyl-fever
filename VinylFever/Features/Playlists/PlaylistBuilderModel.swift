@@ -1,9 +1,51 @@
 import Dependencies
+import DependenciesMacros
 import Foundation
 import LLMHandoffKit
 import Observation
 import SQLiteData
 import VinylFeverCore
+
+@DependencyClient
+struct SnapshotRefreshRequestClient: Sendable {
+  var requests: @Sendable () -> AsyncStream<Void> = { AsyncStream { _ in } }
+}
+
+extension SnapshotRefreshRequestClient: TestDependencyKey {
+  static var testValue: Self { Self(requests: { AsyncStream { _ in } }) }
+}
+
+extension SnapshotRefreshRequestClient: DependencyKey {
+  static var liveValue: Self {
+    Self(requests: {
+      AsyncStream { continuation in
+        #if os(macOS)
+        let center = DistributedNotificationCenter.default()
+        let observer = center.addObserver(forName: Notification.Name("com.jonphillips.vinylfever.refreshSnapshot"),
+          object: nil, queue: .main) { _ in continuation.yield(()) }
+        let registration = SnapshotRefreshObserver(center: center, token: observer)
+        continuation.onTermination = { _ in registration.remove() }
+        #endif
+      }
+    })
+  }
+}
+
+private final class SnapshotRefreshObserver: @unchecked Sendable {
+  private let center: DistributedNotificationCenter
+  private let token: any NSObjectProtocol
+  init(center: DistributedNotificationCenter, token: any NSObjectProtocol) {
+    self.center = center; self.token = token
+  }
+  func remove() { center.removeObserver(token) }
+}
+
+extension DependencyValues {
+  var snapshotRefreshRequestClient: SnapshotRefreshRequestClient {
+    get { self[SnapshotRefreshRequestClient.self] }
+    set { self[SnapshotRefreshRequestClient.self] = newValue }
+  }
+}
 
 @MainActor
 @Observable
@@ -12,6 +54,7 @@ final class PlaylistBuilderModel {
   @ObservationIgnored @Dependency(\.appleMusicCatalogClient) private var appleMusic
   @ObservationIgnored @Dependency(\.catalogMatchResolver) private var resolver
   @ObservationIgnored @Dependency(\.continuousClock) private var clock
+  @ObservationIgnored @Dependency(\.snapshotRefreshRequestClient) private var snapshotRefreshRequests
   @ObservationIgnored @Dependency(\.musicAppClient) private var musicApp
   @ObservationIgnored @Dependency(\.librarySnapshotStore) private var snapshotStore
   @ObservationIgnored @Dependency(\.tasteCurationClient) private var tasteCuration
@@ -20,6 +63,7 @@ final class PlaylistBuilderModel {
   @ObservationIgnored @Dependency(\.playlistInboxClient) private var playlistInbox
   @ObservationIgnored @Dependency(\.playlistRolesStore) private var playlistRoles
   @ObservationIgnored @Dependency(\.date.now) private var now
+  @ObservationIgnored private var pendingSnapshotRefresh: Task<Void, Never>?
 
   var pastedText = ""
   var playlistName = ""
@@ -154,6 +198,25 @@ final class PlaylistBuilderModel {
         await refreshSnapshot(requestingPermission: false)
       }
     } catch { librarySnapshotError = error.localizedDescription }
+  }
+
+  func runSnapshotLifecycle(onLoaded: @MainActor (LibrarySnapshot?) async -> Void) async {
+    let requests = snapshotRefreshRequests.requests()
+    await loadSnapshotAndRefreshIfStale()
+    await onLoaded(librarySnapshot)
+    for await _ in requests {
+      await snapshotRefreshRequested()
+    }
+  }
+
+  func snapshotRefreshRequested() async {
+    pendingSnapshotRefresh?.cancel()
+    await refreshSnapshot(requestingPermission: false)
+    pendingSnapshotRefresh = Task { @MainActor [weak self, clock] in
+      do { try await clock.sleep(for: .seconds(5 * 60)) }
+      catch { return }
+      await self?.refreshSnapshot(requestingPermission: false)
+    }
   }
 
   func refreshInbox() {

@@ -23,6 +23,9 @@ packages:
   swift-dependencies:
     url: https://github.com/pointfreeco/swift-dependencies
     from: 1.0.0
+  swift-clocks:
+    url: https://github.com/pointfreeco/swift-clocks
+    from: 1.0.0
   sqlite-data:
     url: https://github.com/pointfreeco/sqlite-data
     from: 1.0.0
@@ -215,6 +218,8 @@ targets:
       # its VinylFeverCore/Dependencies copies into the test bundle.
       - target: VinylFever
         link: false
+      - package: swift-clocks
+        product: Clocks
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

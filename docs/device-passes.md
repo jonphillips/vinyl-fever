@@ -17,7 +17,7 @@ goes in `DONE-LOG.md`.
   M18's prerequisites carry it too ([M18](milestones/M18-taste-outcomes.md)).
 - **M18 S2:** for two New Music weeks, chat picks before listening, then read `taste_baselines`
   after 14 days, or once Jon finishes the week in chat
-  ([finish-new-music-week](efforts/finish-new-music-week.md)). Staging passed 2026-10-28
+  ([finish-new-music-week](efforts/archive/finish-new-music-week.md)). Staging passed 2026-10-28
   ([M18](milestones/M18-taste-outcomes.md)).
 - **M18 S7:** create an inbox playlist, confirm it's pending immediately, then confirm its Music
   ID is adopted after sync and refresh.
@@ -41,6 +41,7 @@ goes in `DONE-LOG.md`.
 - **review-keeps-from-phone:** Phone outcomes: on iPhone, keep a staged song, tap Done listening without opening Mac Vinyl Fever, and confirm the monitor review counts the keep. On Pop with Bite, tap Not done then Done listening, confirm the new review counts keeps, save Your reaction, and find it via taste_notes. ([brief](efforts/archive/review-keeps-from-phone.md))
 - **review-keeps-from-phone:** Unprompted taste notes: after install, quit and reopen ChatGPT, then make two unprompted taste statements in a new Work chat. Verify both strings arrive word for word in notes-chat-<host>.jsonl and each reply confirms it is saved. ([brief](efforts/archive/review-keeps-from-phone.md))
 - **evicted-icloud-writes:** After installation, evict the recommendations JSONL file; ask chat to record New Music picks and confirm recorded: true plus the batch in recommendation_outcomes. ([brief](efforts/archive/evicted-icloud-writes.md))
+- **finish-new-music-week:** After installing on the Mac, finish a live New Music week in a new chat; confirm the snapshot updates without touching the Mac, then confirm a keep synced from the phone appears in the review outcomes. ([brief](efforts/archive/finish-new-music-week.md))
 ## Setup steps held for Jon
 
 - **Before M20 S1's gate:** the one-action "VF Music Feedback" shortcut, picked in Control
