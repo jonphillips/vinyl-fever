@@ -8,8 +8,12 @@ struct CachedBatch: Equatable, Identifiable, Sendable {
   var id: String { key }
   @Column(primaryKey: true)
   var key: String
-  @Column(as: RecommendationBatch.JSONRepresentation.self)
-  var batch: RecommendationBatch
+  @Column("batch")
+  var line: String
+
+  var batch: RecommendationBatch? {
+    RecommendationLedgerCodec.readFiles([Data(line.utf8)]).batches.first
+  }
 }
 
 @Table("cachedCreationEvent")
@@ -17,8 +21,12 @@ struct CachedCreationEvent: Equatable, Identifiable, Sendable {
   var id: String { key }
   @Column(primaryKey: true)
   var key: String
-  @Column(as: PlaylistCreationEvent.JSONRepresentation.self)
-  var event: PlaylistCreationEvent
+  @Column("event")
+  var line: String
+
+  var event: PlaylistCreationEvent? {
+    PlaylistCreationsCodec.readFiles([Data(line.utf8)]).events.first
+  }
 }
 
 @Table("cachedLibraryPlaylist")
@@ -79,8 +87,8 @@ struct MobileShelfCache: Equatable {
 enum ShelfCache {
   static func load(from database: any DatabaseReader) throws -> MobileShelfCache {
     try database.read { db in
-      let batches = try CachedBatch.all.fetchAll(db).map(\.batch)
-      let events = try CachedCreationEvent.all.fetchAll(db).map(\.event)
+      let batches = try CachedBatch.all.fetchAll(db).compactMap(\.batch)
+      let events = try CachedCreationEvent.all.fetchAll(db).compactMap(\.event)
       let library = try CachedLibraryPlaylist.all.fetchAll(db).map {
         KeepLibraryPlaylist(id: $0.id, name: $0.name)
       }
@@ -125,19 +133,23 @@ enum ShelfCache {
   }
 
   static func replaceShelf(_ cache: MobileShelfCache, to database: any DatabaseWriter) throws {
+    let batchRows = try cache.batches.map { batch in
+      CachedBatch.Draft(
+        key: PlaylistCreationsCodec.batchKey(host: batch.host, recordedAt: batch.recordedAt),
+        line: String(decoding: try RecommendationLedgerCodec.encode(batch), as: UTF8.self)
+      )
+    }
+    let eventRows = try cache.creationEvents.map { event in
+      CachedCreationEvent.Draft(
+        key: PlaylistCreationsCodec.batchKey(host: event.host, recordedAt: event.recordedAt),
+        line: String(decoding: try PlaylistCreationsCodec.encode(event), as: UTF8.self)
+      )
+    }
     try database.write { db in
       try CachedBatch.delete().execute(db)
-      try CachedBatch.insert {
-        cache.batches.map {
-          CachedBatch.Draft(key: PlaylistCreationsCodec.batchKey(host: $0.host, recordedAt: $0.recordedAt), batch: $0)
-        }
-      }.execute(db)
+      try CachedBatch.insert { batchRows }.execute(db)
       try CachedCreationEvent.delete().execute(db)
-      try CachedCreationEvent.insert {
-        cache.creationEvents.map {
-          CachedCreationEvent.Draft(key: PlaylistCreationsCodec.batchKey(host: $0.host, recordedAt: $0.recordedAt), event: $0)
-        }
-      }.execute(db)
+      try CachedCreationEvent.insert { eventRows }.execute(db)
     }
   }
 

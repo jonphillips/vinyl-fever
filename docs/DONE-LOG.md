@@ -3,7 +3,7 @@
 ## 2026-11-08 — Effort — The phone remembers its shelf (`effort/phone-remembers-shelf`)
 
 - **Result:** The iPhone now paints its shelf and song progress from a device-local SQLiteData cache before continuing its usual Music and iCloud refresh. Clean reads replace their cache; partial reads merge; failed reads preserve the last known state.
-- **Verification:** VinylFeverMobileTests: 83 passed; VinylFeverNotes: 70 passed; VinylFeverListening: 51 passed; VinylFeverCore: 327 passed; generic iOS Simulator build and macOS Vinyl Fever app build passed.
+- **Verification:** VinylFeverMobileTests: 85 passed (81 with NowPlaying excluded, then its 4 tests in isolation); VinylFeverNotes: 70 passed; VinylFeverListening: 51 passed; VinylFeverCore: 327 passed; generic iOS Simulator build and macOS Vinyl Fever app build passed.
 - **Owed:** This slice's device gate, in [device-passes.md](device-passes.md).
 
 ## 2026-11-08 — M24 · S5 — Create staged playlists on iPhone (`m24/s5-create-in-music`)

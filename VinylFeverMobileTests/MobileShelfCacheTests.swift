@@ -82,15 +82,67 @@ struct MobileShelfCacheTests {
     #expect(reopened.0.libraryPlaylists == [KeepLibraryPlaylist(id: "library-id", name: "Fresh")])
     #expect(reopened.1.results[freshPlaylistID]?.songs[freshSongID] == .kept(in: ["Keepers"]))
     #expect(reopened.1.results[freshPlaylistID]?.counts.kept == 1)
-    let cachedBatchNames = try await database.read { try CachedBatch.all.fetchAll($0).map(\.batch.playlist) }
+    let cachedBatchNames = try await database.read { try CachedBatch.all.fetchAll($0).compactMap { $0.batch?.playlist } }
     #expect(cachedBatchNames == ["Fresh"])
+  }
+
+  @Test
+  func cacheRoundTripPreservesCodecTimestampAndShelfIDs() throws {
+    let source = try preciseBatchFromLedgerLine()
+    let before = shelfPlaylists([source]).first
+    let database = try makeDatabase()
+
+    _ = try ShelfCache.writeShelf(read([source]), to: database)
+
+    let cached = try ShelfCache.load(from: database)
+    let after = shelfPlaylists(cached.batches).first
+    #expect(cached.batches.first?.recordedAt == source.recordedAt)
+    #expect(after?.id == before?.id)
+    #expect(after?.songs.map(\.id) == before?.songs.map(\.id))
+  }
+
+  @Test @MainActor
+  func preciseCachedProgressAndSelectionSurviveFreshRead() async throws {
+    let source = try preciseBatchFromLedgerLine()
+    let cachedPlaylist = try #require(shelfPlaylists([source]).first)
+    let database = try makeDatabase()
+    _ = try ShelfCache.writeShelf(read([source]), to: database)
+    try ShelfCache.replaceProgress([
+      cachedPlaylist.id: PlaylistProgressResult(songs: [cachedPlaylist.songs[0].id: .kept(in: ["Keepers"])]),
+    ], to: database)
+
+    let gate = ShelfReadGate()
+    let models = withDependencies({ dependencies in
+      dependencies.mobileCacheDatabase = database
+      dependencies.date.now = date(1_793_216_700)
+      dependencies.keepLibraryClient.isAuthorized = { true }
+      dependencies.keepLibraryClient.libraryPlaylists = { [] }
+      dependencies.playlistShelfClient.read = { try await gate.read() }
+    }) {
+      (PlaylistShelfModel(), PlaylistProgressModel())
+    }
+    models.1.loadCache()
+    let refresh = Task { await models.0.refresh() }
+    await gate.waitUntilRead()
+
+    models.0.selectedPlaylistID = cachedPlaylist.id
+    #expect(models.0.playlists.first?.id == cachedPlaylist.id)
+    #expect(models.1.results[cachedPlaylist.id]?.counts.kept == 1)
+
+    await gate.release(read([source]))
+    await refresh.value
+
+    #expect(models.0.playlists.first?.id == cachedPlaylist.id)
+    #expect(models.0.selectedPlaylistID == cachedPlaylist.id)
+    #expect(models.1.results[cachedPlaylist.id]?.counts.kept == 1)
   }
 
   @Test @MainActor
   func partialReadMergesBatchesAndKeepsTheNewerCreationEvent() async throws {
     let database = try makeDatabase()
     let old = batch("Old", at: date(10))
-    let priorEvent = PlaylistCreationEvent(kind: .created, host: "Mac", recordedAt: date(10), playlist: "Old", at: date(30))
+    let priorEvent = PlaylistCreationEvent(kind: .created, host: "Mac", recordedAt: date(10), playlist: "Old", at: date(30),
+      writerHost: "Mac", musicID: "music-id", songs: 1, skipped: [])
     _ = try ShelfCache.writeShelf(read([old], events: [priorEvent]), to: database)
     let added = batch("Added", at: date(20))
     let staleEvent = PlaylistCreationEvent(kind: .dismissed, host: "Mac", recordedAt: date(10), playlist: "Old", at: date(29))
@@ -109,8 +161,10 @@ struct MobileShelfCacheTests {
     await model.refresh()
 
     #expect(Set(model.playlists.compactMap(\.batch.playlist)) == ["Old", "Added"])
-    #expect(model.creationEvents == [priorEvent])
-    let cachedBatchNames = try await database.read { try CachedBatch.all.fetchAll($0).compactMap(\.batch.playlist) }
+    #expect(model.creationEvents.map(\.kind) == [priorEvent.kind])
+    #expect(model.creationEvents.first?.playlist == priorEvent.playlist)
+    #expect(abs((model.creationEvents.first?.at.timeIntervalSince1970 ?? 0) - priorEvent.at.timeIntervalSince1970) < 0.001)
+    let cachedBatchNames = try await database.read { try CachedBatch.all.fetchAll($0).compactMap { $0.batch?.playlist } }
     #expect(Set(cachedBatchNames) == ["Old", "Added"])
   }
 
@@ -211,6 +265,20 @@ struct MobileShelfCacheTests {
     RecommendationBatch(recordedAt: date, host: "Mac", playlist: name, tracks: [
       RecommendationTrack(artist: "Artist", title: "\(name) song", familiar: false, reasons: [], artistKnown: true),
     ])
+  }
+
+  private func preciseBatchFromLedgerLine() throws -> RecommendationBatch {
+    let source = batch("Precise", at: date(1_793_216_522.383))
+    let line = try RecommendationLedgerCodec.encode(source)
+    #expect(String(decoding: line, as: UTF8.self).contains("2026-10-28T19:42:02.383Z"))
+    return try #require(RecommendationLedgerCodec.readFiles([line]).batches.first)
+  }
+
+  private func shelfPlaylists(_ batches: [RecommendationBatch]) -> [PlaylistShelfPlaylist] {
+    PlaylistShelf.make(
+      from: RecommendationLedgerReadResult(batches: batches, skippedLines: 0),
+      now: date(1_793_216_700), calendar: .current, timeZone: .current
+    )
   }
 
   private func read(_ batches: [RecommendationBatch], events: [PlaylistCreationEvent] = []) -> RecommendationLedgerFolderRead {
