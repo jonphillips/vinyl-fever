@@ -115,6 +115,13 @@ Vinyl Fever's iCloud Drive logs and drives Music's queue. First uses:
 - A now-playing album and artist brief in the chat, tied to Jon's evidence.
 - Queueing chat-picked songs into Up Next without making a playlist.
 
+**The phone finishes chat work too (Jon, 2026-11-08).** Vinyl Fever has grown from
+the Mac's hard-drive console into Jon's music HQ, and he wants to finish what he asks the
+chat for without the Mac, such as creating a staged playlist in Music. The Mac stays fully
+synced and keeps the records: the phone writes to Music and to shared append-only logs,
+never to a file the Mac owns ([M24](milestones/M24-phone-finishes-playlists.md)). File and
+shell workflows stay on the Mac.
+
 Use SwiftUI and shared package boundaries so the Mac app, the iPhone companion,
 and a later iPad surface share logic.
 
