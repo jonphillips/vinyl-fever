@@ -31,6 +31,7 @@ Related source material:
 - [Music Feedback in the iPhone and iPad app (M20)](milestones/M20-music-feedback-intent.md)
 - [The Vinyl Fever playlists in the iPhone and iPad app (M21)](milestones/archive/M21-playlists-view.md)
 - [Done listening, and taste that travels (M23)](milestones/archive/M23-done-listening.md)
+- [The phone finishes what the chat starts (M24)](milestones/M24-phone-finishes-playlists.md)
 - [reference/MusicWorkbench_Codex_Handoff.md](reference/MusicWorkbench_Codex_Handoff.md)
 - [reference/apple_music_library_strategy.md](reference/apple_music_library_strategy.md)
 - [reference/duplicate-detection-strategy.md](reference/duplicate-detection-strategy.md)

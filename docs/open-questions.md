@@ -6,6 +6,13 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
 
 ## Candidates & parked work
 
+- **From M24 (architect, 2026-11-08):**
+  - **An always-on chat host.** Staging from the phone needs the laptop awake; the Intel mini
+    can't run Vinyl Fever (macOS 15). Revisit if an Apple silicon Mac joins, or if Jon finds
+    the laptop asleep when he asks.
+  - **Dismiss a staged playlist from the phone,** writing M24 S4's `dismissed` line. Today the
+    14-day rule archives one he never creates.
+  - **Tap the player strip to jump to the song** in the open playlist.
 - **Now-playing album brief and queueing** — [parked brief](efforts/archive/now-playing-album-brief.md)
   (Jon and the architect, 2026-10-27). Ask the chat about the song that's playing and get a brief
   against Jon's own evidence, then queue tracks without a playlist. Its first intent shipped as
@@ -89,13 +96,6 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   - **Decided (Jon, 2026-10-20): no exact-album tiebreak in the matcher.** Preferring the
     upload whose raw album equals the hint would resolve these rows silently and hide the
     duplicates. The picker stays as it is.
-- **M11: Create can lose the playlist it just made when a later batch fails** (from the #67
-  review, 2026-10-15). `createLibraryPlaylist` sends the first 100 IDs with the create call,
-  then appends the rest in batches of 100. If a later batch throws, the error drops the
-  `CreatedPlaylistRef`. The model then shows no playlist, and Create again makes a second one.
-  This only affects playlists over 100 songs. Candidate fix: throw a typed partial-create error
-  that carries the ref and the unsent IDs, so the model enters the post-Create state with those
-  rows left over. Low priority until Jon builds a playlist that long.
 - **App-target test failing on `main`: `CollectionInboxAppendTests`** (found in the #67 review,
   2026-10-15). `resumingInboxRebuildsFromStagedFilesAndClearsDerivedFolders` hits an
   unimplemented `@Dependency(\.uuid)` (reached through `FileSystemClient`) and fails. It most
