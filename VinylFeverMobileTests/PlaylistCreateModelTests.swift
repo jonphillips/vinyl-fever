@@ -156,6 +156,7 @@ struct PlaylistCreateModelTests {
   }
 
   private func readyDependencies(_ dependencies: inout DependencyValues) {
+    dependencies.date.now = Date(timeIntervalSince1970: 1_000)
     dependencies.appleMusicCatalogClient.authorizationStatus = { .authorized }
     dependencies.appleMusicCatalogClient.subscriptionStatus = {
       AppleMusicSubscriptionStatus(canPlayCatalogContent: true, hasCloudLibraryEnabled: true)
