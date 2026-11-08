@@ -7,7 +7,7 @@ import VinylFeverNotes
 
 struct NowPlayingItem: Equatable, Sendable {
   var song: FeedbackSong
-  var artworkURL: URL?
+  var artwork: Artwork?
   var isPlaying: Bool
 }
 
@@ -75,20 +75,20 @@ private enum PlaylistMusicClientKey: DependencyKey {
           func currentItem() -> NowPlayingItem? {
             guard let entry = player.queue.currentEntry else { return nil }
             let artist: String
-            var artworkURL: URL?
             if case let .song(song)? = entry.item {
               artist = song.artistName
-              artworkURL = song.artwork?.url(width: 80, height: 80)
             } else {
               artist = entry.subtitle ?? ""
             }
             return NowPlayingItem(song: FeedbackSong(title: entry.title, artist: artist),
-              artworkURL: artworkURL, isPlaying: player.state.playbackStatus == .playing)
+              artwork: entry.artwork, isPlaying: player.state.playbackStatus == .playing)
           }
-          continuation.yield(currentItem())
-          var previousItem = currentItem()
-          while !Task.isCancelled {
-            do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
+          let firstItem = currentItem()
+          continuation.yield(firstItem)
+          var previousItem = firstItem
+          let changes = Publishers.Merge(player.queue.objectWillChange, player.state.objectWillChange)
+          for await _ in changes.values {
+            await Task.yield()
             let nextItem = currentItem()
             if nextItem != previousItem {
               continuation.yield(nextItem)

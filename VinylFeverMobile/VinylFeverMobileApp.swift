@@ -479,13 +479,8 @@ private struct NowPlayingBar: View {
   var body: some View {
     if model.isAuthorized, let item = model.item {
       HStack(spacing: 12) {
-        if let artworkURL = item.artworkURL {
-          AsyncImage(url: artworkURL) { image in
-            image.resizable().scaledToFill()
-          } placeholder: {
-            artworkPlaceholder
-          }
-          .frame(width: 40, height: 40)
+        if let artwork = item.artwork {
+          ArtworkImage(artwork, width: 40)
           .clipShape(.rect(cornerRadius: 6))
           .accessibilityHidden(true)
         } else {
@@ -524,7 +519,8 @@ private struct NowPlayingBar: View {
       }
       .padding(.horizontal, 12)
       .padding(.vertical, 6)
-      .background(.regularMaterial)
+      .padding(.horizontal, 8)
+      .glassEffect(in: .rect(cornerRadius: 16))
       .accessibilityElement(children: .contain)
     } else if model.isAuthorized, let errorMessage = model.errorMessage {
       Text(errorMessage)
@@ -532,7 +528,8 @@ private struct NowPlayingBar: View {
         .foregroundStyle(.red)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(.regularMaterial)
+        .padding(.horizontal, 8)
+        .glassEffect(in: .rect(cornerRadius: 16))
     }
   }
 

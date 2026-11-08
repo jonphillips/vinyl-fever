@@ -99,7 +99,7 @@ matching, the stage tool's hints, the creation record, and the Mac's side). **Di
 gates. Dispatch 2 adds a ledger field and a new log, so the architect escalates it to Jon
 (ADR-0005 D9).
 
-- [ ] **S1 — A player strip at the bottom.**
+- [x] **S1 — A player strip at the bottom.** *Implemented in `m24/s1-player-strip`; Jon's iPhone and iPad gate remains owed.*
   - **The strip.** A bar pinned to the bottom of the app (`.safeAreaInset(edge: .bottom)` on the
     split view), so it stays put across the list and the detail on iPhone and spans both columns
     on iPad. It uses the system's glass material. From the leading edge:
@@ -132,7 +132,7 @@ gates. Dispatch 2 adds a ledger field and a new log, so the architect escalates 
       hides; confirm it doesn't cover the last song in a long playlist. Jon takes one screenshot
       on each device.
 
-- [ ] **S2 — The Note button says when a song has a note.**
+- [x] **S2 — The Note button says when a song has a note.** *Implemented in `m24/s1-player-strip`; Jon's iPhone gate remains owed.*
   - A song with at least one note shows **Noted** with `text.bubble.fill`; without one it stays
     **Note** with `pencil`. Tapping either opens the same sheet, so Jon can add another.
   - It counts every note `notes(for:)` matches: the phone's own, Music Feedback's, the chat's,

@@ -87,7 +87,7 @@ struct NowPlayingModelTests {
   }
 
   private func item(isPlaying: Bool) -> NowPlayingItem {
-    NowPlayingItem(song: FeedbackSong(title: "Song", artist: "Artist"), artworkURL: nil,
+    NowPlayingItem(song: FeedbackSong(title: "Song", artist: "Artist"), artwork: nil,
       isPlaying: isPlaying)
   }
 
