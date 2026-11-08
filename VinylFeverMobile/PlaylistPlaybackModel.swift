@@ -47,6 +47,11 @@ final class PlaylistPlaybackModel {
     beginStagedPlaylistLookup(for: playlist)
   }
 
+  func refreshMatchedPlaylist(_ playlist: PlaylistShelfPlaylist) async {
+    activePlaylistID = nil
+    await prepare(playlist)
+  }
+
   private func beginStagedPlaylistLookup(for playlist: PlaylistShelfPlaylist) {
     guard !didLookUpStagedPlaylist else { return }
     didLookUpStagedPlaylist = true

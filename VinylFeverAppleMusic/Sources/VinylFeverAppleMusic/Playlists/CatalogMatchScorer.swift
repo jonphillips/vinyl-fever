@@ -11,6 +11,7 @@ public struct CatalogSongCandidate: Equatable, Sendable {
   public let durationSeconds: Double?
   public let isrc: String?
   public let source: Source
+  public let artworkURL: URL?
 
   public init(
     id: String,
@@ -20,7 +21,8 @@ public struct CatalogSongCandidate: Equatable, Sendable {
     releaseDate: Date? = nil,
     durationSeconds: Double? = nil,
     isrc: String? = nil,
-    source: Source = .catalog
+    source: Source = .catalog,
+    artworkURL: URL? = nil
   ) {
     self.id = id
     self.title = title
@@ -30,6 +32,7 @@ public struct CatalogSongCandidate: Equatable, Sendable {
     self.durationSeconds = durationSeconds
     self.isrc = isrc
     self.source = source
+    self.artworkURL = artworkURL
   }
 }
 

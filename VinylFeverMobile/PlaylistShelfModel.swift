@@ -103,6 +103,15 @@ final class PlaylistShelfModel {
     isArchived(playlist) ? "No longer in your Music library." : nil
   }
 
+  func isNotInMusicYet(_ playlist: PlaylistShelfPlaylist) -> Bool {
+    guard keepClient.isAuthorized(), let libraryPlaylistNames,
+      let name = playlist.batch.playlist?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty,
+      !libraryPlaylistNames.contains(name)
+    else { return false }
+    let key = PlaylistCreationsCodec.batchKey(host: playlist.batch.host, recordedAt: playlist.batch.recordedAt)
+    return PlaylistCreationsCodec.latestEvents(creationEvents)[key]?.kind != .created
+  }
+
   func selectSegment(_ segment: PlaylistShelfSegment) {
     let playlistIDs = Set(playlists(in: segment).map(\.id))
     selectedSegment = segment

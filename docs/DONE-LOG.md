@@ -1,5 +1,11 @@
 # Done log
 
+## 2026-11-08 — M24 · S5 — Create staged playlists on iPhone (`m24/s5-create-in-music`)
+
+- **Result:** Vinyl Fever on iPhone now matches staged songs with the shared catalog and upload resolvers, handles choices and duplicates, creates the Music playlist, and appends the shared creation record. The shelf reflects creation state and the existing archive policy files deleted playlists.
+- **Verification:** VinylFeverNotes 70 tests; VinylFeverAppleMusic 1; VinylFeverListening 51; VinylFeverCore 327; VinylFever Mac app 102; iOS app and test targets build-for-testing. The iOS simulator test run could not finish because CoreSimulator did not complete test startup.
+- **Owed:** M24 S5's device gate, in [device-passes.md](device-passes.md).
+
 ## 2026-11-08 — M24 Dispatch 2 — Shared matching and creation record (`m24/s3-shared-matching`)
 
 - **Result:** Moved the Mac matching client into the shared Apple Music package, recorded upload routing and iCloud alias mirrors, and added cross-device creation records with Mac inbox reconciliation and phone archive rules.
