@@ -41,7 +41,8 @@ public extension AppleMusicCatalogClient {
             albumTitle: song.albumTitle,
             releaseDate: song.releaseDate,
             durationSeconds: song.duration,
-            isrc: song.isrc
+            isrc: song.isrc,
+            artworkURL: song.artwork?.url(width: 240, height: 240)
           )
         }
       },

@@ -2,7 +2,7 @@
 
 *Give the iPhone and iPad app a player strip and a Noted state, then let Jon create a staged
 playlist in Music from the phone, with the Mac's matching and the Mac kept in step. Rules in
-[../technical-architecture.md](../technical-architecture.md), jon-platform `AGENTS.md`, and
+[../technical-architecture.md](../../technical-architecture.md), jon-platform `AGENTS.md`, and
 jon-platform `docs/ios/ui-and-platforms.md` (§ Controls) apply. Where this doc and those
 conflict, stop and flag it.*
 
@@ -218,7 +218,7 @@ gates. Dispatch 2 adds a ledger field and a new log, so the architect escalates 
       the Mac and confirm the `created` line; stage and dismiss a second and confirm the
       `dismissed` line.
 
-- [ ] **S5 — Create in Music, on the phone.**
+- [x] **S5 — Create in Music, on the phone.** *(Implemented in `m24/s5-create-in-music`; Jon's iPhone gate remains owed.)*
   - **Where.** On a staged playlist's detail, when Apple Music access is granted, the batch has a
     name, no library playlist has that exact name, and the batch has no `created` line:
     - the header reads "Not in Music yet" under the date line;
@@ -283,13 +283,13 @@ gates. Dispatch 2 adds a ledger field and a new log, so the architect escalates 
 
 - **An always-on chat host.** Staging needs the laptop awake. A chat host that's always on
   needs an Apple silicon Mac on macOS 26 or later; none is planned
-  ([open-questions.md](../open-questions.md)).
+  ([open-questions.md](../../open-questions.md)).
 - **Re-searching a song by hand on the phone:** stays on the Mac. A song the phone can't find
   is skipped and recorded, and Jon can add it from the Mac or with Keep.
 - **Dismissing a staged playlist from the phone:** a candidate in
-  [open-questions.md](../open-questions.md). The 14-day rule archives one Jon never creates.
+  [open-questions.md](../../open-questions.md). The 14-day rule archives one Jon never creates.
 - **Tapping the strip to jump to the song in its playlist:** a candidate in
-  [open-questions.md](../open-questions.md).
+  [open-questions.md](../../open-questions.md).
 - **A playlist staged without a ledger record** (`ledgerRecorded: false`): the phone can't see
   it, so it's created on the Mac as today.
 

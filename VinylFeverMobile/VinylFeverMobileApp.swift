@@ -1,5 +1,8 @@
+import Dependencies
 import MusicKit
 import SwiftUI
+import VinylFeverAppleMusic
+import VinylFeverAppleMusicLive
 import VinylFeverNotes
 
 @main
@@ -11,12 +14,21 @@ struct VinylFeverMobileApp: App {
   @State private var notesModel = PlaylistTasteNotesModel()
   @State private var progressModel = PlaylistProgressModel()
   @State private var reviewsModel = PlaylistReviewsModel()
+  @State private var createModel = PlaylistCreateModel()
+
+  init() {
+    prepareDependencies {
+      $0.appleMusicCatalogClient = .liveValue
+      $0.catalogMatchResolver = .liveValue
+      $0.playlistCreateSupportClient = PlaylistCreateSupportClientKey.liveValue
+    }
+  }
 
   var body: some Scene {
     WindowGroup {
       PlaylistHomeView(model: shelfModel, playbackModel: playbackModel, nowPlayingModel: nowPlayingModel,
         keepModel: keepModel, notesModel: notesModel, progressModel: progressModel,
-        reviewsModel: reviewsModel)
+        reviewsModel: reviewsModel, createModel: createModel)
     }
   }
 }
@@ -32,6 +44,7 @@ private struct PlaylistHomeView: View {
   @Bindable var notesModel: PlaylistTasteNotesModel
   @Bindable var progressModel: PlaylistProgressModel
   @Bindable var reviewsModel: PlaylistReviewsModel
+  @Bindable var createModel: PlaylistCreateModel
 
   private var selectedPlaylist: PlaylistShelfPlaylist? {
     model.playlists.first { $0.id == model.selectedPlaylistID }
@@ -62,7 +75,8 @@ private struct PlaylistHomeView: View {
           ForEach(model.displayedPlaylists) { playlist in
             NavigationLink(value: playlist.id) {
               PlaylistRow(playlist: playlist, progress: progressModel.results[playlist.id],
-                isFinished: reviewsModel.finishedEntries[playlist.id] != nil)
+                isFinished: reviewsModel.finishedEntries[playlist.id] != nil,
+                isNotInMusicYet: model.isNotInMusicYet(playlist))
             }
             .tag(playlist.id)
           }
@@ -90,7 +104,8 @@ private struct PlaylistHomeView: View {
             hasUnreadableFiles: model.hasUnreadableFiles || notesModel.hasUnreadableFiles ||
               progressModel.hasUnreadableListeningLog || reviewsModel.hasUnreadableFiles,
             playbackModel: playbackModel, keepModel: keepModel, notesModel: notesModel,
-            progressModel: progressModel, reviewsModel: reviewsModel) {
+            progressModel: progressModel, reviewsModel: reviewsModel, createModel: createModel,
+            isNotInMusicYet: model.isNotInMusicYet(playlist)) {
             await model.refresh()
             await notesModel.refresh()
             await progressModel.refresh(model.playlists, libraryPlaylists: model.libraryPlaylists)
@@ -190,6 +205,7 @@ private struct PlaylistRow: View {
   let playlist: PlaylistShelfPlaylist
   let progress: PlaylistProgressResult?
   let isFinished: Bool
+  let isNotInMusicYet: Bool
 
   private var title: String {
     guard let name = playlist.batch.playlist?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else {
@@ -206,10 +222,10 @@ private struct PlaylistRow: View {
           .font(.caption)
           .foregroundStyle(.secondary)
       }
-      Text("\(playlist.stagedDate) · \(playlist.songCount) songs · \(playlist.newSongCount) new")
+      Text("\(playlist.stagedDate) · \(playlist.songCount) songs · \(playlist.newSongCount) new\(isNotInMusicYet ? " · Not in Music yet" : "")")
         .font(.caption)
         .foregroundStyle(.secondary)
-        .lineLimit(1)
+        .lineLimit(2)
       if let progress { PlaylistProgressBar(counts: progress.counts) }
     }
     .padding(.vertical, 4)
@@ -292,6 +308,8 @@ private struct PlaylistDetailView: View {
   let notesModel: PlaylistTasteNotesModel
   let progressModel: PlaylistProgressModel
   let reviewsModel: PlaylistReviewsModel
+  @Bindable var createModel: PlaylistCreateModel
+  let isNotInMusicYet: Bool
   let refresh: () async -> Void
 
   private var title: String {
@@ -299,6 +317,29 @@ private struct PlaylistDetailView: View {
       return "Staged playlist"
     }
     return name
+  }
+
+  @ViewBuilder
+  private var playAllButton: some View {
+    if isNotInMusicYet {
+      playAllAction.buttonStyle(.bordered)
+    } else {
+      playAllAction.buttonStyle(.borderedProminent)
+    }
+  }
+
+  private var playAllAction: some View {
+    Button {
+      guard let first = playlist.songs.first else { return }
+      Task { await playbackModel.play(first.id) }
+    } label: {
+      if playbackModel.isPreparingPlayback {
+        ProgressView().accessibilityLabel("Preparing playlist")
+      } else {
+        Label("Play All", systemImage: "play.fill")
+      }
+    }
+    .disabled(playbackModel.isPreparingPlayback)
   }
 
   var body: some View {
@@ -326,6 +367,7 @@ private struct PlaylistDetailView: View {
           }
           Text("\(playlist.stagedDate) · \(playlist.songCount) songs · \(playlist.newSongCount) new to you")
             .foregroundStyle(.secondary)
+          if isNotInMusicYet { Text("Not in Music yet").font(.callout).foregroundStyle(.secondary) }
           if let archiveStatus {
             Text(archiveStatus)
               .font(.callout)
@@ -412,18 +454,36 @@ private struct PlaylistDetailView: View {
               .font(.callout)
               .foregroundStyle(.secondary)
           } else {
-            Button {
-              guard let first = playlist.songs.first else { return }
-              Task { await playbackModel.play(first.id) }
-            } label: {
-              if playbackModel.isPreparingPlayback {
-                ProgressView().accessibilityLabel("Preparing playlist")
-              } else {
-                Label("Play All", systemImage: "play.fill")
+            if isNotInMusicYet {
+              Button {
+                Task { await createModel.createButtonTapped(playlist) }
+              } label: {
+                if createModel.isResolving {
+                  Label("Finding songs…", systemImage: "hourglass")
+                } else {
+                  Label("Create in Music", systemImage: "plus")
+                }
+              }
+              .buttonStyle(.borderedProminent)
+              .disabled(createModel.isResolving || createModel.isCreating)
+            }
+            playAllButton
+          }
+          if let gateMessage = createModel.gate(for: playlist.id) {
+            Text(gateMessage).font(.callout).foregroundStyle(.secondary)
+          }
+          if let outcome = createModel.outcome(for: playlist.id) {
+            if let message = outcome.message { Text(message).font(.callout).foregroundStyle(.secondary) }
+            if let recordError = outcome.recordError { Text(recordError).font(.callout).foregroundStyle(.red) }
+            if let error = outcome.error { Text(error).font(.callout).foregroundStyle(.red) }
+            if !outcome.skipped.isEmpty {
+              VStack(alignment: .leading, spacing: 4) {
+                ForEach(Array(outcome.skipped.enumerated()), id: \.offset) { _, skipped in
+                  Text("\(skipped.title) · \(skipped.artist) · \(skipped.reason)")
+                    .font(.callout).foregroundStyle(.secondary)
+                }
               }
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(playbackModel.isPreparingPlayback)
           }
           if reviewsModel.finishedEntries[playlist.id] == nil {
             Button("Done listening", systemImage: "checkmark.circle") {
@@ -452,7 +512,18 @@ private struct PlaylistDetailView: View {
       .frame(maxWidth: 760, alignment: .leading)
       .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .refreshable { await refresh() }
+    .refreshable {
+      await refresh()
+      createModel.clearMessages(for: playlist.id)
+    }
+    .sheet(item: $createModel.destination, onDismiss: {
+      Task {
+        await refresh()
+        await playbackModel.refreshMatchedPlaylist(playlist)
+      }
+    }) { _ in
+      PlaylistCreateSheet(model: createModel)
+    }
     .alert("Done listening?", isPresented: $confirmsDoneListening) {
       Button("Cancel", role: .cancel) {}
       Button("Done listening") { Task { await reviewsModel.finish(playlist, progress: progressModel.results[playlist.id]) } }

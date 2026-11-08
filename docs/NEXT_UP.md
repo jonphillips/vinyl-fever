@@ -1,6 +1,5 @@
-# Next Up — Create in Music, on the phone
+# Next Up — nothing dispatched
 
-**Slices:** M24 · S5
-**Briefs:** [docs/milestones/M24-phone-finishes-playlists.md](milestones/M24-phone-finishes-playlists.md) §S5
-**Done when:** per the briefs
+Nothing dispatched.
+
 **Owed:** see [device-passes.md](device-passes.md)

@@ -95,6 +95,26 @@ struct PlaylistPlaybackModelTests {
   }
 
   @Test @MainActor
+  func refreshingMatchedPlaylistWaitsForTheLibraryLookup() async throws {
+    let playlist = try musicPlaylist("Staged", id: "p.staged")
+    var detailReads = 0
+    let shelf = stagedPlaylist(name: "Staged", tracks: [(title: "Song", artist: "Artist")])
+    let model = withDependencies({ dependencies in
+      dependencies.playlistMusicClient.isAuthorized = { true }
+      dependencies.playlistMusicClient.playlists = { [playlist] }
+      dependencies.playlistMusicClient.playlistDetails = { _ in
+        detailReads += 1
+        return playlist
+      }
+    }) { PlaylistPlaybackModel() }
+
+    await model.refreshMatchedPlaylist(shelf)
+
+    #expect(model.matchedPlaylist?.id.rawValue == "p.staged")
+    #expect(detailReads == 1)
+  }
+
+  @Test @MainActor
   func unresolvedStagedPlaylistLookupIsAwaitedBeforeResolvingRows() async throws {
     let stagedSong = try song("Song", "Artist", id: "i.staged")
     let staged = try musicPlaylist("Staged", id: "p.staged", songs: [stagedSong])
