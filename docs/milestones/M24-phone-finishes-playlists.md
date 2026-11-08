@@ -283,9 +283,8 @@ gates. Dispatch 2 adds a ledger field and a new log, so the architect escalates 
 - **An always-on chat host.** Staging needs the laptop awake. A chat host that's always on
   needs an Apple silicon Mac on macOS 26 or later; none is planned
   ([open-questions.md](../open-questions.md)).
-- **Re-searching a song by hand, and removing heavily played songs, on the phone:** stay on the
-  Mac. A song the phone can't find is skipped and recorded, and Jon can add it from the Mac or
-  with Keep.
+- **Re-searching a song by hand on the phone:** stays on the Mac. A song the phone can't find
+  is skipped and recorded, and Jon can add it from the Mac or with Keep.
 - **Dismissing a staged playlist from the phone:** a candidate in
   [open-questions.md](../open-questions.md). The 14-day rule archives one Jon never creates.
 - **Tapping the strip to jump to the song in its playlist:** a candidate in
@@ -331,3 +330,9 @@ gates. Dispatch 2 adds a ledger field and a new log, so the architect escalates 
     M22's 24-hour grace period for batches without a creation line. A batch staged in the two
     weeks before S5 ships that Jon already deleted in Music will show "Not in Music yet" until
     it ages out; there are only a few.
+11. **The chat chooses the songs; the apps only build the playlist (Jon, 2026-11-08).** The chat
+    picks through `vf-mcp`, which already gives it play counts and familiarity, and stages the
+    list. Creating it on the Mac or the phone turns that list into a playlist: it matches songs
+    but doesn't curate them. So the phone gets no counterpart to the Mac builder's "Remove N
+    tracks played ≥ 20 times" button. That button dates from M12, before the chat chose songs
+    with these tools.
