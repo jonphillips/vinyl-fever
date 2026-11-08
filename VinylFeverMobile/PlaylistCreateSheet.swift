@@ -25,11 +25,12 @@ struct PlaylistCreateSheet: View {
             }
             if model.unresolvedChoiceCount > 0 {
               Section {
-                Text("Choose or skip \(model.unresolvedChoiceCount) songs")
+                let count = model.unresolvedChoiceCount
+                Text("Choose or skip \(count) \(count == 1 ? "song" : "songs")")
                   .foregroundStyle(.secondary)
               }
             }
-            if let errorMessage = model.errorMessage {
+            if let errorMessage = model.outcome(for: model.playlist?.id ?? "")?.error {
               Section { Text(errorMessage).foregroundStyle(.red) }
             }
           }
@@ -40,10 +41,6 @@ struct PlaylistCreateSheet: View {
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancel") { model.cancel(); dismiss() }
-        }
-        ToolbarItem(placement: .confirmationAction) {
-          Button(model.createButtonTitle) { Task { await model.create() } }
-            .disabled(!model.canCreate)
         }
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -89,7 +86,11 @@ struct PlaylistCreateSheet: View {
         if row.isSkipped {
           Label("Skipped", systemImage: "forward.end").font(.caption).foregroundStyle(.secondary)
         } else if let choice = row.choice {
-          Text("Chosen: \(choice.title) · \(choice.artistName)").font(.caption).foregroundStyle(.secondary)
+          if let duplicate = model.duplicateOf(row) {
+            Text("Same as #\(duplicate + 1)").font(.caption).foregroundStyle(.secondary)
+          } else {
+            Text("Chosen: \(choice.title) · \(choice.artistName)").font(.caption).foregroundStyle(.secondary)
+          }
         } else {
           Text("Choose a match or skip").font(.caption).foregroundStyle(.secondary)
           ForEach(Array(candidates.enumerated()), id: \.offset) { _, scored in

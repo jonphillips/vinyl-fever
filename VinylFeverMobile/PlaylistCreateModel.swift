@@ -21,19 +21,50 @@ extension PlaylistCreateSupportClient: TestDependencyKey {
   static var testValue: Self { Self() }
 }
 
+struct PlaylistCreateGate: Equatable {
+  var playlistID: String
+  var message: String
+}
+
+struct PlaylistCreateOutcome: Equatable {
+  var playlistID: String
+  var message: String?
+  var skipped: [PlaylistCreationSkippedSong]
+  var recordError: String?
+  var error: String?
+}
+
+enum PlaylistCreateSupport {
+  static func loadArtistIdentity(
+    folder: URL,
+    startDownload: (URL) throws -> Void = { try FileManager.default.startDownloadingUbiquitousItem(at: $0) },
+    read: (URL) throws -> Data
+  ) throws -> ArtistIdentity {
+    let url = folder.appending(path: "Taste Intelligence/artist-aliases.json")
+    try? startDownload(url)
+    let data: Data
+    do { data = try read(url) }
+    catch {
+      let nsError = error as NSError
+      if nsError.domain == NSCocoaErrorDomain && nsError.code == CocoaError.fileNoSuchFile.rawValue {
+        return .empty
+      }
+      throw error
+    }
+    guard let document = try? JSONDecoder().decode(ArtistAliasesDocument.self, from: data),
+      document.format == ArtistAliasesDocument.format,
+      document.version <= ArtistAliasesDocument.currentVersion
+    else { return .empty }
+    return ArtistIdentity(aliases: document.aliases, knownArtists: Set(document.aliases.keys).union(document.aliases.values))
+  }
+}
+
 enum PlaylistCreateSupportClientKey: DependencyKey {
   typealias Value = PlaylistCreateSupportClient
   static let liveValue = PlaylistCreateSupportClient(
     artistIdentity: {
       try ProbeBookmarkStore.withFolder { folder in
-        let url = folder.appending(path: "Taste Intelligence/artist-aliases.json")
-        try? FileManager.default.startDownloadingUbiquitousItem(at: url)
-        guard FileManager.default.fileExists(atPath: url.path) else { return .empty }
-        let document = try JSONDecoder().decode(ArtistAliasesDocument.self, from: TasteFolderReader.coordinatedRead(url))
-        guard document.format == ArtistAliasesDocument.format, document.version <= ArtistAliasesDocument.currentVersion else {
-          return .empty
-        }
-        return ArtistIdentity(aliases: document.aliases, knownArtists: Set(document.aliases.keys).union(document.aliases.values))
+        try PlaylistCreateSupport.loadArtistIdentity(folder: folder, read: TasteFolderReader.coordinatedRead)
       }
     },
     readCreations: {
@@ -95,11 +126,11 @@ final class PlaylistCreateModel {
   private(set) var rows: [PlaylistCreateRow] = []
   private(set) var isResolving = false
   private(set) var isCreating = false
-  private(set) var gateMessage: String?
-  private(set) var errorMessage: String?
-  private(set) var completionMessage: String?
+  private(set) var gate: PlaylistCreateGate?
+  private(set) var outcome: PlaylistCreateOutcome?
   var destination: Destination?
   private(set) var playlist: PlaylistShelfPlaylist?
+  private(set) var playlistName: String?
 
   @ObservationIgnored @Dependency(\.appleMusicCatalogClient) private var appleMusic
   @ObservationIgnored @Dependency(\.catalogMatchResolver) private var resolver
@@ -116,6 +147,14 @@ final class PlaylistCreateModel {
   }
   var canCreate: Bool { !isResolving && !isCreating && unresolvedChoiceCount == 0 && !rows.filter { duplicateOf($0) == nil }.compactMap(\.resolvedCandidate).isEmpty }
 
+  func gate(for playlistID: String) -> String? { gate?.playlistID == playlistID ? gate?.message : nil }
+  func outcome(for playlistID: String) -> PlaylistCreateOutcome? { outcome?.playlistID == playlistID ? outcome : nil }
+
+  func clearMessages(for playlistID: String) {
+    if gate?.playlistID == playlistID { gate = nil }
+    if outcome?.playlistID == playlistID { outcome = nil }
+  }
+
   func duplicateOf(_ row: PlaylistCreateRow) -> Int? {
     guard let candidate = row.resolvedCandidate else { return nil }
     return rows.first { earlier in
@@ -127,47 +166,52 @@ final class PlaylistCreateModel {
   func createButtonTapped(_ playlist: PlaylistShelfPlaylist) async {
     guard !isResolving, !isCreating else { return }
     self.playlist = playlist
+    playlistName = nil
     rows = []
-    gateMessage = nil
-    errorMessage = nil
-    completionMessage = nil
+    gate = nil
     isResolving = true
     defer { isResolving = false }
 
     var authorization = await appleMusic.authorizationStatus()
     if authorization == .notDetermined { authorization = await appleMusic.requestAuthorization() }
     let granted = authorization == .authorized
-    guard granted else { gateMessage = "Allow Apple Music access in Settings to create this playlist."; return }
+    guard granted else { setGate("Allow Apple Music access in Settings to create this playlist.", for: playlist); return }
     let subscription: AppleMusicSubscriptionStatus
     do { subscription = try await appleMusic.subscriptionStatus() }
-    catch { gateMessage = error.localizedDescription; return }
+    catch { setGate(error.localizedDescription, for: playlist); return }
     guard subscription.canPlayCatalogContent else {
-      gateMessage = "An Apple Music subscription is needed to create this playlist."; return
+      setGate("An Apple Music subscription is needed to create this playlist.", for: playlist); return
     }
     guard subscription.hasCloudLibraryEnabled else {
-      gateMessage = "Turn on Sync Library in Settings → Music → Sync Library, then try again."; return
+      setGate("Turn on Sync Library in Settings → Music → Sync Library, then try again.", for: playlist); return
     }
     guard let name = playlist.batch.playlist?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else {
-      gateMessage = "This staged playlist has no name."; return
+      setGate("This staged playlist has no name.", for: playlist); return
     }
+    playlistName = name
     let creationEvents: [PlaylistCreationEvent]
     let support = self.support
     do { creationEvents = try await Task.detached { try support.readCreations().events }.value }
-    catch { gateMessage = error.localizedDescription; return }
+    catch { setGate(error.localizedDescription, for: playlist); return }
     let key = PlaylistCreationsCodec.batchKey(host: playlist.batch.host, recordedAt: playlist.batch.recordedAt)
     if let event = PlaylistCreationsCodec.latestEvents(creationEvents)[key], event.kind == .created {
-      gateMessage = "Already created on \(event.writerName)."; return
+      setGate("Already created on \(event.writerName).", for: playlist); return
     }
     do {
       if try await library.libraryPlaylists().contains(where: { $0.name == name }) {
-        gateMessage = "Already in Music"; return
+        setGate("Already in Music", for: playlist); return
       }
-    } catch { gateMessage = error.localizedDescription; return }
+    } catch { setGate(error.localizedDescription, for: playlist); return }
 
-    let identity = (try? await Task.detached { try support.artistIdentity() }.value) ?? .empty
-    await resolve(playlist, identity: identity)
-    guard !rows.isEmpty else { gateMessage = "This playlist has no songs to create."; return }
     destination = .create
+    let isPreS3 = !playlist.batch.tracks.contains { $0.upload != nil }
+    let identity = (try? await Task.detached { try support.artistIdentity() }.value) ?? .empty
+    await resolve(playlist, identity: identity, isPreS3: isPreS3)
+    guard !rows.isEmpty else {
+      destination = nil
+      setGate("This playlist has no songs to create.", for: playlist)
+      return
+    }
   }
 
   func choose(_ candidate: CatalogSongCandidate, for rowID: Int) {
@@ -182,38 +226,43 @@ final class PlaylistCreateModel {
     rows[index].choice = nil
   }
 
-  func cancel() { destination = nil; rows = []; gateMessage = nil; errorMessage = nil }
+  func cancel() { destination = nil; rows = [] }
 
   func create() async {
-    guard canCreate, let playlist, let name = playlist.batch.playlist, !isCreating else { return }
+    guard canCreate, let playlist, let name = playlistName, !isCreating else { return }
     isCreating = true
     defer { isCreating = false }
-    errorMessage = nil
+    outcome = nil
     do {
       if try await library.libraryPlaylists().contains(where: { $0.name == name }) {
-        errorMessage = "Already in Music"; return
+        setOutcome(playlist, error: "Already in Music"); return
       }
-    } catch { errorMessage = error.localizedDescription; return }
+    } catch { setOutcome(playlist, error: error.localizedDescription); return }
 
     let resolved = rows.filter { duplicateOf($0) == nil }.compactMap(\.resolvedCandidate)
     let references = resolved.map { PlaylistSongReference(id: $0.id, source: $0.source) }
     let skipped = skippedSongs()
     do {
       let created = try await appleMusic.createLibraryPlaylist(name, playlist.batch.description, references)
-      await record(created: created, skipped: skipped)
-      completionMessage = successText(name, actual: created.trackCount, requested: playlist.songs.count, skippedCount: skipped.count)
+      let recordError = await record(created: created, skipped: skipped)
+      outcome = PlaylistCreateOutcome(playlistID: playlist.id,
+        message: successText(name, actual: created.trackCount, requested: references.count, skippedCount: skipped.count),
+        skipped: skipped, recordError: recordError, error: nil)
       destination = nil
     } catch let partial as CreatedPlaylistPartialError {
       let failed = partial.unaddedSongs.compactMap { reference in
         rows.first(where: { row in row.resolvedCandidate?.id == reference.id })?.request
       }.map { PlaylistCreationSkippedSong(title: $0.title, artist: $0.artist, reason: "not-found") }
-      await record(created: partial.createdPlaylist, skipped: skipped + failed)
-      completionMessage = "Created “\(name)” with \(partial.createdPlaylist.trackCount) of \(playlist.songs.count) songs"
+      let allSkipped = skipped + failed
+      let recordError = await record(created: partial.createdPlaylist, skipped: allSkipped)
+      outcome = PlaylistCreateOutcome(playlistID: playlist.id,
+        message: successText(name, actual: partial.createdPlaylist.trackCount, requested: references.count,
+          skippedCount: allSkipped.count), skipped: allSkipped, recordError: recordError, error: nil)
       destination = nil
-    } catch { errorMessage = error.localizedDescription }
+    } catch { setOutcome(playlist, error: error.localizedDescription) }
   }
 
-  private func resolve(_ playlist: PlaylistShelfPlaylist, identity: ArtistIdentity) async {
+  private func resolve(_ playlist: PlaylistShelfPlaylist, identity: ArtistIdentity, isPreS3: Bool) async {
     let tracks = playlist.batch.tracks.enumerated().map { index, track in
       TrackRequest(index: index, artist: track.artist, title: track.title, album: track.album, year: track.year)
     }
@@ -222,7 +271,9 @@ final class PlaylistCreateModel {
       let batch = Array(tracks[start..<min(start + 4, tracks.count)])
       await withTaskGroup(of: PlaylistCreateRow.self) { group in
         for request in batch {
-          group.addTask { await self.resolve(request, track: playlist.batch.tracks[request.index], identity: identity) }
+          group.addTask {
+            await self.resolve(request, track: playlist.batch.tracks[request.index], identity: identity, isPreS3: isPreS3)
+          }
         }
         for await row in group { resolved[row.id] = row }
       }
@@ -230,13 +281,13 @@ final class PlaylistCreateModel {
     rows = resolved.compactMap { $0 }
   }
 
-  private func resolve(_ request: TrackRequest, track: RecommendationTrack, identity: ArtistIdentity) async -> PlaylistCreateRow {
+  private func resolve(_ request: TrackRequest, track: RecommendationTrack, identity: ArtistIdentity, isPreS3: Bool) async -> PlaylistCreateRow {
     if track.upload == true {
       return await uploadRow(request, identity: identity)
     }
     let rows = await resolver.resolve(PlaylistRequest(name: "", tracks: [request]), identity)
     guard let row = rows.first else { return PlaylistCreateRow(request: request, status: .notFound(error: nil), choice: nil) }
-    if track.upload == nil, case .notFound = row.status, track.album != nil {
+    if isPreS3, case .notFound = row.status, track.album != nil {
       return await uploadRow(request, identity: identity)
     }
     return PlaylistCreateRow(request: request, status: row.status, choice: nil)
@@ -277,15 +328,27 @@ final class PlaylistCreateModel {
     return skipped
   }
 
-  private func record(created: CreatedPlaylistRef, skipped: [PlaylistCreationSkippedSong]) async {
-    guard let playlist else { return }
+  private func record(created: CreatedPlaylistRef, skipped: [PlaylistCreationSkippedSong]) async -> String? {
+    guard let playlist else { return nil }
     let device = await support.deviceName()
     let event = PlaylistCreationEvent(kind: .created, host: playlist.batch.host, recordedAt: playlist.batch.recordedAt,
       playlist: playlist.batch.playlist ?? created.name, at: now, device: device, musicID: created.id,
       songs: created.trackCount, skipped: skipped)
     let support = self.support
-    do { try await Task.detached { try support.appendCreation(event) }.value }
-    catch { errorMessage = "Created in Music, but the record didn’t save: \(error.localizedDescription). The Mac will still list it in its inbox." }
+    do {
+      try await Task.detached { try support.appendCreation(event) }.value
+      return nil
+    } catch {
+      return "Created in Music, but the record didn’t save: \(error.localizedDescription). The Mac will still list it in its inbox."
+    }
+  }
+
+  private func setGate(_ message: String, for playlist: PlaylistShelfPlaylist) {
+    gate = PlaylistCreateGate(playlistID: playlist.id, message: message)
+  }
+
+  private func setOutcome(_ playlist: PlaylistShelfPlaylist, error: String) {
+    outcome = PlaylistCreateOutcome(playlistID: playlist.id, message: nil, skipped: [], recordError: nil, error: error)
   }
 
   private func successText(_ name: String, actual: Int, requested: Int, skippedCount: Int) -> String {

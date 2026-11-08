@@ -50,6 +50,7 @@ final class PlaylistPlaybackModel {
   func refreshMatchedPlaylist(_ playlist: PlaylistShelfPlaylist) async {
     activePlaylistID = nil
     await prepare(playlist)
+    await waitForStagedPlaylistLookup()
   }
 
   private func beginStagedPlaylistLookup(for playlist: PlaylistShelfPlaylist) {

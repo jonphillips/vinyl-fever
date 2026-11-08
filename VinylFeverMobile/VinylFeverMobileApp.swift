@@ -455,21 +455,35 @@ private struct PlaylistDetailView: View {
               .foregroundStyle(.secondary)
           } else {
             if isNotInMusicYet {
-              Button("Create in Music", systemImage: "plus") {
+              Button {
                 Task { await createModel.createButtonTapped(playlist) }
+              } label: {
+                if createModel.isResolving {
+                  Label("Finding songs…", systemImage: "hourglass")
+                } else {
+                  Label("Create in Music", systemImage: "plus")
+                }
               }
               .buttonStyle(.borderedProminent)
+              .disabled(createModel.isResolving || createModel.isCreating)
             }
             playAllButton
           }
-          if let gateMessage = createModel.gateMessage {
+          if let gateMessage = createModel.gate(for: playlist.id) {
             Text(gateMessage).font(.callout).foregroundStyle(.secondary)
           }
-          if let completionMessage = createModel.completionMessage {
-            Text(completionMessage).font(.callout).foregroundStyle(.secondary)
-          }
-          if let createError = createModel.errorMessage {
-            Text(createError).font(.callout).foregroundStyle(.red)
+          if let outcome = createModel.outcome(for: playlist.id) {
+            if let message = outcome.message { Text(message).font(.callout).foregroundStyle(.secondary) }
+            if let recordError = outcome.recordError { Text(recordError).font(.callout).foregroundStyle(.red) }
+            if let error = outcome.error { Text(error).font(.callout).foregroundStyle(.red) }
+            if !outcome.skipped.isEmpty {
+              VStack(alignment: .leading, spacing: 4) {
+                ForEach(Array(outcome.skipped.enumerated()), id: \.offset) { _, skipped in
+                  Text("\(skipped.title) · \(skipped.artist) · \(skipped.reason)")
+                    .font(.callout).foregroundStyle(.secondary)
+                }
+              }
+            }
           }
           if reviewsModel.finishedEntries[playlist.id] == nil {
             Button("Done listening", systemImage: "checkmark.circle") {
@@ -498,7 +512,10 @@ private struct PlaylistDetailView: View {
       .frame(maxWidth: 760, alignment: .leading)
       .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .refreshable { await refresh() }
+    .refreshable {
+      await refresh()
+      createModel.clearMessages(for: playlist.id)
+    }
     .sheet(item: $createModel.destination, onDismiss: {
       Task {
         await refresh()

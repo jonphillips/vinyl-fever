@@ -11,16 +11,17 @@ struct PlaylistCreateModelTests {
     for subscription in [AppleMusicSubscriptionStatus(canPlayCatalogContent: false, hasCloudLibraryEnabled: true),
       AppleMusicSubscriptionStatus(canPlayCatalogContent: true, hasCloudLibraryEnabled: false)] {
       let matcher = MatchRecorder()
+      let batch = playlist()
       let model = withDependencies({ dependencies in
         dependencies.appleMusicCatalogClient.authorizationStatus = { .authorized }
         dependencies.appleMusicCatalogClient.subscriptionStatus = { subscription }
         dependencies.catalogMatchResolver.resolve = { request, _ in await matcher.record(request); return [] }
       }) { PlaylistCreateModel() }
 
-      await model.createButtonTapped(playlist())
+      await model.createButtonTapped(batch)
 
       #expect(model.destination == nil)
-      #expect(model.gateMessage != nil)
+      #expect(model.gate(for: batch.id) != nil)
       #expect(await matcher.requests.isEmpty)
     }
   }
@@ -57,10 +58,15 @@ struct PlaylistCreateModelTests {
   func createRechecksNameThenAppendsCreationEventAndHandlesRecordFailure() async {
     let events = CreationRecorder()
     let created = CreatedPlaylistRef(id: "p.1", name: "Night Drive", trackCount: 1)
+    let batch = playlist(name: " Night Drive ", tracks: [track("Song"), track("Missing A"), track("Missing B")])
     let model = withDependencies({ dependencies in
       readyDependencies(&dependencies)
       dependencies.catalogMatchResolver.resolve = { request, _ in
-        [ResolvedPlaylistRow(request: request.tracks[0], status: .matched(candidate(id: "song.1", title: "Song"), score: 1))]
+        let track = request.tracks[0]
+        let status: ResolvedPlaylistRow.Status = track.title == "Song"
+          ? .matched(candidate(id: "song.1", title: "Song"), score: 1)
+          : .notFound(error: nil)
+        return [ResolvedPlaylistRow(request: track, status: status)]
       }
       dependencies.playlistCreateSupportClient.deviceName = { "Jon’s iPhone" }
       dependencies.playlistCreateSupportClient.appendCreation = { events.append($0) }
@@ -70,13 +76,17 @@ struct PlaylistCreateModelTests {
         return created
       }
     }) { PlaylistCreateModel() }
-    let batch = playlist()
-
     await model.createButtonTapped(batch)
     await model.create()
 
     #expect(model.destination == nil)
-    #expect(model.completionMessage == "Created “Night Drive” with 1 song.")
+    #expect(model.playlistName == "Night Drive")
+    let outcome = model.outcome(for: batch.id)
+    #expect(outcome?.message == "Created “Night Drive” with 1 song. 2 skipped.")
+    #expect(outcome?.skipped.count == 2)
+    #expect(model.outcome(for: "a-different-playlist") == nil)
+    model.clearMessages(for: batch.id)
+    #expect(model.outcome(for: batch.id) == nil)
     let saved = events.values
     #expect(saved.count == 1)
     #expect(saved.first?.kind == .created)
@@ -94,13 +104,14 @@ struct PlaylistCreateModelTests {
     }) { PlaylistCreateModel() }
     await recordFailure.createButtonTapped(batch)
     await recordFailure.create()
-    #expect(recordFailure.errorMessage?.contains("Created in Music, but the record didn’t save") == true)
+    #expect(recordFailure.outcome(for: batch.id)?.recordError?.contains("Created in Music, but the record didn’t save") == true)
   }
 
   @Test @MainActor
   func aPlaylistCreatedDuringMatchingStopsBeforePosting() async {
     let presence = LibraryPresence()
     let createCalls = CreateCallRecorder()
+    let batch = playlist()
     let model = withDependencies({ dependencies in
       readyDependencies(&dependencies)
       dependencies.catalogMatchResolver.resolve = { request, _ in
@@ -113,11 +124,93 @@ struct PlaylistCreateModelTests {
       }
     }) { PlaylistCreateModel() }
 
-    await model.createButtonTapped(playlist())
+    await model.createButtonTapped(batch)
     await model.create()
 
-    #expect(model.errorMessage == "Already in Music")
+    #expect(model.outcome(for: batch.id)?.error == "Already in Music")
     #expect(await createCalls.count == 0)
+  }
+
+  @Test @MainActor
+  func newBatchWithAnUploadDoesNotFallbackCatalogMissesToUploads() async {
+    let albumSearches = SearchCounter()
+    let upload = RecommendationTrack(artist: "Band", title: "Owned", album: "Record",
+      familiar: false, reasons: [], artistKnown: true, upload: true)
+    let catalog = RecommendationTrack(artist: "Band", title: "Catalog miss", album: "Record",
+      familiar: false, reasons: [], artistKnown: true)
+    let model = withDependencies({ dependencies in
+      readyDependencies(&dependencies)
+      dependencies.catalogMatchResolver.resolve = { request, _ in
+        [ResolvedPlaylistRow(request: request.tracks[0], status: .notFound(error: nil))]
+      }
+      dependencies.appleMusicCatalogClient.searchLibraryAlbums = { _ in
+        await albumSearches.increment()
+        return [LibraryAlbumCandidate(id: "album", title: "Record")]
+      }
+      dependencies.appleMusicCatalogClient.libraryAlbumTracks = { _ in
+        [LibrarySongCandidate(id: "i.owned", title: "Owned", artist: "Band", album: "Record", hasCatalogID: false)]
+      }
+    }) { PlaylistCreateModel() }
+
+    await model.createButtonTapped(playlist(tracks: [upload, catalog]))
+
+    #expect(await albumSearches.count == 1)
+    #expect(model.rows.map(\.status).contains { if case .notFound = $0 { return true }; return false })
+  }
+
+  @Test @MainActor
+  func sheetAppearsWhileMatchingIsStillRunning() async {
+    let resolver = ResolverSuspension()
+    let model = withDependencies({ dependencies in
+      readyDependencies(&dependencies)
+      dependencies.catalogMatchResolver.resolve = { request, _ in
+        await resolver.hold()
+        return [ResolvedPlaylistRow(request: request.tracks[0],
+          status: .matched(candidate(id: "song", title: request.tracks[0].title), score: 1))]
+      }
+    }) { PlaylistCreateModel() }
+
+    let task = Task { await model.createButtonTapped(playlist()) }
+    await resolver.waitUntilStarted()
+    #expect(model.destination == .create)
+    #expect(model.isResolving)
+    await resolver.release()
+    await task.value
+    #expect(!model.isResolving)
+  }
+
+  @Test
+  func aliasIdentityUsesCoordinatedReadEvenForAnICloudPlaceholder() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let taste = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: taste, withIntermediateDirectories: true)
+    try Data().write(to: taste.appending(path: ".artist-aliases.json.icloud"))
+    let url = root.appending(path: "Taste Intelligence/artist-aliases.json")
+    let data = Data(#"{"format":"vf-artist-aliases","version":1,"aliases":{"Bill":"William"}}"#.utf8)
+    var readURL: URL?
+
+    let identity = try PlaylistCreateSupport.loadArtistIdentity(folder: root, startDownload: { _ in }, read: { requestedURL in
+      readURL = requestedURL
+      return data
+    })
+
+    #expect(readURL == url)
+    #expect(identity.matches(request: "William", track: "Bill"))
+  }
+
+  @Test
+  func missingAndWrongFormatArtistAliasesUseEmptyIdentity() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let missing = try PlaylistCreateSupport.loadArtistIdentity(folder: root, startDownload: { _ in }, read: { _ in
+      throw CocoaError(.fileNoSuchFile)
+    })
+    let wrong = try PlaylistCreateSupport.loadArtistIdentity(folder: root, startDownload: { _ in }, read: { _ in
+      Data(#"{"format":"other","version":1,"aliases":{"Bill":"William"}}"#.utf8)
+    })
+    #expect(missing == .empty)
+    #expect(wrong == .empty)
   }
 
   @Test @MainActor
@@ -153,6 +246,7 @@ struct PlaylistCreateModelTests {
     let saved = events.values
     #expect(saved.first?.musicID == "p.2")
     #expect(saved.first?.skipped == [PlaylistCreationSkippedSong(title: "Song", artist: "Band", reason: "not-found")])
+    #expect(model.outcome(for: batch.id)?.message == "Created “Night Drive” with 0 of 1 songs")
   }
 
   private func readyDependencies(_ dependencies: inout DependencyValues) {
@@ -178,10 +272,14 @@ struct PlaylistCreateModelTests {
   }
 
   private func playlist(tracks: [RecommendationTrack]? = nil) -> PlaylistShelfPlaylist {
+    playlist(name: "Night Drive", tracks: tracks ?? [track("Song")])
+  }
+
+  private func playlist(name: String, tracks: [RecommendationTrack]) -> PlaylistShelfPlaylist {
     let batch = RecommendationBatch(recordedAt: Date(timeIntervalSince1970: 100), host: "Mac",
-      playlist: "Night Drive", tracks: tracks ?? [track("Song")], description: "Late night songs")
-    return PlaylistShelfPlaylist(id: "Mac|100", batch: batch, stagedDate: "today", songCount: batch.tracks.count,
-      newSongCount: batch.tracks.count, songs: [])
+      playlist: name, tracks: tracks, description: "Late night songs")
+    return PlaylistShelf.make(from: RecommendationLedgerReadResult(batches: [batch], skippedLines: 0),
+      now: Date(timeIntervalSince1970: 101), calendar: .current, timeZone: .current)[0]
   }
 
   private func track(_ title: String) -> RecommendationTrack {
@@ -220,4 +318,34 @@ private actor LibraryPresence {
 private actor CreateCallRecorder {
   private(set) var count = 0
   func record() { count += 1 }
+}
+
+private actor SearchCounter {
+  private(set) var count = 0
+  func increment() { count += 1 }
+}
+
+private actor ResolverSuspension {
+  private var continuation: CheckedContinuation<Void, Never>?
+  private var startedContinuation: CheckedContinuation<Void, Never>?
+  private var started = false
+
+  func hold() async {
+    await withCheckedContinuation { continuation in
+      self.continuation = continuation
+      started = true
+      startedContinuation?.resume()
+      startedContinuation = nil
+    }
+  }
+
+  func waitUntilStarted() async {
+    guard !started else { return }
+    await withCheckedContinuation { startedContinuation = $0 }
+  }
+
+  func release() {
+    continuation?.resume()
+    continuation = nil
+  }
 }
