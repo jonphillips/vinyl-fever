@@ -45,7 +45,7 @@ enum TasteFolderReader {
         at: directory, includingPropertiesForKeys: nil, options: [.skipsSubdirectoryDescendants]
       )
     } catch {
-      let missing = (error as NSError).code == CocoaError.fileNoSuchFile.rawValue
+      let missing = error.isMissingFile
       return TasteFolderFilesRead(files: [], unreadableFileCount: missing && !missingDirectoryIsUnavailable ? 0 : 1,
         totalFileCount: 0)
     }
@@ -94,5 +94,15 @@ enum TasteFolderReader {
     if let readError { throw readError }
     guard let data else { throw CocoaError(.fileReadUnknown) }
     return data
+  }
+}
+
+extension Error {
+  /// Cocoa reports a missing file as `fileReadNoSuchFile` from reads and directory listings, and
+  /// as `fileNoSuchFile` elsewhere; both mean the item isn't there.
+  var isMissingFile: Bool {
+    let error = self as NSError
+    return error.domain == NSCocoaErrorDomain
+      && [CocoaError.fileNoSuchFile.rawValue, CocoaError.fileReadNoSuchFile.rawValue].contains(error.code)
   }
 }

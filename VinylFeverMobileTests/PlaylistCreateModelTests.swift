@@ -213,6 +213,16 @@ struct PlaylistCreateModelTests {
     #expect(wrong == .empty)
   }
 
+  @Test
+  func artistAliasesAbsentOnDiskUseEmptyIdentity() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let identity = try PlaylistCreateSupport.loadArtistIdentity(folder: root, startDownload: { _ in },
+      read: TasteFolderReader.coordinatedRead)
+    #expect(identity == .empty)
+  }
+
   @Test @MainActor
   func anOldBatchFallsBackToUploadsOnlyAfterCatalogMissAndPartialCreateIsRecorded() async {
     let events = CreationRecorder()
