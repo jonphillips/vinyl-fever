@@ -45,10 +45,7 @@ enum PlaylistCreateSupport {
     let data: Data
     do { data = try read(url) }
     catch {
-      let nsError = error as NSError
-      if nsError.domain == NSCocoaErrorDomain && nsError.code == CocoaError.fileNoSuchFile.rawValue {
-        return .empty
-      }
+      if error.isMissingFile { return .empty }
       throw error
     }
     guard let document = try? JSONDecoder().decode(ArtistAliasesDocument.self, from: data),

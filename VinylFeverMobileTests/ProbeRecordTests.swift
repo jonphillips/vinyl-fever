@@ -75,6 +75,24 @@ struct ProbeRecordTests {
     #expect(timedOut.unreadableFileCount == 2)
   }
 
+  @Test func missingOptionalFolderReadsAsEmptyNotUnreadable() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let recommendations = root.appendingPathComponent("Taste Intelligence/recommendations", isDirectory: true)
+    try FileManager.default.createDirectory(at: recommendations, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try Data().write(to: recommendations.appendingPathComponent("one.jsonl"))
+
+    let read = RecommendationLedgerFolderReader.read(folder: root, startDownload: { _ in })
+    #expect(read.unreadableFileCount == 0)
+    #expect(read.creations.unreadableFileCount == 0)
+    #expect(read.creations.skippedLines == 0)
+
+    let reviews = TasteFolderReader.read(folder: root, subdirectory: "playlist-reviews",
+      includes: { $0.hasSuffix(".jsonl") }, missingDirectoryIsUnavailable: false,
+      emptyDirectoryIsUnavailable: false, startDownload: { _ in })
+    #expect(reviews.unreadableFileCount == 0)
+  }
+
   @Test func missingOrEmptyRecommendationFolderIsUnavailable() throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
