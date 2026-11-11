@@ -98,6 +98,27 @@ struct PlaylistKeepModelTests {
   }
 
   @Test @MainActor
+  func failedTrackReadNamesThePlaylist() async throws {
+    let model = withDependencies({ dependencies in
+      dependencies.keepLibraryClient.isAuthorized = { true }
+      dependencies.keepLibraryClient.readRoles = {
+        PlaylistRoles(updatedAt: .now, playlists: [
+          PlaylistRoleEntry(persistentID: "keepers", name: "Undeniable", role: .keepers),
+        ])
+      }
+      dependencies.keepLibraryClient.editablePlaylists = {
+        [KeepLibraryPlaylist(id: "keepers", name: "Undeniable")]
+      }
+      dependencies.keepLibraryClient.tracks = { _ in throw NSError(domain: "Apple Music", code: 404,
+        userInfo: [NSLocalizedDescriptionKey: "not found"]) }
+    }) { PlaylistKeepModel() }
+
+    await model.keepButtonTapped(for: shelfSong(), resolvedSong: try song(id: "catalog"))
+
+    #expect(model.errorMessage?.hasPrefix("Undeniable: ") == true)
+  }
+
+  @Test @MainActor
   func failedRolesReadIsRetriedOnTheNextOpen() async throws {
     let sequence = RolesReadSequence(roles: PlaylistRoles(updatedAt: .now, playlists: [
       PlaylistRoleEntry(persistentID: "keepers", name: "Vinyl Fever Keepers", role: .keepers),

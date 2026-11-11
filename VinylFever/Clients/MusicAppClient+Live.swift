@@ -106,10 +106,12 @@ private struct LiveMusicAppBridge: Sendable {
     guard permission == .authorized else {
       throw MusicAppLiveError.automationPermission(permission)
     }
-    return try await Self.withTimeout(Self.snapshotReadTimeout) {
+    let step = SnapshotReadStep()
+    return try await Self.withTimeout(Self.snapshotReadTimeout, timeoutError: { MusicAppLiveError.timedOut(step: step.value) }) {
       try await Task.detached(priority: .userInitiated) {
         var columns: [String: [Any]] = [:]
         for property in LibraryBulkProperty.all {
+          step.set(property.key)
           columns[property.key] = try Self.readEveryTrackProperty(property)
         }
         let count = columns["persistentID"]?.count ?? 0
@@ -123,6 +125,7 @@ private struct LiveMusicAppBridge: Sendable {
         let result = try (0..<count).map {
           try LibraryTrack(bulkColumns: columns, index: $0)
         }
+        step.set("playlists")
         let (playlists, outsideTracks) = try Self.readPlaylists(in: Self.musicApplication(), libraryTrackIDs: Set(result.map(\.persistentID)))
         return LibrarySnapshot(generatedAt: Date(), tracks: result, playlists: playlists, outsideTracks: outsideTracks)
       }.value
@@ -543,6 +546,7 @@ private struct LiveMusicAppBridge: Sendable {
   /// one continuation, guarded so it resumes exactly once.
   private static func withTimeout<T: Sendable>(
     _ timeout: Duration,
+    timeoutError: @escaping @Sendable () -> any Error = { MusicAppLiveError.timedOut(step: nil) },
     operation: @escaping @Sendable () async throws -> T
   ) async throws -> T {
     let flag = OnceFlag()
@@ -557,7 +561,7 @@ private struct LiveMusicAppBridge: Sendable {
       }
       Task {
         try? await Task.sleep(for: timeout)
-        if flag.claim() { continuation.resume(throwing: MusicAppLiveError.timedOut) }
+        if flag.claim() { continuation.resume(throwing: timeoutError()) }
       }
     }
   }
@@ -648,6 +652,23 @@ private final class OnceFlag: @unchecked Sendable {
   }
 }
 
+private final class SnapshotReadStep: @unchecked Sendable {
+  private let lock = NSLock()
+  private var current = "starting"
+
+  var value: String {
+    lock.lock()
+    defer { lock.unlock() }
+    return current
+  }
+
+  func set(_ value: String) {
+    lock.lock()
+    current = value
+    lock.unlock()
+  }
+}
+
 @objc
 private protocol MusicScriptingApplication {
   @objc optional func add(_ urls: NSArray, to playlist: SBObject?) -> Any?
@@ -662,7 +683,7 @@ private enum MusicAppLiveError: LocalizedError {
   case libraryPlaylistUnavailable
   case musicAppUnavailable
   case scriptingBridgeReadFailed(String)
-  case timedOut
+  case timedOut(step: String?)
   case watchFolderUnavailable(URL)
   case watchFolderNotWritable(URL)
 
@@ -678,8 +699,12 @@ private enum MusicAppLiveError: LocalizedError {
       "Music.app could not be found."
     case .scriptingBridgeReadFailed(let key):
       "Music scripting bridge value '\(key)' could not be read."
-    case .timedOut:
-      "Music did not respond in time. It may be busy or blocked on a dialog; try again."
+    case .timedOut(let step):
+      if let step {
+        "Music did not respond in time (reading \(step)). It may be busy or blocked on a dialog; Vinyl Fever will try again within the hour."
+      } else {
+        "Music did not respond in time. It may be busy or blocked on a dialog; try again."
+      }
     case .watchFolderUnavailable(let url):
       "The Automatically Add folder isn't there: \(url.path(percentEncoded: false)). Check it in Settings — is the drive mounted?"
     case .watchFolderNotWritable(let url):

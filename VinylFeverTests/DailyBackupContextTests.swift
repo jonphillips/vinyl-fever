@@ -21,7 +21,7 @@ struct DailyBackupContextTests {
 
     #expect(backupHealth(manifest: nil, warnings: [], now: now) == .noSet)
     #expect(backupHealth(manifest: old, warnings: [], now: now) == .stale)
-    #expect(backupHealth(manifest: current, warnings: [warning], now: now) == .warnings([warning]))
+    #expect(backupHealth(manifest: current, warnings: [DailyBackupDatedWarning(day: "2026-11-11", warning: warning)], now: now) == .warnings([warning]))
     #expect(backupHealth(manifest: current, warnings: [], now: now) == .ok)
   }
 }

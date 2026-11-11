@@ -88,7 +88,8 @@ final class PlaylistKeepModel {
       for index in rows.indices {
         let id = rows[index].id
         if !loadedTrackPlaylists.contains(id) {
-          tracksByPlaylist[id] = try await client.tracks(id)
+          do { tracksByPlaylist[id] = try await client.tracks(id) }
+          catch { throw KeepPlaylistTracksReadError(name: rows[index].name, underlying: error) }
           loadedTrackPlaylists.insert(id)
         }
         if let tracks = tracksByPlaylist[id], tracks.contains(where: { matches($0, request) }) {
@@ -98,7 +99,11 @@ final class PlaylistKeepModel {
       }
       playlists = rows
     } catch {
-      errorMessage = error.localizedDescription
+      if let playlistFailure = error as? KeepPlaylistTracksReadError {
+        errorMessage = "\(playlistFailure.name): \(playlistFailure.underlying.localizedDescription)"
+      } else {
+        errorMessage = error.localizedDescription
+      }
     }
   }
 
@@ -136,4 +141,9 @@ final class PlaylistKeepModel {
     MusicFeedback.matches(FeedbackSong(title: track.title, artist: track.artist),
       FeedbackSong(title: request.title, artist: request.artist))
   }
+}
+
+private struct KeepPlaylistTracksReadError: Error {
+  var name: String
+  var underlying: Error
 }

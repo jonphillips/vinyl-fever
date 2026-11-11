@@ -65,7 +65,38 @@ struct DailyBackupTests {
     let manifest = try #require(try DailyBackup.latestManifest(in: fixture.dailyRoot))
     #expect(manifest.warnings.contains(DailyBackupWarning(kind: .shrank, path: notePath)))
     #expect(FileManager.default.fileExists(atPath: firstSet.path))
-    #expect(DailyBackup.recentWarnings(in: fixture.dailyRoot).contains(DailyBackupWarning(kind: .shrank, path: notePath)))
+    #expect(DailyBackup.recentWarnings(in: fixture.dailyRoot).contains {
+      $0.warning == DailyBackupWarning(kind: .shrank, path: notePath)
+    })
+  }
+
+  @Test("unreadable warnings clear after a later clean copy, while the newest unresolved warning keeps its date")
+  func datesAndResolvesRecentWarnings() throws {
+    let fixture = try Fixture()
+    try fixture.writeDatabase()
+    let path = "iCloud/Taste Intelligence/exposure.jsonl"
+    try fixture.write("one\n", to: path)
+
+    var first = fixture.input(day: "2026-11-01")
+    first.readSource = { _ in throw CocoaError(.fileReadNoPermission) }
+    _ = try DailyBackup.make(first)
+    _ = try DailyBackup.make(fixture.input(day: "2026-11-02"))
+    _ = try DailyBackup.make(fixture.input(day: "2026-11-03"))
+    #expect(DailyBackup.recentWarnings(in: fixture.dailyRoot).isEmpty)
+
+    let unresolved = try Fixture()
+    try unresolved.writeDatabase()
+    try unresolved.write("one\n", to: path)
+    var unresolvedFirst = unresolved.input(day: "2026-11-01")
+    unresolvedFirst.readSource = { _ in throw CocoaError(.fileReadNoPermission) }
+    _ = try DailyBackup.make(unresolvedFirst)
+    _ = try DailyBackup.make(unresolved.input(day: "2026-11-02"))
+    var third = unresolved.input(day: "2026-11-03")
+    third.readSource = { _ in throw CocoaError(.fileReadNoPermission) }
+    _ = try DailyBackup.make(third)
+    let warnings = DailyBackup.recentWarnings(in: unresolved.dailyRoot)
+    #expect(warnings == [DailyBackupDatedWarning(day: "2026-11-03",
+      warning: DailyBackupWarning(kind: .unreadable, path: path))])
   }
 
   @Test("a missing prior JSONL file is recorded by path")

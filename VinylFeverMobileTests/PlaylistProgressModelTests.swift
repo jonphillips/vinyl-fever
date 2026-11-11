@@ -49,6 +49,35 @@ struct PlaylistProgressModelTests {
     #expect(progress?.songs["played"] == .passed(withFeedback: false))
     #expect(progress?.songs["unheard"] == .notHeard)
     #expect(progress?.counts == PlaylistProgressCounts(kept: 1, passedWithFeedback: 0, passedWithoutFeedback: 1, notHeard: 1))
+    #expect(model.refreshFailure == nil)
+  }
+
+  @Test @MainActor
+  func failedPlaylistRefreshKeepsResultsAndLaterSuccessClearsFailure() async {
+    let playlist = fixture()
+    let trackReads = ProgressTrackReadSwitch()
+    let model = withDependencies({ dependencies in
+      dependencies.date.now = date(101)
+      dependencies.keepLibraryClient.isAuthorized = { true }
+      dependencies.keepLibraryClient.libraryPlaylists = {
+        [KeepLibraryPlaylist(id: "keepers", name: "Vinyl Fever Keepers")]
+      }
+      dependencies.keepLibraryClient.readRoles = { try roles() }
+      dependencies.keepLibraryClient.tracks = { _ in try await trackReads.read() }
+      dependencies.playlistTasteNotesClient.read = { emptyNotes() }
+      dependencies.playlistListeningLogClient.read = { _, _ in [] }
+    }) { PlaylistProgressModel() }
+
+    await model.refresh([playlist])
+    let saved = model.results
+    await trackReads.fail()
+    await model.refresh([playlist])
+    #expect(model.results == saved)
+    #expect(model.refreshFailure?.hasPrefix("Couldn't read Vinyl Fever Keepers from Apple Music: ") == true)
+
+    await trackReads.succeed()
+    await model.refresh([playlist])
+    #expect(model.refreshFailure == nil)
   }
 
   @Test @MainActor
@@ -122,6 +151,7 @@ struct PlaylistProgressModelTests {
     #expect(!failedLog.isAvailable)
     #expect(failedLog.results.isEmpty)
     #expect(failedLog.hasUnreadableListeningLog)
+    #expect(failedLog.refreshFailure == nil)
   }
 
   @Test @MainActor
@@ -147,6 +177,7 @@ struct PlaylistProgressModelTests {
     #expect(!model.isAvailable)
     #expect(model.results.isEmpty)
     #expect(model.hasUnreadableListeningLog)
+    #expect(model.refreshFailure == nil)
   }
 
   private func fixture() -> PlaylistShelfPlaylist {
@@ -176,4 +207,14 @@ struct PlaylistProgressModelTests {
   }
 
   private func date(_ value: TimeInterval) -> Date { Date(timeIntervalSince1970: value) }
+}
+
+private actor ProgressTrackReadSwitch {
+  private var shouldFail = false
+  func fail() { shouldFail = true }
+  func succeed() { shouldFail = false }
+  func read() throws -> [KeepLibraryTrack] {
+    if shouldFail { throw NSError(domain: "Music", code: 503, userInfo: [NSLocalizedDescriptionKey: "Unavailable"]) }
+    return [KeepLibraryTrack(title: "Kept", artist: "Artist")]
+  }
 }

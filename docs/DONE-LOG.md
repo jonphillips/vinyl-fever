@@ -1,5 +1,11 @@
 # Done log
 
+## 2026-11-11 — Bad tracks and slow Music handled (`effort/bad-tracks-and-slow-music`)
+
+- **Result:** Apple Music page decoding skips malformed items, progress reports refresh failures, backup warnings show dates and resolve after clean copies, and stale library snapshots retry hourly with step-specific timeouts and logs.
+- **Verification:** VinylFeverCore: 328 tests; VinylFeverListening: 51; VinylFeverNotes: 70; VinylFever macOS: 104; VinylFeverMobile on iPhone 18 Pro simulator: 89; generic iOS simulator build passed.
+- **Owed:** bad-tracks-and-slow-music's device gate, in [device-passes.md](device-passes.md).
+
 ## 2026-11-08 — Effort — The phone remembers its shelf (`effort/phone-remembers-shelf`)
 
 - **Result:** The iPhone now paints its shelf and song progress from a device-local SQLiteData cache before continuing its usual Music and iCloud refresh. Clean reads replace their cache; partial reads merge; failed reads preserve the last known state.

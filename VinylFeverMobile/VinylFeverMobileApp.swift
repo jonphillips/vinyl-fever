@@ -81,6 +81,11 @@ private struct PlaylistHomeView: View {
               .font(.caption)
               .foregroundStyle(.secondary)
           }
+          if let failure = progressModel.refreshFailure {
+            Text("Progress couldn't refresh: \(failure). Showing the last saved progress.")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
           if let message = model.emptyMessage {
             PlaylistShelfEmptyView(segment: model.selectedSegment, message: message)
           }
