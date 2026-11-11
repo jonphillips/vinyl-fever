@@ -63,6 +63,9 @@ private enum KeepLibraryClientKey: DependencyKey {
       while let page = next {
         let response = try await Self.getTrackPage(path: page)
         tracks += response.data.map { KeepLibraryTrack(title: $0.attributes.name, artist: $0.attributes.artistName) }
+        for id in response.skipped {
+          NSLog("Vinyl Fever skipped an unreadable track %@ in playlist %@", id, playlistID)
+        }
         next = response.next
       }
       return tracks
@@ -73,22 +76,22 @@ private enum KeepLibraryClientKey: DependencyKey {
     }
   )
 
-  private static func getPage(path: String) async throws -> PlaylistPage {
+  private static func getPage(path: String) async throws -> KeepLibraryPages.PlaylistPage {
     guard let url = path.hasPrefix("https://") ? URL(string: path) : URL(string: "https://api.music.apple.com\(path)") else {
       throw KeepLibraryError(statusCode: 0, detail: "Apple Music returned an invalid pagination URL.")
     }
     let response = try await request(url: url, method: "GET", body: nil)
-    do { return try JSONDecoder().decode(PlaylistPage.self, from: response.data) }
+    do { return try KeepLibraryPages.decodePlaylists(response.data) }
     catch { throw KeepLibraryError(statusCode: response.urlResponse.statusCode,
       detail: "Apple Music returned an unreadable playlist response: \(error.localizedDescription)") }
   }
 
-  private static func getTrackPage(path: String) async throws -> TrackPage {
+  private static func getTrackPage(path: String) async throws -> KeepLibraryPages.TrackPage {
     guard let url = path.hasPrefix("https://") ? URL(string: path) : URL(string: "https://api.music.apple.com\(path)") else {
       throw KeepLibraryError(statusCode: 0, detail: "Apple Music returned an invalid pagination URL.")
     }
     let response = try await request(url: url, method: "GET", body: nil)
-    do { return try JSONDecoder().decode(TrackPage.self, from: response.data) }
+    do { return try KeepLibraryPages.decodeTracks(response.data) }
     catch { throw KeepLibraryError(statusCode: response.urlResponse.statusCode,
       detail: "Apple Music returned an unreadable playlist tracks response: \(error.localizedDescription)") }
   }
@@ -179,26 +182,73 @@ private struct RolesReadTimedOut: LocalizedError {
   var errorDescription: String? { "Playlist roles did not finish loading before the deadline." }
 }
 
-private struct PlaylistPage: Decodable {
-  var data: [Playlist]
-  var next: String?
-
-  struct Playlist: Decodable {
-    var id: String
-    var attributes: Attributes
-    struct Attributes: Decodable { var name: String; var canEdit: Bool? }
+enum KeepLibraryPages {
+  struct TrackPage: Sendable {
+    var data: [Track]
+    var next: String?
+    var skipped: [String]
   }
 
-}
-
-private struct TrackPage: Decodable {
-  var data: [Track]
-  var next: String?
-  struct Track: Decodable {
+  struct Track: Decodable, Sendable {
     var id: String
     var attributes: Attributes
-    struct Attributes: Decodable { var name: String; var artistName: String }
+    struct Attributes: Decodable, Sendable { var name: String; var artistName: String }
   }
+
+  struct Playlist: Decodable, Sendable {
+    var id: String
+    var attributes: Attributes
+    struct Attributes: Decodable, Sendable { var name: String; var canEdit: Bool? }
+  }
+
+  struct PlaylistPage: Sendable {
+    var data: [Playlist]
+    var next: String?
+    var skipped: [String]
+  }
+
+  static func decodeTracks(_ data: Data) throws -> TrackPage {
+    let parts = try pageParts(data)
+    var tracks: [Track] = []
+    var skipped: [String] = []
+    for item in parts.items {
+      do { tracks.append(try JSONDecoder().decode(Track.self, from: item.data)) }
+      catch { if let id = item.id { skipped.append(id) } }
+    }
+    return TrackPage(data: tracks, next: parts.next, skipped: skipped)
+  }
+
+  static func decodePlaylists(_ data: Data) throws -> PlaylistPage {
+    let parts = try pageParts(data)
+    var playlists: [Playlist] = []
+    var skipped: [String] = []
+    for item in parts.items {
+      do { playlists.append(try JSONDecoder().decode(Playlist.self, from: item.data)) }
+      catch { if let id = item.id { skipped.append(id) } }
+    }
+    return PlaylistPage(data: playlists, next: parts.next, skipped: skipped)
+  }
+
+  private static func pageParts(_ data: Data) throws -> (items: [(data: Data, id: String?)], next: String?) {
+    let root = try JSONSerialization.jsonObject(with: data)
+    guard let object = root as? [String: Any], let rawItems = object["data"] as? [Any] else {
+      throw DecodingError.keyNotFound(CodingKeys.data, .init(codingPath: [], debugDescription: "Missing data array."))
+    }
+    let next: String?
+    if let rawNext = object["next"], !(rawNext is NSNull) {
+      guard let value = rawNext as? String else {
+        throw DecodingError.typeMismatch(String.self, .init(codingPath: [CodingKeys.next], debugDescription: "next must be a string."))
+      }
+      next = value
+    } else { next = nil }
+    let items = try rawItems.map { raw -> (data: Data, id: String?) in
+      let itemData = try JSONSerialization.data(withJSONObject: raw, options: [.fragmentsAllowed])
+      return (itemData, (raw as? [String: Any])?["id"] as? String)
+    }
+    return (items, next)
+  }
+
+  private enum CodingKeys: String, CodingKey { case data, next }
 }
 
 private struct KeepLibraryError: LocalizedError {

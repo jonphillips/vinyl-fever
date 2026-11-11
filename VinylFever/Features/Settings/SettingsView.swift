@@ -25,7 +25,7 @@ struct SettingsView: View {
   @State private var tasteStatus = "Checking…"
   @State private var tasteError: String?
   @State private var backupManifest: DailyBackupManifest?
-  @State private var backupWarnings: [DailyBackupWarning] = []
+  @State private var backupWarnings: [DailyBackupDatedWarning] = []
   @State private var backupFailure: DailyBackupFailure?
   @Dependency(\.librarySnapshotStore) private var librarySnapshotStore
   @Dependency(\.playlistRolesStore) private var playlistRolesStore
@@ -165,7 +165,7 @@ struct SettingsView: View {
               .foregroundStyle(.secondary)
           } else {
             ForEach(Array(backupWarnings.enumerated()), id: \.offset) { _, warning in
-              Label("\(warning.kind.rawValue): \(warning.path)", systemImage: "exclamationmark.triangle.fill")
+              Label(backupWarningText(warning), systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
                 .textSelection(.enabled)
             }
@@ -267,6 +267,19 @@ struct SettingsView: View {
     backupManifest = try? DailyBackup.latestManifest(in: backupRoot)
     backupWarnings = DailyBackup.recentWarnings(in: backupRoot)
     backupFailure = DailyBackup.latestFailure(in: backupRoot)
+  }
+
+  private func backupWarningText(_ dated: DailyBackupDatedWarning) -> String {
+    let parser = DateFormatter()
+    parser.locale = Locale(identifier: "en_US_POSIX")
+    parser.calendar = Calendar(identifier: .gregorian)
+    parser.dateFormat = "yyyy-MM-dd"
+    let day = parser.date(from: dated.day)?.formatted(date: .abbreviated, time: .omitted) ?? dated.day
+    return switch dated.warning.kind {
+    case .unreadable: "\(day): couldn't read \(dated.warning.path); kept the day before's copy"
+    case .missing: "\(day): \(dated.warning.path) was missing"
+    case .shrank: "\(day): \(dated.warning.path) has fewer lines than the day before"
+    }
   }
 
   private var artistAliasesSection: some View {
@@ -378,10 +391,10 @@ enum BackupHealthState: Equatable {
   case ok
 }
 
-func backupHealth(manifest: DailyBackupManifest?, warnings: [DailyBackupWarning], now: Date) -> BackupHealthState {
+func backupHealth(manifest: DailyBackupManifest?, warnings: [DailyBackupDatedWarning], now: Date) -> BackupHealthState {
   guard let manifest else { return .noSet }
   guard now.timeIntervalSince(manifest.createdAt) < 2 * 24 * 60 * 60 else { return .stale }
-  return warnings.isEmpty ? .ok : .warnings(warnings)
+  return warnings.isEmpty ? .ok : .warnings(warnings.map(\.warning))
 }
 
 struct ListeningAgentClient {

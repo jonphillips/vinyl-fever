@@ -3,8 +3,8 @@
 Status: Dispatched
 Summary: One badly tagged song in *Undeniable* has no artist, so the phone's Keep sheet failed and its progress silently stopped updating. A stall in Music has also kept the Mac's library snapshot at 5 days old. Skip tracks that won't decode, say when progress can't refresh, put dates on backup warnings and drop the resolved ones, and retry a stale snapshot every hour.
 
-Related: [M21](../milestones/archive/M21-playlists-view.md) · [M22](../milestones/archive/M22-playlist-progress.md) ·
-[M19](../milestones/archive/M19-backups.md) · [Efforts index](README.md)
+Related: [M21](../../milestones/archive/M21-playlists-view.md) · [M22](../../milestones/archive/M22-playlist-progress.md) ·
+[M19](../../milestones/archive/M19-backups.md) · [Efforts index](../README.md)
 
 Branch `effort/bad-tracks-and-slow-music`, from a fresh `main`. One PR. No schema change, no sync
 change, and no iCloud file changes format.

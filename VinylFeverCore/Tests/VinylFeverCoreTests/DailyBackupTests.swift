@@ -65,7 +65,78 @@ struct DailyBackupTests {
     let manifest = try #require(try DailyBackup.latestManifest(in: fixture.dailyRoot))
     #expect(manifest.warnings.contains(DailyBackupWarning(kind: .shrank, path: notePath)))
     #expect(FileManager.default.fileExists(atPath: firstSet.path))
-    #expect(DailyBackup.recentWarnings(in: fixture.dailyRoot).contains(DailyBackupWarning(kind: .shrank, path: notePath)))
+    #expect(DailyBackup.recentWarnings(in: fixture.dailyRoot).contains {
+      $0.warning == DailyBackupWarning(kind: .shrank, path: notePath)
+    })
+  }
+
+  @Test("unreadable warnings clear after a later clean copy, while the newest unresolved warning keeps its date")
+  func datesAndResolvesRecentWarnings() throws {
+    let fixture = try Fixture()
+    try fixture.writeDatabase()
+    let path = "iCloud/Taste Intelligence/exposure.jsonl"
+    try fixture.write("one\n", to: path)
+
+    var first = fixture.input(day: "2026-11-01")
+    first.readSource = { _ in throw CocoaError(.fileReadNoPermission) }
+    _ = try DailyBackup.make(first)
+    _ = try DailyBackup.make(fixture.input(day: "2026-11-02"))
+    _ = try DailyBackup.make(fixture.input(day: "2026-11-03"))
+    #expect(DailyBackup.recentWarnings(in: fixture.dailyRoot).isEmpty)
+
+    let unresolved = try Fixture()
+    try unresolved.writeDatabase()
+    try unresolved.write("one\n", to: path)
+    var unresolvedFirst = unresolved.input(day: "2026-11-01")
+    unresolvedFirst.readSource = { _ in throw CocoaError(.fileReadNoPermission) }
+    _ = try DailyBackup.make(unresolvedFirst)
+    _ = try DailyBackup.make(unresolved.input(day: "2026-11-02"))
+    var third = unresolved.input(day: "2026-11-03")
+    third.readSource = { _ in throw CocoaError(.fileReadNoPermission) }
+    _ = try DailyBackup.make(third)
+    let warnings = DailyBackup.recentWarnings(in: unresolved.dailyRoot)
+    #expect(warnings == [DailyBackupDatedWarning(day: "2026-11-03",
+      warning: DailyBackupWarning(kind: .unreadable, path: path))])
+  }
+
+  @Test("a shrank warning remains after later clean copies")
+  func shrankWarningSurvivesLaterCleanSets() throws {
+    let fixture = try Fixture()
+    try fixture.writeDatabase()
+    let path = "iCloud/Listening/fetches/poller/2026-11.jsonl"
+    try fixture.write("one\ntwo\nthree\nfour\nfive\n", to: path)
+    _ = try DailyBackup.make(fixture.input(day: "2026-10-31"))
+
+    try fixture.write("one\ntwo\n", to: path)
+    _ = try DailyBackup.make(fixture.input(day: "2026-11-01"))
+    _ = try DailyBackup.make(fixture.input(day: "2026-11-02"))
+    _ = try DailyBackup.make(fixture.input(day: "2026-11-03"))
+
+    #expect(DailyBackup.recentWarnings(in: fixture.dailyRoot, days: 3) == [
+      DailyBackupDatedWarning(day: "2026-11-01", warning: DailyBackupWarning(kind: .shrank, path: path)),
+    ])
+  }
+
+  @Test("recent warnings are returned newest first")
+  func recentWarningsAreNewestFirst() throws {
+    let fixture = try Fixture()
+    try fixture.writeDatabase()
+    let missingPath = "iCloud/Listening/fetches/poller/missing.jsonl"
+    let shrinkingPath = "iCloud/Listening/fetches/poller/shrinking.jsonl"
+    try fixture.write("missing\n", to: missingPath)
+    try fixture.write("one\ntwo\nthree\nfour\nfive\n", to: shrinkingPath)
+    _ = try DailyBackup.make(fixture.input(day: "2026-10-31"))
+
+    try FileManager.default.removeItem(at: fixture.iCloudRoot.appending(path: "Listening/fetches/poller/missing.jsonl"))
+    _ = try DailyBackup.make(fixture.input(day: "2026-11-01"))
+    _ = try DailyBackup.make(fixture.input(day: "2026-11-02"))
+    try fixture.write("one\n", to: shrinkingPath)
+    _ = try DailyBackup.make(fixture.input(day: "2026-11-03"))
+
+    #expect(DailyBackup.recentWarnings(in: fixture.dailyRoot) == [
+      DailyBackupDatedWarning(day: "2026-11-03", warning: DailyBackupWarning(kind: .shrank, path: shrinkingPath)),
+      DailyBackupDatedWarning(day: "2026-11-01", warning: DailyBackupWarning(kind: .missing, path: missingPath)),
+    ])
   }
 
   @Test("a missing prior JSONL file is recorded by path")

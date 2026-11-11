@@ -1008,6 +1008,95 @@ struct PlaylistBuilderModelTests {
     #expect(freshModel.librarySnapshot == previous)
   }
 
+  @Test("hourly lifecycle checks staleness and stops when cancelled")
+  func hourlySnapshotRefreshAndCancellation() async throws {
+    let database = try testDatabase()
+    let now = Date(timeIntervalSince1970: 2_000_000_000)
+    let clock = TestClock()
+    let armCounter = ClockArmCounter()
+    let armedClock = ArmedClock(base: clock, armCounter: armCounter)
+    let readCounter = SearchCallCounter()
+    let modifiedAt = SnapshotModifiedAt(now.addingTimeInterval(-7 * 60 * 60))
+    let snapshot = LibrarySnapshot(generatedAt: now, tracks: [])
+    let requests = AsyncStream<Void>.makeStream()
+    let model = withDependencies {
+      $0.defaultDatabase = database
+      $0.continuousClock = armedClock
+      $0.date.now = now
+      $0.musicAppClient.automationPermission = { .authorized }
+      $0.musicAppClient.readLibrarySnapshot = { await readCounter.record(); return snapshot }
+      $0.librarySnapshotStore = LibrarySnapshotStore(
+        read: { nil }, write: { _ in await modifiedAt.set(now) }, readAliases: { [:] },
+        writeAliases: { _ in }, repairAliasesMirror: {}, modifiedAt: { await modifiedAt.value })
+      $0.snapshotRefreshRequestClient.requests = { requests.stream }
+    } operation: { PlaylistBuilderModel() }
+
+    let lifecycle = Task { @MainActor in await model.runSnapshotLifecycle { _ in } }
+    let launchRead = await waitUntil { await readCounter.count == 1 }
+    #expect(launchRead)
+    let firstTimerArmed = await waitUntil { armCounter.count >= 1 }
+    #expect(firstTimerArmed)
+    await clock.advance(by: .seconds(60 * 60))
+    let nextTimerArmed = await waitUntil { armCounter.count >= 2 }
+    #expect(nextTimerArmed)
+    #expect(await readCounter.count == 1)
+
+    lifecycle.cancel()
+    await lifecycle.value
+    await clock.advance(by: .seconds(2 * 60 * 60))
+    #expect(await readCounter.count == 1)
+    requests.continuation.finish()
+  }
+
+  @Test("an hourly retry recovers from a failed launch snapshot")
+  func hourlySnapshotRetryRecovers() async throws {
+    let database = try testDatabase()
+    let now = Date(timeIntervalSince1970: 2_000_000_000)
+    let clock = TestClock()
+    let armCounter = ClockArmCounter()
+    let readCounter = SearchCallCounter()
+    let readSwitch = SnapshotReadSwitch()
+    let snapshot = LibrarySnapshot(generatedAt: now, tracks: [])
+    let requests = AsyncStream<Void>.makeStream()
+    let model = withDependencies {
+      $0.defaultDatabase = database
+      $0.continuousClock = ArmedClock(base: clock, armCounter: armCounter)
+      $0.date.now = now
+      $0.musicAppClient.automationPermission = { .authorized }
+      $0.musicAppClient.readLibrarySnapshot = {
+        await readCounter.record()
+        if await readSwitch.shouldFail { throw CocoaError(.fileReadUnknown) }
+        return snapshot
+      }
+      $0.librarySnapshotStore = LibrarySnapshotStore(
+        read: { nil }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in },
+        repairAliasesMirror: {}, modifiedAt: { now.addingTimeInterval(-7 * 60 * 60) })
+      $0.snapshotRefreshRequestClient.requests = { requests.stream }
+    } operation: { PlaylistBuilderModel() }
+
+    let lifecycle = Task { @MainActor in await model.runSnapshotLifecycle { _ in } }
+    let launchFailed = await waitUntil {
+      let count = await readCounter.count
+      let hasError = await MainActor.run { model.librarySnapshotError != nil }
+      return count == 1 && hasError
+    }
+    #expect(launchFailed)
+    let timerArmed = await waitUntil { armCounter.count >= 1 }
+    #expect(timerArmed)
+    await readSwitch.recover()
+    await clock.advance(by: .seconds(60 * 60))
+    let recovered = await waitUntil {
+      let count = await readCounter.count
+      let hasNoError = await MainActor.run { model.librarySnapshotError == nil }
+      return count == 2 && hasNoError
+    }
+    #expect(recovered)
+    #expect(model.librarySnapshot == snapshot)
+    requests.continuation.finish()
+    lifecycle.cancel()
+    await lifecycle.value
+  }
+
   @Test("launch refresh only checks automation permission; manual refresh asks for it")
   func refreshPermissionPrompting() async throws {
     let database = try testDatabase()
@@ -1695,6 +1784,17 @@ private final class ObservationFlag: @unchecked Sendable {
 private actor SearchCallCounter {
   private(set) var count = 0
   func record() { count += 1 }
+}
+
+private actor SnapshotModifiedAt {
+  private(set) var value: Date?
+  init(_ value: Date?) { self.value = value }
+  func set(_ value: Date?) { self.value = value }
+}
+
+private actor SnapshotReadSwitch {
+  private(set) var shouldFail = true
+  func recover() { shouldFail = false }
 }
 
 private final class ClockArmCounter: @unchecked Sendable {

@@ -3,6 +3,7 @@ import DependenciesMacros
 import Foundation
 import LLMHandoffKit
 import Observation
+import os
 import SQLiteData
 import VinylFeverCore
 import VinylFeverListening
@@ -53,6 +54,7 @@ extension DependencyValues {
 @Observable
 final class PlaylistBuilderModel {
   private static let snapshotStaleInterval: TimeInterval = 6 * 60 * 60
+  private static let snapshotLogger = Logger(subsystem: "com.jonphillips.vinylfever", category: "library-snapshot")
   @ObservationIgnored @Dependency(\.appleMusicCatalogClient) private var appleMusic
   @ObservationIgnored @Dependency(\.catalogMatchResolver) private var resolver
   @ObservationIgnored @Dependency(\.continuousClock) private var clock
@@ -200,7 +202,7 @@ final class PlaylistBuilderModel {
       librarySnapshot = try await snapshotStore.read()
       let modifiedAt = try await snapshotStore.modifiedAt()
       if modifiedAt == nil || now.timeIntervalSince(modifiedAt!) >= Self.snapshotStaleInterval {
-        await refreshSnapshot(requestingPermission: false)
+        await refreshSnapshot(requestingPermission: false, trigger: .launch)
       }
     } catch { librarySnapshotError = error.localizedDescription }
   }
@@ -209,18 +211,29 @@ final class PlaylistBuilderModel {
     let requests = snapshotRefreshRequests.requests()
     await loadSnapshotAndRefreshIfStale()
     await onLoaded(librarySnapshot)
+    async let hourlyRefresh: Void = runHourlySnapshotRefreshLoop()
     for await _ in requests {
+      guard !Task.isCancelled else { break }
       await snapshotRefreshRequested()
+    }
+    _ = await hourlyRefresh
+  }
+
+  private func runHourlySnapshotRefreshLoop() async {
+    while !Task.isCancelled {
+      do { try await clock.sleep(for: .seconds(60 * 60)) }
+      catch { return }
+      await refreshSnapshotIfStale(trigger: .hourly)
     }
   }
 
   func snapshotRefreshRequested() async {
     pendingSnapshotRefresh?.cancel()
-    await refreshSnapshot(requestingPermission: false)
+    await refreshSnapshot(requestingPermission: false, trigger: .requested)
     pendingSnapshotRefresh = Task { @MainActor [weak self, clock] in
       do { try await clock.sleep(for: .seconds(5 * 60)) }
       catch { return }
-      await self?.refreshSnapshot(requestingPermission: false)
+      await self?.refreshSnapshot(requestingPermission: false, trigger: .requested)
     }
   }
 
@@ -277,11 +290,23 @@ final class PlaylistBuilderModel {
 
   /// The manual refresh. Unlike the launch refresh, it may show the Automation prompt.
   func refreshLibrarySnapshot() async {
-    await refreshSnapshot(requestingPermission: true)
+    await refreshSnapshot(requestingPermission: true, trigger: .manual)
   }
 
-  private func refreshSnapshot(requestingPermission: Bool) async {
+  private func refreshSnapshotIfStale(trigger: SnapshotRefreshTrigger) async {
+    do {
+      let modifiedAt = try await snapshotStore.modifiedAt()
+      guard modifiedAt == nil || now.timeIntervalSince(modifiedAt!) >= Self.snapshotStaleInterval else { return }
+      await refreshSnapshot(requestingPermission: false, trigger: trigger)
+    } catch {
+      librarySnapshotError = error.localizedDescription
+      Self.snapshotLogger.error("\(trigger.rawValue, privacy: .public) refresh check failed: \(error.localizedDescription, privacy: .public)")
+    }
+  }
+
+  private func refreshSnapshot(requestingPermission: Bool, trigger: SnapshotRefreshTrigger) async {
     guard !isRefreshingSnapshot else { return }
+    let startedAt = ProcessInfo.processInfo.systemUptime
     isRefreshingSnapshot = true
     librarySnapshotError = nil
     defer { isRefreshingSnapshot = false }
@@ -294,6 +319,7 @@ final class PlaylistBuilderModel {
         permission == .notDetermined && !requestingPermission
         ? "Click Refresh Library Snapshot to allow Vinyl Fever to read your Music library."
         : permission.displayMessage
+      Self.logSnapshotFailure(trigger, startedAt: startedAt, message: librarySnapshotError ?? "Music permission is unavailable.")
       return
     }
     do {
@@ -316,7 +342,17 @@ final class PlaylistBuilderModel {
       }
       try await snapshotStore.write(snapshot)
       librarySnapshot = snapshot
-    } catch { librarySnapshotError = error.localizedDescription }
+      let elapsed = ProcessInfo.processInfo.systemUptime - startedAt
+      Self.snapshotLogger.info("\(trigger.rawValue, privacy: .public) refresh succeeded: \(snapshot.tracks.count) tracks in \(elapsed, format: .fixed(precision: 1)) seconds")
+    } catch {
+      librarySnapshotError = error.localizedDescription
+      Self.logSnapshotFailure(trigger, startedAt: startedAt, message: error.localizedDescription)
+    }
+  }
+
+  private static func logSnapshotFailure(_ trigger: SnapshotRefreshTrigger, startedAt: TimeInterval, message: String) {
+    let elapsed = ProcessInfo.processInfo.systemUptime - startedAt
+    snapshotLogger.error("\(trigger.rawValue, privacy: .public) refresh failed after \(elapsed, format: .fixed(precision: 1)) seconds: \(message, privacy: .public)")
   }
 
   func removeHeavilyPlayedRows() {
@@ -824,6 +860,10 @@ final class PlaylistBuilderModel {
       }
     }
   }
+}
+
+private enum SnapshotRefreshTrigger: String {
+  case launch, hourly, requested, manual
 }
 
 enum PlaylistGate: Equatable {

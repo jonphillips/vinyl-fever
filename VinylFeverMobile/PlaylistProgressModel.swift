@@ -37,6 +37,7 @@ final class PlaylistProgressModel {
   private(set) var isAvailable = false
   private(set) var isLoading = false
   private(set) var hasUnreadableListeningLog = false
+  private(set) var refreshFailure: String?
 
   @ObservationIgnored @Dependency(\.keepLibraryClient) private var keepClient
   @ObservationIgnored @Dependency(\.playlistTasteNotesClient) private var notesClient
@@ -52,6 +53,7 @@ final class PlaylistProgressModel {
     loadCacheIfNeeded()
     self.playlists = playlists
     hasUnreadableListeningLog = false
+    refreshFailure = nil
     guard keepClient.isAuthorized() else {
       isAvailable = false
       index = nil
@@ -72,12 +74,17 @@ final class PlaylistProgressModel {
         ?? library.map(\.name).filter { $0 == "Vinyl Fever Keepers" || $0.range(of: SelectionPlaylistName.pattern, options: .regularExpression) != nil })
       var readKeepers: [PlaylistKeeperTracks] = []
       for libraryPlaylist in library where names.contains(libraryPlaylist.name) {
-        let tracks = try await keepClient.tracks(libraryPlaylist.id)
+        let tracks: [KeepLibraryTrack]
+        do { tracks = try await keepClient.tracks(libraryPlaylist.id) }
+        catch { throw PlaylistProgressReadError.playlist(name: libraryPlaylist.name, underlying: error) }
         readKeepers.append(PlaylistKeeperTracks(name: libraryPlaylist.name,
           tracks: tracks.map { PlaylistTrackIdentity(title: $0.title, artist: $0.artist) }))
       }
-      let noteRead = try await notesClient.read()
-      guard noteRead.unreadableFileCount == 0 else { throw PlaylistProgressReadError.incompleteNotes }
+      let noteRead: PlaylistTasteNotesFolderRead
+      do {
+        noteRead = try await notesClient.read()
+        guard noteRead.unreadableFileCount == 0 else { throw PlaylistProgressReadError.incompleteNotes }
+      } catch { throw PlaylistProgressReadError.notes }
       let oldest = playlists.map(\.batch.recordedAt).min() ?? now
       let readPlays: [ListeningPlay]
       do {
@@ -100,6 +107,15 @@ final class PlaylistProgressModel {
       saveCache()
     } catch {
       // Keep the last successful cache visible while evidence sources are unavailable.
+      if hasUnreadableListeningLog { return }
+      switch error {
+      case let PlaylistProgressReadError.playlist(name, underlying):
+        refreshFailure = "Couldn't read \(name) from Apple Music: \(underlying.localizedDescription)"
+      case PlaylistProgressReadError.notes, PlaylistProgressReadError.incompleteNotes:
+        refreshFailure = "Some notes are still downloading from iCloud."
+      default:
+        refreshFailure = error.localizedDescription
+      }
     }
   }
 
@@ -161,5 +177,7 @@ final class PlaylistProgressModel {
 }
 
 private enum PlaylistProgressReadError: Error {
+  case playlist(name: String, underlying: Error)
+  case notes
   case incompleteNotes
 }

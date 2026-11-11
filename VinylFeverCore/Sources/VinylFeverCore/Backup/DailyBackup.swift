@@ -67,6 +67,16 @@ public struct DailyBackupWarning: Codable, Equatable, Sendable {
   }
 }
 
+public struct DailyBackupDatedWarning: Equatable, Sendable {
+  public var day: String
+  public var warning: DailyBackupWarning
+
+  public init(day: String, warning: DailyBackupWarning) {
+    self.day = day
+    self.warning = warning
+  }
+}
+
 public struct DailyBackupManifest: Codable, Equatable, Sendable {
   public var format = "vf-backup-manifest"
   public var version = 1
@@ -234,13 +244,31 @@ public enum DailyBackup {
     return try readManifest(at: latest)
   }
 
-  public static func recentWarnings(in dailyRoot: URL, days: Int = 30) -> [DailyBackupWarning] {
+  public static func recentWarnings(in dailyRoot: URL, days: Int = 30) -> [DailyBackupDatedWarning] {
     guard let directories = try? FileManager.default.contentsOfDirectory(at: dailyRoot, includingPropertiesForKeys: nil) else { return [] }
-    return directories
+    let sets = directories
       .filter { $0.lastPathComponent.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil }
       .sorted { $0.lastPathComponent > $1.lastPathComponent }
       .prefix(days)
-      .flatMap { (try? readManifest(at: $0).warnings) ?? [] }
+      .map { directory in
+        (day: directory.lastPathComponent, manifest: try? readManifest(at: directory))
+      }
+    return sets.enumerated().flatMap { index, set in
+      (set.manifest?.warnings ?? []).compactMap { warning -> DailyBackupDatedWarning? in
+        if warning.kind != .shrank {
+          let resolvedByLaterSet = sets[..<index].contains { later in
+            guard let manifest = later.manifest,
+              manifest.files.contains(where: { $0.path == warning.path })
+            else { return false }
+            return !manifest.warnings.contains {
+              $0.path == warning.path && ($0.kind == .unreadable || $0.kind == .missing)
+            }
+          }
+          if resolvedByLaterSet { return nil }
+        }
+        return DailyBackupDatedWarning(day: set.day, warning: warning)
+      }
+    }
   }
 
   public static func latestFailure(in dailyRoot: URL) -> DailyBackupFailure? {
