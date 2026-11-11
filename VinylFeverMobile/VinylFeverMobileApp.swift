@@ -518,6 +518,13 @@ private struct PlaylistDetailView: View {
 
         ForEach(Array(playlist.songs.enumerated()), id: \.element.id) { index, song in
           VStack(spacing: 18) {
+            if let heading = song.sectionHeading {
+              Text(heading)
+                .font(.title3.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 8)
+                .accessibilityAddTraits(.isHeader)
+            }
             PlaylistSongView(song: song, playbackModel: playbackModel, keepModel: keepModel,
               notesModel: notesModel, progress: progressModel.results[playlist.id]?.songs[song.id])
             if song.id != playlist.songs.last?.id { Divider() }
@@ -707,7 +714,21 @@ private struct PlaylistSongView: View {
           Spacer()
         }
         Text(song.artist).foregroundStyle(.secondary)
+        if let tag = song.tag {
+          Text(tag)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.indigo)
+            .padding(.horizontal, 9).padding(.vertical, 4)
+            .background(.indigo.opacity(0.12), in: Capsule())
+            .fixedSize(horizontal: false, vertical: true)
+        }
         if let progress { PlaylistSongProgressPill(progress: progress) }
+        if !song.details.isEmpty {
+          Text(song.details.joined(separator: " · "))
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
         if song.album != nil || song.year != nil {
           Text([song.album, song.year.map(String.init)].compactMap { $0 }.joined(separator: " · "))
             .font(.subheadline)
@@ -724,8 +745,8 @@ private struct PlaylistSongView: View {
         .padding(.top, 4)
 
         Text(song.familiarity).font(.subheadline.weight(.medium))
-        if let why = song.why {
-          Text(why).fixedSize(horizontal: false, vertical: true)
+        if let paragraph = song.familiarity == "New to you" ? (song.story ?? song.why) : song.why {
+          Text(paragraph).fixedSize(horizontal: false, vertical: true)
         }
         ForEach(Array(notesModel.notes(for: song).enumerated()), id: \.offset) { _, note in
           VStack(alignment: .leading, spacing: 3) {

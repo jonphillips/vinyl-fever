@@ -3,8 +3,8 @@
 Status: Ready
 Summary: The chat writes each song a label, a few facts, and a paragraph, and groups songs under headings, but `stage_playlist` only carries a one-sentence `why`, so the phone shows a thinner list than the chat did. Staging gains four optional per-song fields in the chat's own words (`tag`, `details`, `story`, `section`); the ledger keeps them and the phone shows them.
 
-Related: M24 (the phone shelf) · [Taste Intelligence](../taste-intelligence.md) ·
-[Efforts index](../README.md)
+Related: M24 (the phone shelf) · [Taste Intelligence](../../taste-intelligence.md) ·
+[Efforts index](../../README.md)
 
 Branch `effort/chat-writeups-on-phone`, from a fresh `main`. One PR: the MCP server, the ledger
 type, and the phone. No Mac UI change.

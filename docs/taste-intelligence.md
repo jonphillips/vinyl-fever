@@ -181,7 +181,9 @@ Music.app ──snapshot v2 (laptop)──▶ tracks + every playlist's members 
   never Apple Music.
 - **Recommendation ledger:** `PlaylistInbox/Processed/` already archives every staged playlist.
   The addition: each track's familiarity when it was staged (in library, in a playlist, heard in
-  the log, recommended before), so outcomes measure discoveries only.
+  the log, recommended before), so outcomes measure discoveries only. The chat may also write
+  optional `tag`, `details`, `story`, and `section` fields in its own words; the phone shows them,
+  and `playlist_reviews` reads `tag` when judging the bet.
 
 ### MCP tools (first set)
 

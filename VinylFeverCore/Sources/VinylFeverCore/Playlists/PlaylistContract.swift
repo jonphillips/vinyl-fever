@@ -60,12 +60,13 @@ public enum PlaylistContract {
   """ + "\n"
 
   public static let trackRules = """
-  The JSON object must have a non-empty name and at least one track. Each track needs artist and title; album is an optional hint. year is the original release year: `stage_playlist` requires it on every track, with null when you can't verify it. For one of Jon's own recordings, such as a live show, set album to the exact album name from his library. Omit any track you are not confident exists as a released recording by that artist; do not substitute another song. Include a specific version in the title only when that version is the point, such as "Song (Live at the Fillmore)". Do not include IDs, ISRCs, URLs, or commentary fields.
+  The JSON object must have a non-empty name and at least one track. Each track needs artist and title; album is an optional hint. year is the original release year: `stage_playlist` requires it on every track, with null when you can't verify it. For one of Jon's own recordings, such as a live show, set album to the exact album name from his library. Omit any track you are not confident exists as a released recording by that artist; do not substitute another song. Include a specific version in the title only when that version is the point, such as "Song (Live at the Fillmore)".
   """
 
   public static let formatInstructions = formatInstructionsBeforeRules
     + "This format applies only when Jon asks you to emit the playlist. Otherwise, continue the conversation normally.\n"
-  public static let projectInstructions = formatInstructionsBeforeRules + trackRules + "\n\n"
+  public static let projectInstructions = formatInstructionsBeforeRules + trackRules
+    + " Do not include IDs, ISRCs, URLs, or commentary fields.\n\n"
     + "This format applies only when Jon asks you to emit the playlist. Otherwise, continue the conversation normally.\n"
 
   /// Decodes the pinned marker plus one JSON object. Invalid tracks with blank artist or title

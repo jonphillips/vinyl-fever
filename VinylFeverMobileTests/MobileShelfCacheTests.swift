@@ -101,6 +101,23 @@ struct MobileShelfCacheTests {
     #expect(after?.songs.map(\.id) == before?.songs.map(\.id))
   }
 
+  @Test
+  func cacheRoundTripPreservesChatWriteupsOnShelf() throws {
+    let date = Date(timeIntervalSince1970: 1_800_000_000)
+    let source = RecommendationBatch(recordedAt: date, host: "Mac", playlist: "Writeups", tracks: [
+      RecommendationTrack(artist: "Artist", title: "Song", familiar: false, reasons: [], artistKnown: true,
+        tag: "Strong bet", details: ["From Scotland"], story: "The paragraph from chat.", section: "Challenge")
+    ])
+    let database = try makeDatabase()
+    _ = try ShelfCache.writeShelf(read([source]), to: database)
+    let cached = try ShelfCache.load(from: database)
+    let song = try #require(shelfPlaylists(cached.batches).first?.songs.first)
+    #expect(song.tag == "Strong bet")
+    #expect(song.details == ["From Scotland"])
+    #expect(song.story == "The paragraph from chat.")
+    #expect(song.sectionHeading == "Challenge")
+  }
+
   @Test @MainActor
   func preciseCachedProgressAndSelectionSurviveFreshRead() async throws {
     let source = try preciseBatchFromLedgerLine()

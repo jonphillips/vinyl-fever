@@ -72,6 +72,25 @@ struct RecommendationLedgerTests {
     }
   }
 
+  @Test("playlist shelf carries chat writeups and marks the first song in each section run")
+  func playlistShelfChatWriteups() throws {
+    let date = Date(timeIntervalSince1970: 1_800_000_000)
+    let batch = RecommendationBatch(recordedAt: date, host: "Mac", playlist: "Grouped", tracks: [
+      RecommendationTrack(artist: "A", title: "One", familiar: false, reasons: [], artistKnown: true,
+        tag: " Strong bet ", details: [" Scotland ", " "], story: " A paragraph "),
+      RecommendationTrack(artist: "A", title: "Two", familiar: false, reasons: [], artistKnown: true, section: "A"),
+      RecommendationTrack(artist: "A", title: "Three", familiar: false, reasons: [], artistKnown: true, section: "A"),
+      RecommendationTrack(artist: "A", title: "Four", familiar: false, reasons: [], artistKnown: true, section: "B"),
+      RecommendationTrack(artist: "A", title: "Five", familiar: false, reasons: [], artistKnown: true, section: "A"),
+    ])
+    let shelf = try #require(PlaylistShelf.make(from: RecommendationLedgerReadResult(
+      batches: [batch], skippedLines: 0), now: date, calendar: .current, timeZone: .current).first)
+    #expect(shelf.songs[0].tag == "Strong bet")
+    #expect(shelf.songs[0].details == ["Scotland"])
+    #expect(shelf.songs[0].story == "A paragraph")
+    #expect(shelf.songs.map(\.sectionHeading) == [nil, "A", nil, "B", "A"])
+  }
+
   @Test("JSONL round-trips and tolerates blank lines, unsupported records, partial tails and no final newline")
   func ledgerCodec() throws {
     let instant = Date(timeIntervalSince1970: 1_800_000_000)
