@@ -103,6 +103,8 @@ struct LibraryMCPServerTests {
     #expect(enumValues(in: tools, tool: "recent_listening", property: "period") == ["24h", "7d", "30d", "90d"])
     #expect(enumValues(in: tools, tool: "top_artists", property: "period") == ["all_time", "7d", "30d", "90d"])
     let stage = try #require(tools.first { $0["name"] as? String == "stage_playlist" })
+    let reviewsTool = try #require(tools.first { $0["name"] as? String == "playlist_reviews" })
+    #expect((reviewsTool["description"] as? String)?.contains("each song's why, tag, and listening outcome") == true)
     let stageSchema = try #require(stage["inputSchema"] as? [String: Any])
     #expect(Set(stageSchema["required"] as? [String] ?? []) == Set(["name", "description", "tracks"]))
     let stageProperties = try #require((stage["inputSchema"] as? [String: Any])?["properties"] as? [String: Any])
@@ -110,6 +112,12 @@ struct LibraryMCPServerTests {
     let stageTrackSchema = try #require(stageTracks["items"] as? [String: Any])
     #expect((stageTrackSchema["required"] as? [String]) == ["artist", "title", "year"])
     let stageTrackProperties = try #require(stageTrackSchema["properties"] as? [String: Any])
+    for key in ["tag", "details", "story", "section"] {
+      #expect(stageTrackProperties[key] != nil)
+      #expect(!(stageTrackSchema["required"] as? [String] ?? []).contains(key))
+      #expect((stageTrackProperties[key] as? [String: Any])?["enum"] == nil)
+    }
+    #expect((stageTrackProperties["details"] as? [String: Any])?["maxItems"] as? Int == 3)
     let yearSchema = try #require(stageTrackProperties["year"] as? [String: Any])
     #expect((yearSchema["type"] as? [String]) == ["integer", "null"])
     #expect(yearSchema["description"] as? String
@@ -130,7 +138,7 @@ struct LibraryMCPServerTests {
     let recordedAt = Date(timeIntervalSince1970: 1_800_000_000.125)
     let batch = RecommendationBatch(recordedAt: recordedAt, host: "Mac", playlist: "Power Pop",
       tracks: [RecommendationTrack(artist: "Artist", title: "Song", familiar: false,
-        reasons: [], artistKnown: true, why: "The chorus opens up.")],
+        reasons: [], artistKnown: true, why: "The chorus opens up.", tag: "Bright bet")],
       request: "Make me a buoyant power pop playlist.", description: "Bright guitars and big choruses.")
     let ledgerFolder = tasteRoot.appending(path: "recommendations", directoryHint: .isDirectory)
     try RecommendationLedgerCodec.append(batch, host: "Mac", folder: ledgerFolder)
@@ -175,6 +183,10 @@ struct LibraryMCPServerTests {
     #expect(waiting[0]["finishedAt"] as? String == reviewTimestamp.string(from: finished.at))
     let songs = try #require(waiting[0]["songs"] as? [[String: Any]])
     #expect(songs[0]["why"] as? String == "The chorus opens up.")
+    #expect(songs[0]["tag"] as? String == "Bright bet")
+    #expect(songs[0]["story"] == nil)
+    #expect(songs[0]["details"] == nil)
+    #expect(songs[0]["section"] == nil)
     #expect(songs[0]["status"] as? String == "kept")
     #expect(songs[0]["keptIn"] as? [String] == ["Keepers"])
     let jonNotes = try #require(waiting[0]["jonNotes"] as? [String])
@@ -1185,6 +1197,34 @@ struct LibraryMCPServerTests {
     #expect(batch.tracks.first?.why?.count == 300)
   }
 
+  @Test("stage keeps chat writeups, trims empty values, and reports capped fields")
+  func stageChatWriteups() async throws {
+    let root = temporaryDirectory()
+    let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
+    let (server, _) = try makeServer(snapshot: s0Fixture(), tasteRootURL: tasteRoot)
+    let tag = String(repeating: "t", count: 41)
+    let story = String(repeating: "s", count: 1_501)
+    let detail = String(repeating: "d", count: 81)
+    let arguments = #"{"name":"Writeups","description":"Full words.","tracks":[{"artist":" ","title":"Dropped","year":null,"tag":"lost","story":"lost","section":"lost"},{"artist":"Band","title":"Kept","year":2024,"tag":" \#(tag) ","details":[" \#(detail) "," ","Second","Third","Fourth"],"story":" \#(story) ","section":" Heading ","why":"One sentence."},{"artist":"Band","title":"Empty","year":null,"tag":" ","details":[" "],"story":"","section":" "}]}"#
+    let staged = try #require(await resultJSON(server, id: 1, name: "stage_playlist", arguments: arguments) as? [String: Any])
+    #expect(staged["ledgerRecorded"] as? Bool == true)
+    #expect(staged["truncated"] as? Bool == true)
+    let folder = tasteRoot.appending(path: "recommendations", directoryHint: .isDirectory)
+    let file = try #require(FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil).first)
+    let batch = try #require(RecommendationLedgerCodec.readFiles([try Data(contentsOf: file)]).batches.first)
+    #expect(batch.tracks.count == 2)
+    let kept = try #require(batch.tracks.first)
+    #expect(kept.tag == String(repeating: "t", count: 40))
+    #expect(kept.details == [String(repeating: "d", count: 80), "Second", "Third"])
+    #expect(kept.story?.count == 1_500)
+    #expect(kept.section == "Heading")
+    let empty = try #require(batch.tracks.last)
+    #expect(empty.tag == nil && empty.details == nil && empty.story == nil && empty.section == nil)
+    let encoded = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any]
+    let encodedTracks = try #require(encoded?["tracks"] as? [[String: Any]])
+    for key in ["tag", "details", "story", "section"] { #expect(encodedTracks[1][key] == nil) }
+  }
+
   @Test("stage records which songs need the upload route")
   func stageUploadRouteHints() async throws {
     let root = temporaryDirectory()
@@ -1583,7 +1623,8 @@ struct LibraryMCPServerTests {
     #expect(LibraryMCPServer.instructions.contains("`list_playlists` and `check_tracks` return `openQuestions` when there are any."))
     #expect(LibraryMCPServer.instructions.contains("ask at most one without waiting to be asked"))
     #expect(LibraryMCPServer.instructions.contains("Record his reply word for word as `note`"))
-    #expect(LibraryMCPServer.instructions.contains("show Jon each song's year and why"))
+    #expect(LibraryMCPServer.instructions.contains("When you stage, show Jon each song's year, and its story or why."))
+    #expect(LibraryMCPServer.instructions.contains("your label for it as `tag`, the facts beside it as `details`"))
     #expect(LibraryMCPServer.instructions.contains("If the result lists `missingYear` or `unverifiedReferences`, tell Jon which songs."))
     #expect(LibraryMCPServer.instructions.contains("Don't stage the same batch again"))
     #expect(LibraryMCPServer.instructions.contains("never ask what tools can tell you"))
@@ -1607,6 +1648,17 @@ struct LibraryMCPServerTests {
     #expect(LibraryMCPServer.instructions.contains("`like`"))
     #expect(LibraryMCPServer.instructions.contains("name the playlist"))
     #expect(LibraryMCPServer.instructions.contains(PlaylistContract.trackRules))
+    #expect(!LibraryMCPServer.instructions.contains("commentary fields"))
+    #expect(PlaylistContract.projectInstructions == """
+    When Jon asks you to emit the playlist, reply with exactly this format: a marker line, then one JSON object. Do not include a code fence, preamble, or sign-off. Use straight ASCII quotes.
+
+    VF-PLAYLIST: v1
+    {"name":"Playlist name","description":"optional one sentence","tracks":[{"artist":"Artist name","title":"Song title","album":"optional album hint","year":1979}]}
+
+    The JSON object must have a non-empty name and at least one track. Each track needs artist and title; album is an optional hint. year is the original release year: `stage_playlist` requires it on every track, with null when you can't verify it. For one of Jon's own recordings, such as a live show, set album to the exact album name from his library. Omit any track you are not confident exists as a released recording by that artist; do not substitute another song. Include a specific version in the title only when that version is the point, such as "Song (Live at the Fillmore)". Do not include IDs, ISRCs, URLs, or commentary fields.
+
+    This format applies only when Jon asks you to emit the playlist. Otherwise, continue the conversation normally.
+    """ + "\n")
     #expect(!LibraryMCPServer.instructions.contains("VF-PLAYLIST: v1"))
   }
 

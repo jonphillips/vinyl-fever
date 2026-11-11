@@ -1,5 +1,11 @@
 # Done log
 
+## 2026-11-11 — The phone shows what the chat wrote (`effort/chat-writeups-on-phone`)
+
+- **Result:** Staging now stores the chat’s optional labels, facts, paragraphs, and headings; playlist reviews include each song’s tag. The iPhone shelf displays those fields and preserves them in its cache.
+- **Verification:** VinylFeverNotes (71 tests), VinylFeverCore (331 tests), VinylFeverMobile (93 tests), Mac app build, and iOS simulator build passed.
+- **Owed:** chat-writeups-on-phone's device gate, in [device-passes.md](device-passes.md).
+
 ## 2026-11-11 — Bad tracks and slow Music handled (`effort/bad-tracks-and-slow-music`)
 
 - **Result:** Apple Music page decoding skips malformed items, progress reports refresh failures, backup warnings show dates and resolve after clean copies, and stale library snapshots retry hourly with step-specific timeouts and logs.

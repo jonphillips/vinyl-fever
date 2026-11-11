@@ -10,6 +10,10 @@ public struct RecommendationTrack: Codable, Equatable, Sendable {
   public var artistKnown: Bool
   public var why: String?
   public var like: [RecommendationLike]?
+  public var tag: String?
+  public var details: [String]?
+  public var story: String?
+  public var section: String?
   public var heardBeforePick: Bool?
   public var picked: Bool?
   /// True when the Mac snapshot said this staged song needs the upload matcher.
@@ -18,12 +22,14 @@ public struct RecommendationTrack: Codable, Equatable, Sendable {
   public init(artist: String, title: String, album: String? = nil, year: Int? = nil,
     familiar: Bool, reasons: [String], artistKnown: Bool, why: String? = nil,
     like: [RecommendationLike]? = nil, heardBeforePick: Bool? = nil, picked: Bool? = nil,
-    upload: Bool? = nil) {
+    upload: Bool? = nil, tag: String? = nil, details: [String]? = nil, story: String? = nil,
+    section: String? = nil) {
     self.artist = artist; self.title = title; self.album = album; self.year = year
     self.familiar = familiar; self.reasons = reasons; self.artistKnown = artistKnown
     self.why = why; self.like = like; self.heardBeforePick = heardBeforePick
     self.picked = picked
     self.upload = upload
+    self.tag = tag; self.details = details; self.story = story; self.section = section
   }
 }
 
@@ -102,11 +108,18 @@ public struct PlaylistShelfSong: Equatable, Sendable, Identifiable {
   public var familiarity: String
   public var why: String?
   public var like: [RecommendationLike]
+  public var tag: String?
+  public var details: [String]
+  public var story: String?
+  public var sectionHeading: String?
+  public var paragraph: String? { story ?? why }
 
   public init(id: String, title: String, artist: String, album: String?, year: Int?, familiarity: String,
-    why: String?, like: [RecommendationLike]) {
+    why: String?, like: [RecommendationLike], tag: String? = nil, details: [String] = [],
+    story: String? = nil, sectionHeading: String? = nil) {
     self.id = id; self.title = title; self.artist = artist; self.album = album; self.year = year
     self.familiarity = familiarity; self.why = why; self.like = like
+    self.tag = tag; self.details = details; self.story = story; self.sectionHeading = sectionHeading
   }
 }
 
@@ -139,8 +152,12 @@ public enum PlaylistShelf {
 
     return batches.map { batch in
       let playlistID = "\(batch.host)|\(batch.recordedAt.timeIntervalSince1970)"
+      var previousSection: String?
       let songs = batch.tracks.enumerated().map { songIndex, track in
-        PlaylistShelfSong(
+        let section = nonempty(track.section)
+        let sectionHeading = section == previousSection ? nil : section
+        previousSection = section
+        return PlaylistShelfSong(
           id: "\(playlistID)|\(songIndex)",
           title: track.title,
           artist: track.artist,
@@ -148,7 +165,11 @@ public enum PlaylistShelf {
           year: track.year,
           familiarity: familiarity(for: track),
           why: nonempty(track.why),
-          like: track.like ?? []
+          like: track.like ?? [],
+          tag: nonempty(track.tag),
+          details: (track.details ?? []).compactMap(nonempty),
+          story: nonempty(track.story),
+          sectionHeading: sectionHeading
         )
       }
       return PlaylistShelfPlaylist(

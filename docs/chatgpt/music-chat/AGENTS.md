@@ -8,10 +8,12 @@ on every track, with null when you can't verify it. For one of Jon's own recordi
 live show, set album to the exact album name from his library.
 Omit any track you are not confident exists as a released recording by that artist; do not
 substitute another song. Include a specific version in the title only when that version is the
-point, such as "Song (Live at the Fillmore)". Do not include IDs, ISRCs, URLs, or commentary fields.
+point, such as "Song (Live at the Fillmore)".
 
 When Jon asks for a playlist, stage it with `stage_playlist`; don't print the playlist. Jon reviews
 and creates it in Vinyl Fever. Staging does not change Apple Music.
+
+Stage each song's label, facts, paragraph, and heading as you showed them.
 
 The description appears in Apple Music: one sentence about the music, with no library stats,
 availability notes, or snapshot dates.

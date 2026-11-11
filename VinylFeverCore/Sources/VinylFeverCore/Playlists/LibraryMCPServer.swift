@@ -12,8 +12,12 @@ private struct PlaylistToolPayload: Decodable, Sendable {
     var year: Int?
     var why: String?
     var like: [RecommendationLikeInput]?
+    var tag: String?
+    var details: [String]?
+    var story: String?
+    var section: String?
     var hasYear: Bool
-    enum CodingKeys: String, CodingKey { case artist, title, album, year, why, like }
+    enum CodingKeys: String, CodingKey { case artist, title, album, year, why, like, tag, details, story, section }
 
     init(from decoder: Decoder) throws {
       let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -23,6 +27,10 @@ private struct PlaylistToolPayload: Decodable, Sendable {
       year = try values.decodeIfPresent(Int.self, forKey: .year)
       why = try values.decodeIfPresent(String.self, forKey: .why)
       like = try values.decodeIfPresent([RecommendationLikeInput].self, forKey: .like)
+      tag = try values.decodeIfPresent(String.self, forKey: .tag)
+      details = try values.decodeIfPresent([String].self, forKey: .details)
+      story = try values.decodeIfPresent(String.self, forKey: .story)
+      section = try values.decodeIfPresent(String.self, forKey: .section)
       hasYear = values.contains(.year)
     }
   }
@@ -621,7 +629,7 @@ private actor LibraryMCPContext {
           }
           let keptIn: [String]?
           if case let .kept(names) = progress.songs[song.id] { keptIn = names } else { keptIn = nil }
-          return MCPPlaylistReviewSong(artist: song.artist, title: song.title, why: song.why, status: status, keptIn: keptIn)
+          return MCPPlaylistReviewSong(artist: song.artist, title: song.title, why: song.why, tag: song.tag, status: status, keptIn: keptIn)
         }, jonNotes: relatedNotes, outcomeSource: finished.songs == nil ? "mac" : "phone and mac",
         snapshotTakenAt: Self.reviewTimestamp(snapshotTakenAt))
     }
@@ -926,6 +934,20 @@ private actor LibraryMCPContext {
           if why.count > 300 { truncated = true }
           result.why = String(why.prefix(300))
         }
+        func normalized(_ value: String?, cap: Int) -> String? {
+          guard let value else { return nil }
+          let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+          guard !trimmed.isEmpty else { return nil }
+          if trimmed.count > cap { truncated = true }
+          return String(trimmed.prefix(cap))
+        }
+        result.tag = normalized(input?.tag, cap: 40)
+        result.story = normalized(input?.story, cap: 1_500)
+        result.section = normalized(input?.section, cap: 80)
+        let details = (input?.details ?? []).compactMap { normalized($0, cap: 80) }
+        if details.count > 3 { truncated = true }
+        let keptDetails = Array(details.prefix(3))
+        result.details = keptDetails.isEmpty ? nil : keptDetails
         result.like = references[offset]
         return result
       }
@@ -969,7 +991,7 @@ public enum LibraryMCPServer {
   Vinyl Fever exposes Jon's Apple Music library and listening stats. Whenever Jon reacts to a song, artist, or playlist, states a preference, or explains a keep or a pass, call `record_taste_note` with his words word for word before you reply, then say briefly that it's saved so he can say 'don't'. Do not record the chat's own words or a paraphrase, playlist requests, small talk without a taste statement, or the same words twice in one conversation.
   """
   public static let instructions: String = {
-    instructionHead + "\n\nUse these tools for any claim about what Jon owns, has played, or has loved — never guess. Before proposing a final list, call check_tracks on it. For Jon's uploads, use an exact album from uploadedAlbums as the album hint. When Jon asks for the playlist, call stage_playlist with the final list instead of printing it; Jon creates it in Vinyl Fever on the Mac or iPhone. Snapshot age is in library_overview. For taste questions, start with list_playlists. Before choosing songs for a new playlist, read `recommendation_outcomes` and `taste_notes`, and learn from what Jon passed as well as what he kept, and from his notes on both. keepers are the strongest evidence and replay positions are ranks. Report evidence by role, not by counting playlists; don't infer taste from genre. sharedAccountEra play counts aren't Jon's alone. Stage discoveries with stage_playlist, because Vinyl Fever records which songs were new to Jon. Give every discovery its original release year, Jon's request word for word as `request`, including how he said it; never summarize it or substitute your plan. Include the chat's own one-sentence description of the music as `description`. Give every discovery a one-sentence why and up to three songs in `like`. Cite only songs read from a Vinyl Fever tool in this conversation, and name the playlist you read each one from in `from`. Drop songs recommended before, unless Jon asks for them again. When Jon asks which New Music songs he'll keep, read kept_and_passed, choose, then call record_new_music_picks right away, even if he has started listening: songs he's already heard are marked and left out of scoring. A week keeps its first picks, so `recorded: false` means they're already saved. If the call fails, show Jon the error as reported and say the picks weren't saved. When Jon says he's finished a New Music week, read kept_and_passed for its lastModifiedDate and call finish_new_music_week without asking him to confirm. Only his saying so counts; never infer it. If he says he isn't done after all, call it with `undo: true`. Then read recommendation_outcomes. While `awaitingSnapshot` is true, the Mac is refreshing its library: report the keeps, and don't report passes yet. Check again after a minute or two. If it stays true, call finish_new_music_week again, then ask Jon to open Vinyl Fever on the Mac. Once it's false, review the picks: picked and kept, picked and passed, kept but not picked, and neither. Say which songs were heard before the picks and weren't scored. If the week has no picks, review what he kept. Record nothing of yours as a taste note. If stage_playlist returns `ledgerRecorded: false`, tell Jon the playlist is staged but its record wasn't saved, and give him `ledgerReason`. `list_playlists` and `check_tracks` return `openQuestions` when there are any. In a taste conversation, ask at most one without waiting to be asked, and only when it bears on what Jon is doing. Record his reply word for word as `note` with the question's id in `answers`. Record 'skip' or 'not now' the same way, with `skipped: true`. Name songs or playlists in `about` when he names them. When Jon asks for a review of finished playlists, read `playlist_reviews`, judge each against its request and song whys, show Jon the review, then record it with `record_playlist_review`. If `outcomeSource` is `mac` and `snapshotTakenAt` is older than `finishedAt`, say in the review that keeps since the snapshot may be missing. Never claim an outcome a tool didn't report. When you stage, show Jon each song's year and why. If the result lists `missingYear` or `unverifiedReferences`, tell Jon which songs. Don't stage the same batch again: a second staging marks every song as recommended before. Record a new question when evidence leaves a meaningful contrast unresolved, even if Jon isn't there; ask only when the answer could change your next recommendation, cite the evidence, and never ask what tools can tell you.\n\n" + PlaylistContract.trackRules
+    instructionHead + "\n\nUse these tools for any claim about what Jon owns, has played, or has loved — never guess. Before proposing a final list, call check_tracks on it. For Jon's uploads, use an exact album from uploadedAlbums as the album hint. When Jon asks for the playlist, call stage_playlist with the final list instead of printing it; Jon creates it in Vinyl Fever on the Mac or iPhone. Snapshot age is in library_overview. For taste questions, start with list_playlists. Before choosing songs for a new playlist, read `recommendation_outcomes` and `taste_notes`, and learn from what Jon passed as well as what he kept, and from his notes on both. keepers are the strongest evidence and replay positions are ranks. Report evidence by role, not by counting playlists; don't infer taste from genre. sharedAccountEra play counts aren't Jon's alone. Stage discoveries with stage_playlist, because Vinyl Fever records which songs were new to Jon. Give every discovery its original release year, Jon's request word for word as `request`, including how he said it; never summarize it or substitute your plan. Include the chat's own one-sentence description of the music as `description`. Give every discovery a one-sentence why and up to three songs in `like`. Show each song in chat however suits the conversation, then stage what you showed: your label for it as `tag`, the facts beside it as `details`, its paragraph as `story`, and its heading as `section`. The `story` is the same words Jon reads in chat, not a second version. Cite only songs read from a Vinyl Fever tool in this conversation, and name the playlist you read each one from in `from`. Drop songs recommended before, unless Jon asks for them again. When Jon asks which New Music songs he'll keep, read kept_and_passed, choose, then call record_new_music_picks right away, even if he has started listening: songs he's already heard are marked and left out of scoring. A week keeps its first picks, so `recorded: false` means they're already saved. If the call fails, show Jon the error as reported and say the picks weren't saved. When Jon says he's finished a New Music week, read kept_and_passed for its lastModifiedDate and call finish_new_music_week without asking him to confirm. Only his saying so counts; never infer it. If he says he isn't done after all, call it with `undo: true`. Then read recommendation_outcomes. While `awaitingSnapshot` is true, the Mac is refreshing its library: report the keeps, and don't report passes yet. Check again after a minute or two. If it stays true, call finish_new_music_week again, then ask Jon to open Vinyl Fever on the Mac. Once it's false, review the picks: picked and kept, picked and passed, kept but not picked, and neither. Say which songs were heard before the picks and weren't scored. If the week has no picks, review what he kept. Record nothing of yours as a taste note. If stage_playlist returns `ledgerRecorded: false`, tell Jon the playlist is staged but its record wasn't saved, and give him `ledgerReason`. `list_playlists` and `check_tracks` return `openQuestions` when there are any. In a taste conversation, ask at most one without waiting to be asked, and only when it bears on what Jon is doing. Record his reply word for word as `note` with the question's id in `answers`. Record 'skip' or 'not now' the same way, with `skipped: true`. Name songs or playlists in `about` when he names them. When Jon asks for a review of finished playlists, read `playlist_reviews`, judge each against its request and each song's why and tag, show Jon the review, then record it with `record_playlist_review`. If `outcomeSource` is `mac` and `snapshotTakenAt` is older than `finishedAt`, say in the review that keeps since the snapshot may be missing. Never claim an outcome a tool didn't report. When you stage, show Jon each song's year, and its story or why. If the result lists `missingYear` or `unverifiedReferences`, tell Jon which songs. Don't stage the same batch again: a second staging marks every song as recommended before. Record a new question when evidence leaves a meaningful contrast unresolved, even if Jon isn't there; ask only when the answer could change your next recommendation, cite the evidence, and never ask what tools can tell you.\n\n" + PlaylistContract.trackRules + "\n\nDo not include IDs, ISRCs, or URLs."
   }()
 
   public static func newestFinishedPlaylist(tasteRootURL: URL? = nil) async throws -> PlaylistReviewEntry? {
@@ -1018,10 +1040,17 @@ public enum LibraryMCPServer {
     let likeSchema = MCPValue.object(["type": .string("array"), "maxItems": .integer(3), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField, "from": stringField]), "required": .array([.string("artist"), .string("title")])])])
     let stageYearField = MCPValue.object(["type": .array([.string("integer"), .string("null")]),
       "description": .string("The song's original release year, not a reissue's or compilation's. Use null only when you can't verify it.")])
+    let stageDetailsField = MCPValue.object(["type": .string("array"), "maxItems": .integer(3),
+      "items": .object(["type": .string("string")]),
+      "description": .string("Short facts you showed beside this song in chat, such as where the artist is from or how it was released. Omit them otherwise.")])
     let stageSchema = schema(["name": stringField,
       "description": .object(["type": .string("string"), "description": .string(stageDescriptionGuidance)]),
       "request": .object(["type": .string("string"), "description": .string("Jon's message asking for this playlist, word for word, including how he said it. Never a summary or your plan.")]),
-      "tracks": .object(["type": .string("array"), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField, "album": stringField, "year": stageYearField, "why": stringField, "like": likeSchema]), "required": .array([.string("artist"), .string("title"), .string("year")])])])], required: ["name", "description", "tracks"])
+      "tracks": .object(["type": .string("array"), "items": .object(["type": .string("object"), "properties": .object(["artist": stringField, "title": stringField, "album": stringField, "year": stageYearField, "why": stringField, "like": likeSchema,
+        "tag": .object(["type": .string("string"), "description": .string("The short label you gave this song in chat, in your own words, if you gave it one. Omit it otherwise.")]),
+        "details": stageDetailsField,
+        "story": .object(["type": .string("string"), "description": .string("The paragraph you showed Jon about this song in chat, word for word. Omit it if you showed only a sentence.")]),
+        "section": .object(["type": .string("string"), "description": .string("The heading you showed this song under in chat, word for word. Omit it if the list had no headings.")])]), "required": .array([.string("artist"), .string("title"), .string("year")])])])], required: ["name", "description", "tracks"])
     return MCPServer(name: "Vinyl Fever", version: "1.0.0", instructions: instructions, tools: [
       MCPTool(name: "library_overview", description: "Summarize Jon's Apple Music library, including track, artist, album, genre and decade counts, plus the connector's build stamp (commit, dirty state, and build time).", inputSchema: overviewSchema, annotations: readOnly) { _ in
         return .json(MCPOverview(try await context.overview(), connector: buildStamp))
@@ -1243,7 +1272,7 @@ public enum LibraryMCPServer {
           filesRead: result.filesRead, skippedLines: result.skippedLines,
           listening: listeningCoverage, listeningStatus: listeningError)))
       },
-      MCPTool(name: "playlist_reviews", description: "Show finished playlists waiting for a chat review, with the request, description, each song's why and listening outcome, and Jon's notes; recent recorded reviews follow.", inputSchema: schema([:]), annotations: readOnly) { _ in
+      MCPTool(name: "playlist_reviews", description: "Show finished playlists waiting for a chat review, with the request, description, each song's why, tag, and listening outcome, and Jon's notes; recent recorded reviews follow.", inputSchema: schema([:]), annotations: readOnly) { _ in
         return .json(try await context.playlistReviewData(now: now()))
       },
       MCPTool(name: "record_playlist_review", description: "Record the chat's review for a playlist Jon has finished. A review is refused unless the recommendation batch exists and its latest Jon status is finished.", inputSchema: recordPlaylistReviewSchema,
@@ -1431,6 +1460,7 @@ private struct MCPPlaylistReviewSong: Encodable {
   var artist: String
   var title: String
   var why: String?
+  var tag: String?
   var status: String
   var keptIn: [String]?
 }
