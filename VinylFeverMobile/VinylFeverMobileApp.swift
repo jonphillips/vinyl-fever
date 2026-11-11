@@ -722,13 +722,13 @@ private struct PlaylistSongView: View {
             .background(.indigo.opacity(0.12), in: Capsule())
             .fixedSize(horizontal: false, vertical: true)
         }
-        if let progress { PlaylistSongProgressPill(progress: progress) }
         if !song.details.isEmpty {
           Text(song.details.joined(separator: " · "))
             .font(.subheadline)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
         }
+        if let progress { PlaylistSongProgressPill(progress: progress) }
         if song.album != nil || song.year != nil {
           Text([song.album, song.year.map(String.init)].compactMap { $0 }.joined(separator: " · "))
             .font(.subheadline)
@@ -745,7 +745,7 @@ private struct PlaylistSongView: View {
         .padding(.top, 4)
 
         Text(song.familiarity).font(.subheadline.weight(.medium))
-        if let paragraph = song.familiarity == "New to you" ? (song.story ?? song.why) : song.why {
+        if let paragraph = song.paragraph {
           Text(paragraph).fixedSize(horizontal: false, vertical: true)
         }
         ForEach(Array(notesModel.notes(for: song).enumerated()), id: \.offset) { _, note in

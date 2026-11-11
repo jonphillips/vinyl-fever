@@ -112,6 +112,7 @@ public struct PlaylistShelfSong: Equatable, Sendable, Identifiable {
   public var details: [String]
   public var story: String?
   public var sectionHeading: String?
+  public var paragraph: String? { story ?? why }
 
   public init(id: String, title: String, artist: String, album: String?, year: Int?, familiarity: String,
     why: String?, like: [RecommendationLike], tag: String? = nil, details: [String] = [],

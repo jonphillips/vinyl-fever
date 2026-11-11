@@ -91,6 +91,22 @@ struct RecommendationLedgerTests {
     #expect(shelf.songs.map(\.sectionHeading) == [nil, "A", nil, "B", "A"])
   }
 
+  @Test("playlist paragraphs prefer the chat story for familiar songs and fall back to why")
+  func playlistParagraph() throws {
+    let date = Date(timeIntervalSince1970: 1_800_000_000)
+    let batch = RecommendationBatch(recordedAt: date, host: "Mac", playlist: "Familiar", tracks: [
+      RecommendationTrack(artist: "Owned Artist", title: "Known Song", familiar: true, reasons: ["owned"],
+        artistKnown: true, why: "A short reason.", story: "The full chat paragraph."),
+      RecommendationTrack(artist: "Other Artist", title: "Another Song", familiar: true, reasons: ["owned"],
+        artistKnown: true, why: "Only the short reason."),
+    ])
+    let songs = try #require(PlaylistShelf.make(from: RecommendationLedgerReadResult(
+      batches: [batch], skippedLines: 0), now: date, calendar: .current, timeZone: .current).first?.songs)
+    #expect(songs[0].familiarity == "In your library")
+    #expect(songs[0].paragraph == "The full chat paragraph.")
+    #expect(songs[1].paragraph == "Only the short reason.")
+  }
+
   @Test("JSONL round-trips and tolerates blank lines, unsupported records, partial tails and no final newline")
   func ledgerCodec() throws {
     let instant = Date(timeIntervalSince1970: 1_800_000_000)
@@ -107,6 +123,39 @@ struct RecommendationLedgerTests {
     let result = RecommendationLedgerCodec.readFiles([stream])
     #expect(result.batches == [batch])
     #expect(result.skippedLines == 1)
+  }
+
+  @Test("a pre-writeups ledger line decodes without the optional chat fields")
+  func legacyLedgerLineCompatibility() throws {
+    let line = #"{"format":"vf-recommendation-batch","version":1,"kind":"staged-playlist","source":"chat","recordedAt":"2026-10-30T12:00:00.000Z","host":"Mac","playlist":"Power Pop","tracks":[{"artist":"The Records","title":"Starry Eyes","album":"Shades in Bed","year":1979,"familiar":false,"reasons":[],"artistKnown":true,"why":"A bright chorus.","like":[{"artist":"The Records","title":"Radio Heart","from":"Keepers","found":"library"}]}]}"#
+    let result = RecommendationLedgerCodec.readFiles([Data((line + "\n").utf8)])
+    let track = try #require(result.batches.first?.tracks.first)
+    #expect(result.skippedLines == 0)
+    #expect(track.why == "A bright chorus.")
+    #expect(track.like == [RecommendationLike(artist: "The Records", title: "Radio Heart",
+      from: "Keepers", found: "library")])
+    #expect(track.tag == nil)
+    #expect(track.details == nil)
+    #expect(track.story == nil)
+    #expect(track.section == nil)
+  }
+
+  @Test("encoding without chat writeups preserves the pre-change track key set")
+  func recommendationTrackLegacyKeySet() throws {
+    let track = RecommendationTrack(artist: "The Records", title: "Starry Eyes", album: "Shades in Bed",
+      year: 1979, familiar: false, reasons: ["owned"], artistKnown: true,
+      why: "A bright chorus.",
+      like: [RecommendationLike(artist: "Another Artist", title: "Another Song")],
+      heardBeforePick: false, picked: true, upload: true)
+    let batch = RecommendationBatch(recordedAt: Date(timeIntervalSince1970: 1_800_000_000),
+      host: "Mac", playlist: "Power Pop", tracks: [track])
+    let object = try #require(JSONSerialization.jsonObject(with: RecommendationLedgerCodec.encode(batch))
+      as? [String: Any])
+    let tracks = try #require(object["tracks"] as? [[String: Any]])
+    #expect(tracks[0].keys.sorted() == [
+      "album", "artist", "artistKnown", "familiar", "heardBeforePick", "like", "picked",
+      "reasons", "title", "upload", "why", "year",
+    ])
   }
 
   @Test("staged playlist headers attribute Jon's request only when a description is recorded")
