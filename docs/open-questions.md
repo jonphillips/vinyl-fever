@@ -56,13 +56,6 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
 
   The analytical strategy is now *Taste Intelligence*, planned as
   [M17](milestones/archive/M17-taste-intelligence.md) (2026-10-23).
-- **Familiarity when evidence can't be read** (from the #132 review, 2026-10-25). At staging,
-  M18 S1 treats an unreadable listening log or notes file as empty, so the ledger records those
-  songs as unfamiliar, permanently. **Recommendation, for S2's plan:** each ledger batch records
-  which evidence it could read (for example `coverage: {"listening": false}`), and S2's outcomes
-  leave out batches recorded without listening evidence, or mark them. Decide before S2 is
-  dispatched. **Decided 2026-10-25:** added to M18 S2 as Decision 12 (coverage on every batch,
-  and an uncovered batch is listed but not scored).
 - **The executor posted as Jon** (from the #126 review, 2026-10-24). One of Codex's PR comments
   was posted as `jonphillips`, not `jon-codex-bot`, so at least one of Codex's shells reaches
   Jon's `gh` keyring login. Later comments came from the bot. **For Jon:** check which shell or
@@ -111,14 +104,6 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   - **Decided (Jon, 2026-10-20): no exact-album tiebreak in the matcher.** Preferring the
     upload whose raw album equals the hint would resolve these rows silently and hide the
     duplicates. The picker stays as it is.
-- **App-target test failing on `main`: `CollectionInboxAppendTests`** (found in the #67 review,
-  2026-10-15). `resumingInboxRebuildsFromStagedFilesAndClearsDerivedFolders` hits an
-  unimplemented `@Dependency(\.uuid)` (reached through `FileSystemClient`) and fails. It most
-  likely dates from #60/#65. It went unnoticed because the executor's host runs macOS 26.6,
-  which only compiles the app test bundle; the architect's macOS 27 host is the only place it
-  runs. Candidate fix: a one-line `$0.uuid = .incrementing` override in that test. It's small
-  enough to fold into the next dispatch that touches the Inbox, or to send as its own small
-  effort.
 - **Folder-picked compilation appends leave derived folders behind** (from the #65 review,
   2026-10-14). A compilation append builds `Working/` and `Output/` *inside* the user's picked
   folder, and after #65 `Output/` holds a copy of every track. Nothing cleans either one up after
@@ -150,13 +135,6 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   builds and archives today. **Recommendation:** watch it. If archives get frequent, cache the
   scratch path across builds, or build the helper as an Xcode target in the same build graph.
 
-- **The chat ran on an old connector for two days** (2026-10-25). #125's playlist tools merged
-  on 10-24, but nothing installed the build, and ChatGPT.app's Codex kept an old `vf-mcp`
-  running with a cached list of 7 tools. M17 S1's gate ran without the tools it was testing.
-  The fix is planned as [M16](milestones/archive/M16-machine-ops.md) S4 (a build stamp the chat can
-  report, and an installer warning about old helpers), plus a rule that every chat gate starts
-  with an install and a tool refresh. Telling Jon to "re-copy the Project instructions" was
-  also wrong: that text is only the paste fallback (corrected in M18 and the feedback guide).
 - **`setup-mac`'s Time Machine check stops at the first destination without snapshots** (from
   the #135 review, 2026-10-26). The loop reads `Destinations.$i.SnapshotDates` for i = 0, 1, …,
   and stops at the first one that's missing. So if Jon adds a second destination and the first
@@ -165,40 +143,11 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   first (`plutil -extract Destinations raw`), and skip destinations that have no dates. A
   fixture with an empty first destination and a recent second one gives no warning. Do it with
   the next `setup-mac` change; it isn't worth its own dispatch.
-- **The installer's System Events gap and the flaky timing tests** are dispatched as M16 S3
-  (2026-10-22). The two entries below stay for history until S3 merges.
-- **The installer assumes nothing is running when System Events access is denied** (from the
-  #110 review, 2026-10-21). `install-vinyl-fever` asks System Events how many Vinyl Fever
-  processes are running. If Automation access to System Events is denied (a fresh Mac's first
-  run, with the prompt declined), `osascript` prints nothing, `[[ "" -gt 0 ]]` is false, and the
-  install proceeds as if nothing were running. It then swaps out an open app's bundle and deletes
-  it. **Recommendation:** have the installer treat non-numeric output as an error ("allow
-  Automation for System Events, or quit Vinyl Fever first"), and have `setup-mac` report the
-  grant. A small fix for the next dispatch that touches `scripts/`.
-- **Listening handover hole** (from the #105 review, 2026-10-21). On a lease handover, plays
-  between the old holder's last fetch and the new holder's baseline are absorbed by the baseline.
-  `coverage` doesn't report that window as a gap, which conflicts with M13's "gaps and failures
-  are loud". **Measured at the M13 S3 gate (2026-10-22):** the mini → laptop hole was 40 minutes
-  and absorbed 19 real plays (Jon was listening and skipping); `coverage` showed no gap. The
-  laptop → mini hole was 80 minutes with no plays lost. The poller app doesn't fetch when it
-  takes the lease; it waits for its next hourly run. So a hole can approach two poll intervals,
-  not one. **Recommendation:** have the new holder diff its first fetch against the old holder's
-  last list, and log what it finds as plays. That's exact and recovers all 19; reporting the
-  window as a gap would only flag the loss. Fetching right at takeover would shorten the hole
-  too, but it doesn't close it. **Planned as M13 S4** (handover recovery), which does both, with
-  the gap report as the fallback when the old list can't be read. **Done:** M13 S4 (#119) and S5 (#121). S5's gate
-  passed on 2026-10-22, recovering exactly the songs played inside the handover.
 - **An idle listening agent can't be stopped on its own** (from the #105 review). While another
   Mac holds the lease, Settings shows this Mac's toggle as off, so the only way to unregister its
   idle agent is to take the lease and then turn polling off. The idle agent's hourly run skips
   and writes nothing. **Recommendation:** a "Stop this Mac's idle agent" button, if an idle agent
   ever matters in practice.
-- **Wall-clock tests flake under load** (from the #108 review). Two tests assert absolute timings:
-  the M15 index-build ratio (`LibrarySnapshotTests`, "within 1.25x") and Listening's "a year of
-  JSONL log files loads quickly" (under 2 s). Both failed with this Mac at load average 60–116
-  from system daemons, and both passed when re-run and on `main`. **Recommendation:** move them
-  behind an opt-in perf tag, or measure with a generous ratio against an in-run baseline, so
-  `swift test` stays a correctness signal.
 
 ## V1 Scope
 
@@ -279,11 +228,5 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
 
 ## Shared Components
 
-- Extraction trigger: when Vinyl Fever starts consuming model access (Phase 5),
-  lift Galavant's `GalavantAI` into a neutrally-named shared package both apps
-  depend on, per `jon-platform/docs/adr/0001-extract-model-layer.md`. Confirm the
-  path: depend on the extracted shared package (intended), copy/vendor for now, or
-  defer AI until after extraction. Recommendation: rename-and-move at Phase 5; do
-  not pre-extract and do not copy.
 - Does AcoustID fingerprint lookup ever enter scope? If so, it is the only
   non-model credential; decide whether it reuses the shared Keychain key store.
