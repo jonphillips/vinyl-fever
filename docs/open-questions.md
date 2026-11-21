@@ -6,6 +6,16 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
 
 ## Candidates & parked work
 
+- **Siri AI tool intents — wait for the release, not the beta** (Jon and the architect,
+  2026-11-16). Apple's Siri AI developer preview
+  ([news](https://developer.apple.com/news/?id=gdk2umrf),
+  [docs](https://developer.apple.com/documentation/appintents/bringing-custom-actions-and-content-to-siri))
+  lets Siri call an App Intent marked `@AppIntent(.tool)` from natural speech. It's 27.3-beta only, and only for
+  dev-signed and internal-TestFlight builds. Jon isn't running betas, so revisit when Siri AI ships to customers
+  ("a few months" from 2026-11-03) and App Store submission opens (spring 2027). The cheap win then: mark
+  `WhyThisSongIntent` and `MusicFeedbackIntent` as tools, and add a parameter description to `note`, so "tell
+  Vinyl Fever this bridge is gorgeous" fills the note. About four lines. Leave `VinylFeverProbeIntent` out:
+  it's a diagnostic. Re-read the docs first, because the API may change before release.
 - **From M24 (architect, 2026-11-08):**
   - **An always-on chat host.** Staging from the phone needs the laptop awake; the Intel mini
     can't run Vinyl Fever (macOS 15). Revisit if an Apple silicon Mac joins, or if Jon finds
