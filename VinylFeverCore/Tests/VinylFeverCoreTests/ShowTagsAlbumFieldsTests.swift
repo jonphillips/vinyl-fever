@@ -67,6 +67,7 @@ import Testing
     "Unknown Date: Unknown City - Unknown Venue (unknown)",
     "2026-13-40: Chicago, IL - Sleeping Village",
     "Christmas & Fan Club Singles (Compilation)",
+    "2011-12-25: Fan Club - Christmas Singles (Compilation)",
     "Dave Hause - Live from Chicago",
   ])
   func doesNotFillFromInvalidOrPlaceholderTitle(_ album: String) {

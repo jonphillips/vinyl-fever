@@ -59,7 +59,10 @@ public struct ShowTags: Equatable, Sendable {
   /// Fills missing show fields from the app's `YYYY-MM-DD: Location - Venue` album title.
   /// Explicit tag values remain authoritative.
   public func fillingFieldsFromAlbum() -> ShowTags {
-    guard case let .value(album) = album else {
+    guard
+      case let .value(album) = album,
+      !album.lowercased().hasSuffix("(compilation)")
+    else {
       return self
     }
 
