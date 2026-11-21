@@ -3,7 +3,7 @@
 Status: Dispatched
 Summary: A setlist whose ALBUM line is already `YYYY-MM-DD: Location - Venue` leaves Date, Venue, and Location as Unknown, and the plan then tags the files `Unknown Date: Unknown City - Unknown Venue (SBD)`. Read the three fields back out of a well-formed album title, both when a setlist is parsed and when Jon types the Album field.
 
-Related: [M1](../milestones/archive/M1-live-show-plan-preview.md) · [Efforts index](README.md)
+Related: [M1](../../milestones/archive/M1-live-show-plan-preview.md) · [Efforts index](../README.md)
 
 Branch `effort/album-title-fills-show-fields`, from a fresh `main`. One PR. No schema change, no
 sync change, and no file changes format.

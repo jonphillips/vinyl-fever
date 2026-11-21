@@ -3,7 +3,8 @@ import Foundation
 import Testing
 @testable import VinylFeverCore
 
-@Suite struct ShowPlanTests {
+@Suite(.serialized, .dependency(\.uuid, .incrementing))
+struct ShowPlanTests {
   @Test
   func mapsSortedFilesToTracksAndProposedTags() {
     let plan = ShowPlan(
@@ -66,6 +67,46 @@ import Testing
           discNumber: 1
         ),
       ]
+    )
+  }
+
+  @Test
+  func parsedAlbumFieldsDriveEveryTrackAlbumAndSetlistComposition() {
+    let draft = SetlistParser().parse(
+      """
+      ALBUM: 2026-02-27: Chicago, IL - Sleeping Village (SBD)
+
+      First Song
+      Second Song
+      """
+    )
+    let metadata = ShowMetadata(tags: draft.tags)
+    let plan = ShowPlan(
+      folder: ScannedShowFolder(
+        root: showRoot,
+        audioFiles: [
+          audioFile(id: UUID(1), name: "01.flac", sortKey: "01.flac"),
+          audioFile(id: UUID(2), name: "02.flac", sortKey: "02.flac"),
+        ],
+        setlistCandidates: [],
+        coverCandidates: []
+      ),
+      setlist: draft,
+      metadata: metadata
+    )
+
+    expectNoDifference(
+      plan.tracks.map { $0.proposedTags.album },
+      [
+        "2026-02-27: Chicago, IL - Sleeping Village (SBD)",
+        "2026-02-27: Chicago, IL - Sleeping Village (SBD)",
+      ]
+    )
+    var tagsWithoutExplicitAlbum = draft.tags
+    tagsWithoutExplicitAlbum.album = .unknown
+    expectNoDifference(
+      plan.tracks.first?.proposedTags.album,
+      SetlistText.composedAlbum(tagsWithoutExplicitAlbum)
     )
   }
 

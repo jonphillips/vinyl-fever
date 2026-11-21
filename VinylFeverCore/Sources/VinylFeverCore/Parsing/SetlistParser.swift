@@ -27,6 +27,7 @@ public struct SetlistParser: Sendable {
       tracks.append(SetlistTrack(id: uuid(), title: title))
     }
 
+    tags = tags.fillingFieldsFromAlbum()
     return SetlistDraft(tags: tags, tracks: tracks)
   }
 

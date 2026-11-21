@@ -55,6 +55,86 @@ public struct ShowTags: Equatable, Sendable {
     self.location = location
     self.source = source
   }
+
+  /// Fills missing show fields from the app's `YYYY-MM-DD: Location - Venue` album title.
+  /// Explicit tag values remain authoritative.
+  public func fillingFieldsFromAlbum() -> ShowTags {
+    guard
+      case let .value(album) = album,
+      !album.lowercased().hasSuffix("(compilation)")
+    else {
+      return self
+    }
+
+    let prefix = String(album.prefix(10))
+    guard
+      prefix.count == 10,
+      let delimiter = album.index(album.startIndex, offsetBy: 10, limitedBy: album.endIndex),
+      album[delimiter...].hasPrefix(": ")
+    else {
+      return self
+    }
+
+    let date = DateField(isoString: prefix)
+    guard case .iso = date else {
+      return self
+    }
+
+    let detailsStart = album.index(delimiter, offsetBy: 2)
+    let details = String(album[detailsStart...])
+    guard let separator = details.range(of: " - ") else {
+      return self
+    }
+
+    let locationText = String(details[..<separator.lowerBound])
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let venueText = Self.removingTrailingParentheticalGroups(
+      from: String(details[separator.upperBound...])
+    )
+    let venueValue = venueText.trimmingCharacters(in: .whitespacesAndNewlines)
+    return fillingAvailableFields(date: date, location: locationText, venue: venueValue)
+  }
+
+  private func fillingAvailableFields(date parsedDate: DateField, location: String, venue: String) -> ShowTags {
+    var tags = self
+    if case .unknown = tags.date {
+      tags.date = parsedDate
+    }
+    if case .unknown = tags.location, !location.isEmpty,
+       location.caseInsensitiveCompare("Unknown City") != .orderedSame {
+      tags.location = Field(location)
+    }
+    if case .unknown = tags.venue, !venue.isEmpty,
+       venue.caseInsensitiveCompare("Unknown Venue") != .orderedSame {
+      tags.venue = Field(venue)
+    }
+    return tags
+  }
+
+  private static func removingTrailingParentheticalGroups(from text: String) -> String {
+    var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    while result.last == ")" {
+      var depth = 0
+      var matchingOpen: String.Index?
+      var index = result.index(before: result.endIndex)
+      while true {
+        if result[index] == ")" {
+          depth += 1
+        } else if result[index] == "(" {
+          depth -= 1
+          if depth == 0 {
+            matchingOpen = index
+            break
+          }
+        }
+        guard index > result.startIndex else { break }
+        index = result.index(before: index)
+      }
+      guard let matchingOpen else { break }
+      result = String(result[..<matchingOpen]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    return result
+  }
 }
 
 public enum Field: Equatable, Sendable {

@@ -1524,12 +1524,40 @@ private struct SetlistTagsEditor: View {
   var body: some View {
     Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 10) {
       EditableTagRow(title: "Artist", text: $tags.artist.text)
-      EditableTagRow(title: "Album", text: $tags.album.text)
+      EditableAlbumTagRow(tags: $tags)
       EditableTagRow(title: "Album Artist", text: $tags.albumArtist.text)
       EditableTagRow(title: "Date", text: $tags.date.text)
       EditableTagRow(title: "Venue", text: $tags.venue.text)
       EditableTagRow(title: "Location", text: $tags.location.text)
     }
+  }
+}
+
+private struct EditableAlbumTagRow: View {
+  @Binding var tags: ShowTags
+  @FocusState private var isFocused: Bool
+
+  var body: some View {
+    GridRow {
+      Text("Album")
+        .foregroundStyle(.secondary)
+      TextField(text: $tags.album.text, prompt: Text("Unknown")) {
+        Text("Album")
+      }
+      .textFieldStyle(.roundedBorder)
+      .frame(maxWidth: 520)
+      .focused($isFocused)
+      .onSubmit(fillFieldsFromAlbum)
+      .onChange(of: isFocused) { _, focused in
+        if !focused {
+          fillFieldsFromAlbum()
+        }
+      }
+    }
+  }
+
+  private func fillFieldsFromAlbum() {
+    tags = tags.fillingFieldsFromAlbum()
   }
 }
 
