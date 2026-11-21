@@ -1,5 +1,11 @@
 # Done log
 
+## 2026-11-21 — Album titles fill show date, venue, and location (`effort/album-title-fills-show-fields`)
+
+- **Result:** Setlist parsing and the Live Shows Album editor now fill unknown show fields from well-formed live-show album titles while preserving explicit fields. The plan continues to compose its album from the resulting date, venue, location, and source.
+- **Verification:** VinylFeverCore 339 tests; VinylFeverListening 51 tests; VinylFeverNotes 74 tests; macOS app 104 tests; iOS simulator build and 93 tests; core and listening performance suites passed.
+- **Owed:** album-title-fills-show-fields's device gate, in [device-passes.md](device-passes.md).
+
 ## 2026-11-11 — The phone shows what the chat wrote (`effort/chat-writeups-on-phone`)
 
 - **Result:** Staging now stores the chat’s optional labels, facts, paragraphs, and headings; playlist reviews include each song’s tag. The iPhone shelf displays those fields and preserves them in its cache.

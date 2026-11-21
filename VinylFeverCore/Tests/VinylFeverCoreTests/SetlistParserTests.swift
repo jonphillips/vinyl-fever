@@ -60,6 +60,21 @@ struct SetlistParserTests {
   }
 
   @Test
+  func fillsShowFieldsFromAlbumAfterReadingAllTagLines() {
+    let draft = SetlistParser().parse(
+      """
+      ALBUM: 2026-02-27: Chicago, IL - Sleeping Village (SBD)
+      VENUE: The Metro
+      """
+    )
+
+    expectNoDifference(draft.tags.date, .iso(year: 2026, month: 2, day: 27))
+    expectNoDifference(draft.tags.location, .value("Chicago, IL"))
+    expectNoDifference(draft.tags.venue, .value("The Metro"))
+    expectNoDifference(draft.tags.source, .value("SBD"))
+  }
+
+  @Test
   func doesNotTreatCompilationMarkerAsASource() {
     let draft = SetlistParser().parse("ALBUM: Christmas & Fan Club Singles 1988-2011 (Compilation)")
     expectNoDifference(draft.tags.source, .unknown)
