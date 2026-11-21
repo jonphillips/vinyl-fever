@@ -50,6 +50,7 @@ Read expected_build from the current Git commit and built_build from $build_app/
 Fail before staging if built_build is unknown or does not match expected_build
 If Vinyl Fever is running, prompt and quit it
 Stage $build_app beside $installed_app, swap it in while retaining the previous app
+Touch $installed_app and re-register it with Launch Services so macOS re-reads its icon
 If $tunnel_label is loaded, kickstart it and wait for /readyz
 python3 -I scripts/mcp-smoke $helper --expected-build <build commit>
 On smoke failure, restore the previous app; on success, remove the backup and report mcp-tunnel status
@@ -194,6 +195,11 @@ if [[ -d "$installed_app" ]]; then
 fi
 swapped=true
 mv "$stage_app" "$installed_app"
+# ditto and mv keep the bundle's date, and Xcode rebuilds the app in place, so the installed
+# bundle would keep the date of the first build forever. macOS caches app icons by path and
+# bundle date, so an icon change would never show. A fresh date makes it re-read the icon.
+touch "$installed_app"
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$installed_app" || echo "warning: could not re-register $installed_app with Launch Services" >&2
 
 uid="$(id -u)"
 if launchctl print "gui/$uid/$tunnel_label" >/dev/null 2>&1; then
