@@ -31,7 +31,7 @@ public struct ShowPlan: Equatable, Sendable {
           album: metadata.albumTitle,
           sortAlbum: metadata.sortAlbum,
           artist: metadata.tags.artist.displayText,
-          albumArtist: metadata.tags.albumArtist.displayText,
+          albumArtist: metadata.tags.albumArtist.text,
           trackNumber: trackNumber,
           discNumber: Self.m1DiscNumber
         )
