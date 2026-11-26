@@ -43,7 +43,7 @@ if $dry_run; then
   cat <<EOF
 cd $repo_root
 xcodegen generate
-xcodebuild -project VinylFever.xcodeproj -scheme VinylFever -configuration $configuration -destination 'platform=macOS' -derivedDataPath $derived_data build
+xcodebuild -project VinylFever.xcodeproj -scheme VinylFever -configuration $configuration -destination 'platform=macOS' -derivedDataPath $derived_data -skipMacroValidation build
 xcodegen generate
 Verify codesign, bundled vf-mcp, embedded Vinyl Fever Dev Profile, and this Mac's Provisioning UDID
 Read expected_build from the current Git commit and built_build from $build_app/Contents/Info.plist
@@ -63,12 +63,16 @@ fi
 
 cd "$repo_root"
 xcodegen generate
+# -skipMacroValidation: SwiftPM keeps one macro approval per package, tied to the approved commit.
+# Building in jon-platform's Apps.xcworkspace approves different versions than this project pins,
+# so a plain build here fails "changed since a previous approval". jon-platform scripts/build does the same.
 "$platform_root/scripts/quiet-run" xcodebuild \
   -project VinylFever.xcodeproj \
   -scheme VinylFever \
   -configuration "$configuration" \
   -destination 'platform=macOS' \
   -derivedDataPath "$derived_data" \
+  -skipMacroValidation \
   build
 xcodegen generate
 
