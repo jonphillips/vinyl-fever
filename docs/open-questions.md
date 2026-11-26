@@ -17,9 +17,6 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
   Vinyl Fever this bridge is gorgeous" fills the note. About four lines. Leave `VinylFeverProbeIntent` out:
   it's a diagnostic. Re-read the docs first, because the API may change before release.
 - **From M24 (architect, 2026-11-08):**
-  - **An always-on chat host.** Staging from the phone needs the laptop awake; the Intel mini
-    can't run Vinyl Fever (macOS 15). Revisit if an Apple silicon Mac joins, or if Jon finds
-    the laptop asleep when he asks.
   - **Dismiss a staged playlist from the phone,** writing M24 S4's `dismissed` line. Today the
     14-day rule archives one he never creates.
   - **Tap the player strip to jump to the song** in the open playlist.

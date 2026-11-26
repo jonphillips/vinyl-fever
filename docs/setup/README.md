@@ -10,7 +10,8 @@ reference. This page is the order to do things in and the steps those pages assu
 
 ## Roles
 
-One Mac can do several of these jobs. Today the laptop does the first two, and the Mac mini polls.
+One Mac can do several of these jobs. From 2026-11-26 the M6 Mac mini does all three, and the laptop
+is a second Build Mac. The Intel mini and its separate poller app are retired.
 
 | Role | What it runs | Needs to be |
 | --- | --- | --- |
@@ -165,9 +166,11 @@ Apple-silicon Mac. A new Mac mini needs Vinyl Fever, not the separate poller app
 Until S3 ships, or for the Intel mini on macOS 15, polling uses the separate VF Listening Poller
 app: see [poller setup](../listening/POLLER-SETUP.md).
 
-**If the mini is also the chat host:** it needs a library snapshot of its own, which means
-running Vinyl Fever there and opening Playlists once. The mini's Music library play counts come
-from Sync Library and can differ from the laptop's. That trade-off is still open.
+**When the mini is also the chat host** (it is, from 2026-11-26): it needs a library snapshot of
+its own, which means running Vinyl Fever there and opening Playlists once. The mini's Music library
+play counts come from Sync Library and can differ from the laptop's. Jon accepted that on
+2026-11-26: the mini's counts are the record from then on. The Intel mini's poller had already
+stopped logging a week or two earlier, so there was no clean stream to protect.
 
 ## Backups and restoring
 
