@@ -43,8 +43,8 @@ NO_SNAPSHOT = "Open Vinyl Fever to build the library snapshot."
 
 
 def missing_snapshot(result):
-    """A Mac that has never run Vinyl Fever has no library snapshot, so library_overview can't
-    answer. That's expected on a first install: the installer already checked the build stamp in
+    """A Mac that has never run Vinyl Fever has no library snapshot, so library_overview and
+    recent_listening can't answer. That's expected on a first install: the installer already checked the build stamp in
     Info.plist, and opening the app builds the snapshot."""
     chunks = [item.get("text", "") for item in result.get("content", []) if item.get("type") == "text"]
     return bool(result.get("isError")) and " ".join(chunks).strip() == NO_SNAPSHOT
@@ -182,8 +182,8 @@ def main():
 
         for name, arguments in (("library_overview", {}), ("recent_listening", {"period": "24h"})):
             result, elapsed = request("tools/call", {"name": name, "arguments": arguments})
-            if name == "library_overview" and missing_snapshot(result):
-                print(f"library_overview: {elapsed:.2f}s — no library snapshot on this Mac yet; "
+            if missing_snapshot(result):
+                print(f"{name}: {elapsed:.2f}s — no library snapshot on this Mac yet; "
                       "open Vinyl Fever, then Playlists, to build it (warning)")
                 continue
             if name == "library_overview":
