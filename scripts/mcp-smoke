@@ -39,6 +39,17 @@ def summarize(result, allow_setup_warning=False):
     return text[:240] or "ok", False
 
 
+NO_SNAPSHOT = "Open Vinyl Fever to build the library snapshot."
+
+
+def missing_snapshot(result):
+    """A Mac that has never run Vinyl Fever has no library snapshot, so library_overview can't
+    answer. That's expected on a first install: the installer already checked the build stamp in
+    Info.plist, and opening the app builds the snapshot."""
+    chunks = [item.get("text", "") for item in result.get("content", []) if item.get("type") == "text"]
+    return bool(result.get("isError")) and " ".join(chunks).strip() == NO_SNAPSHOT
+
+
 def connector_stamp(result):
     chunks = [item.get("text", "") for item in result.get("content", []) if item.get("type") == "text"]
     try:
@@ -76,6 +87,9 @@ def main():
             "connector": {"build": "unknown", "dirty": False, "builtAt": "unknown"},
         })}]})
         assert connector == {"build": "unknown", "dirty": False, "builtAt": "unknown"}
+        assert missing_snapshot({"isError": True, "content": [{"type": "text", "text": NO_SNAPSHOT}]})
+        assert not missing_snapshot({"isError": False, "content": [{"type": "text", "text": NO_SNAPSHOT}]})
+        assert not missing_snapshot({"isError": True, "content": [{"type": "text", "text": "The helper failed."}]})
         print("mcp-smoke self-test: passed")
         return
     if os.environ.get("VF_MCP_SMOKE_FAIL") == "1":
@@ -168,6 +182,10 @@ def main():
 
         for name, arguments in (("library_overview", {}), ("recent_listening", {"period": "24h"})):
             result, elapsed = request("tools/call", {"name": name, "arguments": arguments})
+            if name == "library_overview" and missing_snapshot(result):
+                print(f"library_overview: {elapsed:.2f}s — no library snapshot on this Mac yet; "
+                      "open Vinyl Fever, then Playlists, to build it (warning)")
+                continue
             if name == "library_overview":
                 connector = connector_stamp(result)
                 if expected_build is not None and connector["build"] != expected_build:

@@ -239,7 +239,11 @@ printf '\n%-24s %s\n' "Check" "Result"
 printf '%-24s %s\n' "Build and signature" "passed"
 printf '%-24s %s\n' "Provisioning profile" "passed — $profile_name includes this Mac"
 printf '%-24s %s\n' "Bundled vf-mcp" "passed"
-printf '%-24s %s\n' "MCP smoke" "passed"
+smoke_summary="passed"
+if printf '%s\n' "$smoke_report" | grep -q "no library snapshot on this Mac yet"; then
+  smoke_summary="passed — no library snapshot yet: open Vinyl Fever, then Playlists"
+fi
+printf '%-24s %s\n' "MCP smoke" "$smoke_summary"
 printf '%-24s %s\n' "Listening coverage" "$recent_summary"
 printf '%-24s %s\n' "mcp-tunnel status" "$(printf '%s' "$status_summary" | tr '\n' ';' | sed 's/; *$//')"
 
