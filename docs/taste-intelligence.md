@@ -110,6 +110,7 @@ playlist starts unlabeled, and the app asks. Roles:
 | `auditioned` | New Music | Exposure: heard in full and graded. |
 | `discovery-inbox` | My Shazam Tracks | Curiosity, not endorsement. |
 | `followed` | Jangle Pop Essentials, New Music Daily | Following it is the signal; its tracks aren't. |
+| `tracked` | Antidote, ALT-CTRL | Followed for its new songs: its unheard tracks are candidates ([M25](milestones/M25-weekly-triage.md) S3). |
 | `apple-mix` | Heavy Rotation, Get Up! | Apple's own view of Jon. |
 | `collection` | Collection: '80s | Ownership. |
 | `vinyl-fever` | playlists Vinyl Fever created | Exposure. Jon pruning or keeping songs is the feedback. |

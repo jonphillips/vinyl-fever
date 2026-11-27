@@ -51,6 +51,13 @@ goes in `DONE-LOG.md`.
 - **album-title-fills-show-fields:** After the Mac install, parse Dave Hause - Live from Chicago 2026 and confirm Date, Venue, Location, and Plan Album. Clear Venue, edit Album to a different venue, press Return, and confirm Venue fills while Date and Location stay unchanged. ([brief](efforts/archive/album-title-fills-show-fields.md))
 ## Setup steps held for Jon
 
+- **M25, any time:** follow Antidote, ALT-CTRL, Breaking Alternative, Pop Deluxe, and AltPop in
+  Music if you don't already. Once S3 ships, label them `tracked` in Settings → Taste → Playlist
+  Roles ([M25](milestones/M25-weekly-triage.md)).
+- **M25 S2, when you make it:** the mini's Messages Apple ID (jon-platform `docs/always-on-mac.md`
+  Phase 2 step 8). The same sender serves the TestFlight renewal and Vinyl Fever's alerts.
+- **After M25 S5 ships:** the Friday Codex automation on the mini, from
+  `docs/setup/new-music-weekly.md` ([M25](milestones/M25-weekly-triage.md) Decision 3).
 - **Before M20 S1's gate:** the one-action "VF Music Feedback" shortcut, picked in Control
   Center on both devices; and TestFlight for the iPhone companion (M20 *Prerequisites*).
 - **After M20 S1's gate:** point Siri's "Music Feedback" at the intent, and Control Center at
