@@ -108,18 +108,24 @@ the architect escalates them only if they deviate from it (ADR-0005 D9).
   - **What it does with each new item** (no `created` or `dismissed` line, and not yet attempted):
     1. Resolve every track with `CatalogMatchResolver`, the same way as the phone's Create (M24
        S5), including the upload route the stage tool recorded.
-    2. **Every track matched:** first read the creation log again, and look in the Music library
-       for a playlist with the staged name, the same check the phone uses to hide Create. If
-       either shows it's already made, write nothing and move on. iCloud can lag by minutes, and
-       `WatchPaths` acts within a minute of staging, which is when Jon might tap Create on the
-       phone, so the log alone isn't enough. Otherwise create the playlist in Music under its
-       staged name and description, and append a `created` line to the creation log with this host
-       as the creator. The Mac files the inbox from that line, as it does for the phone.
-    3. **Any track ambiguous or not found:** create nothing (M24 Decision 7 stands). Append one
+    2. **Before matching,** look in the Music library for a playlist with the staged name, the
+       same check the phone uses to hide Create. If there is one, append a `needs-review` line
+       with `error` ("A playlist named … is already in Music.") and stop. Don't skip it silently,
+       or every run matches it again and Jon never hears. A phone Create's `created` line, if it
+       hasn't synced yet, outranks this line.
+    3. **Every track matched:** read the creation log again and check the name again. iCloud can
+       lag by minutes, and `WatchPaths` acts within a minute of staging, which is when Jon might
+       tap Create on the phone, so the log alone isn't enough. If either shows the playlist is
+       already made, write nothing. Otherwise create the playlist in Music under its staged name
+       and description, and append a `created` line to the creation log with this host as the
+       creator. The Mac files the inbox from that line, as it does for the phone. **Once the
+       playlist is in Music, never write `needs-review`:** retry a failed `created` append, then
+       log it and leave the item in the inbox.
+    4. **Any track ambiguous or not found:** create nothing (M24 Decision 7 stands). Append one
        `needs-review` line to the creation log listing each unresolved song in `skipped` with its
        `reason`, `ambiguous` or `not-found`. The playlist stays staged for the phone's or the Mac's
        Create.
-    4. **Apple Music refuses or errors** for a song (after the existing retries): that song goes in
+    5. **Apple Music refuses or errors** for a song (after the existing retries): that song goes in
        `skipped` with `reason: "error"`. **For the whole playlist** (no subscription, auth, 5xx on
        the create call): append a `needs-review` line with the message in its `error` field and
        whatever songs were unresolved in `skipped`, which may be empty. `reason` never holds free
@@ -148,7 +154,8 @@ the architect escalates them only if they deviate from it (ADR-0005 D9).
       song's API error → `skipped` with `reason: "error"`; a playlist-level API error →
       `needs-review` with `error` set; a `needs-review` line with neither `skipped` nor `error` is
       skipped as unreadable; a `needs-review` later than a `created` leaves the batch created; a
-      name already in the library → nothing written; an item already created, dismissed, or
+      name already in the library → `needs-review` with `error`, before matching; a failed
+      `created` append retried and never turned into `needs-review`; an item already created, dismissed, or
       reviewed is skipped; older lines and an unknown `kind` read unchanged;
     - the phone's shelf state from fixture logs: Not in Music yet, Needs you (a count, and the
       error), Active;
