@@ -114,7 +114,7 @@ the tempo or the vocals?". At the start of a taste conversation, it asks at most
 ## Housekeeping
 
 - **Open Vinyl Fever on the laptop at least weekly.** It refreshes the library snapshot at launch
-  when the snapshot is more than 6 hours old. Playlists → **Refresh Library Snapshot** forces one.
+  when the snapshot is more than 50 minutes old, and hourly while it runs. Playlists → **Refresh Library Snapshot** forces one.
   Keeps are seen only at a refresh. A pass is final only once a snapshot is newer than the
   song's 14-day window.
 - **A new playlist needs a role.** If you make a playlist you choose songs into, label it in

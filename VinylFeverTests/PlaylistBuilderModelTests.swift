@@ -962,6 +962,32 @@ struct PlaylistBuilderModelTests {
     #expect(model.removedTrackIndexes.isEmpty)
   }
 
+  /// The hourly loop sleeps 60 minutes, so a snapshot it wrote is stale by its next check.
+  @Test("a snapshot goes stale at 50 minutes", arguments: [(49, 0), (50, 1), (60, 1)])
+  func snapshotStaleBoundary(minutesOld: Int, expectedReads: Int) async throws {
+    let database = try testDatabase()
+    let now = Date(timeIntervalSince1970: 2_000_000_000)
+    let previous = LibrarySnapshot(generatedAt: now.addingTimeInterval(-Double(minutesOld) * 60), tracks: [])
+    let counter = SearchCallCounter()
+    _ = await withDependencies {
+      $0.defaultDatabase = database
+      $0.date.now = now
+      $0.musicAppClient.automationPermission = { .authorized }
+      $0.musicAppClient.readLibrarySnapshot = {
+        await counter.record()
+        return LibrarySnapshot(generatedAt: now, tracks: [])
+      }
+      $0.librarySnapshotStore = LibrarySnapshotStore(
+        read: { previous }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, repairAliasesMirror: {},
+        modifiedAt: { now.addingTimeInterval(-Double(minutesOld) * 60) })
+    } operation: {
+      let model = PlaylistBuilderModel()
+      await model.loadSnapshotAndRefreshIfStale()
+      return model
+    }
+    #expect(await counter.count == expectedReads)
+  }
+
   @Test("launch refresh runs only when the saved snapshot is stale")
   func launchRefreshThreshold() async throws {
     let database = try testDatabase()
@@ -998,7 +1024,7 @@ struct PlaylistBuilderModelTests {
         return refreshed
       }
       $0.librarySnapshotStore = LibrarySnapshotStore(
-        read: { previous }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, repairAliasesMirror: {}, modifiedAt: { now.addingTimeInterval(-2 * 60 * 60) })
+        read: { previous }, write: { _ in }, readAliases: { [:] }, writeAliases: { _ in }, repairAliasesMirror: {}, modifiedAt: { now.addingTimeInterval(-10 * 60) })
     } operation: {
       let model = PlaylistBuilderModel()
       await model.loadSnapshotAndRefreshIfStale()

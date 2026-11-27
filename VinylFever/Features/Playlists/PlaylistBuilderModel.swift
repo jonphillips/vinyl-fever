@@ -53,7 +53,8 @@ extension DependencyValues {
 @MainActor
 @Observable
 final class PlaylistBuilderModel {
-  private static let snapshotStaleInterval: TimeInterval = 6 * 60 * 60
+  /// Under the hourly loop's 60-minute sleep, so every hourly check finds the snapshot stale.
+  private static let snapshotStaleInterval: TimeInterval = 50 * 60
   private static let snapshotLogger = Logger(subsystem: "com.jonphillips.vinylfever", category: "library-snapshot")
   @ObservationIgnored @Dependency(\.appleMusicCatalogClient) private var appleMusic
   @ObservationIgnored @Dependency(\.catalogMatchResolver) private var resolver

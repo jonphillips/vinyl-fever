@@ -114,7 +114,10 @@ plan PR moves it into a milestone or effort and sets `docs/NEXT_UP.md`.
 - **M12: should the launch refresh skip when Music.app isn't running?** (from the #72 review,
   2026-10-17). **Recommendation: yes;** launch refreshes only when Music is already running, and
   the manual **Refresh Library Snapshot** button stays the way to launch it. Today a snapshot
-  older than 6 h makes Vinyl Fever launch Music.app at its own launch. Pending Jon.
+  older than 50 min makes Vinyl Fever launch Music.app at its own launch, and since the
+  50-minute threshold (2026-11-27) the hourly check relaunches a quit Music.app every hour while
+  Vinyl Fever is open. That's harmless on the mini, where Music stays open, and noticeable on
+  the laptop. Pending Jon.
 - **M12: what to do with `LibrarySnapshot.lastfm` now that S3 is dropped** (from the #72
   review, 2026-10-17; updated 2026-10-18). It's typed `Data?`, which would encode as base64, and
   it's always `null`. **Recommendation:** leave it. Drop the field at the next snapshot format
