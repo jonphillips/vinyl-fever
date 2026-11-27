@@ -124,7 +124,7 @@ final class PlaylistShelfModel {
     guard isNotInMusicYet(playlist) else { return nil }
     let key = PlaylistCreationsCodec.batchKey(host: playlist.batch.host, recordedAt: playlist.batch.recordedAt)
     guard let event = latestCreationEvents[key], event.kind == .needsReview else { return "Not in Music yet" }
-    if let error = event.error, event.skipped?.isEmpty != false { return error == "" ? "Apple Music error" : "Apple Music error · \(error)" }
+    if event.error != nil, event.skipped?.isEmpty != false { return "Needs you · Apple Music error" }
     let count = event.skipped?.count ?? 0
     return count == 1 ? "Needs you · 1 song needs you" : "Needs you · \(count) songs need you"
   }

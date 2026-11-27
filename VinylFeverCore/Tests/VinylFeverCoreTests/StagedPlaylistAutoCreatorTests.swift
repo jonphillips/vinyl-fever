@@ -78,24 +78,77 @@ struct StagedPlaylistAutoCreatorTests {
     #expect(recorder.appendedEvents.first?.kind == .created)
   }
 
-  @Test func existingLibraryNamePreventsCreationAndWriting() async throws {
+  @Test func existingLibraryNameRecordsNeedsReviewOnceWithoutMatching() async throws {
     let fixture = try Fixture()
     let recorder = AutoCreateRecorder()
     await withDependencies({ dependencies in
-      fixture.setDependencies(&dependencies, recorder: recorder, statuses: { request in
-      request.tracks.map { track in
-        ResolvedPlaylistRow(request: track,
-          status: .matched(CatalogSongCandidate(id: "id-\(track.index)", title: track.title, artistName: track.artist), score: 1))
-      }
+      fixture.setDependencies(&dependencies, recorder: recorder, statuses: { _ in
+        Issue.record("A name already in Music must be caught before matching.")
+        return []
       })
       dependencies.appleMusicCatalogClient.libraryPlaylistNames = { [fixture.name] }
     }) {
       await StagedPlaylistAutoCreator().processInbox()
+      await StagedPlaylistAutoCreator().processInbox()
     }
 
     #expect(recorder.createdSongs.isEmpty)
+    #expect(recorder.appendedEvents.map(\.kind) == [.needsReview])
+    #expect(recorder.appendedEvents.first?.skipped == [])
+    #expect(recorder.appendedEvents.first?.error?.contains("already in Music") == true)
+    #expect(try fixture.inboxClient.list().count == 1)
+  }
+
+  @Test func failedCreatedAppendIsRetriedAndNeverBecomesNeedsReview() async throws {
+    let fixture = try Fixture()
+    let recorder = AutoCreateRecorder()
+    let failures = LockIsolated(1)
+    await withDependencies({ dependencies in
+      fixture.setDependencies(&dependencies, recorder: recorder, statuses: Self.allMatched)
+      dependencies.continuousClock = ImmediateClock()
+      dependencies.playlistCreationClient.append = { event in
+        let shouldFail = failures.withValue { remaining in
+          defer { remaining -= 1 }
+          return remaining > 0
+        }
+        if shouldFail { throw CocoaError(.fileWriteUnknown) }
+        recorder.recordEvent(event)
+      }
+    }) {
+      await StagedPlaylistAutoCreator().processInbox()
+    }
+
+    #expect(recorder.createdSongs.count == 2)
+    #expect(recorder.appendedEvents.map(\.kind) == [.created])
+    #expect(try fixture.inboxClient.list().isEmpty)
+  }
+
+  @Test func createdAppendThatKeepsFailingWritesNothingElse() async throws {
+    let fixture = try Fixture()
+    let recorder = AutoCreateRecorder()
+    let attempts = LockIsolated(0)
+    await withDependencies({ dependencies in
+      fixture.setDependencies(&dependencies, recorder: recorder, statuses: Self.allMatched)
+      dependencies.continuousClock = ImmediateClock()
+      dependencies.playlistCreationClient.append = { _ in
+        attempts.withValue { $0 += 1 }
+        throw CocoaError(.fileWriteUnknown)
+      }
+    }) {
+      await StagedPlaylistAutoCreator().processInbox()
+    }
+
+    #expect(recorder.createdSongs.count == 2)
+    #expect(attempts.value == StagedPlaylistAutoCreator.createdAppendAttempts)
     #expect(recorder.appendedEvents.isEmpty)
     #expect(try fixture.inboxClient.list().count == 1)
+  }
+
+  private static let allMatched: @Sendable (PlaylistRequest) -> [ResolvedPlaylistRow] = { request in
+    request.tracks.map { track in
+      ResolvedPlaylistRow(request: track,
+        status: .matched(CatalogSongCandidate(id: "id-\(track.index)", title: track.title, artistName: track.artist), score: 1))
+    }
   }
 
   @Test func playlistApiFailureRecordsErrorOnlyNeedsReview() async throws {

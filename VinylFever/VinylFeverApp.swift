@@ -37,6 +37,9 @@ enum VinylFeverMain {
       }
       await StagedPlaylistAutoCreator().processInbox()
       await PlaylistReviewAlertSender().sendPendingAlerts()
+      if shouldRunDailyBackup(in: context) {
+        await Task.detached(priority: .utility) { runDailyBackup() }.value
+      }
       if pollFailed { exit(EXIT_FAILURE) }
       return
     }

@@ -41,6 +41,7 @@ struct PlaylistShelfModelTests {
       playlist: "Power Pop", at: at, writerHost: "Mac", songs: 1,
       skipped: [PlaylistCreationSkippedSong(title: "Song", artist: "Band", reason: "not-found")])
     let model = await withDependencies({ dependencies in
+      dependencies.date.now = at
       dependencies.keepLibraryClient.isAuthorized = { true }
       dependencies.keepLibraryClient.libraryPlaylists = { [] }
       dependencies.playlistShelfClient.read = {
@@ -66,6 +67,7 @@ struct PlaylistShelfModelTests {
     let event = PlaylistCreationEvent(kind: .needsReview, host: "Test", recordedAt: at,
       playlist: "Power Pop", at: at, writerHost: "Mac", error: "Apple Music is unavailable.")
     let model = await withDependencies({ dependencies in
+      dependencies.date.now = at
       dependencies.keepLibraryClient.isAuthorized = { true }
       dependencies.keepLibraryClient.libraryPlaylists = { [] }
       dependencies.playlistShelfClient.read = {
@@ -80,12 +82,13 @@ struct PlaylistShelfModelTests {
       return model
     }
 
-    #expect(model.creationStatusText(for: model.playlists[0]) == "Apple Music error · Apple Music is unavailable.")
+    #expect(model.creationStatusText(for: model.playlists[0]) == "Needs you · Apple Music error")
   }
 
   @Test @MainActor
   func unknownCreationKindsDoNotLookLikeUnreadableICloudFiles() async {
     let model = await withDependencies({ dependencies in
+      dependencies.date.now = Date(timeIntervalSince1970: 0)
       dependencies.keepLibraryClient.isAuthorized = { false }
       dependencies.playlistShelfClient.read = {
         RecommendationLedgerFolderRead(

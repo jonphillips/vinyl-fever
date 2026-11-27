@@ -276,7 +276,7 @@ final class PlaylistBuilderModel {
     guard let host = item.batchHost, let recordedAt = item.recordedAt else { return nil }
     let key = PlaylistCreationsCodec.batchKey(host: host, recordedAt: recordedAt)
     guard let event = latestCreationEvents[key], event.kind == .needsReview else { return nil }
-    if let error = event.error, event.skipped?.isEmpty != false { return "Apple Music error · \(error)" }
+    if let error = event.error, event.skipped?.isEmpty != false { return "Needs you · \(error)" }
     let count = event.skipped?.count ?? 0
     return count == 1 ? "Needs you · 1 song needs you" : "Needs you · \(count) songs need you"
   }

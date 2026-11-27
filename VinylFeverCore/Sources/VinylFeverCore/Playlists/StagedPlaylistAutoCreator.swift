@@ -97,6 +97,28 @@ public struct StagedPlaylistAutoCreator {
     }
     guard !decoded.request.tracks.isEmpty else { return }
 
+    // Check access and the name before matching. Every outcome here writes a line, so an item that
+    // can't be created doesn't cost a full match on every run.
+    do {
+      guard await appleMusic.authorizationStatus() == .authorized else {
+        throw AutoCreateError.message("Apple Music access is not authorized on this Mac.")
+      }
+      let subscription = try await appleMusic.subscriptionStatus()
+      guard subscription.canPlayCatalogContent, subscription.hasCloudLibraryEnabled else {
+        throw AutoCreateError.message("Apple Music subscription and Sync Library are required to create playlists.")
+      }
+      if try await appleMusic.libraryPlaylistNames().contains(decoded.request.name) {
+        // Safe even when a phone Create's `created` line hasn't synced yet: it outranks this line.
+        await writeNeedsReview(item, host: batchHost, recordedAt: recordedAt, skipped: [],
+          error: "A playlist named \u{201C}\(decoded.request.name)\u{201D} is already in Music.")
+        return
+      }
+    } catch {
+      await writeNeedsReview(item, host: batchHost, recordedAt: recordedAt, skipped: [],
+        error: error.localizedDescription)
+      return
+    }
+
     let routes: [RecommendationTrack]?
     do { routes = try routeClient.read(batchHost, recordedAt) }
     catch {
@@ -129,36 +151,60 @@ public struct StagedPlaylistAutoCreator {
       return
     }
 
+    let created: CreatedPlaylistRef
     do {
-      guard await appleMusic.authorizationStatus() == .authorized else {
-        throw AutoCreateError.message("Apple Music access is not authorized on this Mac.")
-      }
-      let subscription = try await appleMusic.subscriptionStatus()
-      guard subscription.canPlayCatalogContent, subscription.hasCloudLibraryEnabled else {
-        throw AutoCreateError.message("Apple Music subscription and Sync Library are required to create playlists.")
-      }
-      // iCloud can lag behind a phone Create; repeat the log check immediately before writing to Music.
-      let latestLog = try creations.read()
-      if let latest = PlaylistCreationsCodec.latestEvents(latestLog.events)[key],
-        latest.kind == .created || latest.kind == .dismissed || latest.kind == .needsReview { return }
-      let names = try await appleMusic.libraryPlaylistNames()
-      guard !names.contains(decoded.request.name) else { return }
+      // Matching takes a while, and Jon may tap Create on the phone meanwhile: check again.
+      if try await isAlreadyMade(key: key, name: decoded.request.name) { return }
       let songs = rows.compactMap { row -> PlaylistSongReference? in
         guard case let .matched(candidate, _) = row.status else { return nil }
         return PlaylistSongReference(id: candidate.id, source: candidate.source)
       }
-      let created = try await appleMusic.createLibraryPlaylist(decoded.request.name,
+      created = try await appleMusic.createLibraryPlaylist(decoded.request.name,
         decoded.request.description, songs)
-      try creations.append(PlaylistCreationEvent(kind: .created, host: batchHost,
-        recordedAt: recordedAt, playlist: decoded.request.name, at: now,
-        writerHost: ListeningStore.liveHostName(), musicID: created.id,
-        songs: created.trackCount, skipped: []))
-      _ = try inbox.markProcessed(item.handoff)
     } catch {
       await writeNeedsReview(item, host: batchHost, recordedAt: recordedAt, skipped: [],
         error: error.localizedDescription)
+      return
+    }
+
+    // The playlist is in Music now, so nothing below may write `needs-review`.
+    let event = PlaylistCreationEvent(kind: .created, host: batchHost,
+      recordedAt: recordedAt, playlist: decoded.request.name, at: now,
+      writerHost: ListeningStore.liveHostName(), musicID: created.id,
+      songs: created.trackCount, skipped: [])
+    guard await appendCreated(event) else { return }
+    do { _ = try inbox.markProcessed(item.handoff) }
+    catch {
+      NSLog("Vinyl Fever created %@ but could not file it from the inbox: %@", item.name, error.localizedDescription)
     }
   }
+
+  /// True when the log already has a line for this batch, or Music already has a playlist with
+  /// this name. iCloud can lag behind a phone Create, so the log alone isn't enough.
+  private func isAlreadyMade(key: String, name: String) async throws -> Bool {
+    if let latest = PlaylistCreationsCodec.latestEvents(try creations.read().events)[key],
+      latest.kind == .created || latest.kind == .dismissed || latest.kind == .needsReview { return true }
+    return try await appleMusic.libraryPlaylistNames().contains(name)
+  }
+
+  /// Appends the `created` line, retrying a failed iCloud write. On a final failure it logs and
+  /// gives up. The item stays in the inbox, and the next run records the name clash, which is
+  /// true, rather than an error that isn't.
+  private func appendCreated(_ event: PlaylistCreationEvent) async -> Bool {
+    for attempt in 1...Self.createdAppendAttempts {
+      do {
+        try creations.append(event)
+        return true
+      } catch {
+        NSLog("Vinyl Fever created %@ but could not record it (attempt %d): %@",
+          event.playlist, attempt, error.localizedDescription)
+        if attempt < Self.createdAppendAttempts { try? await clock.sleep(for: .seconds(2)) }
+      }
+    }
+    return false
+  }
+
+  public static let createdAppendAttempts = 3
 
   private func resolve(_ request: PlaylistRequest, routes: [RecommendationTrack]?, identity: ArtistIdentity) async -> [ResolvedPlaylistRow] {
     let tracks = request.tracks
