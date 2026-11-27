@@ -7,6 +7,11 @@ which holds the unheard songs from Apple editorial playlists Jon follows. Rules 
 jon-platform `docs/ios/ui-and-platforms.md` (§ Controls) apply. Where this doc and those conflict,
 stop and flag it.*
 
+*Amended 2026-11-27, after PR #214 asked where the helper runs: "the listening helper" is Vinyl
+Fever's own windowless `--poll-listening` run on the M6 mini, not the retired VF Listening Poller
+app. S1 gains the rule that a `created` or `dismissed` line outranks `needs-review`, a playlist-level
+`error` field, and a library-name check before creating.*
+
 Status: Designed
 Summary: S1 has the mini's listening helper create every staged playlist whose songs all match, and S2 alerts Jon by iMessage when one doesn't; S3 saves the contents of playlists labeled `tracked` and S4 shows their unheard songs on the phone as Playlist Catchup; S5 gives the chat one tool for a New Music week (hidden picks, optional notes, and five extras) that a Codex automation on the mini calls every Friday, and S6 shows the result on the phone as New Music Weekly.
 
@@ -31,8 +36,12 @@ his phone tells him.
 
 - **The mini is the chat host and the listening host** (#207). `vf-mcp` runs there through the
   tunnel, so the playlist inbox (`~/Library/Application Support/VinylFever/PlaylistInbox`) fills
-  on the mini. The listening helper (`VinylFeverListeningPoller`) runs there hourly from
-  `VFListeningPollerAgent.plist` (`StartInterval`).
+  on the mini. The listening helper runs there hourly: `VinylFeverListeningAgent.plist`
+  (`StartInterval`), registered from Settings → Listening History, starts Vinyl Fever with
+  `--poll-listening` (`VinylFeverApp.swift`), which polls once and exits with no window. In this
+  doc, "the helper" means that run. It's the macOS 27 app, so it links `VinylFeverCore` and
+  `VinylFeverAppleMusic`. The separate VF Listening Poller app (`VinylFeverListeningPoller`, macOS
+  15) was for the Intel mini, which is retired (#207). It gets no M25 work and keeps its target.
 - **The helper can already read and write Apple Music.** It reads recently played, and it saves
   New Music (`NewMusicExposure.swift`). It finds New Music's catalog ID through the library
   playlists relationship, caches it, and fetches the catalog playlist. Any followed catalog
@@ -88,35 +97,62 @@ the architect escalates them only if they deviate from it (ADR-0005 D9).
 - [ ] **S1 — Staged playlists create themselves (helper + Core).**
   - **Where it runs.** In the listening helper, on any Mac whose inbox holds an item, whether or
     not that Mac holds the polling lease: each Mac has its own inbox, so two Macs can't race over
-    one item. Add `WatchPaths` on the inbox folder to the agent plist, so an item is processed
-    within a minute of staging. The hourly run picks up anything missed. If the helper is
-    sandboxed and can't read the inbox, stop and flag it.
+    one item. Add `WatchPaths` on the inbox folder to `VinylFeverListeningAgent.plist`, so an
+    item is processed within a minute of staging. The hourly run picks up anything missed. If the
+    helper is sandboxed and can't read the inbox, stop and flag it.
+  - **One process per database.** The `--poll-listening` run must not open the synced SQLiteData
+    database or start a `SyncEngine`, because the windowed app may be open at the same time
+    (jon-platform `docs/always-on-mac.md`). It reads the inbox files, the iCloud aliases and the
+    creation log, and writes only to Music and the log. If S1 seems to need a row, stop and flag
+    it.
   - **What it does with each new item** (no `created` or `dismissed` line, and not yet attempted):
     1. Resolve every track with `CatalogMatchResolver`, the same way as the phone's Create (M24
        S5), including the upload route the stage tool recorded.
-    2. **Every track matched:** create the playlist in Music under its staged name and description,
-       and append a `created` line to the creation log with this host as the creator. The Mac
-       files the inbox from that line, as it does for the phone.
+    2. **Every track matched:** first read the creation log again, and look in the Music library
+       for a playlist with the staged name, the same check the phone uses to hide Create. If
+       either shows it's already made, write nothing and move on. iCloud can lag by minutes, and
+       `WatchPaths` acts within a minute of staging, which is when Jon might tap Create on the
+       phone, so the log alone isn't enough. Otherwise create the playlist in Music under its
+       staged name and description, and append a `created` line to the creation log with this host
+       as the creator. The Mac files the inbox from that line, as it does for the phone.
     3. **Any track ambiguous or not found:** create nothing (M24 Decision 7 stands). Append one
-       `needs-review` line to the creation log listing each unresolved song and why (ambiguous or
-       not found). The playlist stays staged for the phone's or the Mac's Create.
-    4. **Apple Music refuses or errors** (no subscription, auth, 5xx after the existing retries):
-       treat it like `needs-review`, with the error as the reason.
+       `needs-review` line to the creation log listing each unresolved song in `skipped` with its
+       `reason`, `ambiguous` or `not-found`. The playlist stays staged for the phone's or the Mac's
+       Create.
+    4. **Apple Music refuses or errors** for a song (after the existing retries): that song goes in
+       `skipped` with `reason: "error"`. **For the whole playlist** (no subscription, auth, 5xx on
+       the create call): append a `needs-review` line with the message in its `error` field and
+       whatever songs were unresolved in `skipped`, which may be empty. `reason` never holds free
+       text.
   - **One attempt per item.** An item with a `needs-review` line isn't retried automatically.
     Jon finishes it on the phone or the Mac, and their Create writes `created` as today.
-  - **Format:** `needs-review` is a new `kind` on `vf-playlist-creation` v1. Older readers must
-    skip it, not fail on it. Check `PlaylistCreations`' decoder, and the Mac's inbox filing, which
-    must not treat it as created.
-  - **The phone:** a staged playlist with a `needs-review` line and no `created` line shows **Needs
-    you** in place of "Not in Music yet", with the count ("2 songs need you"). Create opens the
-    existing sheet, where those songs ask for a choice.
+  - **Format:** `needs-review` is a new `kind` on `vf-playlist-creation` v1, with `skipped` (each
+    song's identity and a `reason` of `ambiguous`, `not-found`, or `error`) and an optional `error`
+    string for the whole playlist. A `needs-review` line is valid only if `skipped` isn't empty or
+    `error` is set. Older readers must skip it, not fail on it. Check `PlaylistCreations`' decoder,
+    and the Mac's inbox filing, which must not treat it as created.
+  - **`created` and `dismissed` outrank `needs-review`.** A `needs-review` line counts only when
+    the batch has no `created` or `dismissed` line, whatever their `at`. Between `created` and
+    `dismissed`, the latest still wins, as today. This holds everywhere a batch's state is read:
+    the phone's shelf and its "Already created" check, the Mac's inbox filing and its row, and
+    the archive. A `needs-review` batch archives on the same 14-day grace period as a batch with
+    no line.
+  - **The phone:** a staged playlist whose state is `needs-review` shows **Needs you** in place of
+    "Not in Music yet": with the count when `skipped` isn't empty ("2 songs need you"), and
+    otherwise "Apple Music error". Create shows only when it would today (Keep access authorized,
+    no library playlist with that name). Create opens the existing sheet, where those songs ask for
+    a choice.
   - **The Mac app:** the inbox row shows the same state. Its own Create still works.
   - **DoD:**
-    - Core tests: all matched → `created`; one ambiguous → `needs-review` and nothing created; an
-      API error → `needs-review` with the reason; an item already created, dismissed, or reviewed
-      is skipped; older lines and an unknown `kind` read unchanged;
-    - the phone's shelf state from fixture logs: Not in Music yet, Needs you, Active;
-    - the helper builds, and the agent plist carries `WatchPaths`;
+    - Core tests: all matched → `created`; one ambiguous → `needs-review` and nothing created; a
+      song's API error → `skipped` with `reason: "error"`; a playlist-level API error →
+      `needs-review` with `error` set; a `needs-review` line with neither `skipped` nor `error` is
+      skipped as unreadable; a `needs-review` later than a `created` leaves the batch created; a
+      name already in the library → nothing written; an item already created, dismissed, or
+      reviewed is skipped; older lines and an unknown `kind` read unchanged;
+    - the phone's shelf state from fixture logs: Not in Music yet, Needs you (a count, and the
+      error), Active;
+    - the helper builds, and `VinylFeverListeningAgent.plist` carries `WatchPaths`;
     - closeout records the gate: install on the mini; from the phone's ChatGPT, stage a short
       playlist that's easy to match and confirm it's in Music within two minutes without touching
       a device, and the phone shows it Active; stage one with a song that can't be found and
@@ -126,10 +162,12 @@ the architect escalates them only if they deviate from it (ADR-0005 D9).
   - **When:** each `needs-review` line from S1, and (from S5) a missed Friday. One message per
     event, never repeated.
   - **What it says**, in one or two lines: the playlist name, *N of M songs found*, the first
-    two unresolved songs, and "Finish it in Vinyl Fever on your phone."
+    two unresolved songs, and "Finish it in Vinyl Fever on your phone." For a line with `error`
+    set, the error message takes the place of the song count.
   - **How:** Messages through AppleScript, as ADR-0010 D3's renewal job does. The handle is Jon's
-    number, set once in the helper's settings (`ListeningPollerSettingsView`) and stored only in
-    the helper's defaults on that Mac, never in a repo. Settings gains **Send test message**.
+    number, set once in Vinyl Fever's **Settings → Listening History** and stored only in Vinyl
+    Fever's defaults on that Mac, never in a repo or in iCloud. That section gains **Send test
+    message**.
   - **No sender yet:** with no handle set, or when Messages fails, the helper logs the alert
     and carries on. The phone's Needs you is the fallback, so nothing is lost before the mini's
     Apple ID exists.
@@ -292,7 +330,9 @@ Added 2026-11-27 with M25. Merging this plan PR approves them.
    it plays in CarPlay and Music. Catchup changes hourly as songs are heard, and the API can't
    remove songs from a playlist. A song leaves Catchup when it leaves every source, so the list
    follows the editors instead of growing without limit.
-7. **Auto-create runs in the listening helper, not the Mac app (architect, 2026-11-27).** It writes
-   only to Music and to iCloud logs, never to SQLiteData rows, so it fits the helper shape in
-   jon-platform `docs/always-on-mac.md` § What runs on the mini. The helper is already on the mini
-   with Music access. The Mac app doesn't have to stay running.
+7. **Auto-create runs in the windowless `--poll-listening` run, not the open app (architect,
+   2026-11-27; amended the same day).** It writes only to Music and to iCloud logs, never to
+   SQLiteData rows, so it fits the helper shape in jon-platform `docs/always-on-mac.md` § What runs
+   on the mini. That run is already on the mini with Music access, and launchd starts it, so the
+   Vinyl Fever window doesn't have to stay open. It's the macOS 27 app, so it uses the M24 resolver
+   and the inbox code as they are. Nothing moves into a macOS 15 package.
