@@ -342,6 +342,10 @@ completing PR advances `NEXT_UP.md` to [M20](M20-music-feedback-intent.md) · S0
     chat ranks and explains, and the ledger records `source: "apple-similar-artists"`.
   - **If not:** the chat stays on catalog depth, and New Music stays Apple's job, unfiltered.
   - Either way, the result is recorded here before anything is built.
+  - *2026-11-27:* [M25](M25-weekly-triage.md) gives the chat five extras a week, chosen first from
+    Apple's editorial playlists Jon tracks (M25 Decision 4). That replaces the similar-artists
+    probe for now. The picked-versus-rest result still decides whether the chat ranks Apple's
+    candidates beyond that.
 
 - [x] **S4 — The chat's questions (Core + `vf-mcp`).** *Added 2026-10-25 from plan PR #127,
   which was never merged; see Decision 8. M17 S3 (#129) built the notes it extends.*
