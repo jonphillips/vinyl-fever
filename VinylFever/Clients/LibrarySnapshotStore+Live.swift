@@ -35,8 +35,11 @@ extension LibrarySnapshotStore {
         try LibrarySnapshotCodec.encode(snapshot).write(to: fileURL, options: .atomic)
       },
       readAliases: {
-        guard FileManager.default.fileExists(atPath: aliasesURL.path(percentEncoded: false)) else { return [:] }
-        return try ArtistAliasesCodec.decode(Data(contentsOf: aliasesURL))
+        let source = FileManager.default.fileExists(atPath: mirrorURL.path(percentEncoded: false))
+          ? mirrorURL : aliasesURL
+        guard FileManager.default.fileExists(atPath: source.path(percentEncoded: false)) else { return [:] }
+        try? FileManager.default.startDownloadingUbiquitousItem(at: source)
+        return try ArtistAliasesCodec.decode(coordinatedRead(source))
       },
       writeAliases: { aliases in
         try FileManager.default.createDirectory(
@@ -57,5 +60,19 @@ extension LibrarySnapshotStore {
           atPath: fileURL.path(percentEncoded: false))[.modificationDate] as? Date
       }
     )
+  }
+
+  private static func coordinatedRead(_ url: URL) throws -> Data {
+    let coordinator = NSFileCoordinator(filePresenter: nil)
+    var coordinationError: NSError?
+    var readError: Error?
+    var data: Data?
+    coordinator.coordinate(readingItemAt: url, options: [], error: &coordinationError) { target in
+      do { data = try Data(contentsOf: target) } catch { readError = error }
+    }
+    if let coordinationError { throw coordinationError }
+    if let readError { throw readError }
+    guard let data else { throw CocoaError(.fileReadUnknown) }
+    return data
   }
 }

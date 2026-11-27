@@ -15,5 +15,9 @@
 	<true/>
 	<key>StartInterval</key>
 	<integer>3600</integer>
+	<key>WatchPaths</key>
+	<array>
+		<string>/Users/jon/Library/Application Support/VinylFever/PlaylistInbox</string>
+	</array>
 </dict>
 </plist>

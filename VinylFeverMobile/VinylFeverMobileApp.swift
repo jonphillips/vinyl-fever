@@ -226,8 +226,6 @@ private struct PlaylistRow: View {
   let isFinished: Bool
   let creationStatusText: String?
 
-  private var isNotInMusicYet: Bool { creationStatusText != nil }
-
   private var title: String {
     guard let name = playlist.batch.playlist?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else {
       return "Staged playlist"

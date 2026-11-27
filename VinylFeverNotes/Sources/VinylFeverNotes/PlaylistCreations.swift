@@ -29,14 +29,15 @@ public struct PlaylistCreationEvent: Codable, Equatable, Sendable {
   public var musicID: String?
   public var songs: Int?
   public var skipped: [PlaylistCreationSkippedSong]?
+  public var error: String?
 
   public init(kind: PlaylistCreationKind, host: String, recordedAt: Date, playlist: String,
     at: Date, device: String? = nil, writerHost: String? = nil, musicID: String? = nil,
-    songs: Int? = nil, skipped: [PlaylistCreationSkippedSong]? = nil) {
+    songs: Int? = nil, skipped: [PlaylistCreationSkippedSong]? = nil, error: String? = nil) {
     format = "vf-playlist-creation"; version = 1; self.kind = kind
     self.host = host; self.recordedAt = recordedAt; self.playlist = playlist
     self.at = at; self.device = device; self.writerHost = writerHost
-    self.musicID = musicID; self.songs = songs; self.skipped = skipped
+    self.musicID = musicID; self.songs = songs; self.skipped = skipped; self.error = error
   }
 
   public var writerName: String { device ?? writerHost ?? "another device" }
@@ -47,9 +48,12 @@ public struct PlaylistCreationsReadResult: Equatable, Sendable {
   public var skippedLines: Int
   public var filesRead: Int
   public var unreadableFileCount: Int
-  public init(events: [PlaylistCreationEvent], skippedLines: Int, filesRead: Int, unreadableFileCount: Int = 0) {
+  public var unknownKindCount: Int
+  public init(events: [PlaylistCreationEvent], skippedLines: Int, filesRead: Int, unreadableFileCount: Int = 0,
+    unknownKindCount: Int = 0) {
     self.events = events; self.skippedLines = skippedLines; self.filesRead = filesRead
     self.unreadableFileCount = unreadableFileCount
+    self.unknownKindCount = unknownKindCount
   }
 }
 
@@ -89,12 +93,20 @@ public enum PlaylistCreationsCodec {
     }
     var events: [PlaylistCreationEvent] = []
     var skipped = 0
+    var unknownKinds = 0
     for data in files {
       let text = String(decoding: data, as: UTF8.self)
       let lines = text.split(separator: "\n", omittingEmptySubsequences: true)
       for line in lines {
         let bytes = Data(line.utf8)
         let header = (try? JSONSerialization.jsonObject(with: bytes)) as? [String: Any]
+        if header?["format"] as? String == "vf-playlist-creation",
+          header?["version"] as? Int == 1,
+          let rawKind = header?["kind"] as? String,
+          PlaylistCreationKind(rawValue: rawKind) == nil {
+          unknownKinds += 1
+          continue
+        }
         guard header?["format"] as? String == "vf-playlist-creation",
           header?["version"] as? Int == 1,
           let event = try? decoder.decode(PlaylistCreationEvent.self, from: bytes),
@@ -104,14 +116,19 @@ public enum PlaylistCreationsCodec {
       }
     }
     return PlaylistCreationsReadResult(events: events, skippedLines: skipped, filesRead: files.count,
-      unreadableFileCount: unreadableFileCount)
+      unreadableFileCount: unreadableFileCount, unknownKindCount: unknownKinds)
   }
 
   public static func latestEvents(_ events: [PlaylistCreationEvent]) -> [String: PlaylistCreationEvent] {
     var latest: [String: PlaylistCreationEvent] = [:]
     for event in events {
       let key = batchKey(host: event.host, recordedAt: event.recordedAt)
-      if latest[key].map({ $0.at > event.at }) != true { latest[key] = event }
+      guard let previous = latest[key] else { latest[key] = event; continue }
+      let previousIsTerminal = previous.kind == .created || previous.kind == .dismissed
+      let eventIsTerminal = event.kind == .created || event.kind == .dismissed
+      if eventIsTerminal && !previousIsTerminal || eventIsTerminal == previousIsTerminal && previous.at <= event.at {
+        latest[key] = event
+      }
     }
     return latest
   }
@@ -122,14 +139,13 @@ public enum PlaylistCreationsCodec {
     switch event.kind {
     case .created:
       return event.musicID != nil && event.songs != nil && event.skipped != nil
-        && event.songs! >= 0 && event.skipped!.allSatisfy { ["not-found", "skipped", "duplicate"].contains($0.reason) }
+        && event.error == nil && event.songs! >= 0 && event.skipped!.allSatisfy { ["not-found", "skipped", "duplicate"].contains($0.reason) }
     case .dismissed:
-      return event.musicID == nil && event.songs == nil && event.skipped == nil
+      return event.musicID == nil && event.songs == nil && event.skipped == nil && event.error == nil
     case .needsReview:
-      return event.musicID == nil && event.songs != nil && event.skipped != nil
-        && event.songs! >= 0 && event.skipped!.allSatisfy {
-          ["ambiguous", "not-found", "error"].contains($0.reason)
-        }
+      return event.musicID == nil && event.songs == nil
+        && (event.skipped?.isEmpty == false || event.error != nil)
+        && (event.skipped ?? []).allSatisfy { ["ambiguous", "not-found", "error"].contains($0.reason) }
     }
   }
 }

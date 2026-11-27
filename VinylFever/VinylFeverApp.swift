@@ -35,9 +35,8 @@ enum VinylFeverMain {
         listeningLogger.error("Listening poll could not write to iCloud: \(ListeningErrorDescription.describe(error), privacy: .public)")
         pollFailed = true
       }
-      if shouldRunDailyBackup(in: context) {
-        await Task.detached(priority: .utility) { runDailyBackup() }.value
-      }
+      await StagedPlaylistAutoCreator().processInbox()
+      await PlaylistReviewAlertSender().sendPendingAlerts()
       if pollFailed { exit(EXIT_FAILURE) }
       return
     }
@@ -205,6 +204,13 @@ private func prepareVinylFeverDependencies(includeDatabase: Bool, context: Depen
     $0.recentlyPlayedClient = .liveValue
     if installsLiveTasteClients(context) {
       $0.newMusicCatalogClient = .liveValue
+      $0.appleMusicCatalogClient = .liveValue
+      $0.catalogMatchResolver = .liveValue
+      $0.playlistCreationClient = .liveValue
+      $0.playlistInboxClient = .liveValue
+      $0.librarySnapshotStore = .liveValue
+      $0.stagedPlaylistRouteClient = .liveValue
+      $0.playlistAlertClient = .liveValue
       $0.tasteCurationClient = TasteCurationClient(append: { change, host, folder in
         try TasteCurationLog.append(change, host: host, folder: folder)
       })

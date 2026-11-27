@@ -9,7 +9,16 @@ public enum PlaylistArchive {
     creations: [PlaylistCreationEvent] = [],
     now: Date
   ) -> Set<String> {
-    let latest = PlaylistCreationsCodec.latestEvents(creations)
+    archivedPlaylistIDs(from: playlists, libraryPlaylistNames: libraryPlaylistNames,
+      creationEventsByBatch: PlaylistCreationsCodec.latestEvents(creations), now: now)
+  }
+
+  public static func archivedPlaylistIDs(
+    from playlists: [PlaylistShelfPlaylist],
+    libraryPlaylistNames: [String]?,
+    creationEventsByBatch latest: [String: PlaylistCreationEvent],
+    now: Date
+  ) -> Set<String> {
     var stagedCountsByName: [String: Int] = [:]
     for playlist in playlists {
       guard let name = playlist.batch.playlist,
@@ -29,7 +38,7 @@ public enum PlaylistArchive {
         case .created:
           guard let libraryPlaylistNames, !libraryPlaylistNames.contains(name) else { return nil }
           return playlist.id
-        case .needsReview: return nil
+        case .needsReview: break
         }
       }
       guard stagedCountsByName[name] == 1,

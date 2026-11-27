@@ -78,6 +78,7 @@ final class PlaylistBuilderModel {
   var stagedPlaylists: [StagedPlaylistSummary] = []
   private var openedStagedPlaylist: StagedPlaylistSummary?
   var createdElsewhere: [PlaylistCreationEvent] = []
+  private(set) var latestCreationEvents: [String: PlaylistCreationEvent] = [:]
   var creationLogError: String?
   var droppedTracks: [DroppedPlaylistTrack] = []
   var markerWarning: String?
@@ -247,10 +248,12 @@ final class PlaylistBuilderModel {
         creationLog = try playlistCreations.read()
         creationLogError = nil
       } catch {
+        latestCreationEvents = [:]
         creationLogError = "Couldn't check for playlists created on other devices: \(error.localizedDescription)"
         return
       }
       let latest = PlaylistCreationsCodec.latestEvents(creationLog.events)
+      latestCreationEvents = latest
       let localHost = ListeningStore.liveHostName()
       for item in items {
         guard let host = item.batchHost, let recordedAt = item.recordedAt,
@@ -267,6 +270,15 @@ final class PlaylistBuilderModel {
       stagedPlaylists = try playlistInbox.list()
     }
     catch { operationError = error.localizedDescription }
+  }
+
+  func creationStatusText(for item: StagedPlaylistSummary) -> String? {
+    guard let host = item.batchHost, let recordedAt = item.recordedAt else { return nil }
+    let key = PlaylistCreationsCodec.batchKey(host: host, recordedAt: recordedAt)
+    guard let event = latestCreationEvents[key], event.kind == .needsReview else { return nil }
+    if let error = event.error, event.skipped?.isEmpty != false { return "Apple Music error · \(error)" }
+    let count = event.skipped?.count ?? 0
+    return count == 1 ? "Needs you · 1 song needs you" : "Needs you · \(count) songs need you"
   }
 
   func openStagedPlaylist(_ summary: StagedPlaylistSummary) async {

@@ -99,6 +99,9 @@ struct PlaylistsView: View {
                   Text(item.name)
                   Text("\(item.trackCount) tracks · \(item.handoff.stagedAt.formatted(.relative(presentation: .numeric)))")
                     .font(.caption).foregroundStyle(.secondary)
+                  if let status = model.creationStatusText(for: item) {
+                    Text(status).font(.caption).foregroundStyle(.secondary)
+                  }
                 }
               }
               .buttonStyle(.plain)
