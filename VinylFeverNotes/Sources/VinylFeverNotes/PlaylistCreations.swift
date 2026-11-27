@@ -3,6 +3,7 @@ import Foundation
 public enum PlaylistCreationKind: String, Codable, Sendable {
   case created
   case dismissed
+  case needsReview = "needs-review"
 }
 
 public struct PlaylistCreationSkippedSong: Codable, Equatable, Sendable {
@@ -124,6 +125,11 @@ public enum PlaylistCreationsCodec {
         && event.songs! >= 0 && event.skipped!.allSatisfy { ["not-found", "skipped", "duplicate"].contains($0.reason) }
     case .dismissed:
       return event.musicID == nil && event.songs == nil && event.skipped == nil
+    case .needsReview:
+      return event.musicID == nil && event.songs != nil && event.skipped != nil
+        && event.songs! >= 0 && event.skipped!.allSatisfy {
+          ["ambiguous", "not-found", "error"].contains($0.reason)
+        }
     }
   }
 }

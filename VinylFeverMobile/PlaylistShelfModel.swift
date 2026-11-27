@@ -119,6 +119,15 @@ final class PlaylistShelfModel {
     return PlaylistCreationsCodec.latestEvents(creationEvents)[key]?.kind != .created
   }
 
+  func creationStatusText(for playlist: PlaylistShelfPlaylist) -> String? {
+    let key = PlaylistCreationsCodec.batchKey(host: playlist.batch.host, recordedAt: playlist.batch.recordedAt)
+    if let event = PlaylistCreationsCodec.latestEvents(creationEvents)[key], event.kind == .needsReview {
+      let count = event.skipped?.count ?? 0
+      return count == 1 ? "Needs you · 1 song needs you" : "Needs you · \(count) songs need you"
+    }
+    return isNotInMusicYet(playlist) ? "Not in Music yet" : nil
+  }
+
   func selectSegment(_ segment: PlaylistShelfSegment) {
     let playlistIDs = Set(playlists(in: segment).map(\.id))
     selectedSegment = segment

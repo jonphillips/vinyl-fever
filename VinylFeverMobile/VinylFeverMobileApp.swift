@@ -93,7 +93,7 @@ private struct PlaylistHomeView: View {
             NavigationLink(value: playlist.id) {
               PlaylistRow(playlist: playlist, progress: progressModel.results[playlist.id],
                 isFinished: reviewsModel.finishedEntries[playlist.id] != nil,
-                isNotInMusicYet: model.isNotInMusicYet(playlist))
+                creationStatusText: model.creationStatusText(for: playlist))
             }
             .tag(playlist.id)
           }
@@ -122,7 +122,7 @@ private struct PlaylistHomeView: View {
               progressModel.hasUnreadableListeningLog || reviewsModel.hasUnreadableFiles,
             playbackModel: playbackModel, keepModel: keepModel, notesModel: notesModel,
             progressModel: progressModel, reviewsModel: reviewsModel, createModel: createModel,
-            isNotInMusicYet: model.isNotInMusicYet(playlist)) {
+            creationStatusText: model.creationStatusText(for: playlist)) {
             await model.refresh()
             await notesModel.refresh()
             await progressModel.refresh(model.playlists, libraryPlaylists: model.libraryPlaylists)
@@ -224,7 +224,9 @@ private struct PlaylistRow: View {
   let playlist: PlaylistShelfPlaylist
   let progress: PlaylistProgressResult?
   let isFinished: Bool
-  let isNotInMusicYet: Bool
+  let creationStatusText: String?
+
+  private var isNotInMusicYet: Bool { creationStatusText != nil }
 
   private var title: String {
     guard let name = playlist.batch.playlist?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else {
@@ -241,7 +243,7 @@ private struct PlaylistRow: View {
           .font(.caption)
           .foregroundStyle(.secondary)
       }
-      Text("\(playlist.stagedDate) · \(playlist.songCount) songs · \(playlist.newSongCount) new\(isNotInMusicYet ? " · Not in Music yet" : "")")
+      Text("\(playlist.stagedDate) · \(playlist.songCount) songs · \(playlist.newSongCount) new\(creationStatusText.map { " · " + $0 } ?? "")")
         .font(.caption)
         .foregroundStyle(.secondary)
         .lineLimit(2)
@@ -328,8 +330,10 @@ private struct PlaylistDetailView: View {
   let progressModel: PlaylistProgressModel
   let reviewsModel: PlaylistReviewsModel
   @Bindable var createModel: PlaylistCreateModel
-  let isNotInMusicYet: Bool
+  let creationStatusText: String?
   let refresh: () async -> Void
+
+  private var isNotInMusicYet: Bool { creationStatusText != nil }
 
   private var title: String {
     guard let name = playlist.batch.playlist?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else {
@@ -386,7 +390,7 @@ private struct PlaylistDetailView: View {
           }
           Text("\(playlist.stagedDate) · \(playlist.songCount) songs · \(playlist.newSongCount) new to you")
             .foregroundStyle(.secondary)
-          if isNotInMusicYet { Text("Not in Music yet").font(.callout).foregroundStyle(.secondary) }
+          if let creationStatusText { Text(creationStatusText).font(.callout).foregroundStyle(.secondary) }
           if let archiveStatus {
             Text(archiveStatus)
               .font(.callout)

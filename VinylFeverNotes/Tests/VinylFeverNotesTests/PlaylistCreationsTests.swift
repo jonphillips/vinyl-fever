@@ -27,6 +27,20 @@ struct PlaylistCreationsTests {
     #expect(read.skippedLines == 1)
   }
 
+  @Test func needsReviewIsReadableAndUnknownKindsDoNotHideLaterEvents() throws {
+    let at = Date(timeIntervalSince1970: 1_800_000_000)
+    let review = PlaylistCreationEvent(kind: .needsReview, host: "stage-host", recordedAt: at,
+      playlist: "Power Pop", at: at, writerHost: "Mac", songs: 1,
+      skipped: [PlaylistCreationSkippedSong(title: "Unreleased Song", artist: "Band", reason: "not-found")])
+    var bytes = Data(#"{"format":"vf-playlist-creation","version":1,"kind":"future-kind"}"#.utf8)
+    bytes.append(0x0A)
+    bytes.append(try PlaylistCreationsCodec.encode(review))
+
+    let read = PlaylistCreationsCodec.readFiles([bytes])
+    #expect(read.skippedLines == 1)
+    #expect(read.events == [review])
+  }
+
   @Test func batchPairingUsesTheLedgerSecond() {
     let first = Date(timeIntervalSince1970: 1_800_000_000.1)
     let second = Date(timeIntervalSince1970: 1_800_000_000.9)

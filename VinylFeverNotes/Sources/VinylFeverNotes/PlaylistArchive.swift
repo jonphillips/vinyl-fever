@@ -29,6 +29,7 @@ public enum PlaylistArchive {
         case .created:
           guard let libraryPlaylistNames, !libraryPlaylistNames.contains(name) else { return nil }
           return playlist.id
+        case .needsReview: return nil
         }
       }
       guard stagedCountsByName[name] == 1,
