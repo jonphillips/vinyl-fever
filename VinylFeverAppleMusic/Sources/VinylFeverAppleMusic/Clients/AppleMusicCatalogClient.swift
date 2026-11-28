@@ -13,6 +13,7 @@ public struct AppleMusicCatalogClient: Sendable {
   public var requestAuthorization: @Sendable () async -> MusicKitAuthorization = { .notDetermined }
   public var subscriptionStatus: @Sendable () async throws -> AppleMusicSubscriptionStatus
   public var searchSongs: @Sendable (_ term: String, _ limit: Int) async throws -> [CatalogSongCandidate]
+  public var libraryPlaylistNames: @Sendable () async throws -> [String]
   public var searchLibraryAlbums: @Sendable (_ term: String) async throws -> [LibraryAlbumCandidate]
   public var libraryAlbumTracks: @Sendable (_ albumID: String) async throws -> [LibrarySongCandidate]
   public var searchLibrarySongs: @Sendable (_ term: String, _ offset: Int) async throws -> [LibrarySongCandidate]

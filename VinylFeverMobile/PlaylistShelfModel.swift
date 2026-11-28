@@ -68,6 +68,7 @@ final class PlaylistShelfModel {
 
   private var didLoadCache = false
   private var shelfCache = MobileShelfCache.empty
+  private var latestCreationEvents: [String: PlaylistCreationEvent] = [:]
 
   private var libraryPlaylistNames: [String]? {
     guard let libraryPlaylists else { return nil }
@@ -76,7 +77,7 @@ final class PlaylistShelfModel {
 
   private var archivedPlaylistIDs: Set<String> {
     PlaylistArchive.archivedPlaylistIDs(from: playlists, libraryPlaylistNames: libraryPlaylistNames,
-      creations: creationEvents, now: now)
+      creationEventsByBatch: latestCreationEvents, now: now)
   }
 
   var displayedPlaylists: [PlaylistShelfPlaylist] {
@@ -116,7 +117,16 @@ final class PlaylistShelfModel {
       !libraryPlaylistNames.contains(name)
     else { return false }
     let key = PlaylistCreationsCodec.batchKey(host: playlist.batch.host, recordedAt: playlist.batch.recordedAt)
-    return PlaylistCreationsCodec.latestEvents(creationEvents)[key]?.kind != .created
+    return latestCreationEvents[key]?.kind != .created
+  }
+
+  func creationStatusText(for playlist: PlaylistShelfPlaylist) -> String? {
+    guard isNotInMusicYet(playlist) else { return nil }
+    let key = PlaylistCreationsCodec.batchKey(host: playlist.batch.host, recordedAt: playlist.batch.recordedAt)
+    guard let event = latestCreationEvents[key], event.kind == .needsReview else { return "Not in Music yet" }
+    if event.error != nil, event.skipped?.isEmpty != false { return "Needs you · Apple Music error" }
+    let count = event.skipped?.count ?? 0
+    return count == 1 ? "Needs you · 1 song needs you" : "Needs you · \(count) songs need you"
   }
 
   func selectSegment(_ segment: PlaylistShelfSegment) {
@@ -146,6 +156,7 @@ final class PlaylistShelfModel {
         now: now, calendar: .current, timeZone: .current
       )
       creationEvents = merged.creationEvents
+      latestCreationEvents = PlaylistCreationsCodec.latestEvents(merged.creationEvents)
       if let database {
         do {
           try ShelfCache.writeShelf(merged, to: database)
@@ -196,6 +207,7 @@ final class PlaylistShelfModel {
         now: now, calendar: .current, timeZone: .current
       )
       creationEvents = cache.creationEvents
+      latestCreationEvents = PlaylistCreationsCodec.latestEvents(cache.creationEvents)
       libraryPlaylists = keepClient.isAuthorized() ? cache.libraryPlaylists : nil
     } catch {
       NSLog("Vinyl Fever mobile shelf cache could not be loaded: %@", error.localizedDescription)

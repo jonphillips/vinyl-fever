@@ -46,6 +46,12 @@ public extension AppleMusicCatalogClient {
           )
         }
       },
+      libraryPlaylistNames: {
+        var request = MusicLibraryRequest<MusicKit.Playlist>()
+        request.limit = 1_000
+        let response = try await request.response()
+        return response.items.map(\.name)
+      },
       searchLibraryAlbums: { term in
         var offset = 0
         var albums: [LibraryAlbumCandidate] = []

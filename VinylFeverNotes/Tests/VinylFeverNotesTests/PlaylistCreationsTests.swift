@@ -27,6 +27,38 @@ struct PlaylistCreationsTests {
     #expect(read.skippedLines == 1)
   }
 
+  @Test func needsReviewIsReadableAndUnknownKindsDoNotHideLaterEvents() throws {
+    let at = Date(timeIntervalSince1970: 1_800_000_000)
+    let review = PlaylistCreationEvent(kind: .needsReview, host: "stage-host", recordedAt: at,
+      playlist: "Power Pop", at: at, writerHost: "Mac",
+      skipped: [PlaylistCreationSkippedSong(title: "Unreleased Song", artist: "Band", reason: "not-found")])
+    var bytes = Data(#"{"at":"2027-01-15T08:00:00.000Z","format":"vf-playlist-creation","host":"stage-host","kind":"future-kind","playlist":"Power Pop","recordedAt":"2027-01-15T08:00:00.000Z","version":1,"writerHost":"Mac"}"#.utf8)
+    bytes.append(0x0A)
+    bytes.append(try PlaylistCreationsCodec.encode(review))
+
+    let read = PlaylistCreationsCodec.readFiles([bytes])
+    #expect(read.skippedLines == 0)
+    #expect(read.unknownKindCount == 1)
+    #expect(read.events == [review])
+  }
+
+  @Test func terminalEventsOutrankLaterNeedsReviewAndReviewCanExpireIntoArchive() {
+    let at = Date(timeIntervalSince1970: 1_800_000_000)
+    let created = PlaylistCreationEvent(kind: .created, host: "Mac", recordedAt: at,
+      playlist: "Power Pop", at: at, writerHost: "Mac", musicID: "p.1", songs: 1, skipped: [])
+    let laterReview = PlaylistCreationEvent(kind: .needsReview, host: "Mac", recordedAt: at,
+      playlist: "Power Pop", at: at.addingTimeInterval(5), writerHost: "Mac",
+      skipped: [PlaylistCreationSkippedSong(title: "Song", artist: "Band", reason: "not-found")])
+    #expect(PlaylistCreationsCodec.latestEvents([created, laterReview])[
+      PlaylistCreationsCodec.batchKey(host: "Mac", recordedAt: at)] == created)
+
+    let batch = RecommendationBatch(recordedAt: at, host: "Mac", playlist: "Power Pop", tracks: [])
+    let playlists = PlaylistShelf.make(from: RecommendationLedgerReadResult(batches: [batch], skippedLines: 0),
+      now: at.addingTimeInterval(PlaylistArchive.gracePeriod + 1), calendar: .current, timeZone: .current)
+    #expect(PlaylistArchive.archivedPlaylistIDs(from: playlists, libraryPlaylistNames: [],
+      creations: [laterReview], now: at.addingTimeInterval(PlaylistArchive.gracePeriod + 1)).contains(playlists[0].id))
+  }
+
   @Test func batchPairingUsesTheLedgerSecond() {
     let first = Date(timeIntervalSince1970: 1_800_000_000.1)
     let second = Date(timeIntervalSince1970: 1_800_000_000.9)

@@ -34,6 +34,78 @@ struct PlaylistShelfModelTests {
   }
 
   @Test @MainActor
+  func needsReviewShowsTheUnresolvedSongCount() async {
+    let at = Date(timeIntervalSince1970: 1_800_000_000)
+    let batch = RecommendationBatch(recordedAt: at, host: "Test", playlist: "Power Pop", tracks: [])
+    let event = PlaylistCreationEvent(kind: .needsReview, host: "Test", recordedAt: at,
+      playlist: "Power Pop", at: at, writerHost: "Mac", songs: 1,
+      skipped: [PlaylistCreationSkippedSong(title: "Song", artist: "Band", reason: "not-found")])
+    let model = await withDependencies({ dependencies in
+      dependencies.date.now = at
+      dependencies.keepLibraryClient.isAuthorized = { true }
+      dependencies.keepLibraryClient.libraryPlaylists = { [] }
+      dependencies.playlistShelfClient.read = {
+        RecommendationLedgerFolderRead(
+          ledger: RecommendationLedgerReadResult(batches: [batch], skippedLines: 0),
+          creations: PlaylistCreationsReadResult(events: [event], skippedLines: 0, filesRead: 1),
+          filesRead: 1, unreadableFileCount: 0, totalFileCount: 1)
+      }
+    }) {
+      let model = PlaylistShelfModel()
+      await model.refresh()
+      return model
+    }
+
+    #expect(model.creationStatusText(for: model.playlists[0]) == "Needs you · 1 song needs you")
+    #expect(model.isNotInMusicYet(model.playlists[0]))
+  }
+
+  @Test @MainActor
+  func needsReviewWithoutSongFailuresShowsAppleMusicError() async {
+    let at = Date(timeIntervalSince1970: 1_800_000_000)
+    let batch = RecommendationBatch(recordedAt: at, host: "Test", playlist: "Power Pop", tracks: [])
+    let event = PlaylistCreationEvent(kind: .needsReview, host: "Test", recordedAt: at,
+      playlist: "Power Pop", at: at, writerHost: "Mac", error: "Apple Music is unavailable.")
+    let model = await withDependencies({ dependencies in
+      dependencies.date.now = at
+      dependencies.keepLibraryClient.isAuthorized = { true }
+      dependencies.keepLibraryClient.libraryPlaylists = { [] }
+      dependencies.playlistShelfClient.read = {
+        RecommendationLedgerFolderRead(
+          ledger: RecommendationLedgerReadResult(batches: [batch], skippedLines: 0),
+          creations: PlaylistCreationsReadResult(events: [event], skippedLines: 0, filesRead: 1),
+          filesRead: 1, unreadableFileCount: 0, totalFileCount: 1)
+      }
+    }) {
+      let model = PlaylistShelfModel()
+      await model.refresh()
+      return model
+    }
+
+    #expect(model.creationStatusText(for: model.playlists[0]) == "Needs you · Apple Music error")
+  }
+
+  @Test @MainActor
+  func unknownCreationKindsDoNotLookLikeUnreadableICloudFiles() async {
+    let model = await withDependencies({ dependencies in
+      dependencies.date.now = Date(timeIntervalSince1970: 0)
+      dependencies.keepLibraryClient.isAuthorized = { false }
+      dependencies.playlistShelfClient.read = {
+        RecommendationLedgerFolderRead(
+          ledger: RecommendationLedgerReadResult(batches: [], skippedLines: 0),
+          creations: PlaylistCreationsReadResult(events: [], skippedLines: 0, filesRead: 1, unknownKindCount: 1),
+          filesRead: 1, unreadableFileCount: 0, totalFileCount: 0)
+      }
+    }) {
+      let model = PlaylistShelfModel()
+      await model.refresh()
+      return model
+    }
+
+    #expect(!model.hasUnreadableFiles)
+  }
+
+  @Test @MainActor
   func unreadableCreationLogIsSurfaced() async {
     let model = await withDependencies({ dependencies in
       dependencies.date.now = Date(timeIntervalSince1970: 0)

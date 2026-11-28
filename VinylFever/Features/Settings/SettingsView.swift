@@ -19,6 +19,7 @@ struct SettingsView: View {
   @State private var copiedMCPConfig: String?
   @State private var librarySnapshotStatus = "Checking…"
   @State private var listeningModel = ListeningPollingSettingsModel()
+  @AppStorage("playlist-alert-phone-number") private var playlistAlertPhoneNumber = ""
   @State private var isShowingArtistAliases = false
   @State private var isShowingPlaylistRoles = false
   @State private var playlistRolesInitialFilter = "all"
@@ -76,6 +77,16 @@ struct SettingsView: View {
               }
             }
           ))
+          TextField("Phone number for alerts", text: $playlistAlertPhoneNumber)
+            .textFieldStyle(.roundedBorder)
+          Button("Send test message") {
+            Task { await listeningModel.sendTestMessage(to: playlistAlertPhoneNumber) }
+          }
+          .disabled(playlistAlertPhoneNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || listeningModel.isSendingTestMessage)
+          if let alertStatus = listeningModel.alertStatusMessage {
+            Text(alertStatus).font(.callout).foregroundStyle(.secondary)
+          }
           LabeledContent("Poller", value: listeningModel.leaseLabel)
           if let idleMessage = listeningModel.idleAgentMessage {
             Text(idleMessage).foregroundStyle(.secondary)
@@ -96,6 +107,8 @@ struct SettingsView: View {
           Text("Listening History")
         } footer: {
           Text("Listening history begins when polling is set up. A play means a song started; skips and brief autoplay count.")
+          Text("Playlist alerts use Messages and store the phone number on this Mac only.")
+            .foregroundStyle(.secondary)
         }
 
         Section("Frontier Model") {
@@ -443,6 +456,7 @@ final class ListeningPollingSettingsModel {
   @ObservationIgnored @Dependency(\.listeningAgentClient) private var agent
   @ObservationIgnored @Dependency(\.date) private var date
   @ObservationIgnored @Dependency(\.continuousClock) private var clock
+  @ObservationIgnored @Dependency(\.playlistAlertClient) private var alerts
   private var pendingTakeoverPoller: UUID?
   private var leaseHost: String?
 
@@ -450,6 +464,8 @@ final class ListeningPollingSettingsModel {
   private(set) var holdsLease = false
   private(set) var leaseExists = false
   private(set) var errorMessage: String?
+  private(set) var alertStatusMessage: String?
+  private(set) var isSendingTestMessage = false
   var isConfirmingTakeover = false
 
   init() {}
@@ -563,6 +579,19 @@ final class ListeningPollingSettingsModel {
     }
   }
 
+  func sendTestMessage(to phoneNumber: String) async {
+    let handle = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !handle.isEmpty, !isSendingTestMessage else { return }
+    isSendingTestMessage = true
+    defer { isSendingTestMessage = false }
+    do {
+      try await alerts.send(handle, "Vinyl Fever test message. Playlist alerts are working.")
+      alertStatusMessage = "Test message sent."
+    } catch {
+      alertStatusMessage = "Messages couldn't send the test: \(error.localizedDescription)"
+    }
+  }
+
   private func activate() async throws {
     try registerAgentIfNeeded()
     errorMessage = nil
@@ -570,7 +599,13 @@ final class ListeningPollingSettingsModel {
   }
 
   private func registerAgentIfNeeded() throws {
-    if !agent.isEnabled() { try agent.register() }
+    guard !agent.isEnabled() else { return }
+    let applicationSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    let playlistInbox = applicationSupport.appending(
+      path: "VinylFever/PlaylistInbox", directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(at: playlistInbox, withIntermediateDirectories: true)
+    try agent.register()
   }
 }
 
