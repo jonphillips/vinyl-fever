@@ -1713,6 +1713,7 @@ struct PlaylistBuilderModelTests {
       canPlayCatalogContent: true, hasCloudLibraryEnabled: true),
     search: @escaping @Sendable (String, Int) async throws -> [CatalogSongCandidate] = { _, _ in []
     },
+    libraryPlaylistNames: @escaping @Sendable () async throws -> [String] = { [] },
     libraryAlbums: @escaping @Sendable (String) async throws -> [LibraryAlbumCandidate] = { _ in [] },
     albumTracks: @escaping @Sendable (String) async throws -> [LibrarySongCandidate] = { _ in [] },
     create: @escaping @Sendable (String, String?, [PlaylistSongReference]) async throws -> CreatedPlaylistRef = {
@@ -1726,6 +1727,7 @@ struct PlaylistBuilderModelTests {
       requestAuthorization: { authorization },
       subscriptionStatus: { subscription },
       searchSongs: search,
+      libraryPlaylistNames: libraryPlaylistNames,
       searchLibraryAlbums: libraryAlbums,
       libraryAlbumTracks: albumTracks,
       searchLibrarySongs: { _, _ in [] },

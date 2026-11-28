@@ -158,6 +158,8 @@ Apple-silicon Mac. A new Mac mini needs Vinyl Fever, not the separate poller app
 6. In **Settings → Listening History**, turn on **Poll listening on this Mac**. If another Mac
    holds the lease, confirm the takeover. If macOS asks, allow Vinyl Fever in System Settings →
    General → **Login Items**.
+   The LaunchAgent's `WatchPaths` inbox path is set for Jon's account; update it in
+   `VinylFeverListeningAgent.plist` before installing under a different macOS username.
 7. On any Mac, confirm a `baseline` record in iCloud Drive → Vinyl Fever → Listening →
    `fetches/<poller-id>/`. The next hourly fetches should be `none` or `plays`.
 8. Turn off polling on the previous Mac. The lease already moved, so its runs write nothing, but
