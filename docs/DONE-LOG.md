@@ -1,5 +1,11 @@
 # Done log
 
+## 2026-11-27 — Staged playlists create themselves, with an alert when one can't (`m25/s1-staged-playlists`, #214)
+
+- **Result:** Vinyl Fever's windowless --poll-listening run on the mini now creates each staged playlist whose songs all match, and writes a needs-review line when a song is ambiguous or not found, when Apple Music fails, or when a playlist with that name is already in Music. created and dismissed lines outrank needs-review, and a needs-review playlist archives after the usual 14 days. The phone and the Mac inbox show Needs you, with the count or the reason. The run sends one iMessage per needs-review line to the number set in Settings → Listening History, which also has Send test message. The daily backup still runs from the same path, and WatchPaths on the inbox starts a run within a minute of staging.
+- **Verification:** VinylFeverCore 348 tests (339 on main after the test fix in #216, plus 9 for auto-create and alerts); VinylFeverNotes 76; VinylFeverListening 51; VinylFever macOS 105; VinylFeverMobile on the iPhone 18 Pro simulator 96; VinylFeverAppleMusicLive build.
+- **Owed:** M25 S1, M25 S2's device gate, in [device-passes.md](device-passes.md).
+
 ## 2026-11-21 — Album titles fill show date, venue, and location (`effort/album-title-fills-show-fields`)
 
 - **Result:** Setlist parsing and the Live Shows Album editor now fill unknown show fields from well-formed live-show album titles while preserving explicit fields. The plan continues to compose its album from the resulting date, venue, location, and source.
