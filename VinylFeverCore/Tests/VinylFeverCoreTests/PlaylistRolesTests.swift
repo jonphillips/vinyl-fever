@@ -71,12 +71,10 @@ struct PlaylistRolesTests {
     #expect(repeated.roles == result.roles)
   }
 
-  @Test("playlist roles codec rejects unknown values with the role name")
+  @Test("playlist roles codec preserves unknown values while keeping known roles readable")
   func unknownRole() throws {
     let data = Data(#"{"format":"vf-playlist-roles","version":1,"updatedAt":"2026-10-23T00:00:00Z","playlists":[{"persistentID":"x","name":"X","role":"mystery"}]}"#.utf8)
-    #expect(throws: PlaylistRolesError.unknownRole("mystery")) {
-      try PlaylistRolesCodec.decode(data)
-    }
+    #expect(try PlaylistRolesCodec.decode(data).playlists.first?.role.rawValue == "mystery")
   }
 
   @Test("pending role dates round-trip and older files decode without them")

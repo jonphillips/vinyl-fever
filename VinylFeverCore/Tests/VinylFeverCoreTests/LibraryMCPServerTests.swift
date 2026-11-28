@@ -101,6 +101,7 @@ struct LibraryMCPServerTests {
     #expect(enumValues(in: tools, tool: "top_artists", property: "by") == ["plays", "favorites", "recently_added"])
     #expect(enumValues(in: tools, tool: "top_tracks", property: "by") == ["plays", "favorites", "recently_added", "recently_played"])
     #expect(enumValues(in: tools, tool: "recent_listening", property: "period") == ["24h", "7d", "30d", "90d"])
+    #expect(enumValues(in: tools, tool: "list_playlists", property: "role").contains("tracked"))
     #expect(enumValues(in: tools, tool: "top_artists", property: "period") == ["all_time", "7d", "30d", "90d"])
     let stage = try #require(tools.first { $0["name"] as? String == "stage_playlist" })
     let reviewsTool = try #require(tools.first { $0["name"] as? String == "playlist_reviews" })

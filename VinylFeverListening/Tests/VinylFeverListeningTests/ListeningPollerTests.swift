@@ -2,6 +2,7 @@ import Dependencies
 import Foundation
 import Testing
 import VinylFeverListening
+import VinylFeverNotes
 
 @Suite("Listening poller")
 struct ListeningPollerTests {
@@ -72,6 +73,62 @@ struct ListeningPollerTests {
     let records = try store.readNewMusicExposure()
     #expect(records.compactMap(\.lastModifiedDate).count == 1)
     #expect(records.compactMap(\.lastModifiedDate).first == modified)
+  }
+
+  @Test("tracked playlists are saved once a day, only when changed, with gaps for the rest")
+  func trackedPlaylistsSavedDaily() async throws {
+    let folders = try TemporaryListeningFolders()
+    defer { folders.remove() }
+    let taste = folders.root.appendingPathComponent("Taste Intelligence", isDirectory: true)
+    try FileManager.default.createDirectory(at: taste, withIntermediateDirectories: true)
+    try Data(#"{"format":"vf-playlist-roles","version":1,"updatedAt":"2026-11-27T00:00:00Z","playlists":[{"persistentID":"a","name":"Antidote","role":"tracked"},{"persistentID":"b","name":"Gone","role":"tracked"},{"persistentID":"c","name":"Heavy Rotation","role":"apple-mix"}]}"#.utf8)
+      .write(to: taste.appendingPathComponent("playlist-roles.json"))
+    let store = ListeningStore.live(iCloudFolder: folders.cloud, localFolder: folders.local, hostName: { "Test mini" })
+    let calls = ExposureCallCount()
+    let start = date("2026-11-27T10:00:00Z")
+    let tracked: @Sendable (Date) -> @Sendable ([PlaylistRoleEntry], String, Date) async -> [TrackedPlaylistCatalogResult] = { modified in
+      { playlists, host, fetchedAt in
+        _ = await calls.next()
+        #expect(playlists.map(\.name) == ["Antidote", "Gone"])
+        return [
+          .snapshot(TrackedPlaylistSnapshot(name: "Antidote", catalogID: "pl.antidote", lastModifiedDate: modified,
+            fetchedAt: fetchedAt, host: host, tracks: [TrackedPlaylistTrack(catalogID: "1", title: "Song", artist: "Band")])),
+          .gap(TrackedPlaylistGap(name: "Gone", fetchedAt: fetchedAt, host: host, detail: "not found")),
+        ]
+      }
+    }
+    let first = date("2026-11-26T00:00:00Z"), second = date("2026-11-28T00:00:00Z")
+    let empty: @Sendable (Int) async throws -> RecentlyPlayedPage = { _ in RecentlyPlayedPage(items: [], hasNext: false) }
+    _ = try await poll(store: store, now: start, tracked: tracked(first), page: empty)
+    _ = try await poll(store: store, now: start.addingTimeInterval(2 * 3_600), tracked: tracked(first), page: empty)
+    _ = try await poll(store: store, now: start.addingTimeInterval(25 * 3_600), tracked: tracked(first), page: empty)
+    _ = try await poll(store: store, now: start.addingTimeInterval(50 * 3_600), tracked: tracked(second), page: empty)
+    #expect(await calls.value == 3)
+
+    let log = taste.appendingPathComponent("tracked/Test_mini.jsonl")
+    let records = TrackedPlaylistExposureCodec.readFiles([try Data(contentsOf: log)])
+    let snapshots = records.compactMap { record -> TrackedPlaylistSnapshot? in
+      if case let .snapshot(value) = record { value } else { nil }
+    }
+    #expect(snapshots.map(\.lastModifiedDate) == [first, second])
+    #expect(records.count(where: { if case .gap = $0 { true } else { false } }) == 3)
+  }
+
+  @Test("a Mac without the lease saves no tracked playlists")
+  func trackedPlaylistsNeedTheLease() async throws {
+    let calls = ExposureCallCount()
+    let store = ListeningStore(
+      pollerID: { UUID(uuidString: "00000000-0000-0000-0000-000000000001")! },
+      readLease: { ListeningLease(poller: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!, host: "Other", takenAt: Date()) },
+      writeLease: { _ in }, readLastList: { nil }, writeLastList: { _ in },
+      appendFetch: { _ in }, listeningFolder: { URL(fileURLWithPath: "/tmp/Listening") },
+      readTrackedPlaylistRoles: { [PlaylistRoleEntry(persistentID: "a", name: "Antidote", role: .tracked)] },
+      hostName: { "Test Mac" })
+    let result = try await poll(store: store, now: date("2026-11-27T10:00:00Z"), tracked: { _, _, _ in
+      _ = await calls.next(); return []
+    }) { _ in RecentlyPlayedPage(items: [], hasNext: false) }
+    #expect(result == .skipped)
+    #expect(await calls.value == 0)
   }
 
   @Test("unreadable exposure log skips fetch and records a gap")
@@ -589,6 +646,7 @@ struct ListeningPollerTests {
     now: Date,
     authorization: ListeningAuthorizationStatus = .authorized,
     exposure: @escaping @Sendable () async throws -> NewMusicCatalogWeek = { throw NewMusicExposureError.notConfigured },
+    tracked: @escaping @Sendable ([PlaylistRoleEntry], String, Date) async -> [TrackedPlaylistCatalogResult] = { _, _, _ in [] },
     page: @escaping @Sendable (Int) async throws -> RecentlyPlayedPage
   ) async throws -> ListeningPollResult {
     try await withDependencies {
@@ -596,6 +654,7 @@ struct ListeningPollerTests {
       $0.listeningAuthorizationClient = ListeningAuthorizationClient(status: { authorization })
       $0.recentlyPlayedClient.page = page
       $0.newMusicCatalogClient.fetch = exposure
+      $0.trackedPlaylistCatalogClient.fetch = tracked
       $0.date = .constant(now)
     } operation: {
       try await ListeningPoller().pollOnce()
