@@ -11,7 +11,7 @@ struct LibraryMCPServerTests {
     let snapshotURL = root.appending(path: "snapshot.json")
     try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
     let stamp = ConnectorBuildStamp(build: "c8fa5db", dirty: false, builtAt: "2026-10-26T13:00:00Z")
-    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), buildStamp: stamp)
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), listeningRootURL: root.appending(path: "Listening"), tasteRootURL: root.appending(path: "Taste Intelligence"), buildStamp: stamp)
 
     let response = try #require(await resultJSON(server, id: 65, name: "library_overview", arguments: "{}") as? [String: Any])
     let connector = try #require(response["connector"] as? [String: Any])
@@ -31,7 +31,7 @@ struct LibraryMCPServerTests {
     let root = temporaryDirectory()
     let snapshotURL = root.appending(path: "snapshot.json")
     try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
-    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), buildStamp: .unknown)
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), listeningRootURL: root.appending(path: "Listening"), tasteRootURL: root.appending(path: "Taste Intelligence"), buildStamp: .unknown)
 
     let response = try #require(await resultJSON(server, id: 66, name: "library_overview", arguments: "{}") as? [String: Any])
     let connector = try #require(response["connector"] as? [String: Any])
@@ -41,7 +41,7 @@ struct LibraryMCPServerTests {
 
   @Test("tool list matches the brief's names, properties, enums, and annotations")
   func toolsList() async throws {
-    let server = LibraryMCPServer.make(snapshotURL: temporaryDirectory().appending(path: "missing.json"), inboxRoot: temporaryDirectory())
+    let server = LibraryMCPServer.make(snapshotURL: temporaryDirectory().appending(path: "missing.json"), inboxRoot: temporaryDirectory(), listeningRootURL: temporaryDirectory().appending(path: "Listening"), tasteRootURL: temporaryDirectory().appending(path: "Taste Intelligence"))
     let tools = try await listedTools(server)
     let expected: [String: Set<String>] = [
       "library_overview": [],
@@ -235,7 +235,7 @@ struct LibraryMCPServerTests {
     let snapshotURL = root.appending(path: "snapshot.json")
     try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
     let instant = Date(timeIntervalSince1970: 1_800_000_000)
-    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"),
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), listeningRootURL: root.appending(path: "Listening"),
       tasteRootURL: tasteRoot, hostName: { "Test Mac" }, now: { instant })
     let original = "The melody opens up in the chorus — keep that lift."
     let recorded = try #require(await resultJSON(server, id: 60, name: "record_taste_note",
@@ -281,7 +281,7 @@ struct LibraryMCPServerTests {
       source: "now-playing", title: "Song", artist: "Artist", catalogID: "i.song"
     )
     try TasteNotesCodec.appendFeedbackNote(feedback, device: "iPad", folder: tasteRoot)
-    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), tasteRootURL: tasteRoot)
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), listeningRootURL: root.appending(path: "Listening"), tasteRootURL: tasteRoot)
 
     let result = try #require(await resultJSON(server, id: 1, name: "taste_notes", arguments: #"{"artist":"Artist","title":"Song"}"#) as? [String: Any])
     let notes = try #require(result["notes"] as? [[String: Any]])
@@ -300,7 +300,7 @@ struct LibraryMCPServerTests {
       source: "playlist", title: "Song", artist: "Artist", album: "Album", catalogID: "i.song"
     )
     try TasteNotesCodec.appendFeedbackNote(playlistNote, device: "iPhone", folder: tasteRoot)
-    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), tasteRootURL: tasteRoot)
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), listeningRootURL: root.appending(path: "Listening"), tasteRootURL: tasteRoot)
 
     let result = try #require(await resultJSON(server, id: 1, name: "taste_notes",
       arguments: #"{"artist":"Artist","title":"Song"}"#) as? [String: Any])
@@ -406,7 +406,7 @@ struct LibraryMCPServerTests {
     try LibrarySnapshotCodec.encode(s0Fixture()).write(to: snapshotURL)
     let tasteRoot = root.appending(path: "Taste Intelligence", directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: tasteRoot.appending(path: "notes x.jsonl", directoryHint: .isDirectory), withIntermediateDirectories: true)
-    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), tasteRootURL: tasteRoot)
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), listeningRootURL: root.appending(path: "Listening"), tasteRootURL: tasteRoot)
 
     let result = try #require(await resultJSON(server, id: 64, name: "check_tracks",
       arguments: #"{"tracks":[{"artist":"Version Artist","title":"Version Song"}]}"#) as? [String: Any])
@@ -889,7 +889,7 @@ struct LibraryMCPServerTests {
     try LibrarySnapshotCodec.encode(
       LibrarySnapshot(generatedAt: .now, tracks: [unnamedUpload] + uploads + [almostMatch]))
       .write(to: snapshotURL)
-    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), tasteRootURL: root.appending(path: "Taste Intelligence"))
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), listeningRootURL: root.appending(path: "Listening"), tasteRootURL: root.appending(path: "Taste Intelligence"))
 
     let springsteen = try #require(await resultJSON(
       server, id: 40, name: "check_tracks",
@@ -921,7 +921,7 @@ struct LibraryMCPServerTests {
       "elvis": "elvis presley",
     ]
     try ArtistAliasesCodec.encode(aliases).write(to: root.appending(path: "artist-aliases.json"))
-    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), tasteRootURL: root.appending(path: "Taste Intelligence"))
+    let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"), listeningRootURL: root.appending(path: "Listening"), tasteRootURL: root.appending(path: "Taste Intelligence"))
     let check = try #require(await resultJSON(
       server, id: 81, name: "check_tracks",
       arguments: #"{"tracks":[{"artist":"John Cougar Mellencamp","title":"Ain't Even Done With the Night"}]}"#
@@ -935,7 +935,7 @@ struct LibraryMCPServerTests {
     let noFileRoot = temporaryDirectory()
     let noFileSnapshot = noFileRoot.appending(path: "snapshot.json")
     try LibrarySnapshotCodec.encode(LibrarySnapshot(generatedAt: .now, tracks: tracks)).write(to: noFileSnapshot)
-    let noFileServer = LibraryMCPServer.make(snapshotURL: noFileSnapshot, inboxRoot: noFileRoot.appending(path: "inbox"), tasteRootURL: noFileRoot.appending(path: "Taste Intelligence"))
+    let noFileServer = LibraryMCPServer.make(snapshotURL: noFileSnapshot, inboxRoot: noFileRoot.appending(path: "inbox"), listeningRootURL: noFileRoot.appending(path: "Listening"), tasteRootURL: noFileRoot.appending(path: "Taste Intelligence"))
     let unchanged = try #require(await resultJSON(
       noFileServer, id: 83, name: "check_tracks",
       arguments: #"{"tracks":[{"artist":"John Cougar Mellencamp","title":"Ain't Even Done With the Night"}]}"#
@@ -1011,7 +1011,7 @@ struct LibraryMCPServerTests {
 
   @Test("every read tool fails loudly without a snapshot")
   func noSnapshot() async throws {
-    let server = LibraryMCPServer.make(snapshotURL: temporaryDirectory().appending(path: "missing.json"), inboxRoot: temporaryDirectory())
+    let server = LibraryMCPServer.make(snapshotURL: temporaryDirectory().appending(path: "missing.json"), inboxRoot: temporaryDirectory(), listeningRootURL: temporaryDirectory().appending(path: "Listening"), tasteRootURL: temporaryDirectory().appending(path: "Taste Intelligence"))
     for (id, name, arguments) in [
       (1, "library_overview", "{}"), (2, "top_artists", "{}"), (3, "top_tracks", "{}"),
       (4, "search_library", "{}"), (5, "artist_profile", #"{"artist":"Missing"}"#),
@@ -1455,9 +1455,16 @@ struct LibraryMCPServerTests {
     let snapshot = LibrarySnapshot(generatedAt: finishedAt.addingTimeInterval(-1), tracks: [])
     let snapshotURL = root.appending(path: "snapshot.json")
     try LibrarySnapshotCodec.encode(snapshot).write(to: snapshotURL)
+    // playlist_reviews needs a listening log. Without one here the server falls back to the live iCloud
+    // folder, and the test's result depended on that Mac's listening history.
+    let listeningRoot = root.appending(path: "Listening", directoryHint: .isDirectory)
+    let stream = listeningRoot.appending(path: "fetches/fixture/plays.jsonl")
+    try FileManager.default.createDirectory(at: stream.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try (ListeningLogCodec.encode(ListeningFetch(poller: UUID(), host: "Mac", fetchedAt: weekDate,
+      outcome: .none, pagesRead: 1)) + Data([10])).write(to: stream)
     let refreshCounter = RefreshRequestCounter()
     let server = LibraryMCPServer.make(snapshotURL: snapshotURL, inboxRoot: root.appending(path: "inbox"),
-      tasteRootURL: tasteRoot, hostName: { "Chat Host" }, now: { finishedAt },
+      listeningRootURL: listeningRoot, tasteRootURL: tasteRoot, hostName: { "Chat Host" }, now: { finishedAt },
       requestSnapshotRefresh: { refreshCounter.increment() })
     let arguments = "{\"week\":\"\(weekDate.ISO8601Format())\"}"
     let first = try #require(await resultJSON(server, id: 1, name: "finish_new_music_week", arguments: arguments) as? [String: Any])
@@ -1540,7 +1547,7 @@ struct LibraryMCPServerTests {
     ])
     try NewMusicExposureCodec.encode(week).write(to: exposureFolder.appending(path: "week.jsonl"))
     let server = LibraryMCPServer.make(snapshotURL: root.appending(path: "missing-snapshot.json"),
-      inboxRoot: root.appending(path: "inbox"), tasteRootURL: tasteRoot, hostName: { "Chat Host" }, now: { weekDate })
+      inboxRoot: root.appending(path: "inbox"), listeningRootURL: root.appending(path: "Listening"), tasteRootURL: tasteRoot, hostName: { "Chat Host" }, now: { weekDate })
 
     let failure = await call(server, id: 1, name: "finish_new_music_week",
       arguments: "{\"week\":\"\(weekDate.ISO8601Format())\"}")
