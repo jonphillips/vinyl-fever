@@ -12,7 +12,7 @@ Fever's own windowless `--poll-listening` run on the M6 mini, not the retired VF
 app. S1 gains the rule that a `created` or `dismissed` line outranks `needs-review`, a playlist-level
 `error` field, and a library-name check before creating.*
 
-Status: Designed
+Status: Dispatched
 Summary: S1 has the mini's listening helper create every staged playlist whose songs all match, and S2 alerts Jon by iMessage when one doesn't; S3 saves the contents of playlists labeled `tracked` and S4 shows their unheard songs on the phone as Playlist Catchup; S5 gives the chat one tool for a New Music week (hidden picks, optional notes, and five extras) that a Codex automation on the mini calls every Friday, and S6 shows the result on the phone as New Music Weekly.
 
 Jon asked for this on 2026-11-27. Vinyl Fever mobile is becoming his music triage app:
@@ -94,7 +94,7 @@ his phone tells him.
 Jon's gates. Dispatches 2 and 3 add a role and ledger fields. Merging this plan approves them, so
 the architect escalates them only if they deviate from it (ADR-0005 D9).
 
-- [ ] **S1 — Staged playlists create themselves (helper + Core).**
+- [x] **S1 — Staged playlists create themselves (helper + Core).**
   - **Where it runs.** In the listening helper, on any Mac whose inbox holds an item, whether or
     not that Mac holds the polling lease: each Mac has its own inbox, so two Macs can't race over
     one item. Add `WatchPaths` on the inbox folder to `VinylFeverListeningAgent.plist`, so an
@@ -165,7 +165,7 @@ the architect escalates them only if they deviate from it (ADR-0005 D9).
       a device, and the phone shows it Active; stage one with a song that can't be found and
       confirm the phone shows Needs you, then finish it there.
 
-- [ ] **S2 — Alerts by iMessage (helper).**
+- [x] **S2 — Alerts by iMessage (helper).**
   - **When:** each `needs-review` line from S1, and (from S5) a missed Friday. One message per
     event, never repeated.
   - **What it says**, in one or two lines: the playlist name, *N of M songs found*, the first

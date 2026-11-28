@@ -49,6 +49,8 @@ goes in `DONE-LOG.md`.
 - **bad-tracks-and-slow-music:** Install on Mac and iPhone. On iPhone, Keep on a staged song lists Undeniable; refresh the shelf and confirm progress updates. On Mac, Settings shows no resolved 2026-11-03 warning, then leave the app open for over an hour and confirm the library snapshot refreshes (inspect library-snapshot logs if it does not). ([brief](efforts/archive/bad-tracks-and-slow-music.md))
 - **chat-writeups-on-phone:** In a new ChatGPT conversation, stage a playlist and verify on iPhone that each label, fact, paragraph, and heading matches the chat; check an older playlist and review tags. ([brief](efforts/archive/chat-writeups-on-phone.md))
 - **album-title-fills-show-fields:** After the Mac install, parse Dave Hause - Live from Chicago 2026 and confirm Date, Venue, Location, and Plan Album. Clear Venue, edit Album to a different venue, press Return, and confirm Venue fills while Date and Location stay unchanged. ([brief](efforts/archive/album-title-fills-show-fields.md))
+- **M25 S1:** Install on the mini. From the phone's ChatGPT, stage a short playlist that's easy to match: within two minutes it's in Music without touching a device, and the phone shows it Active. Stage one with a song that can't be found: the phone shows Needs you, then finish it there. ([M25](milestones/M25-weekly-triage.md))
+- **M25 S2:** Held until the mini's Messages Apple ID exists: set the phone number in Settings → Listening History, send the test message and confirm it alerts the phone, then repeat the unfound-song staging and confirm the iMessage arrives. ([M25](milestones/M25-weekly-triage.md))
 ## Setup steps held for Jon
 
 - **M25, any time:** follow Antidote, ALT-CTRL, Breaking Alternative, Pop Deluxe, and AltPop in
