@@ -4,9 +4,34 @@ public enum SelectionPlaylistName {
   public static let pattern = #"^\d{4}: Jon's Selections$"#
 }
 
-public enum PlaylistRole: String, Codable, CaseIterable, Sendable {
-  case keepers, replay, curated, situational, auditioned, discoveryInbox = "discovery-inbox"
-  case followed, appleMix = "apple-mix", collection, vinylFever = "vinyl-fever", ignore
+public struct PlaylistRole: RawRepresentable, Codable, CaseIterable, Hashable, Sendable {
+  public let rawValue: String
+  public init(rawValue: String) { self.rawValue = rawValue }
+
+  public static let keepers = Self(rawValue: "keepers")
+  public static let replay = Self(rawValue: "replay")
+  public static let curated = Self(rawValue: "curated")
+  public static let situational = Self(rawValue: "situational")
+  public static let auditioned = Self(rawValue: "auditioned")
+  public static let discoveryInbox = Self(rawValue: "discovery-inbox")
+  public static let followed = Self(rawValue: "followed")
+  public static let tracked = Self(rawValue: "tracked")
+  public static let appleMix = Self(rawValue: "apple-mix")
+  public static let collection = Self(rawValue: "collection")
+  public static let vinylFever = Self(rawValue: "vinyl-fever")
+  public static let ignore = Self(rawValue: "ignore")
+  public static let allCases = [keepers, replay, curated, situational, auditioned, discoveryInbox,
+    followed, tracked, appleMix, collection, vinylFever, ignore]
+
+  public init(from decoder: Decoder) throws {
+    let value = try decoder.singleValueContainer().decode(String.self)
+    self.init(rawValue: value)
+  }
+
+  public func encode(to encoder: Encoder) throws {
+    var value = encoder.singleValueContainer()
+    try value.encode(rawValue)
+  }
 }
 
 public struct PlaylistRoleEntry: Codable, Equatable, Sendable {
@@ -30,12 +55,11 @@ public struct PlaylistRoles: Codable, Equatable, Sendable {
 }
 
 public enum PlaylistRolesError: Error, Equatable, LocalizedError, Sendable {
-  case unsupportedFormat(String), unsupportedVersion(Int), unknownRole(String)
+  case unsupportedFormat(String), unsupportedVersion(Int)
   public var errorDescription: String? {
     switch self {
     case .unsupportedFormat(let value): "Unsupported playlist roles format: \(value)."
     case .unsupportedVersion(let value): "Playlist roles version \(value) is not supported."
-    case .unknownRole(let value): "Unknown playlist role '\(value)'."
     }
   }
 }
@@ -52,14 +76,6 @@ public enum PlaylistRolesCodec {
     let header = try JSONDecoder().decode(Header.self, from: data)
     guard header.format == "vf-playlist-roles" else { throw PlaylistRolesError.unsupportedFormat(header.format) }
     guard header.version == 1 else { throw PlaylistRolesError.unsupportedVersion(header.version) }
-    if let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let rows = object["playlists"] as? [[String: Any]] {
-      for row in rows {
-        if let role = row["role"] as? String, PlaylistRole(rawValue: role) == nil {
-          throw PlaylistRolesError.unknownRole(role)
-        }
-      }
-    }
     let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
     return try decoder.decode(PlaylistRoles.self, from: data)
   }

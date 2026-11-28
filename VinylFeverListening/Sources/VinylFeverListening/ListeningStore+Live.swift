@@ -104,6 +104,34 @@ extension ListeningStore {
       },
       readNewMusicAttemptAt: { try ListeningLocalState(folder: localFolder).newMusicAttemptAt() },
       writeNewMusicAttemptAt: { date in try ListeningLocalState(folder: localFolder).writeNewMusicAttemptAt(date) },
+      readTrackedPlaylistRoles: {
+        let url = iCloudFolder.deletingLastPathComponent().appendingPathComponent("Taste Intelligence/playlist-roles.json")
+        guard let data = try ListeningCoordinatedFiles.readData(url) else { return [] }
+        return try PlaylistRolesCodec.decode(data).playlists.filter { $0.role == .tracked }
+      },
+      readTrackedPlaylistRecords: {
+        let folder = iCloudFolder.deletingLastPathComponent()
+          .appendingPathComponent("Taste Intelligence/tracked", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: folder.path) else { return [] }
+        let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
+        return TrackedPlaylistExposureCodec.readFiles(try files.filter { $0.pathExtension == "jsonl" }.compactMap {
+          try ListeningCoordinatedFiles.readData($0)
+        })
+      },
+      appendTrackedPlaylistSnapshot: { snapshot in
+        let folder = iCloudFolder.deletingLastPathComponent()
+          .appendingPathComponent("Taste Intelligence/tracked", isDirectory: true)
+        try ListeningCoordinatedFiles.append(TrackedPlaylistExposureCodec.encode(snapshot),
+          to: folder.appendingPathComponent(Self.safeFileComponent(snapshot.host) + ".jsonl"))
+      },
+      appendTrackedPlaylistGap: { gap in
+        let folder = iCloudFolder.deletingLastPathComponent()
+          .appendingPathComponent("Taste Intelligence/tracked", isDirectory: true)
+        try ListeningCoordinatedFiles.append(TrackedPlaylistExposureCodec.encode(gap),
+          to: folder.appendingPathComponent(Self.safeFileComponent(gap.host) + ".jsonl"))
+      },
+      readTrackedPlaylistAttemptAt: { try Self.readAttempt(at: localFolder.appendingPathComponent("tracked-playlists-last-attempt.txt")) },
+      writeTrackedPlaylistAttemptAt: { date in try Self.writeAttempt(date, at: localFolder.appendingPathComponent("tracked-playlists-last-attempt.txt")) },
       hostName: hostName
     )
   }
@@ -118,6 +146,17 @@ extension ListeningStore {
   private static func safeFileComponent(_ value: String) -> String {
     let safe = value.unicodeScalars.map { CharacterSet.alphanumerics.contains($0) || "-_".unicodeScalars.contains($0) ? String($0) : "_" }.joined()
     return safe.isEmpty ? "Mac" : safe
+  }
+
+  private static func readAttempt(at url: URL) throws -> Date? {
+    guard let data = try? Data(contentsOf: url), let value = String(data: data, encoding: .utf8),
+      let time = TimeInterval(value.trimmingCharacters(in: .whitespacesAndNewlines)) else { return nil }
+    return Date(timeIntervalSince1970: time)
+  }
+
+  private static func writeAttempt(_ date: Date, at url: URL) throws {
+    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data(String(date.timeIntervalSince1970).utf8).write(to: url, options: .atomic)
   }
 
   private static func months(around date: Date) -> [String] {

@@ -66,6 +66,12 @@ public struct ListeningStore: Sendable {
   public var appendNewMusicGap: @Sendable (NewMusicExposureGap) throws -> Void
   public var readNewMusicAttemptAt: @Sendable () throws -> Date?
   public var writeNewMusicAttemptAt: @Sendable (Date) throws -> Void
+  public var readTrackedPlaylistRoles: @Sendable () throws -> [PlaylistRoleEntry]
+  public var readTrackedPlaylistRecords: @Sendable () throws -> [TrackedPlaylistRecord]
+  public var appendTrackedPlaylistSnapshot: @Sendable (TrackedPlaylistSnapshot) throws -> Void
+  public var appendTrackedPlaylistGap: @Sendable (TrackedPlaylistGap) throws -> Void
+  public var readTrackedPlaylistAttemptAt: @Sendable () throws -> Date?
+  public var writeTrackedPlaylistAttemptAt: @Sendable (Date) throws -> Void
 
   public init(
     pollerID: @escaping @Sendable () throws -> UUID,
@@ -88,6 +94,12 @@ public struct ListeningStore: Sendable {
     appendNewMusicGap: @escaping @Sendable (NewMusicExposureGap) throws -> Void = { _ in },
     readNewMusicAttemptAt: @escaping @Sendable () throws -> Date? = { nil },
     writeNewMusicAttemptAt: @escaping @Sendable (Date) throws -> Void = { _ in },
+    readTrackedPlaylistRoles: @escaping @Sendable () throws -> [PlaylistRoleEntry] = { [] },
+    readTrackedPlaylistRecords: @escaping @Sendable () throws -> [TrackedPlaylistRecord] = { [] },
+    appendTrackedPlaylistSnapshot: @escaping @Sendable (TrackedPlaylistSnapshot) throws -> Void = { _ in },
+    appendTrackedPlaylistGap: @escaping @Sendable (TrackedPlaylistGap) throws -> Void = { _ in },
+    readTrackedPlaylistAttemptAt: @escaping @Sendable () throws -> Date? = { nil },
+    writeTrackedPlaylistAttemptAt: @escaping @Sendable (Date) throws -> Void = { _ in },
     hostName: @escaping @Sendable () -> String = { "Mac" }
   ) {
     self.pollerID = pollerID
@@ -111,6 +123,12 @@ public struct ListeningStore: Sendable {
     self.appendNewMusicGap = appendNewMusicGap
     self.readNewMusicAttemptAt = readNewMusicAttemptAt
     self.writeNewMusicAttemptAt = writeNewMusicAttemptAt
+    self.readTrackedPlaylistRoles = readTrackedPlaylistRoles
+    self.readTrackedPlaylistRecords = readTrackedPlaylistRecords
+    self.appendTrackedPlaylistSnapshot = appendTrackedPlaylistSnapshot
+    self.appendTrackedPlaylistGap = appendTrackedPlaylistGap
+    self.readTrackedPlaylistAttemptAt = readTrackedPlaylistAttemptAt
+    self.writeTrackedPlaylistAttemptAt = writeTrackedPlaylistAttemptAt
   }
 }
 
@@ -146,6 +164,7 @@ public struct ListeningPoller {
   @Dependency(\.listeningAuthorizationClient) private var authorization
   @Dependency(\.recentlyPlayedClient) private var recentlyPlayed
   @Dependency(\.newMusicCatalogClient) private var newMusic
+  @Dependency(\.trackedPlaylistCatalogClient) private var trackedPlaylists
   @Dependency(\.date) private var date
 
   public init() {}
@@ -222,6 +241,7 @@ public struct ListeningPoller {
       try store.writeLastList(diff.currentList)
       if marker != nil { try store.clearHandoverMarker() }
       await recordNewMusicExposure(at: now, host: host)
+      await recordTrackedPlaylistSnapshots(at: now, host: host)
     }
     return .fetched(fetch)
   }
@@ -267,6 +287,28 @@ public struct ListeningPoller {
     } catch {
       try? store.appendNewMusicGap(NewMusicExposureGap(
         fetchedAt: now, host: host, detail: ListeningErrorDescription.describe(error)))
+    }
+  }
+
+  private func recordTrackedPlaylistSnapshots(at now: Date, host: String) async {
+    do {
+      if let attemptedAt = try store.readTrackedPlaylistAttemptAt(), now.timeIntervalSince(attemptedAt) < 24 * 60 * 60 { return }
+      let roles = try store.readTrackedPlaylistRoles()
+      guard !roles.isEmpty else { return }
+      try store.writeTrackedPlaylistAttemptAt(now)
+      let records = try store.readTrackedPlaylistRecords()
+      for result in await trackedPlaylists.fetch(roles, host, now) {
+        switch result {
+        case let .snapshot(snapshot):
+          guard TrackedPlaylistSnapshotPolicy.shouldAppend(snapshot, after: records) else { continue }
+          try store.appendTrackedPlaylistSnapshot(snapshot)
+        case let .gap(gap):
+          try store.appendTrackedPlaylistGap(gap)
+        }
+      }
+    } catch {
+      try? store.appendTrackedPlaylistGap(TrackedPlaylistGap(name: "Tracked playlists", fetchedAt: now,
+        host: host, detail: ListeningErrorDescription.describe(error)))
     }
   }
 

@@ -16,6 +16,7 @@ struct VinylFeverMobileApp: App {
   @State private var progressModel: PlaylistProgressModel
   @State private var reviewsModel: PlaylistReviewsModel
   @State private var createModel: PlaylistCreateModel
+  @State private var catchupModel: PlaylistCatchupModel
 
   init() {
     prepareDependencies {
@@ -34,13 +35,14 @@ struct VinylFeverMobileApp: App {
     _progressModel = State(initialValue: PlaylistProgressModel())
     _reviewsModel = State(initialValue: PlaylistReviewsModel())
     _createModel = State(initialValue: PlaylistCreateModel())
+    _catchupModel = State(initialValue: PlaylistCatchupModel())
   }
 
   var body: some Scene {
     WindowGroup {
       PlaylistHomeView(model: shelfModel, playbackModel: playbackModel, nowPlayingModel: nowPlayingModel,
         keepModel: keepModel, notesModel: notesModel, progressModel: progressModel,
-        reviewsModel: reviewsModel, createModel: createModel)
+        reviewsModel: reviewsModel, createModel: createModel, catchupModel: catchupModel)
     }
   }
 }
@@ -57,6 +59,7 @@ private struct PlaylistHomeView: View {
   @Bindable var progressModel: PlaylistProgressModel
   @Bindable var reviewsModel: PlaylistReviewsModel
   @Bindable var createModel: PlaylistCreateModel
+  @Bindable var catchupModel: PlaylistCatchupModel
 
   private var selectedPlaylist: PlaylistShelfPlaylist? {
     model.playlists.first { $0.id == model.selectedPlaylistID }
@@ -75,7 +78,18 @@ private struct PlaylistHomeView: View {
         .pickerStyle(.segmented)
 
         Section {
-          if model.hasUnreadableFiles || progressModel.hasUnreadableListeningLog || reviewsModel.hasUnreadableFiles {
+          NavigationLink(value: PlaylistCatchupModel.routeID) {
+            HStack {
+              Label("Playlist Catchup", systemImage: "arrow.uturn.forward")
+              Spacer()
+              Text("\(catchupModel.songs.count)").font(.callout.weight(.semibold)).foregroundStyle(.secondary)
+            }
+          }
+          .tag(PlaylistCatchupModel.routeID)
+        }
+
+        Section {
+          if model.hasUnreadableFiles || progressModel.hasUnreadableListeningLog || reviewsModel.hasUnreadableFiles || catchupModel.hasUnreadableFiles {
             Label("Some playlist, review, or listening data is still downloading from iCloud. Pull to refresh.",
               systemImage: "icloud.and.arrow.down")
               .font(.caption)
@@ -105,6 +119,7 @@ private struct PlaylistHomeView: View {
       .navigationTitle("Playlists")
       .refreshable {
         await model.refresh()
+        await catchupModel.refresh()
         await progressModel.refresh(model.playlists, libraryPlaylists: model.libraryPlaylists)
         await reviewsModel.refresh()
       }
@@ -115,7 +130,10 @@ private struct PlaylistHomeView: View {
       }
     } detail: {
       Group {
-        if let playlist = selectedPlaylist {
+        if model.selectedPlaylistID == PlaylistCatchupModel.routeID {
+          PlaylistCatchupDetailView(model: catchupModel, playbackModel: playbackModel,
+            keepModel: keepModel, notesModel: notesModel)
+        } else if let playlist = selectedPlaylist {
           PlaylistDetailView(playlist: playlist,
             archiveStatus: model.archiveStatusText(for: playlist),
             hasUnreadableFiles: model.hasUnreadableFiles || notesModel.hasUnreadableFiles ||
@@ -155,6 +173,7 @@ private struct PlaylistHomeView: View {
     .sheet(item: $model.destination, onDismiss: {
       Task {
         await model.refresh()
+        await catchupModel.refresh()
         await progressModel.refresh(model.playlists, libraryPlaylists: model.libraryPlaylists)
         await reviewsModel.refresh()
         if let selectedPlaylist { await playbackModel.prepare(selectedPlaylist) }
@@ -181,6 +200,7 @@ private struct PlaylistHomeView: View {
       model.loadCache()
       progressModel.loadCache()
       await model.refresh()
+      await catchupModel.refresh()
       await notesModel.refresh()
       await progressModel.refresh(model.playlists, libraryPlaylists: model.libraryPlaylists)
       guard !didApplyInitialSelection else { return }
@@ -203,7 +223,81 @@ private struct PlaylistHomeView: View {
     .onChange(of: notesModel.notes) { _, notes in progressModel.updateSavedNotes(notes) }
     .onChange(of: keepModel.keptPlaylistsBySong) { _, keeps in progressModel.updateSavedKeeps(keeps) }
     .task { await reviewsModel.refresh() }
+    .onChange(of: model.selectedPlaylistID) { _, selectedID in
+      if selectedID == PlaylistCatchupModel.routeID {
+        Task { await playbackModel.prepareCatchup(catchupModel.songs) }
+      }
+    }
+    .onChange(of: catchupModel.songs.map(\.id)) { _, _ in
+      if model.selectedPlaylistID == PlaylistCatchupModel.routeID {
+        Task { await playbackModel.prepareCatchup(catchupModel.songs) }
+      }
+    }
   }
+}
+
+private struct PlaylistCatchupDetailView: View {
+  @Bindable var model: PlaylistCatchupModel
+  let playbackModel: PlaylistPlaybackModel
+  let keepModel: PlaylistKeepModel
+  let notesModel: PlaylistTasteNotesModel
+
+  var body: some View {
+    ScrollView {
+      LazyVStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 10) {
+          Text("Playlist Catchup").font(.largeTitle.bold())
+          Text("\(model.songs.count) unheard songs from your tracked playlists")
+            .foregroundStyle(.secondary)
+          HStack(spacing: 12) {
+            Button {
+              guard let first = model.displayedSongs.first else { return }
+              Task { await playbackModel.prepareCatchup(model.displayedSongs); await playbackModel.play(first.id) }
+            } label: {
+              if playbackModel.isPreparingPlayback { ProgressView().accessibilityLabel("Preparing playlist") }
+              else { Label("Play All", systemImage: "play.fill") }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(model.displayedSongs.isEmpty || playbackModel.isPreparingPlayback)
+            Menu {
+              Button("All sources") { model.sourceFilter = nil }
+              ForEach(model.sources, id: \.self) { source in
+                Button(source) { model.sourceFilter = source }
+              }
+            } label: {
+              HStack(spacing: 8) {
+                Label(model.sourceFilter ?? "All sources", systemImage: "line.3.horizontal.decrease")
+                Image(systemName: "chevron.down").font(.caption2)
+              }
+            }
+            .buttonStyle(.bordered)
+          }
+          if let error = model.errorMessage {
+            Text(error).font(.callout).foregroundStyle(.secondary)
+          }
+        }
+        ForEach(Array(model.displayedSongs.enumerated()), id: \.element.id) { index, song in
+          PlaylistSongView(song: catchupShelfSong(song), playbackModel: playbackModel,
+            keepModel: keepModel, notesModel: notesModel, progress: nil)
+            .task { await playbackModel.resolveSongs(through: index) }
+        }
+        if model.isLoading && model.songs.isEmpty { ProgressView("Loading Playlist Catchup…") }
+        if model.isAvailable && model.displayedSongs.isEmpty && !model.isLoading {
+          ContentUnavailableView("You're caught up", systemImage: "checkmark.circle",
+            description: Text("New songs from your tracked playlists will appear here."))
+        }
+      }
+      .padding()
+    }
+    .refreshable { await model.refresh() }
+    .task { await playbackModel.prepareCatchup(model.songs) }
+  }
+}
+
+private func catchupShelfSong(_ song: PlaylistCatchupSong) -> PlaylistShelfSong {
+  PlaylistShelfSong(id: song.id, title: song.title, artist: song.artist, album: song.album,
+    year: song.releaseDate.flatMap { Int($0.prefix(4)) }, familiarity: "Playlist Catchup",
+    why: nil, like: [], details: song.sources)
 }
 
 private struct PlaylistShelfEmptyView: View {

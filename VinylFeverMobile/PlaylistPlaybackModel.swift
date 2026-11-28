@@ -47,6 +47,38 @@ final class PlaylistPlaybackModel {
     beginStagedPlaylistLookup(for: playlist)
   }
 
+  func prepareCatchup(_ catchupSongs: [PlaylistCatchupSong]) async {
+    let wasAuthorized = isAuthorized
+    isAuthorized = client.isAuthorized()
+    let id = PlaylistCatchupModel.routeID
+    guard activePlaylistID != id || songs.map(\.id) != catchupSongs.map(\.id) else {
+      if !wasAuthorized && isAuthorized { beginSongResolution() }
+      return
+    }
+    activePlaylistID = id
+    songs = catchupSongs.map(Self.shelfSong)
+    matchedPlaylist = nil
+    didLookUpStagedPlaylist = true
+    stagedPlaylistLookupTask = nil
+    stagedPlaylistLookupID = nil
+    errorMessage = nil
+    guard isAuthorized else { return }
+    beginSongResolution()
+  }
+
+  private func beginSongResolution() {
+    guard !songs.isEmpty else { return }
+    Task { @MainActor in
+      for song in songs.prefix(Self.resolveAheadCount) { _ = await resolveSong(song.id) }
+    }
+  }
+
+  private static func shelfSong(_ song: PlaylistCatchupSong) -> PlaylistShelfSong {
+    PlaylistShelfSong(id: song.id, title: song.title, artist: song.artist, album: song.album,
+      year: song.releaseDate.flatMap { Int($0.prefix(4)) }, familiarity: "Playlist Catchup",
+      why: nil, like: [], details: song.sources)
+  }
+
   func refreshMatchedPlaylist(_ playlist: PlaylistShelfPlaylist) async {
     activePlaylistID = nil
     await prepare(playlist)
