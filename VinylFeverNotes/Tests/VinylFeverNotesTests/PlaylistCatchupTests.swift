@@ -63,6 +63,13 @@ struct PlaylistCatchupTests {
     #expect(decoded == [.snapshot(value)])
   }
 
+  @Test("the tracked role reads")
+  func trackedRole() throws {
+    let data = Data(#"{"format":"vf-playlist-roles","version":1,"updatedAt":"2026-11-27T12:00:00Z","playlists":[{"persistentID":"a","name":"Antidote","role":"tracked"}]}"#.utf8)
+    #expect(try PlaylistRolesCodec.decode(data).playlists.map(\.role) == [.tracked])
+    #expect(PlaylistRole.allCases.contains(.tracked))
+  }
+
   @Test("role decoding retains unfamiliar values for a later writer")
   func unknownRoleIsSkipped() throws {
     let data = Data(#"{"format":"vf-playlist-roles","version":1,"updatedAt":"2026-10-30T12:00:00Z","playlists":[{"persistentID":"a","name":"Known","role":"keepers"},{"persistentID":"b","name":"Future","role":"new-future-role"}]}"#.utf8)

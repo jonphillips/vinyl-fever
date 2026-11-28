@@ -4,6 +4,15 @@ import MusicKit
 import Observation
 import VinylFeverNotes
 
+extension PlaylistShelfSong {
+  /// A Catchup song as a shelf row: its sources are the row's labels.
+  init(catchup song: PlaylistCatchupSong) {
+    self.init(id: song.id, title: song.title, artist: song.artist, album: song.album,
+      year: song.releaseDate.flatMap { Int($0.prefix(4)) }, familiarity: "",
+      why: nil, like: [], details: song.sources)
+  }
+}
+
 @MainActor
 @Observable
 final class PlaylistCatchupModel {
@@ -47,7 +56,7 @@ final class PlaylistCatchupModel {
         let tracks = try await keepClient.tracks(playlist.id)
         keeperTrackKeys.formUnion(tracks.map { ListeningTextNormalizer.trackKey(artist: $0.artist, title: $0.title) })
       }
-      let plays = try await listeningClient.read(Self.earliestListeningDate, now())
+      let plays = try await listeningClient.read(Self.earliestListeningDate, now)
       let heardKeys = Set(plays.map { ListeningTextNormalizer.trackKey(artist: $0.item.artist, title: $0.item.title) })
       songs = PlaylistCatchup.make(snapshots: folderRead.snapshots, heardTrackKeys: heardKeys,
         keeperTrackKeys: keeperTrackKeys)

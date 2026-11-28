@@ -131,8 +131,8 @@ public enum PlaylistCatchup {
       let key = "\(identity.key(song.artist))|\(ListeningTextNormalizer.libraryTitle(song.title))"
       if var existing = byText[key] {
         existing.sources = Array(Set(existing.sources + song.sources)).sorted()
-        let songDate = song.dateAdded ?? Self.date(song.releaseDate) ?? .distantPast
-        let existingDate = existing.dateAdded ?? Self.date(existing.releaseDate) ?? .distantPast
+        let songDate = Self.sortDate(song)
+        let existingDate = Self.sortDate(existing)
         if songDate > existingDate || (songDate == existingDate && song.id < existing.id) {
           existing.id = song.id
           existing.title = song.title
@@ -149,12 +149,10 @@ public enum PlaylistCatchup {
       }
     }
 
-    return byText.values.sorted { lhs, rhs in
-      let leftDate = lhs.dateAdded ?? Self.date(lhs.releaseDate) ?? .distantPast
-      let rightDate = rhs.dateAdded ?? Self.date(rhs.releaseDate) ?? .distantPast
-      if leftDate != rightDate { return leftDate > rightDate }
-      return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
-    }
+    return byText.values.map { (song: $0, date: Self.sortDate($0)) }.sorted { lhs, rhs in
+      if lhs.date != rhs.date { return lhs.date > rhs.date }
+      return lhs.song.title.localizedStandardCompare(rhs.song.title) == .orderedAscending
+    }.map(\.song)
   }
 
   public static func filtered(_ songs: [PlaylistCatchupSong], source: String?) -> [PlaylistCatchupSong] {
@@ -164,6 +162,11 @@ public enum PlaylistCatchup {
 
   public static func sources(in songs: [PlaylistCatchupSong]) -> [String] {
     Array(Set(songs.flatMap(\.sources))).sorted()
+  }
+
+  /// Newest first: the date added where the API gave one, the release date otherwise.
+  private static func sortDate(_ song: PlaylistCatchupSong) -> Date {
+    song.dateAdded ?? date(song.releaseDate) ?? .distantPast
   }
 
   private static func date(_ value: String?) -> Date? {

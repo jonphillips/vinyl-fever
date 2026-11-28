@@ -277,7 +277,7 @@ private struct PlaylistCatchupDetailView: View {
           }
         }
         ForEach(Array(model.displayedSongs.enumerated()), id: \.element.id) { index, song in
-          PlaylistSongView(song: catchupShelfSong(song), playbackModel: playbackModel,
+          PlaylistSongView(song: PlaylistShelfSong(catchup: song), playbackModel: playbackModel,
             keepModel: keepModel, notesModel: notesModel, progress: nil)
             .task { await playbackModel.resolveSongs(through: index) }
         }
@@ -292,12 +292,6 @@ private struct PlaylistCatchupDetailView: View {
     .refreshable { await model.refresh() }
     .task { await playbackModel.prepareCatchup(model.songs) }
   }
-}
-
-private func catchupShelfSong(_ song: PlaylistCatchupSong) -> PlaylistShelfSong {
-  PlaylistShelfSong(id: song.id, title: song.title, artist: song.artist, album: song.album,
-    year: song.releaseDate.flatMap { Int($0.prefix(4)) }, familiarity: "Playlist Catchup",
-    why: nil, like: [], details: song.sources)
 }
 
 private struct PlaylistShelfEmptyView: View {
@@ -840,7 +834,7 @@ private struct PlaylistSongView: View {
         .buttonBorderShape(.capsule)
         .padding(.top, 4)
 
-        Text(song.familiarity).font(.subheadline.weight(.medium))
+        if !song.familiarity.isEmpty { Text(song.familiarity).font(.subheadline.weight(.medium)) }
         if let paragraph = song.paragraph {
           Text(paragraph).fixedSize(horizontal: false, vertical: true)
         }

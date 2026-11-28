@@ -56,7 +56,7 @@ final class PlaylistPlaybackModel {
       return
     }
     activePlaylistID = id
-    songs = catchupSongs.map(Self.shelfSong)
+    songs = catchupSongs.map(PlaylistShelfSong.init(catchup:))
     matchedPlaylist = nil
     didLookUpStagedPlaylist = true
     stagedPlaylistLookupTask = nil
@@ -71,12 +71,6 @@ final class PlaylistPlaybackModel {
     Task { @MainActor in
       for song in songs.prefix(Self.resolveAheadCount) { _ = await resolveSong(song.id) }
     }
-  }
-
-  private static func shelfSong(_ song: PlaylistCatchupSong) -> PlaylistShelfSong {
-    PlaylistShelfSong(id: song.id, title: song.title, artist: song.artist, album: song.album,
-      year: song.releaseDate.flatMap { Int($0.prefix(4)) }, familiarity: "Playlist Catchup",
-      why: nil, like: [], details: song.sources)
   }
 
   func refreshMatchedPlaylist(_ playlist: PlaylistShelfPlaylist) async {
